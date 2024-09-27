@@ -1,0 +1,18 @@
+#!/usr/bin/env ruby -w
+
+$LOAD_PATH.unshift File.expand_path('../../lib', __FILE__)
+
+require 'wid'
+
+code = %q(
+  puts 1 + 3.14
+)
+
+lexer = Wid::Lexer.new(code)
+tokens = []
+while tok = parser.next_token
+  tokens << tok
+  puts tok.inspect
+end
+
+parser = Wid::Parser.new(tokens)
