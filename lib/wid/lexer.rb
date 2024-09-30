@@ -43,17 +43,15 @@ module Wid
 
       while (tok = next_token)
         tokens << tok
-
-        break if tok.type == :EOF
       end
 
-      tokens
+      tokens << token(:EOF)
     end
 
     def next_token
       @scanner.skip(WHITESPACE)
 
-      return token(:EOF) if @scanner.eos?
+      return if @scanner.eos?
 
       tok = if (s = @scanner.scan(PUNCTUATION))
         @line += 1 if s == "\n"
