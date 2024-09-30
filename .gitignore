@@ -55,4 +55,9 @@ build-iPhoneSimulator/
 # Used by RuboCop. Remote config files pulled in from inherit_from directive.
 # .rubocop-https?--*
 
+# Ignore all artifacts such as C and binary files
+/examples/*
+
+# But keep the examples that are written in Wid
+!examples/*.wid
 tags
