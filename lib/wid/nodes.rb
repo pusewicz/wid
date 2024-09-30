@@ -9,5 +9,6 @@ require_relative 'nodes/expression'
 
 require_relative 'nodes/binary_operator'
 require_relative 'nodes/number'
+require_relative 'nodes/string'
 require_relative 'nodes/identifier'
 require_relative 'nodes/function_call'

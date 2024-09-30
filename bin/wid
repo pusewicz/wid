@@ -1,4 +1,4 @@
-#!/usr/bin/env ruby -v
+#!/usr/bin/env ruby -w
 
 $LOAD_PATH.unshift File.expand_path(File.join(File.dirname(__FILE__), '..', 'lib'))
 
@@ -14,8 +14,22 @@ ROOT = File.expand_path(File.join(File.dirname(__FILE__), '..'))
 
 file = ARGV[0]
 
+puts "/**"
+puts " * Compiling #{file}..."
+puts " **/"
+system("bat", "--language", "ruby", file)
+
 tokens = Wid::Lexer.tokenize(File.read(file))
-ast = Wid::Parser.parse(tokens)
+parser = Wid::Parser.new(tokens)
+ast = parser.parse
+
+if parser.errors.any?
+  parser.errors.each do |error|
+    $stderr.puts "warning: #{error.to_s} in #{file}:#{error.token.line}:#{error.token.column}"
+  end
+  # exit 1
+end
+
 output = Wid::Codegen.generate(ast)
 
 CC = ENV['CC'] || '/opt/homebrew/bin/zig cc'
@@ -31,8 +45,12 @@ exe = File.join(Dir.pwd, basename)
 
 File.write(src, output)
 
+puts "/**"
+puts " * Compiling #{src}..."
+puts " **/"
+system("bat", src)
+
 cmd = [*CC.split(' '), *FLAGS, src, '-o', exe]
-puts cmd.join(' ')
 
 Open3.popen3(*cmd) do |stdin, stdout, stderr, wait_thr|
   stdin.close
@@ -45,4 +63,8 @@ Open3.popen3(*cmd) do |stdin, stdout, stderr, wait_thr|
   exit_status = wait_thr.value
   exit exit_status.exitstatus if exit_status.exitstatus != 0
 end
+
+puts "/**"
+puts " * Executing #{exe}..."
+puts " **/"
 system(exe)

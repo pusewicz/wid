@@ -7,14 +7,7 @@ module Wid
       # TODO Both implementations below are temporary. Expression SHOULD NOT have a concrete implementation of these methods.
       def ==(other) = self.class == other.class
       def children = []
-
-      def type
-        self.class.to_s.split('::').last.underscore # e.g., Stoffle::AST::FunctionCall becomes "function_call"
-      end
-
-      def accept(visitor)
-        visitor.visit(self)
-      end
+      def accept(visitor) = visitor.visit(self)
     end
   end
 end

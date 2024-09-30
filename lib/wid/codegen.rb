@@ -1,3 +1,5 @@
+require "set"
+
 module Wid
   # Codegen is a class that generates code from a Wid AST using a visitor.
   class Codegen
@@ -10,7 +12,7 @@ module Wid
     C
 
     def initialize
-      @headers = %w[Wid.h]
+      @headers = %w[Wid.h].to_set
       @output = []
     end
 
@@ -35,6 +37,14 @@ module Wid
       node.children.each { |node| visit(node) }
     end
 
+    def visit_identifier(node)
+      node.value
+    end
+
+    def visit_string(node)
+      node.value
+    end
+
     def visit_binary_operator(node)
       @output << "(#{visit(node.left)} #{node.operator} #{visit(node.right)});"
     end
@@ -42,8 +52,12 @@ module Wid
     def visit_number(node) = node.value.to_s
 
     def visit_function_call(node)
-      puts node.inspect
-      @output << "#{node.name}(#{node.arguments.map { visit(_1) }.join(', ')});"
+      case node.function_name
+      when 'print', 'puts'
+        @headers << 'stdio.h'
+      end
+      args = node.arguments.map { visit(_1) }.join(', ')
+      @output << "#{node.function_name}(#{args});"
     end
     # def visit_expression(node) = node.value
 
