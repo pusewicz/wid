@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-require 'wid/version'
-require 'wid/parser'
-require 'wid/lexer'
-require 'wid/codegen'
+require_relative 'wid/version'
+require_relative 'wid/parser'
+require_relative 'wid/lexer'
+require_relative 'wid/codegen'
 
 module Wid
   def self.parse(input)

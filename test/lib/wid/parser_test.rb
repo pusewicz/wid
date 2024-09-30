@@ -7,7 +7,7 @@ module Wid
 
       ast = Parser.parse(tokens)
 
-      fail "TODO: Implement ParserTest"
+      assert_equal(Nodes::Program, ast.class)
     end
   end
 end

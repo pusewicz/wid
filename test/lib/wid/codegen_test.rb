@@ -10,7 +10,7 @@ module Wid
       output = Codegen.generate(ast)
 
       assert_equal(<<~C, output)
-        #include <stdio.h>
+        #include <Wid.h>
 
         int main() {
           (1 + 2.0);
