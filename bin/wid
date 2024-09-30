@@ -1,0 +1,48 @@
+#!/usr/bin/env ruby -v
+
+$LOAD_PATH.unshift File.expand_path(File.join(File.dirname(__FILE__), '..', 'lib'))
+
+require 'wid'
+require 'open3'
+
+if ARGV.size != 1
+  puts "Usage: #{$0} <file>"
+  exit 1
+end
+
+ROOT = File.expand_path(File.join(File.dirname(__FILE__), '..'))
+
+file = ARGV[0]
+
+tokens = Wid::Lexer.tokenize(File.read(file))
+ast = Wid::Parser.parse(tokens)
+output = Wid::Codegen.generate(ast)
+
+CC = ENV['CC'] || '/opt/homebrew/bin/zig cc'
+FLAGS = %W[
+  -v
+  -std=c2x
+  -I#{ROOT}/include
+]
+
+basename = File.basename(file, '.*')
+src = File.join(Dir.pwd, "#{basename}.c")
+exe = File.join(Dir.pwd, basename)
+
+File.write(src, output)
+
+cmd = [*CC.split(' '), *FLAGS, src, '-o', exe]
+puts cmd.join(' ')
+
+Open3.popen3(*cmd) do |stdin, stdout, stderr, wait_thr|
+  stdin.close
+  stdout.each do |line|
+    puts line
+  end
+  stderr.each do |line|
+    puts line
+  end
+  exit_status = wait_thr.value
+  exit exit_status.exitstatus if exit_status.exitstatus != 0
+end
+system(exe)

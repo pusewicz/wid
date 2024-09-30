@@ -1,68 +1,87 @@
 # frozen_string_literal: true
 
-require "strscan"
+require 'strscan'
 
 module Wid
   class Lexer
-    IDENTIFIER =    /[_A-Za-z][_0-9A-Za-z]*\b/
-    INT =           /[-]?(?:[0]|[1-9][0-9]*)/
+    Token = Data.define(:type, :value, :line, :column)
+
+    IDENTIFIER = /[_A-Za-z][_0-9A-Za-z]*\b/
+    WHITESPACE = /[ \r\t]/
+    INTEGER = /-?(?:0|[1-9][0-9]*)/
     FLOAT_DECIMAL = /[.][0-9]+/
-    FLOAT_EXP =     /[eE][+-]?[0-9]+/
-    NUMERIC =  /#{INT}(#{FLOAT_DECIMAL}#{FLOAT_EXP}|#{FLOAT_DECIMAL}|#{FLOAT_EXP})?/
-    WHITESPACE = %r{ [, \c\r\n\t]+ }x.freeze
-    # COMMENTS   = %r{ \#.*$ }x
+    NUMBER =  /#{INTEGER}(#{FLOAT_DECIMAL})?/
+    STRING = /"([^"\\]|\\.)*"/
+    # STRING =/"[^"]*"/
 
     KEYWORDS = %w[true false nil def end].freeze
 
     KW_RE = /#{Regexp.union(KEYWORDS.sort)}\b/
     KW_TABLE = Hash[KEYWORDS.map { |kw| [kw, kw.upcase.to_sym] }]
 
-    module Literals
-      LCURLY =        '{'
-      RCURLY =        '}'
-      LPAREN =        '('
-      RPAREN =        ')'
-      LBRACKET =      '['
-      RBRACKET =      ']'
-      # COLON =         ':'
-      EQUALS =        '='
-      BANG =          '!'
-      PIPE =          '|'
-      AMP =           '&'
-    end
-    include Literals
+    LITERALS = %W[{ } ( ) [ ] = ! | & + - \n].freeze
+    DOT = '.'
 
-    DOT =           '.'
-
-    PUNCTUATION = Regexp.union(Literals.constants.map { |name|
-      Literals.const_get(name)
-    })
-
-    PUNCTUATION_TABLE = Literals.constants.each_with_object({}) { |x,o|
-      o[Literals.const_get(x)] = x
-    }
+    PUNCTUATION = Regexp.union(LITERALS)
+    PUNCTUATION_TABLE = LITERALS.map { |x| [x, x.to_sym] }.to_h
 
     attr_reader :start
+
+    def self.tokenize(input)
+      new(input).tokenize
+    end
 
     def initialize(input)
       @input = input
       @scanner = StringScanner.new(input)
+      @line = 0
+      @column = 0
+    end
+
+    def tokenize
+      tokens = []
+
+      while (tok = next_token)
+        tokens << tok
+
+        break if tok.type == :EOF
+      end
+
+      tokens
     end
 
     def next_token
-      return if @scanner.eos?
+      @scanner.skip(WHITESPACE)
 
-      case
-      when s = @scanner.scan(WHITESPACE)  then [:WHITESPACE, s]
-      # when s = @scanner.scan(COMMENTS)    then [:COMMENT, s]
-      when s = @scanner.scan(PUNCTUATION) then [PUNCTUATION_TABLE[s], s]
-      when s = @scanner.scan(KW_RE)       then [KW_TABLE[s], s]
-      when s = @scanner.scan(IDENTIFIER)  then [:IDENTIFIER, s]
-      when s = @scanner.scan(NUMERIC)     then [@scanner[1] ? :FLOAT : :INT, s]
-      when s = @scanner.scan(INT)         then [:INT, s]
-      when s = @scanner.scan(DOT)         then [:DOT, s]
-      else [:UNKNOWN, @scanner.getch]
+      return token(:EOF) if @scanner.eos?
+
+      tok = if (s = @scanner.scan(PUNCTUATION))
+        @line += 1 if s == "\n"
+        token(PUNCTUATION_TABLE[s], s)
+      elsif (s = @scanner.scan(KW_RE))
+        token(KW_TABLE[s], s)
+      elsif (s = @scanner.scan(STRING))
+        token(:STRING, s)
+      elsif (s = @scanner.scan(IDENTIFIER))
+        token(:IDENTIFIER, s)
+      elsif (s = @scanner.scan(NUMBER))
+        token(:NUMBER, s)
+      elsif (s = @scanner.scan(DOT))
+        token(:DOT)
+      else
+        token(:UNKNOWN, @scanner.getch)
       end
+
+      @column += @scanner.matched_size
+
+      tok
+    end
+
+    private
+
+    def token(type, value = nil)
+      # FIXME: Column calculation is incorrect
+      Token.new(type: type, value: value, line: @line, column: @column - @scanner.pos)
     end
   end
 end

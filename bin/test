@@ -1,18 +1,19 @@
 #!/usr/bin/env ruby -w
+# frozen_string_literal: true
 
-$LOAD_PATH.unshift File.expand_path('../../lib', __FILE__)
+$LOAD_PATH.unshift File.expand_path('../lib', __dir__)
 
 require 'wid'
 
-code = %q(
+code = '
   puts 1 + 3.14
-)
+'
 
-lexer = Wid::Lexer.new(code)
+Wid::Lexer.new(code)
 tokens = []
-while tok = parser.next_token
+while (tok = parser.next_token)
   tokens << tok
   puts tok.inspect
 end
 
-parser = Wid::Parser.new(tokens)
+Wid::Parser.new(tokens)
