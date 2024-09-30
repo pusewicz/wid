@@ -2,8 +2,6 @@ PATH
   remote: .
   specs:
     wid (0.0.1)
-      fiddle
-      logger
 
 GEM
   remote: https://rubygems.org/
@@ -54,6 +52,8 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
+  fiddle
+  logger
   rake (~> 13.0)
   rubocop (~> 1.66)
   tldr (~> 0.10.0)
