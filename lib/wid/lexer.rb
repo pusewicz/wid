@@ -67,7 +67,21 @@ module Wid
       elsif @scanner.scan(DOT)
         token(:DOT)
       else
-        token(:UNKNOWN, @scanner.getch)
+        # print out the lines around the error line to give context
+        ch = @scanner.getch
+
+        warn "warn: Syntax error at #{@line_number + 1}:#{column_number}: unknown token `#{ch}'"
+        lines = @scanner.string.split("\n")
+        lines[[@line_number - 1, 0].max..@line_number + 1].each_with_index do |line, i|
+          lineno = @line_number + i
+          line_prefix = " #{lineno.to_s.ljust(lines.size - 1)} | "
+          warn "#{line_prefix}#{line}"
+          if @line_number == lineno - 1
+            warn " " * (column_number + line_prefix.size) + "^"
+          end
+        end
+
+        token(:UNKNOWN, ch)
       end
 
       if @scanner.matched == "\n"
