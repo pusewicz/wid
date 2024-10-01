@@ -9,9 +9,8 @@ module Wid
         #include <Wid.h>
 
         int main() {
-          (1 + 2.0);
-
-          return 0;
+        (1 + 2.0);
+        return 0;
         }
       C
     end
@@ -23,9 +22,8 @@ module Wid
         #include <Wid.h>
 
         int main() {
-          nil;
-
-          return 0;
+        nil;
+        return 0;
         }
       C
     end
@@ -37,9 +35,8 @@ module Wid
         #include <Wid.h>
 
         int main() {
-          int foo = 1;
-
-          return 0;
+        int foo = 1;
+        return 0;
         }
       C
     end
@@ -51,9 +48,8 @@ module Wid
         #include <Wid.h>
 
         int main() {
-          char *foo = "bar";
-
-          return 0;
+        char *foo = "bar";
+        return 0;
         }
       C
     end
@@ -66,43 +62,40 @@ module Wid
         #include <stdio.h>
 
         int main() {
-          puts("Hello, world!");
-
-          return 0;
+        puts("Hello, world!");
+        return 0;
         }
       C
     end
 
     def test_function_call_with_variable_passed
-      output = Wid.generate("puts(foo)", debug: true)
+      output = Wid.generate("puts(foo)")
 
       assert_equal(<<~C, output)
         #include <Wid.h>
         #include <stdio.h>
 
         int main() {
-          puts(foo);
-
-          return 0;
+        puts(foo);
+        return 0;
         }
       C
     end
 
     def test_binary_operation
-      output = Wid.generate(<<~WID)
+      output = Wid.generate(<<~WID, debug: true)
         number = 1 + 2.0
         print("Number %s", number)
       WID
 
       assert_equal(<<~C, output)
         #include <Wid.h>
+        #include <stdio.h>
 
         int main() {
-
         double number = (1 + 2.0);
         print("Number %s", number);
-
-          return 0;
+        return 0;
         }
       C
     end

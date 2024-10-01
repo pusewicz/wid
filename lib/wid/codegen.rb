@@ -1,13 +1,7 @@
 module Wid
   # Codegen is a class that generates code from a Wid AST using a visitor.
   class Codegen
-    MAIN = <<~C
-      int main() {
-        %s
-
-        return 0;
-      }
-    C
+    MAIN = %(int main() {\n%s\nreturn 0;\n}\n)
 
     def initialize
       @headers = %w[Wid.h].to_set
@@ -65,7 +59,7 @@ module Wid
       else
         type + " "
       end
-      @output << "#{formatted_type_decl}#{node.left.name} = #{visit(node.right)};"
+      @output << "#{formatted_type_decl}#{visit(node.left)} = #{visit(node.right)};"
     end
 
     def infer(node)
