@@ -98,7 +98,9 @@ module Wid
         #include <Wid.h>
 
         int main() {
-          (1 + 2);
+
+        double number = (1 + 2.0);
+        print("Number %s", number);
 
           return 0;
         }
