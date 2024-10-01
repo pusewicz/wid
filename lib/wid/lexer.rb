@@ -4,7 +4,9 @@ require "strscan"
 
 module Wid
   class Lexer
-    Token = Data.define(:type, :value, :line, :column)
+    Token = Data.define(:type, :value, :line, :column) do
+      def ==(other) = type == other.type && value == other.value
+    end
 
     IDENTIFIER = /[_A-Za-z][_0-9A-Za-z]*\b/
     WHITESPACE = /[ \r\t]+/

@@ -9,8 +9,6 @@ module Wid
       def ==(other) = self.class == other.class
 
       def children = []
-
-      def accept(visitor) = visitor.visit(self)
     end
   end
 end

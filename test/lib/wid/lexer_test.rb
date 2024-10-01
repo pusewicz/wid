@@ -2,18 +2,37 @@
 
 module Wid
   class LexerTest < Test
+    def build_token(type, value)
+      Lexer::Token.new(type: type, value: value, line: nil, column: nil)
+    end
+
     def test_tokenize
       tokens = Lexer.tokenize(<<~WID)
         1 + 2.0
       WID
 
-      assert_equal([:NUMBER, :+, :NUMBER, :"\n", :EOF], tokens.map(&:type))
+      assert_equal([
+        build_token(:NUMBER, "1"),
+        build_token(:+, "+"),
+        build_token(:NUMBER, "2.0"),
+        build_token(:"\n", "\n"),
+        build_token(:EOF, nil)
+      ], tokens)
     end
 
     def test_new_line
       tokens = Lexer.tokenize("1 + 2\n3\n")
 
-      assert_equal([:NUMBER, :+, :NUMBER, :"\n", :NUMBER, :"\n", :EOF], tokens.map(&:type))
+      assert_equal([
+        build_token(:NUMBER, "1"),
+        build_token(:+, "+"),
+        build_token(:NUMBER, "2"),
+        build_token(:"\n", "\n"),
+        build_token(:NUMBER, "3"),
+        build_token(:"\n", "\n"),
+        build_token(:EOF, nil)
+      ], tokens)
+
       assert_equal(0, tokens[0].line)
       assert_equal(0, tokens[1].line)
       assert_equal(0, tokens[2].line)
@@ -48,7 +67,11 @@ module Wid
         foo
       WID
 
-      assert_equal([:IDENTIFIER, :"\n", :EOF], tokens.map(&:type))
+      assert_equal([
+        build_token(:IDENTIFIER, "foo"),
+        build_token(:"\n", "\n"),
+        build_token(:EOF, nil)
+      ], tokens)
     end
 
     def test_keywords
@@ -56,7 +79,15 @@ module Wid
         true false nil def end
       WID
 
-      assert_equal([:TRUE, :FALSE, :NIL, :DEF, :END, :"\n", :EOF], tokens.map(&:type))
+      assert_equal([
+        build_token(:TRUE, "true"),
+        build_token(:FALSE, "false"),
+        build_token(:NIL, "nil"),
+        build_token(:DEF, "def"),
+        build_token(:END, "end"),
+        build_token(:"\n", "\n"),
+        build_token(:EOF, nil)
+      ], tokens)
     end
 
     def test_punctuation
@@ -64,7 +95,23 @@ module Wid
         { } ( ) [ ] = ! | & + - .
       WID
 
-      assert_equal([:"{", :"}", :"(", :")", :"[", :"]", :"=", :!, :|, :&, :+, :-, :DOT, :"\n", :EOF], tokens.map(&:type))
+      assert_equal([
+        build_token(:"{", "{"),
+        build_token(:"}", "}"),
+        build_token(:"(", "("),
+        build_token(:")", ")"),
+        build_token(:"[", "["),
+        build_token(:"]", "]"),
+        build_token(:"=", "="),
+        build_token(:!, "!"),
+        build_token(:|, "|"),
+        build_token(:&, "&"),
+        build_token(:+, "+"),
+        build_token(:-, "-"),
+        build_token(:DOT, nil),
+        build_token(:"\n", "\n"),
+        build_token(:EOF, nil)
+      ], tokens)
     end
 
     def test_var_assignment
@@ -72,7 +119,13 @@ module Wid
         foo = 1
       WID
 
-      assert_equal([:IDENTIFIER, :"=", :NUMBER, :"\n", :EOF], tokens.map(&:type))
+      assert_equal([
+        build_token(:IDENTIFIER, "foo"),
+        build_token(:"=", "="),
+        build_token(:NUMBER, "1"),
+        build_token(:"\n", "\n"),
+        build_token(:EOF, nil)
+      ], tokens)
     end
 
     def test_nil
@@ -80,7 +133,11 @@ module Wid
         nil
       WID
 
-      assert_equal([:NIL, :"\n", :EOF], tokens.map(&:type))
+      assert_equal([
+        build_token(:NIL, "nil"),
+        build_token(:"\n", "\n"),
+        build_token(:EOF, nil)
+      ], tokens)
     end
 
     def test_puts_method_call
@@ -88,7 +145,14 @@ module Wid
         puts("Hello, World!")
       WID
 
-      assert_equal([:IDENTIFIER, :"(", :STRING, :")", :"\n", :EOF], tokens.map(&:type))
+      assert_equal([
+        build_token(:IDENTIFIER, "puts"),
+        build_token(:"(", "("),
+        build_token(:STRING, "\"Hello, World!\""),
+        build_token(:")", ")"),
+        build_token(:"\n", "\n"),
+        build_token(:EOF, nil)
+      ], tokens)
 
       assert_equal("puts", tokens[0].value)
       assert_equal("\"Hello, World!\"", tokens[2].value)
