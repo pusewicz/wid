@@ -1,6 +1,6 @@
 module Wid
   module Nodes
-    class Program
+    class Program < Node
       include Shared::ExpressionCollection
     end
   end

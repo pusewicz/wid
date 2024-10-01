@@ -51,6 +51,14 @@ module Wid
       assert_equal([:IDENTIFIER, :"=", :NUMBER, :"\n", :EOF], tokens.map(&:type))
     end
 
+    def test_nil
+      tokens = Lexer.tokenize(<<~WID)
+        nil
+      WID
+
+      assert_equal([:NIL, :"\n", :EOF], tokens.map(&:type))
+    end
+
     def test_puts_method_call
       tokens = Lexer.tokenize(<<~WID)
         puts("Hello, World!")

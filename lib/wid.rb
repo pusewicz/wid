@@ -7,8 +7,19 @@ require_relative 'wid/codegen'
 
 module Wid
   def self.parse(input)
-    lexer = Lexer.new(input)
-    parser = Parser.new(lexer)
-    parser.parse
+    tokens = Lexer.tokenize(input)
+    Parser.parse(tokens)
+  end
+
+  def self.generate(input, debug: false)
+    ast = parse(input)
+    if debug
+      puts "AST"
+      ast.expressions.each do |node|
+        puts node.inspect
+      end
+      puts "ENDAST"
+    end
+    Codegen.generate(ast)
   end
 end

@@ -69,7 +69,7 @@ module Wid
     private
 
     def unrecognized_token_error(file:, line:)
-      @errors << UnrecognizedTokenError.new(current, file, line, file:, line:)
+      @errors << UnrecognizedTokenError.new(current, file:, line:)
     end
 
     def unexpected_token_error(expected = nil, file:, line:)
@@ -131,7 +131,7 @@ module Wid
       expr
     end
 
-    KNOWN_TOKENS = %i[IDENTIFIER NUMBER + STRING].freeze
+    KNOWN_TOKENS = %i[IDENTIFIER NUMBER + STRING NIL].freeze
 
     def determine_parsing_function
       if KNOWN_TOKENS.include?(current.type)
@@ -180,6 +180,10 @@ module Wid
       end
     end
 
+    def parse_nil
+      Nodes::Nil.new
+    end
+
     def parse_string = Nodes::String.new(current.value)
 
     def parse_function_call(identifier)
@@ -205,6 +209,13 @@ module Wid
 
       return unless consume_if_next_token_is(build_token(:')', ')'))
       args
+    end
+
+    def parse_var_binding
+      identifier = Nodes::Identifier.new(current.value)
+      consume(2)
+
+      Nodes::VarBinding.new(identifier, parse_expression_recursively)
     end
   end
 end

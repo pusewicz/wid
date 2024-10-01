@@ -5,7 +5,7 @@ module Wid
 
       def initialize(name = nil, arguments = [])
         @name = name
-        @arguments = arguments
+        @arguments = arguments || []
       end
 
       def function_name
