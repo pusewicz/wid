@@ -19,7 +19,7 @@ module Wid
     KW_RE = /#{Regexp.union(KEYWORDS.sort)}\b/
     KW_TABLE = KEYWORDS.map { [_1, _1.upcase.to_sym] }.to_h
 
-    LITERALS = %W[{ } ( ) [ ] = ! | & + - \n].freeze
+    LITERALS = %W[{ } ( ) [ ] = ! | & + - , \n].freeze
     DOT = "."
 
     PUNCTUATION = Regexp.union(LITERALS)
