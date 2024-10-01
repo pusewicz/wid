@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative 'nodes'
+require_relative "nodes"
 
 module Wid
   class Parser
@@ -29,25 +29,25 @@ module Wid
     LOWEST_PRECEDENCE = 0
     PREFIX_PRECEDENCE = 7
     OPERATOR_PRECEDENCE = {
-      '||': 1,
-      '&&': 2,
-      '==': 3,
-      '!=': 3,
-      '>':  4,
-      '<':  4,
-      '>=': 4,
-      '<=': 4,
-      '+':  5,
-      '-':  5,
-      '*':  6,
-      '/':  6,
-      '(':  8
+      "||": 1,
+      "&&": 2,
+      "==": 3,
+      "!=": 3,
+      ">": 4,
+      "<": 4,
+      ">=": 4,
+      "<=": 4,
+      "+": 5,
+      "-": 5,
+      "*": 6,
+      "/": 6,
+      "(": 8
     }.freeze
 
     attr_reader :errors
 
     def initialize(tokens)
-      @tokens = tokens || raise(ArgumentError, 'tokens must be provided')
+      @tokens = tokens || raise(ArgumentError, "tokens must be provided")
       @root = Nodes::Program.new
       @pos = 0
       @errors = []
@@ -100,10 +100,15 @@ module Wid
     end
 
     def previous = peek(-1)
+
     def current = peek(0)
+
     def current_precedence = OPERATOR_PRECEDENCE.fetch(current.type, LOWEST_PRECEDENCE)
+
     def next_token_not_terminator? = peek.type != :"\n" && peek.type != :EOF
+
     def next_token_precedence = OPERATOR_PRECEDENCE.fetch(peek.type, LOWEST_PRECEDENCE)
+
     def check_syntax_compliance(node)
       return if node.expects?(peek)
       unexpected_token_error(nil, file: __FILE__, line: __LINE__)
@@ -135,7 +140,7 @@ module Wid
 
     def determine_parsing_function
       if KNOWN_TOKENS.include?(current.type)
-        "parse_#{current.type.downcase}".to_sym
+        :"parse_#{current.type.downcase}"
       elsif current.type == :"("
         :parse_grouped_expression
       elsif [:"\n", :EOF].include?(current.type)
@@ -148,7 +153,7 @@ module Wid
     def determine_infix_parsing_function(token = current)
       if (BINARY_OPERATORS + LOGICAL_OPERATORS).include?(token.type)
         :parse_binary_operator
-      elsif token.type == :'('
+      elsif token.type == :"("
         :parse_function_call
       end
     end
@@ -169,9 +174,11 @@ module Wid
 
     # TODO: Temporary impl; reflect more deeply about the appropriate way of parsing a terminator.
     def parse_terminator = nil
+
     def parse_number = Nodes::Number.new(current.value)
+
     def parse_identifier
-      if peek.type == :'='
+      if peek.type == :"="
         parse_var_binding
       else
         ident = Nodes::Identifier.new(current.value)
@@ -194,7 +201,7 @@ module Wid
       args = []
 
       # Function call without arguments.
-      if peek.type == :')'
+      if peek.type == :")"
         consume
         return args
       end
@@ -202,12 +209,12 @@ module Wid
       consume
       args << parse_expression_recursively
 
-      while peek.type == :','
+      while peek.type == :","
         consume(2)
         args << parse_expression_recursively
       end
 
-      return unless consume_if_next_token_is(build_token(:')', ')'))
+      return unless consume_if_next_token_is(build_token(:")", ")"))
       args
     end
 

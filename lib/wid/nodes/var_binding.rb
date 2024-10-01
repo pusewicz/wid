@@ -9,7 +9,9 @@ module Wid
       end
 
       def var_name_as_str = left.name       # The instance variable @left is an Nodes::Identifier.
+
       def ==(other) = children == other&.children
+
       def children = [left, right]
     end
   end

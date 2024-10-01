@@ -4,6 +4,7 @@ module Wid
       # Use super's initializer
 
       def ==(other) = value == other&.value
+
       def children = []
     end
   end

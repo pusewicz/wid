@@ -7,13 +7,13 @@ module Wid
         1 + 2.0
       WID
 
-      assert_equal([:NUMBER, :"+", :NUMBER, :"\n", :EOF], tokens.map(&:type))
+      assert_equal([:NUMBER, :+, :NUMBER, :"\n", :EOF], tokens.map(&:type))
     end
 
     def test_new_line
       tokens = Lexer.tokenize("1 + 2\n3\n")
 
-      assert_equal([:NUMBER, :"+", :NUMBER, :"\n", :NUMBER, :"\n", :EOF], tokens.map(&:type))
+      assert_equal([:NUMBER, :+, :NUMBER, :"\n", :NUMBER, :"\n", :EOF], tokens.map(&:type))
       assert_equal(0, tokens[0].line)
       assert_equal(0, tokens[1].line)
       assert_equal(0, tokens[2].line)

@@ -74,7 +74,7 @@ module Wid
     end
 
     def test_function_call_with_variable_passed
-      output = Wid.generate('puts(foo)', debug: true)
+      output = Wid.generate("puts(foo)", debug: true)
 
       assert_equal(<<~C, output)
         #include <Wid.h>

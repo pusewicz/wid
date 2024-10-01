@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'strscan'
+require "strscan"
 
 module Wid
   class Lexer
@@ -10,17 +10,17 @@ module Wid
     WHITESPACE = /[ \r\t]+/
     INTEGER = /-?(?:0|[1-9][0-9]*)/
     FLOAT_DECIMAL = /[.][0-9]+/
-    NUMBER =  /#{INTEGER}(#{FLOAT_DECIMAL})?/
+    NUMBER = /#{INTEGER}(#{FLOAT_DECIMAL})?/
     STRING = /"([^"\\]|\\.)*"/
     # STRING =/"[^"]*"/
 
     KEYWORDS = %w[true false nil def end].freeze
 
     KW_RE = /#{Regexp.union(KEYWORDS.sort)}\b/
-    KW_TABLE = Hash[KEYWORDS.map { |kw| [kw, kw.upcase.to_sym] }]
+    KW_TABLE = KEYWORDS.map { [_1, _1.upcase.to_sym] }.to_h
 
     LITERALS = %W[{ } ( ) [ ] = ! | & + - \n].freeze
-    DOT = '.'
+    DOT = "."
 
     PUNCTUATION = Regexp.union(LITERALS)
     PUNCTUATION_TABLE = LITERALS.map { |x| [x, x.to_sym] }.to_h
@@ -54,17 +54,17 @@ module Wid
 
       return if @scanner.eos?
 
-      tok = if (s = @scanner.scan(PUNCTUATION))
-        token(PUNCTUATION_TABLE[s], s)
-      elsif (s = @scanner.scan(KW_RE))
-        token(KW_TABLE[s], s)
-      elsif (s = @scanner.scan(STRING))
-        token(:STRING, s)
-      elsif (s = @scanner.scan(IDENTIFIER))
-        token(:IDENTIFIER, s)
-      elsif (s = @scanner.scan(NUMBER))
-        token(:NUMBER, s)
-      elsif (s = @scanner.scan(DOT))
+      tok = if @scanner.scan(PUNCTUATION)
+        token(PUNCTUATION_TABLE[@scanner.matched], @scanner.matched)
+      elsif @scanner.scan(KW_RE)
+        token(KW_TABLE[@scanner.matched], @scanner.matched)
+      elsif @scanner.scan(STRING)
+        token(:STRING, @scanner.matched)
+      elsif @scanner.scan(IDENTIFIER)
+        token(:IDENTIFIER, @scanner.matched)
+      elsif @scanner.scan(NUMBER)
+        token(:NUMBER, @scanner.matched)
+      elsif @scanner.scan(DOT)
         token(:DOT)
       else
         token(:UNKNOWN, @scanner.getch)

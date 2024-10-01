@@ -1,14 +1,14 @@
 #!/usr/bin/env ruby -w
 
-require_relative '../lib/wid'
-require 'open3'
+require_relative "../lib/wid"
+require "open3"
 
 if ARGV.size != 1
   puts "Usage: #{$0} <file>"
   exit 1
 end
 
-ROOT = File.expand_path(File.join(File.dirname(__FILE__), '..'))
+ROOT = File.expand_path(File.join(File.dirname(__FILE__), ".."))
 
 file = ARGV[0]
 
@@ -23,20 +23,20 @@ ast = parser.parse
 
 if parser.errors.any?
   parser.errors.each do |error|
-    $stderr.puts "warning: #{error.to_s} in #{file}:#{error.token.line}:#{error.token.column}"
+    warn "warning: #{error} in #{file}:#{error.token.line}:#{error.token.column}"
   end
 end
 
 output = Wid::Codegen.generate(ast)
 
-CC = ENV['CC'] || '/opt/homebrew/bin/zig cc'
+CC = ENV["CC"] || "/opt/homebrew/bin/zig cc"
 FLAGS = %W[
   -v
   -std=c2x
   -I#{ROOT}/include
 ]
 
-basename = File.basename(file, '.*')
+basename = File.basename(file, ".*")
 src = File.join(Dir.pwd, "#{basename}.c")
 exe = File.join(Dir.pwd, basename)
 
@@ -47,7 +47,7 @@ puts " * Compiling #{src}..."
 puts " **/"
 system("bat", src)
 
-cmd = [*CC.split(' '), *FLAGS, src, '-o', exe]
+cmd = [*CC.split(" "), *FLAGS, src, "-o", exe]
 
 Open3.popen3(*cmd) do |stdin, stdout, stderr, wait_thr|
   stdin.close

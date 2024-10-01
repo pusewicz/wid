@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'wid'
+require "wid"
 
 module Wid
   class Test < TLDR
