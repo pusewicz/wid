@@ -2,11 +2,13 @@ module Wid
   module Nodes
     class Number < Expression
       def initialize(value)
-        @value = if value.include?(".")
-          value.to_f
-        else
-          value.to_i
-        end
+        super(
+          if value.include?(".")
+            value.to_f
+          else
+            value.to_i
+          end
+        )
       end
 
       def ==(other) = value == other&.value

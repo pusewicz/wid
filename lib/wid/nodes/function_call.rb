@@ -4,12 +4,14 @@ module Wid
       attr_accessor :name, :arguments
 
       def initialize(name = nil, arguments = [])
-        @name = name
         @arguments = arguments || []
+        super(name)
       end
 
+      alias name value
+
       def function_name
-        @name.name
+        @value.name
       end
 
       def ==(other)
@@ -17,7 +19,7 @@ module Wid
       end
 
       def children
-        [@name, @arguments]
+        [@value, @arguments]
       end
     end
   end

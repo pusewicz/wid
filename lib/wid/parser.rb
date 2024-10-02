@@ -14,8 +14,10 @@ module Wid
         super("Unexpected token #{token.type} `#{token.value}' at #{file}:#{line}. Expected `#{expected || next_token.type}'")
       end
     end
+
     UnrecognizedTokenError = Class.new(ParserError) do
       attr_reader :token
+
       def initialize(token, file:, line:)
         @token = token
         super("Unrecognized token #{token.type} `#{token.value}' at #{file}:#{line}")

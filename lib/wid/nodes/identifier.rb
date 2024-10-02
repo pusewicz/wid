@@ -8,6 +8,7 @@ module Wid
 
       def initialize(name)
         @name = name
+        super
       end
 
       def ==(other)

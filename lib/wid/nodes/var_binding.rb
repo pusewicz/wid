@@ -6,9 +6,11 @@ module Wid
       def initialize(left, right)
         @left = left
         @right = right
+        super()
       end
 
-      def var_name_as_str = left.name       # The instance variable @left is an Nodes::Identifier.
+      # The instance variable @left is an Nodes::Identifier.
+      def var_name_as_str = left.name
 
       def ==(other) = children == other&.children
 

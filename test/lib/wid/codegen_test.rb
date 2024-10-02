@@ -83,7 +83,7 @@ module Wid
     end
 
     def test_binary_operation
-      output = Wid.generate(<<~WID, debug: true)
+      output = Wid.generate(<<~WID)
         number = 1 + 2.0
         print("Number %s", number)
       WID

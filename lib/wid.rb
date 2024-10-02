@@ -13,13 +13,13 @@ module Wid
 
   def self.generate(input, debug: false)
     ast = parse(input)
-    if debug
-      puts "AST"
-      ast.expressions.each do |node|
-        puts node.inspect
-      end
-      puts "ENDAST"
-    end
+    dump_ast(ast) if debug
     Codegen.generate(ast)
+  end
+
+  def self.dump_ast(ast)
+    ast.children.each do |child|
+      puts child.inspect
+    end
   end
 end
