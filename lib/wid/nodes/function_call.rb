@@ -8,7 +8,7 @@ module Wid
         super(name)
       end
 
-      alias name value
+      alias_method :name, :value
 
       def function_name
         @value.name

@@ -20,7 +20,7 @@ module Wid
 
     def generate_headers = @headers.uniq.map { "#include <#{_1}>" }.join("\n") << "\n\n"
 
-    def generate_output = MAIN % (@output.join(";\n") << ';')
+    def generate_output = MAIN % (@output.join(";\n") << ";")
 
     def visit(node)
       raise "Cannot visit `#{node.inspect}'" unless node.is_a?(Nodes::Node)
@@ -48,7 +48,7 @@ module Wid
 
     def visit_function_call(node)
       case node.function_name
-      when "print", "puts"
+      when "print", "printf", "puts"
         @headers << "stdio.h"
       end
       args = node.arguments.map { visit(_1) }.join(", ")
@@ -68,18 +68,18 @@ module Wid
     # TODO: Move type inference into a separate AST pipeline pass
     def infer(node)
       case node
-        when Nodes::Number
-          node.value.is_a?(Integer) ? "int" : "double"
-        when Nodes::String
-          "char*"
-        when Nodes::BinaryOperator
-          if node.children.any? { |child| child.value.is_a?(Float) }
-            "double"
-          else
-            "int"
-          end
+      when Nodes::Number
+        node.value.is_a?(Integer) ? "int" : "double"
+      when Nodes::String
+        "char*"
+      when Nodes::BinaryOperator
+        if node.children.any? { |child| child.value.is_a?(Float) }
+          "double"
         else
-          raise("Cannot infer type of `#{node.inspect}'")
+          "int"
+        end
+      else
+        raise("Cannot infer type of `#{node.inspect}'")
       end
     end
   end
