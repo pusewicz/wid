@@ -9,18 +9,18 @@ module Wid
     UnexpectedTokenError = Class.new(ParserError) do
       attr_reader :token
 
-      def initialize(token, next_token, expected = nil, file:, line:)
+      def initialize(token, next_token, expected = nil)
         @token = token
-        super("Unexpected token #{token.type} `#{token.value}' at #{file}:#{line}. Expected `#{expected || next_token.type}'")
+        super("Unexpected token #{token.type} `#{token.value}'. Expected `#{expected || next_token.type}'")
       end
     end
 
     UnrecognizedTokenError = Class.new(ParserError) do
       attr_reader :token
 
-      def initialize(token, file:, line:)
+      def initialize(token)
         @token = token
-        super("Unrecognized token #{token.type} `#{token.value}' at #{file}:#{line}")
+        super("Unrecognized token #{token.type} `#{token.value}'")
       end
     end
 
@@ -70,12 +70,12 @@ module Wid
 
     private
 
-    def unrecognized_token_error(file:, line:)
-      @errors << UnrecognizedTokenError.new(current, file:, line:)
+    def unrecognized_token_error
+      @errors << UnrecognizedTokenError.new(current)
     end
 
-    def unexpected_token_error(expected = nil, file:, line:)
-      @errors << UnexpectedTokenError.new(current, peek, expected, file:, line:)
+    def unexpected_token_error(expected = nil)
+      @errors << UnexpectedTokenError.new(current, peek, expected)
     end
 
     def consume(offset = 1)
@@ -89,7 +89,7 @@ module Wid
         consume
         true
       else
-        unexpected_token_error(expected, file: __FILE__, line: __LINE__)
+        unexpected_token_error(expected)
         false
       end
     end
@@ -113,13 +113,13 @@ module Wid
 
     def check_syntax_compliance(node)
       return if node.expects?(peek)
-      unexpected_token_error(nil, file: __FILE__, line: __LINE__)
+      unexpected_token_error(nil)
     end
 
     def parse_expression_recursively(precedence = LOWEST_PRECEDENCE)
       parsing_function = determine_parsing_function
 
-      return unrecognized_token_error(file: __FILE__, line: __LINE__) unless parsing_function
+      return unrecognized_token_error unless parsing_function
 
       expr = send(parsing_function)
 
