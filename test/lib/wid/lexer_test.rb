@@ -108,7 +108,7 @@ module Wid
         build_token(:&, "&"),
         build_token(:+, "+"),
         build_token(:-, "-"),
-        build_token(:DOT, nil),
+        build_token(:".", "."),
         build_token(:"\n", "\n"),
         build_token(:EOF, nil)
       ], tokens)
