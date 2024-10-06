@@ -4,7 +4,7 @@ module Wid
       attr_accessor :name
 
       # TODO This list is incomplete. Complete after some aspects of the parser become clearer.
-      EXPECTED_NEXT_TOKENS = %I[\n + - * / == != > < >= <= && ||].freeze
+      EXPECTED_NEXT_TOKENS = %I[\n + - * / == != > < >= <= && || ( )].freeze
 
       def initialize(name)
         @name = name
