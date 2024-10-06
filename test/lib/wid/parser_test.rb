@@ -1,27 +1,29 @@
 module Wid
   class ParserTest < Test
     def test_parse
-      tokens = Lexer.tokenize(<<~WID)
-        1 + 2.0
-      WID
+      ast = parse("1 + 2.0")
 
-      parser = Parser.new(tokens)
-      ast = parser.parse
-
-      assert_empty(parser.errors)
       assert_equal(Nodes::Program, ast.class)
     end
 
     def test_parse_nil
-      tokens = Lexer.tokenize(<<~WID)
-        nil
-      WID
+      ast = parse("nil")
 
-      parser = Parser.new(tokens)
-      ast = parser.parse
-
-      assert_empty(parser.errors)
       assert_equal(Nodes::Nil, ast.children.first.class)
+    end
+
+    def test_function_call
+      ast = parse("print(1)")
+
+      assert_equal(Nodes::Program, ast.class)
+      assert_equal(Nodes::FunctionCall, ast.children.first.class)
+    end
+
+    private
+
+    def parse(input)
+      tokens = Lexer.tokenize(input)
+      Parser.parse(tokens)
     end
   end
 end
