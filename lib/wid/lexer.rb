@@ -4,23 +4,30 @@ require "strscan"
 
 module Wid
   class Lexer
+    LexerError = Class.new(StandardError)
+    class SyntaxError < LexerError
+      attr_reader :line, :column
+
+      def initialize(msg, line, column)
+        super(msg)
+        @line = line
+        @column = column
+      end
+    end
+
     Token = Data.define(:type, :value, :line, :column) do
       def ==(other) = type == other.type && value == other.value
     end
 
-    WHITESPACE = /[ \r\t]+/
-    IDENTIFIER = /[_A-Za-z][_0-9A-Za-z]*\b/
-    INTEGER = /-?(?:0|[1-9][0-9]*)/
-    FLOAT_DECIMAL = /[.][0-9]+/
-    NUMBER = /#{INTEGER}(#{FLOAT_DECIMAL})?/
-    STRING = /"([^"\\]|\\.)*"/
-    KEYWORDS = %w[true false nil def end].freeze
-    KW_RE = /#{Regexp.union(KEYWORDS.sort)}\b/
-    KW_TABLE = KEYWORDS.map { [_1, _1.upcase.to_sym] }.to_h
-
-    LITERALS = %W[{ } ( ) [ ] = ! | & + - , . \n].freeze
-    LITERALS_RE = Regexp.union(LITERALS).freeze
-    LITERALS_TABLE = LITERALS.map { |x| [x, x.to_sym] }.to_h
+    TOKEN_TYPES = {
+      WHITESPACE: /[ \r\t]+/, # Has to go first
+      KEYWORD: /#{Regexp.union(%w[true false nil def end].sort)}\b/,
+      NUMBER: /\d+(\.\d+)?/,
+      STRING: /"[^"]*"|'[^']*'/,
+      IDENTIFIER: /[_A-Za-z][_0-9A-Za-z]*\b/,
+      PUNCTUATION: Regexp.union(%w[{ } ( ) [ ] = ! | & + - , .]).freeze,
+      NEW_LINE: /[\n]/
+    }.freeze
 
     def self.tokenize(input)
       new(input).tokenize
@@ -35,62 +42,44 @@ module Wid
     def tokenize
       tokens = []
 
-      while (tok = next_token)
-        tokens << tok
+      while (token = next_token)
+        tokens << token
       end
 
       tokens << token(:EOF)
     end
 
-    def column_number
-      @scanner.pos - @last_pos - @scanner.matched_size.to_i
-    end
-
     def next_token
-      @scanner.skip(WHITESPACE)
-
       return if @scanner.eos?
 
-      tok = if @scanner.scan(LITERALS_RE)
-        token(LITERALS_TABLE[@scanner.matched], @scanner.matched)
-      elsif @scanner.scan(KW_RE)
-        token(KW_TABLE[@scanner.matched], @scanner.matched)
-      elsif @scanner.scan(STRING)
-        token(:STRING, @scanner.matched)
-      elsif @scanner.scan(IDENTIFIER)
-        token(:IDENTIFIER, @scanner.matched)
-      elsif @scanner.scan(NUMBER)
-        token(:NUMBER, @scanner.matched)
-      else
-        # print out the lines around the error line to give context
-        ch = @scanner.getch
+      TOKEN_TYPES.each do |type, pattern|
+        if (match = @scanner.scan(pattern))
 
-        warn "warn: Syntax error at #{@line_number + 1}:#{column_number}: unknown token `#{ch}'"
-        lines = @scanner.string.split("\n")
-        lines[[@line_number - 1, 0].max..@line_number + 1].each_with_index do |line, i|
-          lineno = @line_number + i
-          line_prefix = " #{lineno.to_s.ljust(lines.size - 1)} | "
-          warn "#{line_prefix}#{line}"
-          if @line_number == lineno - 1
-            warn " " * (column_number + line_prefix.size) + "^"
+          case type
+          when :WHITESPACE then next
+          when :KEYWORD then return token(match.upcase.to_sym, match)
+          when :PUNCTUATION, :OPERATOR then return token(match.to_sym, match)
+          when :NEW_LINE
+            return token(match.to_sym, match).tap do
+              @last_pos = @scanner.pos
+              @line_number += 1
+            end
+          else return token(type, match)
           end
         end
-
-        token(:UNKNOWN, ch)
       end
 
-      if tok.type == :"\n"
-        @last_pos = @scanner.pos
-        @line_number += 1
-      end
-
-      tok
+      raise SyntaxError.new("Unknown token `#{@scanner.getch}'", @line_number + 1, column_number)
     end
 
     private
 
     def token(type, value = nil)
       Token.new(type: type, value: value, line: @line_number, column: column_number)
+    end
+
+    def column_number
+      @scanner.pos - @last_pos - @scanner.matched_size.to_i
     end
   end
 end
