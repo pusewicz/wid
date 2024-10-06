@@ -46,13 +46,10 @@ module Wid
       "(": 8
     }.freeze
 
-    attr_reader :errors
-
     def initialize(tokens)
       @tokens = tokens || raise(ArgumentError, "tokens must be provided")
       @root = Nodes::Program.new
       @pos = 0
-      @errors = []
     end
 
     def self.parse(tokens) = new(tokens).parse
@@ -70,14 +67,6 @@ module Wid
 
     private
 
-    def unrecognized_token_error
-      @errors << UnrecognizedTokenError.new(current)
-    end
-
-    def unexpected_token_error(expected = nil)
-      @errors << UnexpectedTokenError.new(current, peek, expected)
-    end
-
     def consume(offset = 1)
       tok = peek(offset)
       @pos += offset
@@ -89,8 +78,7 @@ module Wid
         consume
         true
       else
-        unexpected_token_error(expected)
-        false
+        raise UnexpectedTokenError.new(current_token, peek, expected)
       end
     end
 
@@ -103,9 +91,9 @@ module Wid
 
     def previous = peek(-1)
 
-    def current = peek(0)
+    def current_token = peek(0)
 
-    def current_precedence = OPERATOR_PRECEDENCE.fetch(current.type, LOWEST_PRECEDENCE)
+    def current_precedence = OPERATOR_PRECEDENCE.fetch(current_token.type, LOWEST_PRECEDENCE)
 
     def next_token_not_terminator? = peek.type != :"\n" && peek.type != :EOF
 
@@ -113,13 +101,14 @@ module Wid
 
     def check_syntax_compliance(node)
       return if node.expects?(peek)
-      unexpected_token_error(nil)
+
+      raise UnexpectedTokenError.new(current_token, peek, nil)
     end
 
     def parse_expression_recursively(precedence = LOWEST_PRECEDENCE)
       parsing_function = determine_parsing_function
 
-      return unrecognized_token_error unless parsing_function
+      raise UnrecognizedTokenError.new(current_token) unless parsing_function
 
       expr = send(parsing_function)
 
@@ -141,18 +130,18 @@ module Wid
     KNOWN_TOKENS = %i[IDENTIFIER NUMBER + STRING NIL].freeze
 
     def determine_parsing_function
-      if KNOWN_TOKENS.include?(current.type)
-        :"parse_#{current.type.downcase}"
-      elsif current.type == :"("
+      if KNOWN_TOKENS.include?(current_token.type)
+        :"parse_#{current_token.type.downcase}"
+      elsif current_token.type == :"("
         :parse_grouped_expression
-      elsif [:"\n", :EOF].include?(current.type)
+      elsif [:"\n", :EOF].include?(current_token.type)
         :parse_terminator
-      elsif UNARY_OPERATORS.include?(current.type)
+      elsif UNARY_OPERATORS.include?(current_token.type)
         :parse_unary_operator
       end
     end
 
-    def determine_infix_parsing_function(token = current)
+    def determine_infix_parsing_function(token = current_token)
       if (BINARY_OPERATORS + LOGICAL_OPERATORS).include?(token.type)
         :parse_binary_operator
       elsif token.type == :"("
@@ -165,7 +154,7 @@ module Wid
     end
 
     def parse_binary_operator(left)
-      op = Nodes::BinaryOperator.new(current.type, left)
+      op = Nodes::BinaryOperator.new(current_token.type, left)
       op_precedence = current_precedence
 
       consume
@@ -177,15 +166,15 @@ module Wid
     # TODO: Temporary impl; reflect more deeply about the appropriate way of parsing a terminator.
     def parse_terminator = nil
 
-    def parse_number = Nodes::Number.new(current.value)
+    def parse_number = Nodes::Number.new(current_token.value)
 
     def parse_identifier
       if peek.type == :"="
         parse_var_binding
       else
-        ident = Nodes::Identifier.new(current.value)
-        check_syntax_compliance(ident)
-        ident
+        identifier = Nodes::Identifier.new(current_token.value)
+        check_syntax_compliance(identifier)
+        identifier
       end
     end
 
@@ -193,7 +182,7 @@ module Wid
       Nodes::Nil.new
     end
 
-    def parse_string = Nodes::String.new(current.value)
+    def parse_string = Nodes::String.new(current_token.value)
 
     def parse_function_call(identifier)
       Nodes::FunctionCall.new(identifier, parse_function_call_args)
@@ -221,7 +210,7 @@ module Wid
     end
 
     def parse_var_binding
-      identifier = Nodes::Identifier.new(current.value)
+      identifier = Nodes::Identifier.new(current_token.value)
       consume(2)
 
       Nodes::VarBinding.new(identifier, parse_expression_recursively)
