@@ -20,7 +20,7 @@ module Wid
 
       def initialize(token)
         @token = token
-        super("Unrecognized token #{token.type} `#{token.value}'")
+        super("Unrecognized token `#{token.value}'")
       end
     end
 
@@ -151,7 +151,57 @@ module Wid
     #  : Literal
     #  ;
     def parse_expression
-      parse_literal
+      parse_additive_expression
+    end
+
+    # AdditiveExpression
+    #  : MultiplicativeExpression
+    #  | AdditiveExpression ADDITIVE_OPERATOR Literal -> Literal ADDITIVE_OPERATOR Literal ADDITIVE_OPERATOR Literal
+    #  ;
+    def parse_additive_expression
+      parse_binary_expression(:multiplicative_expression, :ADDITIVE_OPERATOR)
+    end
+
+    # MultiplicativeExpression
+    #  : PrimaryExpression
+    #  | MultiplicativeExpression MULTIPLICATIVE_OPERATOR PrimaryExpression -> PrimaryExpression MULTIPLICATIVE_OPERATOR PrimaryExpression MULTIPLICATIVE_OPERATOR PrimaryExpression
+    #  ;
+    def parse_multiplicative_expression
+      parse_binary_expression(:primary_expression, :MULTIPLICATIVE_OPERATOR)
+    end
+
+    def parse_binary_expression(type, operator_type)
+      left = send(:"parse_#{type}")
+
+      while peek&.type == operator_type
+        operator = consume_type(operator_type).value
+        right = send(:"parse_#{type}")
+        left = Nodes::BinaryExpression.new(operator, left, right)
+      end
+
+      left
+    end
+
+    # PrimaryExpression
+    #  : Literal
+    #  | ParenthesizedExpression
+    #  ;
+    def parse_primary_expression
+      case peek.type
+      when :"(" then parse_parenthesized_expression
+      else parse_literal
+      end
+    end
+
+    # ParenthesizedExpression
+    #  : '(' Expression ')'
+    #  ;
+    def parse_parenthesized_expression
+      consume_type(:"(")
+      expression = parse_expression
+      consume_type(:")")
+
+      expression
     end
   end
 end
