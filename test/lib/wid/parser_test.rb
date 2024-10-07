@@ -270,6 +270,40 @@ module Wid
       }, ast)
     end
 
+    def test_block_statement_nested
+      ast = parse("{ 1 { 2 } }")
+
+      assert_ast_equal({
+        class: Nodes::Program,
+        children: [
+          {
+            class: Nodes::BlockStatement,
+            children: [
+              {
+                class: Nodes::ExpressionStatement,
+                children: [{
+                  class: Nodes::NumericLiteral,
+                  value: 1
+                }]
+              },
+              {
+                class: Nodes::BlockStatement,
+                children: [
+                  {
+                    class: Nodes::ExpressionStatement,
+                    children: [{
+                      class: Nodes::NumericLiteral,
+                      value: 2
+                    }]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }, ast)
+    end
+
     private
 
     def assert_ast_equal(expected, actual)
