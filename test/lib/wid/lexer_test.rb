@@ -2,49 +2,42 @@
 
 module Wid
   class LexerTest < Test
-    def build_token(type, value)
-      Lexer::Token.new(type: type, value: value, line: nil, column: nil)
-    end
-
-    def test_tokenize
-      tokens = Lexer.tokenize(<<~WID)
-        1 + 2.0
-      WID
-
+    def test_number
       assert_equal([
         build_token(:NUMBER, "1"),
-        build_token(:+, "+"),
-        build_token(:NUMBER, "2.0"),
-        build_token(:"\n", "\n"),
-        build_token(:EOF, nil)
-      ], tokens)
+        build_token(:NUMBER, "2"),
+        build_token(:NUMBER, "3")
+      ], Lexer.tokenize("1 2 3"))
+
+      assert_equal([
+        build_token(:NUMBER, "1.3"),
+        build_token(:NUMBER, "2.7"),
+        build_token(:NUMBER, "3.88999")
+      ], Lexer.tokenize("1.3 2.7 3.88999"))
+    end
+
+    def test_string
+      assert_equal([
+        build_token(:STRING, "\"foo\""),
+        build_token(:STRING, "'bar'")
+      ], Lexer.tokenize("\"foo\" 'bar'"))
     end
 
     def test_new_line
-      tokens = Lexer.tokenize("1 + 2\n3\n")
+      tokens = Lexer.tokenize("1\n3")
 
       assert_equal([
         build_token(:NUMBER, "1"),
-        build_token(:+, "+"),
-        build_token(:NUMBER, "2"),
         build_token(:"\n", "\n"),
-        build_token(:NUMBER, "3"),
-        build_token(:"\n", "\n"),
-        build_token(:EOF, nil)
+        build_token(:NUMBER, "3")
       ], tokens)
 
       assert_equal(0, tokens[0].line)
       assert_equal(0, tokens[1].line)
-      assert_equal(0, tokens[2].line)
-      assert_equal(0, tokens[3].line)
-
-      assert_equal(1, tokens[4].line)
-      assert_equal(1, tokens[5].line)
-
-      assert_equal(2, tokens[6].line)
+      assert_equal(1, tokens[2].line)
     end
 
-    def test_position
+    def test_column
       tokens = Lexer.tokenize("1 + 2\n       3  + 17\nputs(foo)    \n")
 
       assert_equal(0, tokens[0].column) # 1
@@ -63,37 +56,25 @@ module Wid
     end
 
     def test_identifier
-      tokens = Lexer.tokenize(<<~WID)
-        foo
-      WID
+      tokens = Lexer.tokenize("foo")
 
       assert_equal([
-        build_token(:IDENTIFIER, "foo"),
-        build_token(:"\n", "\n"),
-        build_token(:EOF, nil)
+        build_token(:IDENTIFIER, "foo")
       ], tokens)
     end
 
     def test_keywords
-      tokens = Lexer.tokenize(<<~WID)
-        true false nil def end
-      WID
+      tokens = Lexer.tokenize("true false nil")
 
       assert_equal([
-        build_token(:TRUE, "true"),
-        build_token(:FALSE, "false"),
-        build_token(:NIL, "nil"),
-        build_token(:DEF, "def"),
-        build_token(:END, "end"),
-        build_token(:"\n", "\n"),
-        build_token(:EOF, nil)
+        build_token(:true, "true"),
+        build_token(:false, "false"),
+        build_token(:nil, "nil")
       ], tokens)
     end
 
     def test_punctuation
-      tokens = Lexer.tokenize(<<~WID)
-        { } ( ) [ ] = ! | & + - .
-      WID
+      tokens = Lexer.tokenize("{ } ( ) [ ] . ,")
 
       assert_equal([
         build_token(:"{", "{"),
@@ -102,60 +83,53 @@ module Wid
         build_token(:")", ")"),
         build_token(:"[", "["),
         build_token(:"]", "]"),
-        build_token(:"=", "="),
-        build_token(:!, "!"),
-        build_token(:|, "|"),
-        build_token(:&, "&"),
-        build_token(:+, "+"),
-        build_token(:-, "-"),
         build_token(:".", "."),
-        build_token(:"\n", "\n"),
-        build_token(:EOF, nil)
+        build_token(:",", ",")
       ], tokens)
     end
 
     def test_var_assignment
-      tokens = Lexer.tokenize(<<~WID)
-        foo = 1
-      WID
+      tokens = Lexer.tokenize("foo = 1")
 
       assert_equal([
         build_token(:IDENTIFIER, "foo"),
-        build_token(:"=", "="),
-        build_token(:NUMBER, "1"),
-        build_token(:"\n", "\n"),
-        build_token(:EOF, nil)
+        build_token(:SIMPLE_ASSIGN, "="),
+        build_token(:NUMBER, "1")
       ], tokens)
     end
 
     def test_nil
-      tokens = Lexer.tokenize(<<~WID)
-        nil
-      WID
+      tokens = Lexer.tokenize("nil")
 
       assert_equal([
-        build_token(:NIL, "nil"),
-        build_token(:"\n", "\n"),
-        build_token(:EOF, nil)
+        build_token(:nil, "nil")
       ], tokens)
     end
 
     def test_puts_method_call
-      tokens = Lexer.tokenize(<<~WID)
-        puts("Hello, World!")
-      WID
+      tokens = Lexer.tokenize('puts("Hello, World!")')
 
       assert_equal([
         build_token(:IDENTIFIER, "puts"),
         build_token(:"(", "("),
         build_token(:STRING, "\"Hello, World!\""),
-        build_token(:")", ")"),
-        build_token(:"\n", "\n"),
-        build_token(:EOF, nil)
+        build_token(:")", ")")
       ], tokens)
 
       assert_equal("puts", tokens[0].value)
       assert_equal("\"Hello, World!\"", tokens[2].value)
+    end
+
+    def test_invalid_token
+      assert_raises(Lexer::SyntaxError) do
+        Lexer.tokenize("foo @ bar")
+      end
+    end
+
+    private
+
+    def build_token(type, value)
+      Lexer::Token.new(type: type, value: value, line: nil, column: nil)
     end
   end
 end
