@@ -88,12 +88,14 @@ module Wid
     end
 
     def test_keywords
-      tokens = Lexer.tokenize("true false nil")
+      tokens = Lexer.tokenize("true false nil do end")
 
       assert_equal([
         build_token(:true, "true"),
         build_token(:false, "false"),
-        build_token(:nil, "nil")
+        build_token(:nil, "nil"),
+        build_token(:do, "do"),
+        build_token(:end, "end")
       ], tokens)
     end
 

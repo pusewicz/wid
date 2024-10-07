@@ -32,6 +32,8 @@ module Wid
       [/true\b/, :true],
       [/false\b/, :false],
       [/nil\b/, :nil],
+      [/do\b/, :do],
+      [/end\b/, :end],
 
       # Numbers
       [/\d+(\.\d+)?/, :NUMBER],
@@ -80,6 +82,8 @@ module Wid
     end
 
     def next_token
+      return if @scanner.eos?
+
       SPEC.each do |(pattern, type)|
         if (match = @scanner.scan(pattern))
           case type

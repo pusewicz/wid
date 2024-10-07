@@ -77,7 +77,7 @@ module Wid
       case peek.type
       when :NUMBER then parse_numeric_literal
       when :STRING then parse_string_literal
-      else raise SyntaxError, "Unsupported literal type #{current_token.type}"
+      else raise UnrecognizedTokenError.new(peek)
       end
     end
 
@@ -95,10 +95,10 @@ module Wid
     #  : Statement
     #  | StatementList Statement -> Statement Statement Statement Statement
     #  ;
-    def parse_statement_list
+    def parse_statement_list(terminator = nil)
       statements = [parse_statement]
 
-      while peek
+      while peek && peek.type != terminator
         statements << parse_statement
       end
 
@@ -107,9 +107,25 @@ module Wid
 
     # Statement
     #  : ExpressionStatement
+    #  : BlockStatement
     #  ;
     def parse_statement
-      parse_expression_statement
+      case peek.type
+      when :"{" then parse_block_statement(:"{", :"}")
+      when :do then parse_block_statement(:do, :end)
+      else parse_expression_statement
+      end
+    end
+
+    # BlockStatement
+    #  : '{' StatementList? '}'
+    #  | do StatementList? end
+    #  ;
+    def parse_block_statement(opening, closing)
+      consume_type(opening)
+      statements = (peek.type != closing) ? parse_statement_list(closing) : []
+      consume_type(closing)
+      Nodes::BlockStatement.new(statements)
     end
 
     # ExpressionStatement

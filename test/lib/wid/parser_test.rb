@@ -154,7 +154,7 @@ module Wid
     end
 
     def test_statement_list
-      ast = parse("1; 2; 3")
+      ast = parse("1; 2; 3;")
 
       assert_ast_equal({
         class: Nodes::Program,
@@ -179,6 +179,78 @@ module Wid
               class: Nodes::NumericLiteral,
               value: 3
             }]
+          }
+        ]
+      }, ast)
+    end
+
+    def test_block_statement_curly_braces
+      ast = parse("{ 1; 2; 3 }")
+
+      assert_ast_equal({
+        class: Nodes::Program,
+        children: [
+          {
+            class: Nodes::BlockStatement,
+            children: [
+              {
+                class: Nodes::ExpressionStatement,
+                children: [{
+                  class: Nodes::NumericLiteral,
+                  value: 1
+                }]
+              },
+              {
+                class: Nodes::ExpressionStatement,
+                children: [{
+                  class: Nodes::NumericLiteral,
+                  value: 2
+                }]
+              },
+              {
+                class: Nodes::ExpressionStatement,
+                children: [{
+                  class: Nodes::NumericLiteral,
+                  value: 3
+                }]
+              }
+            ]
+          }
+        ]
+      }, ast)
+    end
+
+    def test_block_statement_do_end
+      ast = parse("do 1; 2; 3 end")
+
+      assert_ast_equal({
+        class: Nodes::Program,
+        children: [
+          {
+            class: Nodes::BlockStatement,
+            children: [
+              {
+                class: Nodes::ExpressionStatement,
+                children: [{
+                  class: Nodes::NumericLiteral,
+                  value: 1
+                }]
+              },
+              {
+                class: Nodes::ExpressionStatement,
+                children: [{
+                  class: Nodes::NumericLiteral,
+                  value: 2
+                }]
+              },
+              {
+                class: Nodes::ExpressionStatement,
+                children: [{
+                  class: Nodes::NumericLiteral,
+                  value: 3
+                }]
+              }
+            ]
           }
         ]
       }, ast)
