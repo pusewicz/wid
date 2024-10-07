@@ -304,6 +304,19 @@ module Wid
       }, ast)
     end
 
+    def test_empty_statement
+      ast = parse(";")
+
+      assert_ast_equal({
+        class: Nodes::Program,
+        children: [
+          {
+            class: Nodes::EmptyStatement
+          }
+        ]
+      }, ast)
+    end
+
     private
 
     def assert_ast_equal(expected, actual)

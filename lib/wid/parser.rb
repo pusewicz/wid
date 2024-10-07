@@ -111,10 +111,19 @@ module Wid
     #  ;
     def parse_statement
       case peek.type
+      when :";" then parse_empty_statement
       when :"{" then parse_block_statement(:"{", :"}")
       when :do then parse_block_statement(:do, :end)
       else parse_expression_statement
       end
+    end
+
+    # EmptyStatement
+    #  : ';'
+    #  ;
+    def parse_empty_statement
+      consume_type(:";")
+      Nodes::EmptyStatement.new
     end
 
     # BlockStatement
