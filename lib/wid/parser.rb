@@ -151,7 +151,59 @@ module Wid
     #  : Literal
     #  ;
     def parse_expression
-      parse_additive_expression
+      parse_assignment_expression
+    end
+
+    # AssignmentExpression
+    #  : AdditiveExpression
+    #  | LeftHandSideExpression AssignmentOperator AssignmentExpression
+    #  ;
+    def parse_assignment_expression
+      left = parse_additive_expression
+
+      return left if !assignment_operator?(peek&.type)
+
+      operator = parse_assignment_operator.value
+      left = check_valid_assignment(left)
+      right = parse_assignment_expression
+      Nodes::AssignmentExpression.new(operator, left, right)
+    end
+
+    # LeftHandSideExpression
+    #  : Identifier
+    #  ;
+    def parse_left_hand_side_expression
+      parse_identifier
+    end
+
+    def check_valid_assignment(node)
+      return node if node.is_a?(Nodes::Identifier)
+
+      raise ParserError.new("Invalid left-hand assignment target")
+    end
+
+    # Identifier
+    #  : IDENTIFIER
+    #  ;
+    def parse_identifier
+      value = consume_type(:IDENTIFIER).value
+      Nodes::Identifier.new(value)
+    end
+
+    # AssignmentOperator
+    #  : SIMPLE_ASSIGN
+    #  | COMPLEX_ASSIGN
+    #  ;
+    def parse_assignment_operator
+      if peek.type == :SIMPLE_ASSIGN
+        return consume_type(:SIMPLE_ASSIGN)
+      end
+
+      consume_type(:COMPLEX_ASSIGN)
+    end
+
+    def assignment_operator?(type)
+      type == :SIMPLE_ASSIGN || type == :COMPLEX_ASSIGN
     end
 
     # AdditiveExpression
@@ -185,12 +237,19 @@ module Wid
     # PrimaryExpression
     #  : Literal
     #  | ParenthesizedExpression
+    #  | LeftHandSideExpression
     #  ;
     def parse_primary_expression
+      return parse_literal if literal?(peek.type)
+
       case peek.type
       when :"(" then parse_parenthesized_expression
-      else parse_literal
+      else parse_left_hand_side_expression
       end
+    end
+
+    def literal?(type)
+      type == :NUMBER || type == :STRING
     end
 
     # ParenthesizedExpression

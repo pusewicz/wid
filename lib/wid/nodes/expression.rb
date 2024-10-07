@@ -8,8 +8,7 @@ module Wid
         super
       end
 
-      # TODO Both implementations below are temporary. Expression SHOULD NOT have a concrete implementation of these methods.
-      def ==(other) = self.class == other.class
+      def ==(other) = self.class == other.class && value == other.value
 
       def children = []
     end

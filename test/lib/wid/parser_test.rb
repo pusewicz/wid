@@ -491,6 +491,58 @@ module Wid
       }, ast)
     end
 
+    def test_assignment_statement
+      ast = parse("foo = 1")
+
+      assert_ast_equal({
+        class: Nodes::Program,
+        children: [
+          {
+            class: Nodes::ExpressionStatement,
+            children: [{
+              class: Nodes::AssignmentExpression,
+              children: [{
+                class: Nodes::Identifier,
+                name: "foo"
+              }, {
+                class: Nodes::NumericLiteral,
+                value: 1
+              }]
+            }]
+          }
+        ]
+      }, ast)
+    end
+
+    def test_assignment_statement_chained
+      ast = parse("foo = bar = 1")
+
+      assert_ast_equal({
+        class: Nodes::Program,
+        children: [
+          {
+            class: Nodes::ExpressionStatement,
+            children: [{
+              class: Nodes::AssignmentExpression,
+              children: [{
+                class: Nodes::Identifier,
+                name: "foo"
+              }, {
+                class: Nodes::AssignmentExpression,
+                children: [{
+                  class: Nodes::Identifier,
+                  name: "bar"
+                }, {
+                  class: Nodes::NumericLiteral,
+                  value: 1
+                }]
+              }]
+            }]
+          }
+        ]
+      }, ast)
+    end
+
     private
 
     def assert_ast_equal(expected, actual)
