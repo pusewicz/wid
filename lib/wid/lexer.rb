@@ -1,33 +1,60 @@
 # frozen_string_literal: true
 
+require_relative "lexer/errors"
+require_relative "lexer/token"
+
 require "strscan"
 
 module Wid
   class Lexer
-    LexerError = Class.new(StandardError)
-    class SyntaxError < LexerError
-      attr_reader :line, :column
+    SPEC = [
+      # Whitespace
+      [/[ \r\t]+/, nil],
 
-      def initialize(msg, line, column)
-        super(msg)
-        @line = line
-        @column = column
-      end
-    end
+      # New line
+      [/[\n]/, :NEW_LINE],
 
-    Token = Data.define(:type, :value, :line, :column) do
-      def ==(other) = type == other.type && value == other.value
-    end
+      # Symbols
+      [/;/, :";"],
+      [/\{/, :"{"],
+      [/\}/, :"}"],
+      [/\(/, :"("],
+      [/\)/, :")"],
+      [/,/, :","],
+      [/\./, :"."],
+      [/\[/, :"["],
+      [/\]/, :"]"],
 
-    TOKEN_TYPES = {
-      WHITESPACE: /[ \r\t]+/, # Has to go first
-      KEYWORD: /#{Regexp.union(%w[true false nil def end].sort)}\b/,
-      NUMBER: /\d+(\.\d+)?/,
-      STRING: /"[^"]*"|'[^']*'/,
-      IDENTIFIER: /[_A-Za-z][_0-9A-Za-z]*\b/,
-      PUNCTUATION: Regexp.union(%w[{ } ( ) [ ] = ! | & + - , .]).freeze,
-      NEW_LINE: /[\n]/
-    }.freeze
+      # Keywords
+      [/true\b/, :true],
+      [/false\b/, :false],
+      [/nil\b/, :nil],
+
+      # Numbers
+      [/\d+(\.\d+)?/, :NUMBER],
+
+      # Identifiers
+      [/[_A-Za-z][_0-9A-Za-z]*\b/, :IDENTIFIER],
+
+      # Equality operators: ==, !=
+      [/[=!]=/, :EQUALITY_OPERATOR],
+
+      # Assignment operators: =, *=, /=, +=, -=
+      [/=/, :SIMPLE_ASSIGN],
+      [/[\*\/\+\-]=/, :COMPLEX_ASSIGN],
+
+      # Math operators: +, -, *, /
+      [/[+\-]/, :ADDITIVE_OPERATOR],
+      [/[*\/]/, :MULTIPLICATIVE_OPERATOR],
+
+      # Logical operators
+      [/^&&/, :LOGICAL_AND],
+      [/^\|\|/, :LOGICAL_OR],
+      [/^!/, :LOGICAL_NOT],
+
+      # Strings: double and single-quoted
+      [/"[^"]*"|'[^']*'/, :STRING]
+    ].freeze
 
     def self.tokenize(input)
       new(input).tokenize
@@ -46,19 +73,16 @@ module Wid
         tokens << token
       end
 
-      tokens << token(:EOF)
+      tokens.freeze
     end
 
     def next_token
       return if @scanner.eos?
 
-      TOKEN_TYPES.each do |type, pattern|
+      SPEC.each do |(pattern, type)|
         if (match = @scanner.scan(pattern))
-
           case type
-          when :WHITESPACE then next
-          when :KEYWORD then return token(match.upcase.to_sym, match)
-          when :PUNCTUATION, :OPERATOR then return token(match.to_sym, match)
+          when nil then next
           when :NEW_LINE
             return token(match.to_sym, match).tap do
               @last_pos = @scanner.pos
@@ -69,7 +93,7 @@ module Wid
         end
       end
 
-      raise SyntaxError.new("Unknown token `#{@scanner.getch}'", @line_number + 1, column_number)
+      raise SyntaxError.new("Unknown token #{@scanner.getch.inspect}", @line_number + 1, column_number)
     end
 
     private
