@@ -4,14 +4,9 @@ module Wid
 end
 
 require_relative "nodes/node"
-require_relative "nodes/shared/expression_collection"
 require_relative "nodes/program"
 require_relative "nodes/expression"
 
-require_relative "nodes/binary_operator"
-require_relative "nodes/nil"
-require_relative "nodes/number"
-require_relative "nodes/string"
-require_relative "nodes/identifier"
-require_relative "nodes/function_call"
-require_relative "nodes/var_binding"
+Dir[File.join(File.dirname(__FILE__), "nodes/*.rb")].each do |file|
+  require_relative file
+end
