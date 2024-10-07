@@ -11,6 +11,9 @@ module Wid
       # Whitespace
       [/[ \r\t]+/, nil],
 
+      # Comments
+      [/#.*[\n]?/, nil],
+
       # New line
       [/[\n]/, :NEW_LINE],
 
@@ -77,8 +80,6 @@ module Wid
     end
 
     def next_token
-      return if @scanner.eos?
-
       SPEC.each do |(pattern, type)|
         if (match = @scanner.scan(pattern))
           case type
@@ -92,6 +93,9 @@ module Wid
           end
         end
       end
+
+      # FIXME: We might be skipping the last unknow token
+      return if @scanner.eos?
 
       raise SyntaxError.new("Unknown token #{@scanner.getch.inspect}", @line_number + 1, column_number)
     end

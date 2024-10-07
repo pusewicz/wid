@@ -1,8 +1,9 @@
 module Wid
   module Nodes
-    class NumericLiteral < Literal
+    class StringLiteral < Literal
       def initialize(value)
-        parsed_value = value.include?(".") ? Float(value) : Integer(value)
+        # Skip the quotes
+        parsed_value = value[1...-1]
         super(parsed_value)
       end
     end

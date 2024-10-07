@@ -16,6 +16,30 @@ module Wid
       ], Lexer.tokenize("1.3 2.7 3.88999"))
     end
 
+    def test_whitespace_skip
+      tokens = Lexer.tokenize("    1    ")
+
+      assert_equal([
+        build_token(:NUMBER, "1")
+      ], tokens)
+    end
+
+    def test_comment_skip
+      tokens = Lexer.tokenize("# This is a comment\n1")
+
+      assert_equal([
+        build_token(:NUMBER, "1")
+      ], tokens)
+    end
+
+    def test_comment_after_expression
+      tokens = Lexer.tokenize("1 # This is a comment")
+
+      assert_equal([
+        build_token(:NUMBER, "1")
+      ], tokens)
+    end
+
     def test_string
       assert_equal([
         build_token(:STRING, "\"foo\""),
@@ -73,8 +97,8 @@ module Wid
       ], tokens)
     end
 
-    def test_punctuation
-      tokens = Lexer.tokenize("{ } ( ) [ ] . ,")
+    def test_symbols
+      tokens = Lexer.tokenize("{ } ( ) [ ] . , ;")
 
       assert_equal([
         build_token(:"{", "{"),
@@ -84,7 +108,8 @@ module Wid
         build_token(:"[", "["),
         build_token(:"]", "]"),
         build_token(:".", "."),
-        build_token(:",", ",")
+        build_token(:",", ","),
+        build_token(:";", ";")
       ], tokens)
     end
 

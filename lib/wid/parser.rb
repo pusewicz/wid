@@ -24,61 +24,30 @@ module Wid
       end
     end
 
-    UNARY_OPERATORS = %i[! -].freeze
-    BINARY_OPERATORS = %i[+ - * / == != < <= > >=].freeze
-    LOGICAL_OPERATORS = %i[&& ||].freeze
-
-    LOWEST_PRECEDENCE = 0
-    PREFIX_PRECEDENCE = 7
-    OPERATOR_PRECEDENCE = {
-      "||": 1,
-      "&&": 2,
-      "==": 3,
-      "!=": 3,
-      ">": 4,
-      "<": 4,
-      ">=": 4,
-      "<=": 4,
-      "+": 5,
-      "-": 5,
-      "*": 6,
-      "/": 6,
-      "(": 8
-    }.freeze
-
     def initialize(tokens)
-      @tokens = tokens || raise(ArgumentError, "tokens must be provided")
-      @root = Nodes::Program.new
+      @tokens = tokens
       @pos = 0
     end
 
     def self.parse(tokens) = new(tokens).parse
 
     def parse
-      while @pos < @tokens.size
-        consume
-
-        node = parse_expression_recursively
-        @root << node if node
-      end
-
-      @root
+      parse_program
     end
 
     private
 
     def consume(offset = 1)
-      tok = peek(offset)
+      token = peek(offset)
       @pos += offset
-      tok
+      token
     end
 
-    def consume_if_next_token_is(expected)
-      if peek.type == expected.type
+    def consume_type(expected_type)
+      if peek&.type == expected_type
         consume
-        true
       else
-        raise UnexpectedTokenError.new(current_token, peek, expected)
+        raise UnexpectedTokenError.new(current_token, peek, expected_type)
       end
     end
 
@@ -89,131 +58,75 @@ module Wid
       @tokens[pos]
     end
 
-    def previous = peek(-1)
-
     def current_token = peek(0)
 
-    def current_precedence = OPERATOR_PRECEDENCE.fetch(current_token.type, LOWEST_PRECEDENCE)
-
-    def next_token_not_terminator? = peek.type != :"\n" && peek.type != :EOF
-
-    def next_token_precedence = OPERATOR_PRECEDENCE.fetch(peek.type, LOWEST_PRECEDENCE)
-
-    def check_syntax_compliance(node)
-      return if node.expects?(peek)
-
-      raise UnexpectedTokenError.new(current_token, peek, nil)
+    # Main entry point
+    #
+    # Program
+    #  : StatementList
+    #  ;
+    def parse_program
+      Nodes::Program.new(parse_statement_list)
     end
 
-    def parse_expression_recursively(precedence = LOWEST_PRECEDENCE)
-      parsing_function = determine_parsing_function
-
-      raise UnrecognizedTokenError.new(current_token) unless parsing_function
-
-      expr = send(parsing_function)
-
-      return unless expr
-
-      while next_token_not_terminator? && precedence < next_token_precedence
-        infix_parsing_function = determine_infix_parsing_function(peek)
-
-        return expr unless infix_parsing_function
-
-        consume
-
-        expr = send(infix_parsing_function, expr)
-      end
-
-      expr
-    end
-
-    KNOWN_TOKENS = %i[IDENTIFIER NUMBER + STRING NIL].freeze
-
-    def determine_parsing_function
-      if KNOWN_TOKENS.include?(current_token.type)
-        :"parse_#{current_token.type.downcase}"
-      elsif current_token.type == :"("
-        :parse_grouped_expression
-      elsif [:"\n", :EOF].include?(current_token.type)
-        :parse_terminator
-      elsif UNARY_OPERATORS.include?(current_token.type)
-        :parse_unary_operator
+    # Literal
+    #  : NumericLiteral
+    #  | StringLiteral
+    #  ;
+    def parse_literal
+      case peek.type
+      when :NUMBER then parse_numeric_literal
+      when :STRING then parse_string_literal
+      else raise SyntaxError, "Unsupported literal type #{current_token.type}"
       end
     end
 
-    def determine_infix_parsing_function(token = current_token)
-      if (BINARY_OPERATORS + LOGICAL_OPERATORS).include?(token.type)
-        :parse_binary_operator
-      elsif token.type == :"("
-        :parse_function_call
-      end
+    def parse_numeric_literal
+      value = consume_type(:NUMBER).value
+      Nodes::NumericLiteral.new(value)
     end
 
-    def build_token(type, value = nil)
-      ::Wid::Lexer::Token.new(type, value, nil, nil)
+    def parse_string_literal
+      value = consume_type(:STRING).value
+      Nodes::StringLiteral.new(value)
     end
 
-    def parse_binary_operator(left)
-      op = Nodes::BinaryOperator.new(current_token.type, left)
-      op_precedence = current_precedence
+    # StatementList
+    #  : Statement
+    #  | StatementList Statement -> Statement Statement Statement Statement
+    #  ;
+    def parse_statement_list
+      statements = [parse_statement]
 
-      consume
-      op.right = parse_expression_recursively(op_precedence)
-
-      op
-    end
-
-    # TODO: Temporary impl; reflect more deeply about the appropriate way of parsing a terminator.
-    def parse_terminator = nil
-
-    def parse_number = Nodes::Number.new(current_token.value)
-
-    def parse_identifier
-      if peek.type == :"="
-        parse_var_binding
-      else
-        identifier = Nodes::Identifier.new(current_token.value)
-        check_syntax_compliance(identifier)
-        identifier
-      end
-    end
-
-    def parse_nil
-      Nodes::Nil.new
-    end
-
-    def parse_string = Nodes::String.new(current_token.value)
-
-    def parse_function_call(identifier)
-      Nodes::FunctionCall.new(identifier, parse_function_call_args)
-    end
-
-    def parse_function_call_args
-      args = []
-
-      # Function call without arguments.
-      if peek.type == :")"
-        consume
-        return args
+      while peek
+        statements << parse_statement
       end
 
-      consume
-      args << parse_expression_recursively
-
-      while peek.type == :","
-        consume(2)
-        args << parse_expression_recursively
-      end
-
-      return unless consume_if_next_token_is(build_token(:")", ")"))
-      args
+      statements
     end
 
-    def parse_var_binding
-      identifier = Nodes::Identifier.new(current_token.value)
-      consume(2)
+    # Statement
+    #  : ExpressionStatement
+    #  ;
+    def parse_statement
+      parse_expression_statement
+    end
 
-      Nodes::VarBinding.new(identifier, parse_expression_recursively)
+    # ExpressionStatement
+    #  : Expression
+    #  | Expression ';'
+    #  ;
+    def parse_expression_statement
+      expression = parse_expression
+      consume_type(:";") if peek&.type == :";"
+      Nodes::ExpressionStatement.new(expression)
+    end
+
+    # Expression
+    #  : Literal
+    #  ;
+    def parse_expression
+      parse_literal
     end
   end
 end
