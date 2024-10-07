@@ -256,6 +256,20 @@ module Wid
       }, ast)
     end
 
+    def test_block_statement_empty
+      ast = parse("{ }")
+
+      assert_ast_equal({
+        class: Nodes::Program,
+        children: [
+          {
+            class: Nodes::BlockStatement,
+            children: []
+          }
+        ]
+      }, ast)
+    end
+
     private
 
     def assert_ast_equal(expected, actual)
