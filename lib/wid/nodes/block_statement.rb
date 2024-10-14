@@ -11,6 +11,10 @@ module Wid
       def children
         @statements
       end
+
+      def to_hash
+        {class: self.class, statements: @statements.map(&:to_hash)}
+      end
     end
   end
 end

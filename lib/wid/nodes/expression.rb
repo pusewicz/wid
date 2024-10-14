@@ -11,6 +11,8 @@ module Wid
       def ==(other) = self.class == other.class && value == other.value
 
       def children = []
+
+      def to_hash = {class: self.class, value: @value}
     end
   end
 end

@@ -12,6 +12,12 @@ module Wid
         end
         "#{self.class.name.split("::").last}(#{attrs.join(" ")})"
       end
+
+      def children = []
+
+      def to_hash
+        {class: self.class}
+      end
     end
   end
 end

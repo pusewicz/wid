@@ -1,2 +1,6 @@
 msg = "Hello, World!"
 puts(msg)
+
+a_number = 42 + 3.14
+
+printf("The answer is: %f", a_number)

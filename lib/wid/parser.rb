@@ -9,9 +9,13 @@ module Wid
     UnexpectedTokenError = Class.new(ParserError) do
       attr_reader :token
 
-      def initialize(token, next_token, expected = nil)
+      def initialize(token = nil, expected = nil)
         @token = token
-        super("Unexpected token #{token.type} `#{token.value}'. Expected `#{expected || next_token.type}'")
+        if token.nil?
+          super("Unexpected end of input. Expected `#{expected.inspect}'")
+        else
+          super("Unexpected token `#{token.type.inspect}(#{token.value.inspect})' at line #{token.line}, column #{token.column}. Expected `#{expected.inspect}'")
+        end
       end
     end
 
@@ -20,7 +24,7 @@ module Wid
 
       def initialize(token)
         @token = token
-        super("Unrecognized token `#{token.value}'")
+        super("Unrecognized token `#{token.type}(#{token.value})' at line #{token.line}, column #{token.column}")
       end
     end
 
@@ -43,11 +47,19 @@ module Wid
       token
     end
 
+    def backtrack(offset = 1)
+      @pos += -offset
+    end
+
     def consume_type(expected_type)
+      if peek.nil?
+        raise UnexpectedTokenError.new(nil, expected_type)
+      end
+
       if peek&.type == expected_type
         consume
       else
-        raise UnexpectedTokenError.new(current_token, peek, expected_type)
+        raise UnexpectedTokenError.new(peek, expected_type)
       end
     end
 
@@ -95,10 +107,12 @@ module Wid
     #  : Statement
     #  | StatementList Statement -> Statement Statement Statement Statement
     #  ;
-    def parse_statement_list(terminator = nil)
+    def parse_statement_list(terminators = [nil])
       statements = [parse_statement]
 
-      while peek && peek.type != terminator
+      terminators = Array(terminators)
+
+      while peek && !terminators.include?(peek.type)
         statements << parse_statement
       end
 
@@ -107,15 +121,37 @@ module Wid
 
     # Statement
     #  : ExpressionStatement
-    #  : BlockStatement
+    #  | BlockStatement
+    #  | EmptyStatement
+    #  | IfStatement
     #  ;
     def parse_statement
       case peek.type
       when :";" then parse_empty_statement
+      when :if then parse_if_statement
       when :"{" then parse_block_statement(:"{", :"}")
       when :do then parse_block_statement(:do, :end)
       else parse_expression_statement
       end
+    end
+
+    # IfStatement
+    #  : 'if' '(' Expression ')' Statement
+    #  | 'if' '(' Expression ')' Statement 'else' Statement
+    #  ;
+    def parse_if_statement
+      consume_type(:if)
+      consume_type(:"(") if peek.type == :"("
+      condition = parse_expression
+      consume_type(:")") if peek.type == :")"
+      consequent = parse_block_statement(nil, :else)
+      backtrack(1) # Un-consume the else
+
+      alternative = if peek&.type == :else
+        parse_block_statement(:else, :end)
+      end
+
+      Nodes::IfStatement.new(condition, consequent, alternative)
     end
 
     # EmptyStatement
@@ -129,9 +165,10 @@ module Wid
     # BlockStatement
     #  : '{' StatementList? '}'
     #  | do StatementList? end
+    #  | else StatementList? end
     #  ;
     def parse_block_statement(opening, closing)
-      consume_type(opening)
+      consume_type(opening) if opening
       statements = (peek.type != closing) ? parse_statement_list(closing) : []
       consume_type(closing)
       Nodes::BlockStatement.new(statements)

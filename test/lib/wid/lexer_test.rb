@@ -52,31 +52,30 @@ module Wid
 
       assert_equal([
         build_token(:NUMBER, "1"),
-        build_token(:"\n", "\n"),
         build_token(:NUMBER, "3")
       ], tokens)
 
-      assert_equal(0, tokens[0].line)
-      assert_equal(0, tokens[1].line)
-      assert_equal(1, tokens[2].line)
+      assert_equal(1, tokens[0].line)
+      assert_equal(2, tokens[1].line)
     end
 
     def test_column
-      tokens = Lexer.tokenize("1 + 2\n       3  + 17\nputs(foo)    \n")
+      tokens = Lexer.tokenize(<<~WID)
+        1 + 2
+               3  + 17
+        puts(foo)    
+      WID
 
-      assert_equal(0, tokens[0].column) # 1
-      assert_equal(2, tokens[1].column) # +
-      assert_equal(4, tokens[2].column) # 2
-      assert_equal(5, tokens[3].column) # \n
-      assert_equal(7, tokens[4].column) # 3
-      assert_equal(10, tokens[5].column) # +
-      assert_equal(12, tokens[6].column) # 17
-      assert_equal(14, tokens[7].column) # \n
-      assert_equal(0, tokens[8].column) # puts
-      assert_equal(4, tokens[9].column) # (
-      assert_equal(5, tokens[10].column) # foo
-      assert_equal(8, tokens[11].column) # )
-      assert_equal(13, tokens[12].column) # \n
+      assert_equal(1, tokens[0].column) # 1
+      assert_equal(3, tokens[1].column) # +
+      assert_equal(5, tokens[2].column) # 2
+      assert_equal(8, tokens[3].column) # 3
+      assert_equal(11, tokens[4].column) # +
+      assert_equal(13, tokens[5].column) # 17
+      assert_equal(1, tokens[6].column) # puts
+      assert_equal(5, tokens[7].column) # (
+      assert_equal(6, tokens[8].column) # foo
+      assert_equal(9, tokens[9].column) # )
     end
 
     def test_identifier
@@ -88,14 +87,16 @@ module Wid
     end
 
     def test_keywords
-      tokens = Lexer.tokenize("true false nil do end")
+      tokens = Lexer.tokenize("true false nil do end if else")
 
       assert_equal([
         build_token(:true, "true"),
         build_token(:false, "false"),
         build_token(:nil, "nil"),
         build_token(:do, "do"),
-        build_token(:end, "end")
+        build_token(:end, "end"),
+        build_token(:if, "if"),
+        build_token(:else, "else")
       ], tokens)
     end
 

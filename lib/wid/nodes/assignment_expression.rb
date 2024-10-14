@@ -11,6 +11,10 @@ module Wid
       end
 
       def children = [left, right]
+
+      def to_hash
+        {class: self.class, operator: @operator, left: @left.to_hash, right: @right.to_hash}
+      end
     end
   end
 end

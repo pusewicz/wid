@@ -11,6 +11,10 @@ module Wid
       def children
         [@expression]
       end
+
+      def to_hash
+        {class: self.class, expression: @expression.to_hash}
+      end
     end
   end
 end

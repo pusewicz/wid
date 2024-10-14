@@ -8,49 +8,51 @@ require "strscan"
 module Wid
   class Lexer
     SPEC = [
+      # New line
+      [/^[\n]/, :NEW_LINE],
+
       # Whitespace
-      [/[ \r\t]+/, nil],
+      [/^\s+/, nil],
 
       # Comments
-      [/#.*[\n]?/, nil],
-
-      # New line
-      [/[\n]/, :NEW_LINE],
+      [/^#.*[\n]?/, nil],
 
       # Symbols
-      [/;/, :";"],
-      [/\{/, :"{"],
-      [/\}/, :"}"],
-      [/\(/, :"("],
-      [/\)/, :")"],
-      [/,/, :","],
-      [/\./, :"."],
-      [/\[/, :"["],
-      [/\]/, :"]"],
+      [/^;/, :";"],
+      [/^\{/, :"{"],
+      [/^\}/, :"}"],
+      [/^\(/, :"("],
+      [/^\)/, :")"],
+      [/^,/, :","],
+      [/^\./, :"."],
+      [/^\[/, :"["],
+      [/^\]/, :"]"],
 
       # Keywords
-      [/true\b/, :true],
-      [/false\b/, :false],
-      [/nil\b/, :nil],
-      [/do\b/, :do],
-      [/end\b/, :end],
+      [/^\btrue\b/, :true],
+      [/^\bfalse\b/, :false],
+      [/^\bnil\b/, :nil],
+      [/^\bdo\b/, :do],
+      [/^\bend\b/, :end],
+      [/^\bif\b/, :if],
+      [/^\belse\b/, :else],
 
       # Numbers
-      [/\d+(\.\d+)?/, :NUMBER],
+      [/^\d+(\.\d+)?/, :NUMBER],
 
       # Identifiers
-      [/[_A-Za-z][_0-9A-Za-z]*\b/, :IDENTIFIER],
+      [/^[_A-Za-z][_0-9A-Za-z]*\b/, :IDENTIFIER],
 
       # Equality operators: ==, !=
-      [/[=!]=/, :EQUALITY_OPERATOR],
+      [/^[=!]=/, :EQUALITY_OPERATOR],
 
       # Assignment operators: =, *=, /=, +=, -=
-      [/=/, :SIMPLE_ASSIGN],
-      [/[\*\/\+\-]=/, :COMPLEX_ASSIGN],
+      [/^=/, :SIMPLE_ASSIGN],
+      [/^[\*\/\+\-]=/, :COMPLEX_ASSIGN],
 
       # Math operators: +, -, *, /
-      [/[+\-]/, :ADDITIVE_OPERATOR],
-      [/[*\/]/, :MULTIPLICATIVE_OPERATOR],
+      [/^[+\-]/, :ADDITIVE_OPERATOR],
+      [/^[*\/]/, :MULTIPLICATIVE_OPERATOR],
 
       # Logical operators
       [/^&&/, :LOGICAL_AND],
@@ -58,7 +60,7 @@ module Wid
       [/^!/, :LOGICAL_NOT],
 
       # Strings: double and single-quoted
-      [/"[^"]*"|'[^']*'/, :STRING]
+      [/^"[^"]*"|'[^']*'/, :STRING]
     ].freeze
 
     def self.tokenize(input)
@@ -68,7 +70,7 @@ module Wid
     def initialize(input)
       @scanner = StringScanner.new(input)
       @last_pos = 0
-      @line_number = 0
+      @line_number = 1
     end
 
     def tokenize
@@ -89,19 +91,17 @@ module Wid
           case type
           when nil then next
           when :NEW_LINE
-            return token(match.to_sym, match).tap do
-              @last_pos = @scanner.pos
-              @line_number += 1
-            end
+            @last_pos = @scanner.pos
+            @line_number += 1
+            next
           else return token(type, match)
           end
         end
       end
 
-      # FIXME: We might be skipping the last unknow token
       return if @scanner.eos?
 
-      raise SyntaxError.new("Unknown token #{@scanner.getch.inspect}", @line_number + 1, column_number)
+      raise SyntaxError.new(@scanner.getch, @line_number, column_number)
     end
 
     private
@@ -111,7 +111,7 @@ module Wid
     end
 
     def column_number
-      @scanner.pos - @last_pos - @scanner.matched_size.to_i
+      @scanner.pos - @last_pos - @scanner.matched_size.to_i + 1
     end
   end
 end

@@ -10,6 +10,10 @@ module Wid
       def children
         []
       end
+
+      def to_hash
+        {class: self.class, name: name}
+      end
     end
   end
 end

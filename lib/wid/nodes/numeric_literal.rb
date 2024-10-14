@@ -5,6 +5,10 @@ module Wid
         parsed_value = value.include?(".") ? Float(value) : Integer(value)
         super(parsed_value)
       end
+
+      def to_hash
+        {class: self.class, value: value}
+      end
     end
   end
 end

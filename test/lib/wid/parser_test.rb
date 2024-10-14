@@ -5,13 +5,13 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::ExpressionStatement,
-            children: [{
+            expression: {
               class: Nodes::NumericLiteral,
               value: 1
-            }]
+            }
           }
         ]
       }, ast)
@@ -22,13 +22,13 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::ExpressionStatement,
-            children: [{
+            expression: {
               class: Nodes::NumericLiteral,
               value: 1
-            }]
+            }
           }
         ]
       }, ast)
@@ -39,13 +39,13 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::ExpressionStatement,
-            children: [{
+            expression: {
               class: Nodes::NumericLiteral,
               value: 1
-            }]
+            }
           }
         ]
       }, ast)
@@ -56,13 +56,13 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::ExpressionStatement,
-            children: [{
+            expression: {
               class: Nodes::NumericLiteral,
               value: 1
-            }]
+            }
           }
         ]
       }, ast)
@@ -73,13 +73,13 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::ExpressionStatement,
-            children: [{
+            expression: {
               class: Nodes::NumericLiteral,
               value: 1.53
-            }]
+            }
           }
         ]
       }, ast)
@@ -90,13 +90,13 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::ExpressionStatement,
-            children: [{
+            expression: {
               class: Nodes::StringLiteral,
               value: "hello"
-            }]
+            }
           }
         ]
       }, ast)
@@ -107,13 +107,13 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::ExpressionStatement,
-            children: [{
+            expression: {
               class: Nodes::StringLiteral,
               value: "hello"
-            }]
+            }
           }
         ]
       }, ast)
@@ -124,13 +124,13 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::ExpressionStatement,
-            children: [{
+            expression: {
               class: Nodes::StringLiteral,
               value: "1"
-            }]
+            }
           }
         ]
       }, ast)
@@ -141,13 +141,13 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::ExpressionStatement,
-            children: [{
+            expression: {
               class: Nodes::StringLiteral,
               value: "hello world"
-            }]
+            }
           }
         ]
       }, ast)
@@ -158,27 +158,27 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::ExpressionStatement,
-            children: [{
+            expression: {
               class: Nodes::NumericLiteral,
               value: 1
-            }]
+            }
           },
           {
             class: Nodes::ExpressionStatement,
-            children: [{
+            expression: {
               class: Nodes::NumericLiteral,
               value: 2
-            }]
+            }
           },
           {
             class: Nodes::ExpressionStatement,
-            children: [{
+            expression: {
               class: Nodes::NumericLiteral,
               value: 3
-            }]
+            }
           }
         ]
       }, ast)
@@ -189,30 +189,30 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::BlockStatement,
-            children: [
+            statements: [
               {
                 class: Nodes::ExpressionStatement,
-                children: [{
+                expression: {
                   class: Nodes::NumericLiteral,
                   value: 1
-                }]
+                }
               },
               {
                 class: Nodes::ExpressionStatement,
-                children: [{
+                expression: {
                   class: Nodes::NumericLiteral,
                   value: 2
-                }]
+                }
               },
               {
                 class: Nodes::ExpressionStatement,
-                children: [{
+                expression: {
                   class: Nodes::NumericLiteral,
                   value: 3
-                }]
+                }
               }
             ]
           }
@@ -225,30 +225,30 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::BlockStatement,
-            children: [
+            statements: [
               {
                 class: Nodes::ExpressionStatement,
-                children: [{
+                expression: {
                   class: Nodes::NumericLiteral,
                   value: 1
-                }]
+                }
               },
               {
                 class: Nodes::ExpressionStatement,
-                children: [{
+                expression: {
                   class: Nodes::NumericLiteral,
                   value: 2
-                }]
+                }
               },
               {
                 class: Nodes::ExpressionStatement,
-                children: [{
+                expression: {
                   class: Nodes::NumericLiteral,
                   value: 3
-                }]
+                }
               }
             ]
           }
@@ -261,10 +261,10 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::BlockStatement,
-            children: []
+            statements: []
           }
         ]
       }, ast)
@@ -275,26 +275,26 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::BlockStatement,
-            children: [
+            statements: [
               {
                 class: Nodes::ExpressionStatement,
-                children: [{
+                expression: {
                   class: Nodes::NumericLiteral,
                   value: 1
-                }]
+                }
               },
               {
                 class: Nodes::BlockStatement,
-                children: [
+                statements: [
                   {
                     class: Nodes::ExpressionStatement,
-                    children: [{
+                    expression: {
                       class: Nodes::NumericLiteral,
                       value: 2
-                    }]
+                    }
                   }
                 ]
               }
@@ -309,7 +309,7 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::EmptyStatement
           }
@@ -322,20 +322,21 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::ExpressionStatement,
-            children: [{
+            expression: {
               class: Nodes::BinaryExpression,
               operator: "+",
-              children: [{
+              left: {
                 class: Nodes::NumericLiteral,
                 value: 1
-              }, {
+              },
+              right: {
                 class: Nodes::NumericLiteral,
                 value: 2
-              }]
-            }]
+              }
+            }
           }
         ]
       }, ast)
@@ -348,27 +349,29 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::ExpressionStatement,
-            children: [{
+            expression: {
               class: Nodes::BinaryExpression,
               operator: "-",
-              children: [{
+              left: {
                 class: Nodes::BinaryExpression,
                 operator: "+",
-                children: [{
+                left: {
                   class: Nodes::NumericLiteral,
                   value: 1
-                }, {
+                },
+                right: {
                   class: Nodes::NumericLiteral,
                   value: 2
-                }]
-              }, {
+                }
+              },
+              right: {
                 class: Nodes::NumericLiteral,
                 value: 3
-              }]
-            }]
+              }
+            }
           }
         ]
       }, ast)
@@ -379,20 +382,21 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::ExpressionStatement,
-            children: [{
+            expression: {
               class: Nodes::BinaryExpression,
               operator: "*",
-              children: [{
+              left: {
                 class: Nodes::NumericLiteral,
                 value: 1
-              }, {
+              },
+              right: {
                 class: Nodes::NumericLiteral,
                 value: 2
-              }]
-            }]
+              }
+            }
           }
         ]
       }, ast)
@@ -403,27 +407,29 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::ExpressionStatement,
-            children: [{
+            expression: {
               class: Nodes::BinaryExpression,
               operator: "+",
-              children: [{
+              left: {
                 class: Nodes::NumericLiteral,
                 value: 1
-              }, {
+              },
+              right: {
                 class: Nodes::BinaryExpression,
                 operator: "*",
-                children: [{
+                left: {
                   class: Nodes::NumericLiteral,
                   value: 2
-                }, {
+                },
+                right: {
                   class: Nodes::NumericLiteral,
                   value: 3
-                }]
-              }]
-            }]
+                }
+              }
+            }
           }
         ]
       }, ast)
@@ -434,27 +440,29 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::ExpressionStatement,
-            children: [{
+            expression: {
               class: Nodes::BinaryExpression,
               operator: "*",
-              children: [{
+              left: {
                 class: Nodes::BinaryExpression,
                 operator: "*",
-                children: [{
+                left: {
                   class: Nodes::NumericLiteral,
                   value: 1
-                }, {
+                },
+                right: {
                   class: Nodes::NumericLiteral,
                   value: 2
-                }]
-              }, {
+                }
+              },
+              right: {
                 class: Nodes::NumericLiteral,
                 value: 3
-              }]
-            }]
+              }
+            }
           }
         ]
       }, ast)
@@ -465,27 +473,29 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::ExpressionStatement,
-            children: [{
+            expression: {
               class: Nodes::BinaryExpression,
               operator: "*",
-              children: [{
+              left: {
                 class: Nodes::BinaryExpression,
                 operator: "+",
-                children: [{
+                left: {
                   class: Nodes::NumericLiteral,
                   value: 1
-                }, {
+                },
+                right: {
                   class: Nodes::NumericLiteral,
                   value: 2
-                }]
-              }, {
+                }
+              },
+              right: {
                 class: Nodes::NumericLiteral,
                 value: 3
-              }]
-            }]
+              }
+            }
           }
         ]
       }, ast)
@@ -496,19 +506,21 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::ExpressionStatement,
-            children: [{
+            expression: {
               class: Nodes::AssignmentExpression,
-              children: [{
+              operator: "=",
+              left: {
                 class: Nodes::Identifier,
                 name: "foo"
-              }, {
+              },
+              right: {
                 class: Nodes::NumericLiteral,
                 value: 1
-              }]
-            }]
+              }
+            }
           }
         ]
       }, ast)
@@ -519,25 +531,92 @@ module Wid
 
       assert_ast_equal({
         class: Nodes::Program,
-        children: [
+        body: [
           {
             class: Nodes::ExpressionStatement,
-            children: [{
+            expression: {
               class: Nodes::AssignmentExpression,
-              children: [{
+              operator: "=",
+              left: {
                 class: Nodes::Identifier,
                 name: "foo"
-              }, {
+              },
+              right: {
                 class: Nodes::AssignmentExpression,
-                children: [{
+                operator: "=",
+                left: {
                   class: Nodes::Identifier,
                   name: "bar"
-                }, {
+                },
+                right: {
                   class: Nodes::NumericLiteral,
                   value: 1
-                }]
-              }]
-            }]
+                }
+              }
+            }
+          }
+        ]
+      }, ast)
+    end
+
+    def test_if_statement
+      ast = parse(<<~WID)
+        if x 
+          x = 1
+        else 
+          x = 2
+        end
+      WID
+
+      assert_ast_equal({
+        class: Nodes::Program,
+        body: [
+          {
+            class: Nodes::IfStatement,
+            test: {
+              class: Nodes::Identifier,
+              name: "x"
+            },
+            consequent: {
+              class: Nodes::BlockStatement,
+              statements: [
+                {
+                  class: Nodes::ExpressionStatement,
+                  expression: {
+                    class: Nodes::AssignmentExpression,
+                    operator: "=",
+                    left: {
+                      class: Nodes::Identifier,
+                      name: "x"
+                    },
+                    right: {
+                      class: Nodes::NumericLiteral,
+                      value: 1
+                    }
+                  }
+                }
+              ]
+            },
+            alternate: {
+              class: Nodes::BlockStatement,
+              statements: [
+                {
+                  class: Nodes::ExpressionStatement,
+                  expression: {
+                    class: Nodes::AssignmentExpression,
+                    operator: "=",
+                    left: {
+                      class: Nodes::Identifier,
+                      name: "x"
+                    },
+                    right: {
+                      class: Nodes::NumericLiteral,
+                      value: 2
+                    }
+                  }
+                }
+              ]
+            }
           }
         ]
       }, ast)
@@ -546,18 +625,27 @@ module Wid
     private
 
     def assert_ast_equal(expected, actual)
-      assert_equal(expected[:class], actual.class)
+      assert_equal(expected, ast_to_hash(actual))
+      # assert_equal(expected[:class], actual.class)
 
-      expected.each do |key, value|
-        next if key == :children || key == :class
-        assert_respond_to(actual, key)
-        assert_equal(value, actual.send(key))
-      end
+      # expected.each do |key, value|
+      #   next if key == :children || key == :class
+      #   assert_respond_to(actual, key)
+      #   assert_equal(value, actual.send(key))
+      # end
 
-      if expected.has_key?(:children)
-        expected[:children].each_with_index do |child, index|
-          assert_ast_equal(child, actual.children[index])
-        end
+      # if expected.has_key?(:children)
+      #   expected[:children].each_with_index do |child, index|
+      #     assert_ast_equal(child, actual.children[index])
+      #   end
+      # end
+    end
+
+    def ast_to_hash(ast)
+      if ast.is_a?(Array)
+        ast.map { |node| ast_to_hash(node) }
+      else
+        ast.to_hash
       end
     end
 
