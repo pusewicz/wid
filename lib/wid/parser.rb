@@ -41,7 +41,7 @@ module Wid
 
     private
 
-    def consume(offset = 1)
+    def advance(offset = 1)
       token = peek(offset)
       @pos += offset
       token
@@ -51,13 +51,13 @@ module Wid
       @pos += -offset
     end
 
-    def consume_type(expected_type)
+    def consume(expected_type)
       if peek.nil?
         raise UnexpectedTokenError.new(nil, expected_type)
       end
 
       if peek&.type == expected_type
-        consume
+        advance
       else
         raise UnexpectedTokenError.new(peek, expected_type)
       end
@@ -94,12 +94,12 @@ module Wid
     end
 
     def parse_numeric_literal
-      value = consume_type(:NUMBER).value
+      value = consume(:NUMBER).value
       Nodes::NumericLiteral.new(value)
     end
 
     def parse_string_literal
-      value = consume_type(:STRING).value
+      value = consume(:STRING).value
       Nodes::StringLiteral.new(value)
     end
 
@@ -140,10 +140,10 @@ module Wid
     #  | 'if' '(' Expression ')' Statement 'else' Statement
     #  ;
     def parse_if_statement
-      consume_type(:if)
-      consume_type(:"(") if peek.type == :"("
+      consume(:if)
+      consume(:"(") if peek.type == :"("
       condition = parse_expression
-      consume_type(:")") if peek.type == :")"
+      consume(:")") if peek.type == :")"
       consequent = parse_block_statement(nil, :else)
       backtrack(1) # Un-consume the else
 
@@ -158,7 +158,7 @@ module Wid
     #  : ';'
     #  ;
     def parse_empty_statement
-      consume_type(:";")
+      consume(:";")
       Nodes::EmptyStatement.new
     end
 
@@ -168,9 +168,9 @@ module Wid
     #  | else StatementList? end
     #  ;
     def parse_block_statement(opening, closing)
-      consume_type(opening) if opening
+      consume(opening) if opening
       statements = (peek.type != closing) ? parse_statement_list(closing) : []
-      consume_type(closing)
+      consume(closing)
       Nodes::BlockStatement.new(statements)
     end
 
@@ -180,7 +180,7 @@ module Wid
     #  ;
     def parse_expression_statement
       expression = parse_expression
-      consume_type(:";") if peek&.type == :";"
+      consume(:";") if peek&.type == :";"
       Nodes::ExpressionStatement.new(expression)
     end
 
@@ -223,7 +223,7 @@ module Wid
     #  : IDENTIFIER
     #  ;
     def parse_identifier
-      value = consume_type(:IDENTIFIER).value
+      value = consume(:IDENTIFIER).value
       Nodes::Identifier.new(value)
     end
 
@@ -233,10 +233,10 @@ module Wid
     #  ;
     def parse_assignment_operator
       if peek.type == :SIMPLE_ASSIGN
-        return consume_type(:SIMPLE_ASSIGN)
+        return consume(:SIMPLE_ASSIGN)
       end
 
-      consume_type(:COMPLEX_ASSIGN)
+      consume(:COMPLEX_ASSIGN)
     end
 
     def assignment_operator?(type)
@@ -263,7 +263,7 @@ module Wid
       left = send(:"parse_#{type}")
 
       while peek&.type == operator_type
-        operator = consume_type(operator_type).value
+        operator = consume(operator_type).value
         right = send(:"parse_#{type}")
         left = Nodes::BinaryExpression.new(operator, left, right)
       end
@@ -293,9 +293,9 @@ module Wid
     #  : '(' Expression ')'
     #  ;
     def parse_parenthesized_expression
-      consume_type(:"(")
+      consume(:"(")
       expression = parse_expression
-      consume_type(:")")
+      consume(:")")
 
       expression
     end
