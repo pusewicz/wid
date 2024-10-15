@@ -20,7 +20,6 @@ module Wid
       Parser.parse(tokens)
     rescue Parser::UnexpectedTokenError => e
       message = [e.message]
-
       # TODO: Fix the line numbers being incorrect
 
       token_line = e.token.line

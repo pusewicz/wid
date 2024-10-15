@@ -154,12 +154,12 @@ module Wid
     def parse_statement
       case peek.type
       when :";" then parse_empty_statement
-      when :if then parse_if_statement
       when :"{" then parse_block_statement(:"{", :"}")
       when :do then parse_block_statement(:do, :end)
+      when :if then parse_if_statement
+      when :while then parse_iteration_statement
       when :def then parse_function_declaration
       when :return then parse_return_statement
-      when :while then parse_iteration_statement
       else parse_expression_statement
       end
     end
@@ -317,10 +317,69 @@ module Wid
     end
 
     # LeftHandSideExpression
-    #  : MemberExpression
+    #  : CallMemberExpression
     #  ;
     def parse_left_hand_side_expression
-      parse_member_expression
+      parse_call_member_expression
+    end
+
+    # CallMemberExpression
+    #  : MemberExpression
+    #  | CallExpression
+    #  ;
+    def parse_call_member_expression
+      member = parse_member_expression
+
+      if peek&.type == :"("
+        return parse_call_expression(member)
+      end
+
+      member
+    end
+
+    # CallExpression
+    #  : Callee Arguments
+    #  ;
+    #
+    # Callee
+    #  : MemberExpression
+    #  | CallExpression
+    #  ;
+    def parse_call_expression(callee)
+      call_expression = Nodes::CallExpression.new(callee, parse_arguments)
+
+      if peek&.type == :"("
+        call_expression = parse_call_expression(call_expression)
+      end
+
+      call_expression
+    end
+
+    # Arguments
+    #  | '(' OptArgumentList ')'
+    #  ;
+    def parse_arguments
+      argument_list = []
+      consume(:"(")
+      argument_list = parse_argument_list unless peek&.type == :")"
+      consume(:")")
+
+      argument_list
+    end
+
+    # ArgumentList
+    #  : AssignmentExpression
+    #  | ArgumentList ',' AssignmentExpression
+    #  ;
+    def parse_argument_list
+      argument_list = [parse_assignment_expression]
+
+      while peek&.type == :","
+        consume(:",")
+        argument_list << parse_assignment_expression
+      end
+
+      argument_list
     end
 
     # MemberExpression
