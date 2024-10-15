@@ -38,6 +38,8 @@ module Wid
       [/^\bthen\b/, :then],
       [/^\belse\b/, :else],
       [/^\bwhile\b/, :while],
+      [/^\bdef\b/, :def],
+      [/^\breturn\b/, :return],
 
       # Numbers
       [/^\d+(\.\d+)?/, :NUMBER],

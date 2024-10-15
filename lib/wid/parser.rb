@@ -148,6 +148,8 @@ module Wid
     #  | EmptyStatement
     #  | IfStatement
     #  | IterationStatement
+    #  | FunctionDeclaration
+    #  | ReturnStatement
     #  ;
     def parse_statement
       case peek.type
@@ -155,9 +157,50 @@ module Wid
       when :if then parse_if_statement
       when :"{" then parse_block_statement(:"{", :"}")
       when :do then parse_block_statement(:do, :end)
+      when :def then parse_function_declaration
+      when :return then parse_return_statement
       when :while then parse_iteration_statement
       else parse_expression_statement
       end
+    end
+
+    # FunctionDeclaration
+    #  : 'def' Identifier '(' OptFormalParameterList ')' BlockStatement
+    #  ;
+    def parse_function_declaration
+      consume(:def)
+      name = parse_identifier
+      consume(:"(")
+      params = (peek&.type != :")") ? parse_formal_parameter_list : []
+      consume(:")")
+      body = parse_block_statement(nil, :end)
+
+      Nodes::FunctionDeclaration.new(name, params, body)
+    end
+
+    # FormalParameterList
+    #  : Identifier
+    #  | FormalParameterList ',' Identifier
+    #  ;
+    def parse_formal_parameter_list
+      params = [parse_identifier]
+
+      while peek&.type == :","
+        consume(:",")
+        params << parse_identifier
+      end
+
+      params
+    end
+
+    # ReturnStatement
+    #  : 'return' OptExpression
+    #  ;
+    def parse_return_statement
+      consume(:return)
+      argument = (peek&.type == :end) ? nil : parse_expression
+
+      Nodes::ReturnStatement.new(argument)
     end
 
     # IterationStatement
