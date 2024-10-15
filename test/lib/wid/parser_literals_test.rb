@@ -1,7 +1,7 @@
 module Wid
-  class ParserTest
-    def test_whitespace_skip
-      ast = parse("    1 ")
+  class ParserLiteralsTest < ParserTest
+    def test_parse_integer_number
+      ast = parse("1")
 
       assert_ast_equal({
         class: Nodes::Program,
@@ -17,8 +17,8 @@ module Wid
       }, ast)
     end
 
-    def test_comment_skip
-      ast = parse("# This is a comment\n1")
+    def test_parse_float_number
+      ast = parse("1.53")
 
       assert_ast_equal({
         class: Nodes::Program,
@@ -27,15 +27,15 @@ module Wid
             class: Nodes::ExpressionStatement,
             expression: {
               class: Nodes::NumericLiteral,
-              value: 1
+              value: 1.53
             }
           }
         ]
       }, ast)
     end
 
-    def test_comment_after_expression
-      ast = parse("1 # This is a comment")
+    def test_parse_double_quote_string
+      ast = parse('"hello"')
 
       assert_ast_equal({
         class: Nodes::Program,
@@ -43,16 +43,16 @@ module Wid
           {
             class: Nodes::ExpressionStatement,
             expression: {
-              class: Nodes::NumericLiteral,
-              value: 1
+              class: Nodes::StringLiteral,
+              value: "hello"
             }
           }
         ]
       }, ast)
     end
 
-    def test_statement_list
-      ast = parse("1; 2; 3;")
+    def test_parse_single_quote_string
+      ast = parse("'hello'")
 
       assert_ast_equal({
         class: Nodes::Program,
@@ -60,36 +60,43 @@ module Wid
           {
             class: Nodes::ExpressionStatement,
             expression: {
-              class: Nodes::NumericLiteral,
-              value: 1
-            }
-          },
-          {
-            class: Nodes::ExpressionStatement,
-            expression: {
-              class: Nodes::NumericLiteral,
-              value: 2
-            }
-          },
-          {
-            class: Nodes::ExpressionStatement,
-            expression: {
-              class: Nodes::NumericLiteral,
-              value: 3
+              class: Nodes::StringLiteral,
+              value: "hello"
             }
           }
         ]
       }, ast)
     end
 
-    def test_empty_statement
-      ast = parse(";")
+    def test_parse_number_as_string
+      ast = parse('"1"')
 
       assert_ast_equal({
         class: Nodes::Program,
         body: [
           {
-            class: Nodes::EmptyStatement
+            class: Nodes::ExpressionStatement,
+            expression: {
+              class: Nodes::StringLiteral,
+              value: "1"
+            }
+          }
+        ]
+      }, ast)
+    end
+
+    def test_parse_string_with_spaces
+      ast = parse('"hello world"')
+
+      assert_ast_equal({
+        class: Nodes::Program,
+        body: [
+          {
+            class: Nodes::ExpressionStatement,
+            expression: {
+              class: Nodes::StringLiteral,
+              value: "hello world"
+            }
           }
         ]
       }, ast)

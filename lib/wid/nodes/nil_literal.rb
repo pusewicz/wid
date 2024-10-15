@@ -1,7 +1,7 @@
 module Wid
   module Nodes
-    class Nil < Expression
-      def ==(other) = self.class == other&.class && value == other&.value
+    class NilLiteral < Node
+      def ==(other) = self.class == other&.class
 
       def children = []
 

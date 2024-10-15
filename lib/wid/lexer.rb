@@ -55,6 +55,9 @@ module Wid
       [/^[+\-]/, :ADDITIVE_OPERATOR],
       [/^[*\/]/, :MULTIPLICATIVE_OPERATOR],
 
+      # Relational operators: <, <=, >, >=
+      [/^[><]=?/, :RELATIONAL_OPERATOR],
+
       # Logical operators
       [/^&&/, :LOGICAL_AND],
       [/^\|\|/, :LOGICAL_OR],

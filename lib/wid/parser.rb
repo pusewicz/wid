@@ -92,13 +92,28 @@ module Wid
     # Literal
     #  : NumericLiteral
     #  | StringLiteral
+    #  | BooleanLiteral
+    #  | NilLiteral
     #  ;
     def parse_literal
       case peek.type
       when :NUMBER then parse_numeric_literal
       when :STRING then parse_string_literal
+      when :true then parse_boolean_literal(true)
+      when :false then parse_boolean_literal(false)
+      when :nil then parse_nil_literal
       else raise UnrecognizedTokenError.new(peek)
       end
+    end
+
+    def parse_boolean_literal(value)
+      consume(value ? :true : :false)
+      Nodes::BooleanLiteral.new(value)
+    end
+
+    def parse_nil_literal
+      consume(:nil)
+      Nodes::Nil.new
     end
 
     def parse_numeric_literal
@@ -210,12 +225,22 @@ module Wid
       parse_assignment_expression
     end
 
-    # AssignmentExpression
+    # RELATIONAL_OPERATOR: >, >=, <, <=
+    #
+    # RelationalExpression
     #  : AdditiveExpression
+    #  | RelationalExpression RELATIONAL_OPERATOR RelationalExpression
+    #  ;
+    def parse_relational_expression
+      parse_binary_expression(:additive_expression, :RELATIONAL_OPERATOR)
+    end
+
+    # AssignmentExpression
+    #  : EqualityExpression
     #  | LeftHandSideExpression AssignmentOperator AssignmentExpression
     #  ;
     def parse_assignment_expression
-      left = parse_additive_expression
+      left = parse_logical_or_expression
 
       return left if !assignment_operator?(peek&.type)
 
@@ -256,6 +281,46 @@ module Wid
       end
 
       consume(:COMPLEX_ASSIGN)
+    end
+
+    # Logical OR expression.
+    #
+    #  x || y
+    #
+    #  LogicalORExpression
+    #  : LogicalANDExpression LOGICAL_OR LogicalORExpression
+    #  | LogicalORExpression
+    #  ;
+    def parse_logical_or_expression
+      parse_logical_expression(:logical_and_expression, :LOGICAL_OR)
+    end
+
+    # Logical AND expression.
+    #
+    #  x && y
+    #
+    # LogicalANDExpression
+    #  : EqualityExpression LOGICAL_AND LogicalANDExpression
+    #  | EqualityExpression
+    #  ;
+    def parse_logical_and_expression
+      parse_logical_expression(:equality_expression, :LOGICAL_AND)
+    end
+
+    def parse_logical_expression(type, operator_type)
+      left = send(:"parse_#{type}")
+
+      while peek&.type == operator_type
+        operator = consume(operator_type).value
+        right = send(:"parse_#{type}")
+        left = Nodes::LogicalExpression.new(operator, left, right)
+      end
+
+      left
+    end
+
+    def parse_equality_expression
+      parse_binary_expression(:relational_expression, :EQUALITY_OPERATOR)
     end
 
     def assignment_operator?(type)
@@ -305,7 +370,7 @@ module Wid
     end
 
     def literal?(type)
-      type == :NUMBER || type == :STRING
+      type == :NUMBER || type == :STRING || type == :true || type == :false || type == :nil
     end
 
     # ParenthesizedExpression
