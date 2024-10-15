@@ -251,10 +251,10 @@ module Wid
     end
 
     # LeftHandSideExpression
-    #  : Identifier
+    #  : PrimaryExpression
     #  ;
     def parse_left_hand_side_expression
-      parse_identifier
+      parse_primary_expression
     end
 
     def check_valid_assignment(node)
@@ -336,11 +336,11 @@ module Wid
     end
 
     # MultiplicativeExpression
-    #  : PrimaryExpression
-    #  | MultiplicativeExpression MULTIPLICATIVE_OPERATOR PrimaryExpression -> PrimaryExpression MULTIPLICATIVE_OPERATOR PrimaryExpression MULTIPLICATIVE_OPERATOR PrimaryExpression
+    #  : UnaryExpression
+    #  | MultiplicativeExpression MULTIPLICATIVE_OPERATOR UnaryExpression -> PrimaryExpression MULTIPLICATIVE_OPERATOR PrimaryExpression MULTIPLICATIVE_OPERATOR PrimaryExpression
     #  ;
     def parse_multiplicative_expression
-      parse_binary_expression(:primary_expression, :MULTIPLICATIVE_OPERATOR)
+      parse_binary_expression(:unary_expression, :MULTIPLICATIVE_OPERATOR)
     end
 
     def parse_binary_expression(type, operator_type)
@@ -358,14 +358,34 @@ module Wid
     # PrimaryExpression
     #  : Literal
     #  | ParenthesizedExpression
-    #  | LeftHandSideExpression
+    #  | Identifier
     #  ;
     def parse_primary_expression
       return parse_literal if literal?(peek.type)
 
       case peek.type
       when :"(" then parse_parenthesized_expression
+      when :IDENTIFIER then parse_identifier
       else parse_left_hand_side_expression
+      end
+    end
+
+    # UnaryExpression
+    #  : LeftHandSideExpression
+    #  | ADDITIVE_OPERATOR UnaryExpression
+    #  | LOGICAL_NOT UnaryExpression
+    #  ;
+    def parse_unary_expression
+      operator = case peek.type
+      when :ADDITIVE_OPERATOR then consume(:ADDITIVE_OPERATOR).value
+      when :LOGICAL_NOT then consume(:LOGICAL_NOT).value
+      end
+
+      if operator
+        argument = parse_unary_expression
+        Nodes::UnaryExpression.new(operator, argument)
+      else
+        parse_left_hand_side_expression # Move to default
       end
     end
 
