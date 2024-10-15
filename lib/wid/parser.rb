@@ -317,14 +317,39 @@ module Wid
     end
 
     # LeftHandSideExpression
-    #  : PrimaryExpression
+    #  : MemberExpression
     #  ;
     def parse_left_hand_side_expression
-      parse_primary_expression
+      parse_member_expression
+    end
+
+    # MemberExpression
+    #  : PrimaryExpression
+    #  | MemberExpression '.' Identifier
+    #  | MemberExpression '[' Expression ']'
+    #  ;
+    def parse_member_expression
+      object = parse_primary_expression
+
+      while peek&.type == :"." || peek&.type == :"["
+        if peek&.type == :"["
+          consume(:"[")
+          property = parse_expression
+          consume(:"]")
+          object = Nodes::MemberExpression.new(true, object, property)
+        else
+          consume(:".")
+          property = parse_identifier
+          object = Nodes::MemberExpression.new(false, object, property)
+        end
+
+      end
+
+      object
     end
 
     def check_valid_assignment(node)
-      return node if node.is_a?(Nodes::Identifier)
+      return node if node.is_a?(Nodes::Identifier) || node.is_a?(Nodes::MemberExpression)
 
       raise ParserError.new("Invalid left-hand assignment target")
     end
