@@ -15,7 +15,7 @@ module Wid
       end
 
       def to_hash
-        {class: self.class, test: @test.to_hash, consequent: @consequent.to_hash, alternate: @alternate.to_hash}
+        {class: self.class, test: @test.to_hash, consequent: @consequent.to_hash, alternate: @alternate&.to_hash}
       end
     end
   end

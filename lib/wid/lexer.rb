@@ -35,6 +35,7 @@ module Wid
       [/^\bdo\b/, :do],
       [/^\bend\b/, :end],
       [/^\bif\b/, :if],
+      [/^\bthen\b/, :then],
       [/^\belse\b/, :else],
 
       # Numbers

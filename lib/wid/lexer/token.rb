@@ -12,6 +12,16 @@ module Wid
       def deconstruct_keys(keys)
         {type: type, value: value}
       end
+
+      def inspect
+        if type.size == 1
+          value.inspect
+        elsif type.size == value.size
+          "`#{type.inspect}'"
+        else
+          "#{type.inspect}(#{value.inspect})"
+        end
+      end
     end
   end
 end

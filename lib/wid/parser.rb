@@ -14,9 +14,13 @@ module Wid
         if token.nil?
           super("Unexpected end of input. Expected `#{expected.inspect}'")
         else
-          super("Unexpected token `#{token.type.inspect}(#{token.value.inspect})' at line #{token.line}, column #{token.column}. Expected `#{expected.inspect}'")
+          super("Unexpected token #{token.inspect} at line #{token.line}, column #{token.column}. Expected `#{expected.inspect}'")
         end
       end
+
+      def line = @token&.line
+
+      def column = @token&.column
     end
 
     UnrecognizedTokenError = Class.new(ParserError) do
@@ -48,7 +52,9 @@ module Wid
     end
 
     def backtrack(offset = 1)
-      @pos += -offset
+      token = peek(-offset)
+      @pos -= offset
+      token
     end
 
     def consume(expected_type)
@@ -71,6 +77,8 @@ module Wid
     end
 
     def current_token = peek(0)
+
+    def previous_token = peek(-1)
 
     # Main entry point
     #
@@ -107,7 +115,7 @@ module Wid
     #  : Statement
     #  | StatementList Statement -> Statement Statement Statement Statement
     #  ;
-    def parse_statement_list(terminators = [nil])
+    def parse_statement_list(terminators = [])
       statements = [parse_statement]
 
       terminators = Array(terminators)
@@ -136,18 +144,21 @@ module Wid
     end
 
     # IfStatement
-    #  : 'if' '(' Expression ')' Statement
-    #  | 'if' '(' Expression ')' Statement 'else' Statement
+    #  : 'if' Expression Statement
+    #  | 'if' Expression Statement 'else' Statement
     #  ;
     def parse_if_statement
       consume(:if)
-      consume(:"(") if peek.type == :"("
       condition = parse_expression
-      consume(:")") if peek.type == :")"
-      consequent = parse_block_statement(nil, :else)
-      backtrack(1) # Un-consume the else
 
-      alternative = if peek&.type == :else
+      consequent = if peek&.type == :then
+        parse_block_statement(:then, [:else, :end])
+      else
+        parse_block_statement(nil, [:else, :end])
+      end
+
+      alternative = if current_token&.type == :else
+        backtrack(1)
         parse_block_statement(:else, :end)
       end
 
@@ -169,8 +180,16 @@ module Wid
     #  ;
     def parse_block_statement(opening, closing)
       consume(opening) if opening
-      statements = (peek.type != closing) ? parse_statement_list(closing) : []
-      consume(closing)
+      closing = Array(closing)
+
+      statements = if closing.include?(peek.type)
+        []
+      else
+        parse_statement_list(closing)
+      end
+
+      found = closing.find { _1 == peek.type }
+      consume(found)
       Nodes::BlockStatement.new(statements)
     end
 
