@@ -18,7 +18,7 @@ module Wid
             },
             consequent: {
               class: Nodes::BlockStatement,
-              statements: [
+              body: [
                 {
                   class: Nodes::ExpressionStatement,
                   expression: {
@@ -60,7 +60,7 @@ module Wid
             },
             consequent: {
               class: Nodes::BlockStatement,
-              statements: [
+              body: [
                 {
                   class: Nodes::ExpressionStatement,
                   expression: {
@@ -104,7 +104,7 @@ module Wid
             },
             consequent: {
               class: Nodes::BlockStatement,
-              statements: [
+              body: [
                 {
                   class: Nodes::ExpressionStatement,
                   expression: {
@@ -124,7 +124,7 @@ module Wid
             },
             alternate: {
               class: Nodes::BlockStatement,
-              statements: [
+              body: [
                 {
                   class: Nodes::ExpressionStatement,
                   expression: {
@@ -145,6 +145,16 @@ module Wid
           }
         ]
       }, ast)
+    end
+
+    def test_if_statement_relational_expression
+      parse(<<~WID)
+        if x > 10
+          x = 0
+        else
+          x += 1
+        end
+      WID
     end
   end
 end

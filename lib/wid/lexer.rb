@@ -37,6 +37,7 @@ module Wid
       [/^\bif\b/, :if],
       [/^\bthen\b/, :then],
       [/^\belse\b/, :else],
+      [/^\bwhile\b/, :while],
 
       # Numbers
       [/^\d+(\.\d+)?/, :NUMBER],

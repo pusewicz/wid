@@ -147,6 +147,7 @@ module Wid
     #  | BlockStatement
     #  | EmptyStatement
     #  | IfStatement
+    #  | IterationStatement
     #  ;
     def parse_statement
       case peek.type
@@ -154,8 +155,30 @@ module Wid
       when :if then parse_if_statement
       when :"{" then parse_block_statement(:"{", :"}")
       when :do then parse_block_statement(:do, :end)
+      when :while then parse_iteration_statement
       else parse_expression_statement
       end
+    end
+
+    # IterationStatement
+    #  : WhileStatement
+    #  | ForStatement TODO
+    def parse_iteration_statement
+      case peek.type
+      when :while then parse_while_statement
+      else raise UnrecognizedTokenError.new(peek)
+      end
+    end
+
+    # WhileStatement
+    # : 'while' Expression Statement
+    # ;
+    def parse_while_statement
+      consume(:while)
+      test = parse_expression
+      body = parse_block_statement(nil, :end)
+
+      Nodes::WhileStatement.new(test, body)
     end
 
     # IfStatement

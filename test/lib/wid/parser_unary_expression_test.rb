@@ -1,6 +1,6 @@
 module Wid
   class ParserUnaryxpressionTest < ParserTest
-    def text_unary_minus
+    def test_unary_minus
       ast = parse("-1")
 
       assert_ast_equal({

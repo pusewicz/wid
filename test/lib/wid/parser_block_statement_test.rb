@@ -8,7 +8,7 @@ module Wid
         body: [
           {
             class: Nodes::BlockStatement,
-            statements: [
+            body: [
               {
                 class: Nodes::ExpressionStatement,
                 expression: {
@@ -44,7 +44,7 @@ module Wid
         body: [
           {
             class: Nodes::BlockStatement,
-            statements: [
+            body: [
               {
                 class: Nodes::ExpressionStatement,
                 expression: {
@@ -80,7 +80,7 @@ module Wid
         body: [
           {
             class: Nodes::BlockStatement,
-            statements: []
+            body: []
           }
         ]
       }, ast)
@@ -94,7 +94,7 @@ module Wid
         body: [
           {
             class: Nodes::BlockStatement,
-            statements: [
+            body: [
               {
                 class: Nodes::ExpressionStatement,
                 expression: {
@@ -104,7 +104,7 @@ module Wid
               },
               {
                 class: Nodes::BlockStatement,
-                statements: [
+                body: [
                   {
                     class: Nodes::ExpressionStatement,
                     expression: {
