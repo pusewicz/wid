@@ -14,7 +14,12 @@ module Wid
         if token.nil?
           super("Unexpected end of input. Expected `#{expected_type.inspect}'")
         else
-          super("Unexpected token #{token.inspect} at line #{token.line}, column #{token.column}. Expected `#{expected_type.inspect}'")
+          message = if expected_value
+            "Unexpected token #{token.inspect} at line #{token.line}, column #{token.column}. Expected `#{expected_type.inspect}' with value `#{expected_value}'"
+          else
+            "Unexpected token #{token.inspect} at line #{token.line}, column #{token.column}. Expected `#{expected_type.inspect}'"
+          end
+          super(message)
         end
       end
 
