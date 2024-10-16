@@ -28,6 +28,7 @@ module Wid
       [/^\[/, :"["],
       [/^\]/, :"]"],
       [/^\./, :"."],
+      [/^@/, :"@"],
 
       # Keywords
       [/^\btrue\b/, :true],
@@ -41,6 +42,9 @@ module Wid
       [/^\bwhile\b/, :while],
       [/^\bdef\b/, :def],
       [/^\breturn\b/, :return],
+      [/^\bclass\b/, :class],
+      [/^\bsuper\b/, :super],
+      [/^\bself\b/, :self],
 
       # Numbers
       [/^\d+(\.\d+)?/, :NUMBER],

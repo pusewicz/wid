@@ -9,12 +9,12 @@ module Wid
     UnexpectedTokenError = Class.new(ParserError) do
       attr_reader :token
 
-      def initialize(token = nil, expected = nil)
+      def initialize(token = nil, expected_type = nil, expected_value = nil)
         @token = token
         if token.nil?
-          super("Unexpected end of input. Expected `#{expected.inspect}'")
+          super("Unexpected end of input. Expected `#{expected_type.inspect}'")
         else
-          super("Unexpected token #{token.inspect} at line #{token.line}, column #{token.column}. Expected `#{expected.inspect}'")
+          super("Unexpected token #{token.inspect} at line #{token.line}, column #{token.column}. Expected `#{expected_type.inspect}'")
         end
       end
 
@@ -57,15 +57,15 @@ module Wid
       token
     end
 
-    def consume(expected_type)
+    def consume(expected_type, expected_value = nil)
       if peek.nil?
         raise UnexpectedTokenError.new(nil, expected_type)
       end
 
-      if peek&.type == expected_type
+      if peek&.type == expected_type && (expected_value.nil? || peek&.value == expected_value)
         advance
       else
-        raise UnexpectedTokenError.new(peek, expected_type)
+        raise UnexpectedTokenError.new(peek, expected_type, expected_value)
       end
     end
 
@@ -160,8 +160,29 @@ module Wid
       when :while then parse_iteration_statement
       when :def then parse_function_declaration
       when :return then parse_return_statement
+      when :class then parse_class_declaration
       else parse_expression_statement
       end
+    end
+
+    # ClassDeclaration
+    #  : 'class' Identifier OptClassExtends BlockStatement
+    #  ;
+    def parse_class_declaration
+      consume(:class)
+      name = parse_identifier
+      superclass = (peek&.type == :RELATIONAL_OPERATOR && peek&.value == "<") ? parse_class_extends : nil
+      body = parse_block_statement(nil, :end)
+
+      Nodes::ClassDeclaration.new(name, superclass, body)
+    end
+
+    # ClassExtends
+    #  : '<' Identifier
+    #  ;
+    def parse_class_extends
+      consume(:RELATIONAL_OPERATOR, "<")
+      parse_identifier
     end
 
     # FunctionDeclaration
@@ -328,6 +349,10 @@ module Wid
     #  | CallExpression
     #  ;
     def parse_call_member_expression
+      if peek&.type == :super
+        return parse_call_expression(parse_super)
+      end
+
       member = parse_member_expression
 
       if peek&.type == :"("
@@ -335,6 +360,14 @@ module Wid
       end
 
       member
+    end
+
+    # SuperExpression
+    #  : 'super'
+    #  ;
+    def parse_super
+      consume(:super)
+      Nodes::SuperExpression.new
     end
 
     # CallExpression
@@ -392,16 +425,17 @@ module Wid
 
       while peek&.type == :"." || peek&.type == :"["
         if peek&.type == :"["
+          # MemberExpression '[' Expression ']'
           consume(:"[")
           property = parse_expression
           consume(:"]")
           object = Nodes::MemberExpression.new(true, object, property)
         else
+          # MemberExpression '.' Identifier
           consume(:".")
           property = parse_identifier
           object = Nodes::MemberExpression.new(false, object, property)
         end
-
       end
 
       object
@@ -509,15 +543,26 @@ module Wid
     #  : Literal
     #  | ParenthesizedExpression
     #  | Identifier
+    #  | SelfExpression
     #  ;
     def parse_primary_expression
-      return parse_literal if literal?(peek.type)
-
       case peek.type
+      when :NUMBER, :STRING, :true, :false, :nil then parse_literal
       when :"(" then parse_parenthesized_expression
       when :IDENTIFIER then parse_identifier
-      else parse_left_hand_side_expression
+      when :self then parse_self_expression
+      # when :@ then parse_self_expression
+      else
+        parse_left_hand_side_expression
       end
+    end
+
+    # SelfExpression
+    #  : 'self'
+    #  ;
+    def parse_self_expression
+      consume(:self)
+      Nodes::SelfExpression.new
     end
 
     # UnaryExpression
@@ -537,10 +582,6 @@ module Wid
       else
         parse_left_hand_side_expression # Move to default
       end
-    end
-
-    def literal?(type)
-      type == :NUMBER || type == :STRING || type == :true || type == :false || type == :nil
     end
 
     # ParenthesizedExpression

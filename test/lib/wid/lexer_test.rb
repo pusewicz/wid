@@ -150,7 +150,7 @@ module Wid
 
     def test_invalid_token
       assert_raises(Lexer::SyntaxError) do
-        Lexer.tokenize("foo @ bar")
+        Lexer.tokenize("foo $ bar")
       end
     end
 
