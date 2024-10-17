@@ -3,6 +3,7 @@
 require_relative "wid/version"
 require_relative "wid/parser"
 require_relative "wid/lexer"
+require_relative "wid/type_checker"
 require_relative "wid/codegen"
 
 module Wid
