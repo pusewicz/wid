@@ -1,13 +1,20 @@
+# frozen_string_literal: true
+# typed: strict
+
 module Wid
   module Nodes
     class AssignmentExpression < Node
-      attr_reader :left, :right, :operator
+      sig { returns(Node) }
+      attr_reader :left, :right
 
+      sig { returns(String) }
+      attr_reader :operator
+
+      sig { params(operator: String, left: Node, right: Node).void }
       def initialize(operator, left, right)
-        @left = left
-        @operator = operator
-        @right = right
-        super
+        @left = T.let(left, Node)
+        @operator = T.let(operator, String)
+        @right = T.let(right, Node)
       end
 
       def children = [left, right]

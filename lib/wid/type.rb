@@ -1,14 +1,20 @@
-# typed: true
+# frozen_string_literal: true
+# typed: strict
 
 module Wid
-  class Type
-    String = Class.new(Type)
-    Int = Class.new(Type)
-    UInt = Class.new(Type)
-    Float = Class.new(Type)
-    Double = Class.new(Type)
-    Bool = Class.new(Type)
+  class Type < T::Enum
+    extend T::Sig
 
+    enums do
+      String = new
+      Int = new
+      UInt = new
+      Float = new
+      Double = new
+      Bool = new
+    end
+
+    sig { params(other: Type).returns(T::Boolean) }
     def ==(other)
       self.class == other.class
     end

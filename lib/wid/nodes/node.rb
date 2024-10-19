@@ -1,20 +1,22 @@
+# typed: strict
+
 module Wid
   module Nodes
     class Node
-      def initialize(*)
-      end
+      extend T::Sig
 
-      def accept(visitor) = visitor.visit(self)
-
+      sig { returns(String) }
       def inspect
         attrs = instance_variables.map do |var|
           "#{var[1..]}=#{instance_variable_get(var).inspect}"
         end
-        "#{self.class.name.split("::").last}(#{attrs.join(" ")})"
+        "#{T.must(self.class.name).split("::").last}(#{attrs.join(" ")})"
       end
 
+      sig { returns(T::Array[T.untyped]) }
       def children = []
 
+      sig { returns(T::Hash[Symbol, T.class_of(Node)]) }
       def to_hash
         {class: self.class}
       end

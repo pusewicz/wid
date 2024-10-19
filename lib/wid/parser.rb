@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# typed: true
 
 require_relative "nodes"
 
@@ -118,7 +119,7 @@ module Wid
 
     def parse_nil_literal
       consume(:nil)
-      Nodes::Nil.new
+      Nodes::NilLiteral.new
     end
 
     def parse_numeric_literal

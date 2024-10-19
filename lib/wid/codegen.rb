@@ -1,7 +1,10 @@
+# frozen_string_literal: true
+# typed: true
+
 module Wid
   # Codegen is a class that generates code from a Wid AST using a visitor.
   class Codegen
-    MAIN = %(int main() {\n%s\nreturn 0;\n}\n).freeze
+    MAIN = %(int main() {\n%s\nreturn 0;\n}\n)
 
     def initialize
       @headers = %w[Wid.h].to_set
