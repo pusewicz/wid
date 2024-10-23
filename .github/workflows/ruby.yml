@@ -19,6 +19,6 @@ jobs:
         with:
           bundler-cache: true
       - name: Run tests
-        run: bundle exec tldr
+        run: bin/tldr
       - name: Run standard
-        run: bundle exec standardrb
+        run: bin/standardrb
