@@ -34,8 +34,8 @@ module Wid
       [/^@/, :"@"],
 
       # Keywords
-      [/^\btrue\b/, :true],
-      [/^\bfalse\b/, :false],
+      [/^\btrue\b/, :true], # standard:disable Lint/BooleanSymbol
+      [/^\bfalse\b/, :false], # standard:disable Lint/BooleanSymbol
       [/^\bnil\b/, :nil],
       [/^\bdo\b/, :do],
       [/^\bend\b/, :end],

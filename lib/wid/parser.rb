@@ -105,15 +105,15 @@ module Wid
       case peek.type
       when :NUMBER then parse_numeric_literal
       when :STRING then parse_string_literal
-      when :true then parse_boolean_literal(true)
-      when :false then parse_boolean_literal(false)
+      when :true then parse_boolean_literal(true) # standard:disable Lint/BooleanSymbol
+      when :false then parse_boolean_literal(false) # standard:disable Lint/BooleanSymbol
       when :nil then parse_nil_literal
       else raise UnrecognizedTokenError.new(peek)
       end
     end
 
     def parse_boolean_literal(value)
-      consume(value ? :true : :false)
+      consume(value ? :true : :false) # standard:disable Lint/BooleanSymbol
       Nodes::BooleanLiteral.new(value)
     end
 
@@ -553,7 +553,7 @@ module Wid
     #  ;
     def parse_primary_expression
       case peek.type
-      when :NUMBER, :STRING, :true, :false, :nil then parse_literal
+      when :NUMBER, :STRING, :true, :false, :nil then parse_literal # standard:disable Lint/BooleanSymbol
       when :"(" then parse_parenthesized_expression
       when :IDENTIFIER then parse_identifier
       when :self then parse_self_expression

@@ -6,7 +6,6 @@ module Wid
       def initialize(test, body)
         @test = test
         @body = body
-        super
       end
 
       def children

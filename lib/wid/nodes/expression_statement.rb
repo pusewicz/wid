@@ -5,7 +5,6 @@ module Wid
 
       def initialize(expression)
         @expression = expression
-        super
       end
 
       def children

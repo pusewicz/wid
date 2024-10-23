@@ -90,8 +90,8 @@ module Wid
       tokens = Lexer.tokenize("true false nil do end if else")
 
       assert_equal([
-        build_token(:true, "true"),
-        build_token(:false, "false"),
+        build_token(:true, "true"), # standard:disable Lint/BooleanSymbol
+        build_token(:false, "false"), # standard:disable Lint/BooleanSymbol
         build_token(:nil, "nil"),
         build_token(:do, "do"),
         build_token(:end, "end"),

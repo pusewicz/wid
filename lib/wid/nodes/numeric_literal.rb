@@ -1,13 +1,14 @@
 module Wid
   module Nodes
-    class NumericLiteral < Literal
+    class NumericLiteral < Node
+      attr_reader :value
+
       def initialize(value)
-        parsed_value = value.include?(".") ? Float(value) : Integer(value)
-        super(parsed_value)
+        @value = value.include?(".") ? Float(value) : Integer(value)
       end
 
       def to_hash
-        {class: self.class, value: value}
+        {class: self.class, value: @value}
       end
     end
   end

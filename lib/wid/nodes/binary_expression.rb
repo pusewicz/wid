@@ -7,7 +7,6 @@ module Wid
         @left = left
         @operator = operator
         @right = right
-        super
       end
 
       def children = [left, right]

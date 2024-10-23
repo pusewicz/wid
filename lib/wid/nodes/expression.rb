@@ -5,7 +5,6 @@ module Wid
 
       def initialize(value = nil)
         @value = value
-        super
       end
 
       def ==(other) = self.class == other.class && value == other.value

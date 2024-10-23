@@ -7,7 +7,6 @@ module Wid
         @test = test
         @consequent = consequent
         @alternate = alternate
-        super
       end
 
       def children

@@ -10,3 +10,5 @@ gem "standard", ">= 1.35.1"
 gem "sorbet", group: :development
 gem "sorbet-runtime"
 gem "tapioca", require: false, group: [:development, :test]
+
+gem "bigdecimal", "~> 3.1"
