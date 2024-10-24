@@ -103,7 +103,7 @@ module Wid
         build_token(:return, "return"),
         build_token(:class, "class"),
         build_token(:super, "super"),
-        build_token(:self, "self"),
+        build_token(:self, "self")
       ], tokens)
     end
 
