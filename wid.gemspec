@@ -18,8 +18,9 @@ Gem::Specification.new do |s|
   s.require_paths = ["lib"]
 
   s.required_ruby_version = Gem::Requirement.new(">= 3.3.0")
+  s.add_dependency("sorbet-runtime", "~> 0.5.11615")
+  s.add_dependency("bigdecimal", "~> 3.1")
+
   s.add_development_dependency("rake", "~> 13.0")
   s.add_development_dependency("tldr", "~> 0.10.0")
-  s.add_development_dependency("logger")
-  s.add_development_dependency("fiddle")
 end

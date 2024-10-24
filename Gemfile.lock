@@ -2,6 +2,8 @@ PATH
   remote: .
   specs:
     wid (0.0.1)
+      bigdecimal (~> 3.1)
+      sorbet-runtime (~> 0.5.11615)
 
 GEM
   remote: https://rubygems.org/
@@ -15,7 +17,6 @@ GEM
       reline (>= 0.3.8)
     diff-lcs (1.5.1)
     erubi (1.13.0)
-    fiddle (1.1.4)
     io-console (0.7.2)
     irb (1.14.1)
       rdoc (>= 4.0.0)
@@ -123,14 +124,10 @@ PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
-  bigdecimal (~> 3.1)
   debug
-  fiddle
-  logger
   rake (~> 13.0)
   repl_type_completor
   sorbet
-  sorbet-runtime
   standard (>= 1.35.1)
   tapioca
   tldr (~> 0.10.0)
