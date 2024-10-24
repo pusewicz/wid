@@ -87,7 +87,7 @@ module Wid
     end
 
     def test_keywords
-      tokens = Lexer.tokenize("true false nil do end if else")
+      tokens = Lexer.tokenize("true false nil do end if then elsif else def return class super self")
 
       assert_equal([
         build_token(:true, "true"), # standard:disable Lint/BooleanSymbol
@@ -96,7 +96,14 @@ module Wid
         build_token(:do, "do"),
         build_token(:end, "end"),
         build_token(:if, "if"),
-        build_token(:else, "else")
+        build_token(:then, "then"),
+        build_token(:elsif, "elsif"),
+        build_token(:else, "else"),
+        build_token(:def, "def"),
+        build_token(:return, "return"),
+        build_token(:class, "class"),
+        build_token(:super, "super"),
+        build_token(:self, "self"),
       ], tokens)
     end
 

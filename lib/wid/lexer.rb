@@ -42,6 +42,7 @@ module Wid
       [/^\bif\b/, :if],
       [/^\bthen\b/, :then],
       [/^\belse\b/, :else],
+      [/^\belsif\b/, :elsif],
       [/^\bwhile\b/, :while],
       [/^\bdef\b/, :def],
       [/^\breturn\b/, :return],
