@@ -22,3 +22,5 @@ jobs:
         run: bin/tldr
       - name: Run standard
         run: bin/standardrb
+      - name: Run sorbet
+        run: bin/srb typecheck

@@ -17,8 +17,10 @@ module Wid
         @right = T.let(right, Node)
       end
 
+      sig { returns(T::Array[Node]) }
       def children = [left, right]
 
+      sig { returns(T::Hash[Symbol, T.untyped]) }
       def to_hash
         {class: self.class, operator: @operator, left: @left.to_hash, right: @right.to_hash}
       end
