@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "sorbet-runtime"
+
 require_relative "wid/version"
 require_relative "wid/parser"
 require_relative "wid/lexer"
