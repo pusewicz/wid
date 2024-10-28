@@ -68,14 +68,14 @@ GEM
       rubocop (>= 1.48.1, < 2.0)
       rubocop-ast (>= 1.31.1, < 2.0)
     ruby-progressbar (1.13.0)
-    sorbet (0.5.11615)
-      sorbet-static (= 0.5.11615)
-    sorbet-runtime (0.5.11615)
-    sorbet-static (0.5.11615-universal-darwin)
-    sorbet-static (0.5.11615-x86_64-linux)
-    sorbet-static-and-runtime (0.5.11615)
-      sorbet (= 0.5.11615)
-      sorbet-runtime (= 0.5.11615)
+    sorbet (0.5.11618)
+      sorbet-static (= 0.5.11618)
+    sorbet-runtime (0.5.11618)
+    sorbet-static (0.5.11618-universal-darwin)
+    sorbet-static (0.5.11618-x86_64-linux)
+    sorbet-static-and-runtime (0.5.11618)
+      sorbet (= 0.5.11618)
+      sorbet-runtime (= 0.5.11618)
     spoom (1.5.0)
       erubi (>= 1.10.0)
       prism (>= 0.28.0)
@@ -120,7 +120,6 @@ GEM
 PLATFORMS
   arm64-darwin-23
   arm64-darwin-24
-  ruby
   x86_64-linux
 
 DEPENDENCIES
