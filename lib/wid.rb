@@ -1,12 +1,10 @@
 # frozen_string_literal: true
 
-require "sorbet-runtime"
+require "zeitwerk"
 
-require_relative "wid/version"
-require_relative "wid/parser"
-require_relative "wid/lexer"
-require_relative "wid/type_checker"
-require_relative "wid/codegen"
+loader = Zeitwerk::Loader.for_gem
+loader.inflector.inflect("ast" => "AST")
+loader.setup
 
 module Wid
   def self.parse(input)
