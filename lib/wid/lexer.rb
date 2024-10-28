@@ -1,5 +1,4 @@
 # frozen_string_literal: true
-# typed: strict
 
 require_relative "lexer/errors"
 require_relative "lexer/token"
@@ -8,9 +7,7 @@ require "strscan"
 
 module Wid
   class Lexer
-    extend T::Sig
-
-    SPEC = T.let([
+    SPEC = [
       # New line
       [/^[\n]/, :NEW_LINE],
 
@@ -77,21 +74,18 @@ module Wid
 
       # Strings: double and single-quoted
       [/^"[^"]*"|'[^']*'/, :STRING]
-    ].freeze, T::Array[[Regexp, T.nilable(Symbol)]])
+    ].freeze
 
-    sig { params(input: String).returns(T::Array[Token]) }
     def self.tokenize(input)
       new(input).tokenize
     end
 
-    sig { params(input: String).void }
     def initialize(input)
-      @scanner = T.let(StringScanner.new(input), StringScanner)
-      @last_pos = T.let(0, Integer)
-      @line_number = T.let(1, Integer)
+      @scanner = StringScanner.new(input)
+      @last_pos = 0
+      @line_number = 1
     end
 
-    sig { returns(T::Array[Token]) }
     def tokenize
       tokens = []
 
@@ -102,7 +96,6 @@ module Wid
       tokens.freeze
     end
 
-    sig { returns(T.nilable(Token)) }
     def next_token
       return if @scanner.eos?
 
@@ -126,12 +119,10 @@ module Wid
 
     private
 
-    sig { params(type: Symbol, value: T.nilable(String)).returns(Token) }
     def token(type, value = nil)
       Token.new(type: type, value: value, line: @line_number, column: column_number)
     end
 
-    sig { returns(Integer) }
     def column_number
       @scanner.pos - @last_pos - @scanner.matched_size.to_i + 1
     end
