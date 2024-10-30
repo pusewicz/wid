@@ -18,13 +18,15 @@ module Wid
     KEYWORDS = %w[].freeze
     SINGLE_QUOTED_STRING = /'[^']*'/
     DOUBLE_QUOTED_STRING = /"[^"]*"/
+    IDENTIFIER = /[a-zA-Z_]\w*[!?=]?/
 
     SPEC = {
       NUMBER: /#{INT}(#{FLOAT_DECIMAL}#{FLOAT_EXP}|#{FLOAT_DECIMAL}|#{FLOAT_EXP})?/,
       OPERATOR: /[#{OPERATORS.sort.join}]/,
       STRING: /#{SINGLE_QUOTED_STRING}|#{DOUBLE_QUOTED_STRING}/,
       BOOL: /true|false/,
-      NIL: /nil/
+      NIL: /nil/,
+      IDENTIFIER: IDENTIFIER
     }.freeze
 
     def initialize(string)

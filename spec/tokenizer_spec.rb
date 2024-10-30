@@ -40,4 +40,10 @@ describe Wid::Tokenizer do
       _(tokenize(operator)).must_equal [[:OPERATOR, operator]]
     end
   end
+
+  it "tokenizes identifiers" do
+    %w[number puts some_fun __dir__ MY_CONSTANT chomp! empty? value=].each do |identifier|
+      _(tokenize(identifier)).must_equal [[:IDENTIFIER, identifier]]
+    end
+  end
 end
