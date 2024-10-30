@@ -6,15 +6,17 @@ module Wid
   class Tokenizer
     Token = Data.define(:type, :value) do
       def to_a
-        [type, value]
+        [type, value].compact
       end
     end
 
     IGNORE = /[ \c\r\t]+/
-    INT = /[-]?(?:[0]|[1-9][0-9]*)/
+    INT = /(?:[0]|[1-9][0-9]*)/
     FLOAT_DECIMAL = /[.][0-9]+/
     FLOAT_EXP = /[eE][+-]?[0-9]+/
-    OPERATORS = %w[+ -]
+    LITERALS = %w[( )]
+    OPERATORS = %w[+ - > < * / !]
+    TWO_CHAR_OPERATORS = %w[>= <= == !=]
     KEYWORDS = %w[].freeze
     SINGLE_QUOTED_STRING = /'[^']*'/
     DOUBLE_QUOTED_STRING = /"[^"]*"/
@@ -22,7 +24,8 @@ module Wid
 
     SPEC = {
       NUMBER: /#{INT}(#{FLOAT_DECIMAL}#{FLOAT_EXP}|#{FLOAT_DECIMAL}|#{FLOAT_EXP})?/,
-      OPERATOR: /[#{OPERATORS.sort.join}]/,
+      LITERAL: /[#{LITERALS.sort.join}]/,
+      OPERATOR: /#{Regexp.union(TWO_CHAR_OPERATORS)}|[#{OPERATORS.sort.join}]/,
       STRING: /#{SINGLE_QUOTED_STRING}|#{DOUBLE_QUOTED_STRING}/,
       BOOL: /true|false/,
       NIL: /nil/,
@@ -44,7 +47,12 @@ module Wid
 
       SPEC.each do |type, regexp|
         if (value = @scan.scan(regexp))
-          return Token.new(type:, value:)
+          return case type
+                 when :OPERATOR, :LITERAL then Token.new(type: value.to_sym, value: nil)
+                 when :NIL then Token.new(type:, value: nil)
+                 else
+                   Token.new(type:, value:)
+                 end
         end
       end
 

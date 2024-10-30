@@ -32,12 +32,18 @@ describe Wid::Tokenizer do
   end
 
   it "tokenizes nil" do
-    _(tokenize("nil")).must_equal [[:NIL, "nil"]]
+    _(tokenize("nil")).must_equal [[:NIL]]
+  end
+
+  it "tokenizes literals" do
+    %w[( )].each do |operator|
+      _(tokenize(operator)).must_equal [[operator.to_sym]]
+    end
   end
 
   it "tokenizes operators" do
-    %w[+ -].each do |operator|
-      _(tokenize(operator)).must_equal [[:OPERATOR, operator]]
+    %w[+ - > >= < <= == !=].each do |operator|
+      _(tokenize(operator)).must_equal [[operator.to_sym]]
     end
   end
 

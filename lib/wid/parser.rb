@@ -50,12 +50,75 @@ module Wid
 
     # expression → equality ;
     def expression
-      # assignment
-      primary
+      equality
     end
 
     # equality → comparison ( ( "!=" | "==" ) comparison )* ;
     def equality
+      expr = comparison
+
+      while match?(:"!=", :"==")
+        operator = previous.type
+        right = comparison
+
+        expr = AST::Expr::Binary.new(left: expr, operator:, right:)
+      end
+
+      expr
+    end
+
+    # comparison → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
+    def comparison
+      expr = term
+
+      while match?(:>, :">=", :<, :"<=")
+        operator = previous.type
+        right = term
+
+        expr = AST::Expr::Binary.new(left: expr, operator:, right:)
+      end
+
+      expr
+    end
+
+    # term → factor ( ( "-" | "+" ) factor )* ;
+    def term
+      expr = factor
+
+      while match?(:-, :+)
+        operator = previous.type
+        right = factor
+
+        expr = AST::Expr::Binary.new(left: expr, operator:, right:)
+      end
+
+      expr
+    end
+
+    # factor → unary ( ( "/" | "*" ) unary )* ;
+    def factor
+      expr = unary
+
+      while match?(:/, :*)
+        operator = previous.type
+        right = unary
+
+        expr = AST::Expr::Binary.new(left: expr, operator:, right:)
+      end
+
+      expr
+    end
+
+    # unary → ( "!" | "-" ) unary | primary ;
+    def unary
+      if match?(:!, :-)
+        operator = previous.type
+        right = unary
+
+        return AST::Expr::Unary.new(operator:, right:)
+      end
+
+      primary
     end
 
     # primary → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER ;
@@ -65,17 +128,14 @@ module Wid
       return bool_literal if match?(:BOOL)
       return nil_literal if match?(:NIL)
 
-      # if match?(:identifier)
-      #   return {type: :variable, name: previous.lexeme}
-      # end
+      if match?(:"(")
+        expr = expression
+        consume(:")", "Expect ')' after expression.")
 
-      # if match?(:left_paren)
-      #   expr = expression
-      #   consume(:right_paren, "Expect ')' after expression.")
-      #   return {type: :grouping, expression: expr}
-      # end
+        return AST::Expr::Grouping.new(expr:)
+      end
 
-      error peek, "Expected expression, got #{peek.inspect}."
+      error peek, "Expected a primary expression, got #{peek.inspect}."
     end
 
     def number_literal
