@@ -11,7 +11,11 @@ describe Wid::Parser do
     end
 
     parser = Wid::Parser.new(tokens)
-    parser.parse.map(&:to_h)
+    program = parser.parse
+
+    _(program).must_be_instance_of Wid::AST::Node::Program
+
+    program.to_h[:statements]
   end
 
   it "parses numbers" do

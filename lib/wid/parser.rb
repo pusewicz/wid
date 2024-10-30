@@ -19,7 +19,8 @@ module Wid
       statements = []
 
       statements << statement until eof?
-      statements
+
+      AST::Node::Program.new(statements:)
     end
 
     # Statement → ExpressionStmt | PrintStmt
