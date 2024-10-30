@@ -13,6 +13,28 @@ describe Wid::Tokenizer do
     tokens
   end
 
+  it "tokenizes new line" do
+    _(tokenize("\n")).must_equal [[:"\n"]]
+  end
+
+  it "increments line number on new lines" do
+    tokenizer = Wid::Tokenizer.new("1\n2\n3\n4")
+
+    _(tokenizer.next_token.line).must_equal 1
+    _(tokenizer.next_token.line).must_equal 2
+    _(tokenizer.next_token.line).must_equal 2
+    _(tokenizer.next_token.line).must_equal 3
+    _(tokenizer.next_token.line).must_equal 3
+    _(tokenizer.next_token.line).must_equal 4
+    _(tokenizer.next_token.line).must_equal 4
+  end
+
+  it "returns line number on unrecognized token" do
+    tokenizer = Wid::Tokenizer.new("?")
+
+    _ { tokenizer.next_token }.must_raise(RuntimeError, 'Unrecognized token "?" at line 1')
+  end
+
   it "tokenizes numbers" do
     %w[3 2.5].each do |number|
       _(tokenize(number)).must_equal [[:NUMBER, number]]
