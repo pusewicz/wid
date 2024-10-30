@@ -1,6 +1,2 @@
-require "minitest/autorun"
-require "minitest/focus"
-require "minitest/reporters"
+require "maxitest/autorun"
 require "wid"
-
-Minitest::Reporters.use! Minitest::Reporters::SpecReporter.new

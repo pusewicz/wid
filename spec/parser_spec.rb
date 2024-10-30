@@ -16,33 +16,33 @@ describe Wid::Parser do
 
   it "parses numbers" do
     [3, 2.5].each do |number|
-      assert_equal([{type: Wid::AST::Expr::NumberLiteral, value: number}], parse(number.to_s))
+      _(parse(number.to_s)).must_equal [{type: Wid::AST::Expr::NumberLiteral, value: number}]
     end
   end
 
   it "parses strings" do
     [%('a string 1'), %("a string 2")].each do |string|
-      assert_equal([{
+      _(parse(string)).must_equal [{
         type: Wid::AST::Expr::StringLiteral,
         value: string[1...-1]
-      }], parse(string))
+      }]
     end
   end
 
   it "parses booleans" do
     %w[true false].each do |string|
-      assert_equal([{
+      _(parse(string)).must_equal [{
         type: Wid::AST::Expr::BoolLiteral,
         value: string.to_s == "true"
-      }], parse(string))
+      }]
     end
   end
 
   it "parses nil" do
-    assert_equal([{
+    _(parse("nil")).must_equal [{
       type: Wid::AST::Expr::NilLiteral,
       value: nil
-    }], parse("nil"))
+    }]
   end
 
   # skip "parses binary expressions" do

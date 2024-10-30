@@ -2,7 +2,6 @@
 
 require "standard/rake"
 require "minitest/test_task"
-require "minitest/fail_fast" if ENV["TESTOPTS"] == "--fail-fast"
 
 task default: [:spec, "standard:fix"]
 
