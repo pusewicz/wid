@@ -1,0 +1,5 @@
+PrePush:
+  Minitest:
+    enabled: true
+    command: ['ruby', '-Ilib:spec', '-rminitest', "-e 'exit! Minitest.run'"]
+    include: 'spec/**/*_spec.rb'
