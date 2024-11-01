@@ -14,8 +14,10 @@ describe Wid::Parser do
     program = parser.parse
 
     _(program).must_be_instance_of Wid::AST::Node::Program
+    _(program.statements).must_be_instance_of Wid::AST::Node::Statements
+    _(program.statements.body).must_be_instance_of Array
 
-    program.to_h[:statements]
+    program.statements.to_h[:body]
   end
 
   it "parses numbers" do

@@ -20,7 +20,7 @@ module Wid
 
       statements << statement until eof?
 
-      AST::Node::Program.new(statements:)
+      AST::Node::Program.new(statements: AST::Node::Statements.new(body: statements))
     end
 
     # Statement → ExpressionStmt | PrintStmt
