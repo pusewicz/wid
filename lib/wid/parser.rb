@@ -25,7 +25,7 @@ module Wid
 
     # Statement → ExpressionStmt | PrintStmt
     def statement
-      if match?(:PRINT)
+      if match(:PRINT)
         print_statement
       else
         expression
@@ -40,10 +40,10 @@ module Wid
       expressions << expression
 
       # Parse additional expressions separated by commas
-      expressions << expression while match?(:comma)
+      expressions << expression while match(:comma)
 
       # Expect newline or semicolon after print statement
-      consume(:"\n", "Expect newline after print statement") unless match?(:";")
+      consume(:"\n", "Expect newline after print statement") unless match(:";")
 
       AST::Stmt::Print.new(expressions:)
     end
@@ -57,7 +57,7 @@ module Wid
     def equality
       expr = comparison
 
-      while match?(:"!=", :"==")
+      while match(:"!=", :"==")
         operator = previous.type
         right = comparison
 
@@ -71,7 +71,7 @@ module Wid
     def comparison
       expr = term
 
-      while match?(:>, :">=", :<, :"<=")
+      while match(:>, :">=", :<, :"<=")
         operator = previous.type
         right = term
 
@@ -85,7 +85,7 @@ module Wid
     def term
       expr = factor
 
-      while match?(:-, :+)
+      while match(:-, :+)
         operator = previous.type
         right = factor
 
@@ -99,7 +99,7 @@ module Wid
     def factor
       expr = unary
 
-      while match?(:/, :*)
+      while match(:/, :*)
         operator = previous.type
         right = unary
 
@@ -111,7 +111,7 @@ module Wid
 
     # unary → ( "!" | "-" ) unary | primary ;
     def unary
-      if match?(:!, :-)
+      if match(:!, :-)
         operator = previous.type
         right = unary
 
@@ -123,12 +123,12 @@ module Wid
 
     # primary → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER ;
     def primary
-      return number_literal if match?(:NUMBER)
-      return string_literal if match?(:STRING)
-      return bool_literal if match?(:BOOL)
-      return nil_literal if match?(:NIL)
+      return number_literal if match(:NUMBER)
+      return string_literal if match(:STRING)
+      return bool_literal if match(:BOOL)
+      return nil_literal if match(:NIL)
 
-      if match?(:"(")
+      if match(:"(")
         expr = expression
         consume(:")", "Expect ')' after expression.")
 
@@ -156,7 +156,7 @@ module Wid
 
     private
 
-    def match?(*types)
+    def match(*types)
       types.each do |type|
         if check(type)
           advance
