@@ -1,0 +1,24 @@
+---
+nodes:
+  - name: Nil
+  - name: Boolean
+    fields:
+      - name: value
+        kind: Boolean
+  - name: Float
+    fields:
+      - name: value
+        kind: Float
+  - name: Integer
+    fields:
+      - name: value
+        kind: Integer
+  - name: String
+    fields:
+      - name: unescaped
+        kind: String
+  - name: Statements
+    fields:
+      - name: body
+        type: node[]
+        kind: Node

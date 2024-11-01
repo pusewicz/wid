@@ -139,19 +139,23 @@ module Wid
     end
 
     def number_literal
-      ::Wid::AST::Expr::NumberLiteral.new(value: previous.value)
+      if previous.value.include?(".")
+        ::Wid::AST::Node::Float.new(value: Float(previous.value))
+      else
+        ::Wid::AST::Node::Integer.new(value: Integer(previous.value))
+      end
     end
 
     def string_literal
-      ::Wid::AST::Expr::StringLiteral.new(value: previous.value)
+      ::Wid::AST::Node::String.new(unescaped: previous.value[1...-1])
     end
 
     def bool_literal
-      ::Wid::AST::Expr::BoolLiteral.new(value: previous.value)
+      ::Wid::AST::Node::Boolean.new(value: previous.value == "true")
     end
 
     def nil_literal
-      ::Wid::AST::Expr::NilLiteral.new(value: nil)
+      ::Wid::AST::Node::Nil.new
     end
 
     private

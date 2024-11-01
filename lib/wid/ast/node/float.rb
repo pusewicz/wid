@@ -13,17 +13,17 @@
 module Wid
   module AST
     class Node
-      class Statements < Node
-        attr_reader :body # : Array[Node]
+      class Float < Node
+        attr_reader :value # : Float
 
-        # @rbs body: Array[Node]
+        # @rbs value: Float
         # @rbs return: void
-        def initialize(body:)
-          @body = body
+        def initialize(value:)
+          @value = value
         end
 
         def to_h
-          super.merge(body: @body.map(&:to_h))
+          super.merge(value: @value)
         end
       end
     end

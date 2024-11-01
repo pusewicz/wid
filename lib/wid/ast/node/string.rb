@@ -13,17 +13,17 @@
 module Wid
   module AST
     class Node
-      class Statements < Node
-        attr_reader :body # : Array[Node]
+      class String < Node
+        attr_reader :unescaped # : String
 
-        # @rbs body: Array[Node]
+        # @rbs unescaped: String
         # @rbs return: void
-        def initialize(body:)
-          @body = body
+        def initialize(unescaped:)
+          @unescaped = unescaped
         end
 
         def to_h
-          super.merge(body: @body.map(&:to_h))
+          super.merge(unescaped: @unescaped)
         end
       end
     end
