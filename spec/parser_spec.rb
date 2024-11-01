@@ -51,14 +51,14 @@ describe Wid::Parser do
 
   it "parses equality" do
     _(parse("1 == 2")).must_equal [{
-      type: Wid::AST::Expr::Binary,
+      type: Wid::AST::Node::Binary,
       left: {type: Wid::AST::Node::Integer, value: 1},
       operator: :==,
       right: {type: Wid::AST::Node::Integer, value: 2}
     }]
 
     _(parse("1 != 2")).must_equal [{
-      type: Wid::AST::Expr::Binary,
+      type: Wid::AST::Node::Binary,
       left: {type: Wid::AST::Node::Integer, value: 1},
       operator: :!=,
       right: {type: Wid::AST::Node::Integer, value: 2}
@@ -67,28 +67,28 @@ describe Wid::Parser do
 
   it "parses comparison" do
     _(parse("1 > 2")).must_equal [{
-      type: Wid::AST::Expr::Binary,
+      type: Wid::AST::Node::Binary,
       left: {type: Wid::AST::Node::Integer, value: 1},
       operator: :>,
       right: {type: Wid::AST::Node::Integer, value: 2}
     }]
 
     _(parse("1 >= 2")).must_equal [{
-      type: Wid::AST::Expr::Binary,
+      type: Wid::AST::Node::Binary,
       left: {type: Wid::AST::Node::Integer, value: 1},
       operator: :>=,
       right: {type: Wid::AST::Node::Integer, value: 2}
     }]
 
     _(parse("1 < 2")).must_equal [{
-      type: Wid::AST::Expr::Binary,
+      type: Wid::AST::Node::Binary,
       left: {type: Wid::AST::Node::Integer, value: 1},
       operator: :<,
       right: {type: Wid::AST::Node::Integer, value: 2}
     }]
 
     _(parse("1 <= 2")).must_equal [{
-      type: Wid::AST::Expr::Binary,
+      type: Wid::AST::Node::Binary,
       left: {type: Wid::AST::Node::Integer, value: 1},
       operator: :<=,
       right: {type: Wid::AST::Node::Integer, value: 2}
@@ -97,14 +97,14 @@ describe Wid::Parser do
 
   it "parses term" do
     _(parse("1 + 2")).must_equal [{
-      type: Wid::AST::Expr::Binary,
+      type: Wid::AST::Node::Binary,
       left: {type: Wid::AST::Node::Integer, value: 1},
       operator: :+,
       right: {type: Wid::AST::Node::Integer, value: 2}
     }]
 
     _(parse("1 - 2")).must_equal [{
-      type: Wid::AST::Expr::Binary,
+      type: Wid::AST::Node::Binary,
       left: {type: Wid::AST::Node::Integer, value: 1},
       operator: :-,
       right: {type: Wid::AST::Node::Integer, value: 2}
@@ -113,14 +113,14 @@ describe Wid::Parser do
 
   it "parses factor" do
     _(parse("1 * 2")).must_equal [{
-      type: Wid::AST::Expr::Binary,
+      type: Wid::AST::Node::Binary,
       left: {type: Wid::AST::Node::Integer, value: 1},
       operator: :*,
       right: {type: Wid::AST::Node::Integer, value: 2}
     }]
 
     _(parse("1 / 2")).must_equal [{
-      type: Wid::AST::Expr::Binary,
+      type: Wid::AST::Node::Binary,
       left: {type: Wid::AST::Node::Integer, value: 1},
       operator: :/,
       right: {type: Wid::AST::Node::Integer, value: 2}
@@ -129,22 +129,22 @@ describe Wid::Parser do
 
   it "parses unary" do
     _(parse("-2")).must_equal [{
-      type: Wid::AST::Expr::Unary,
+      type: Wid::AST::Node::Unary,
       operator: :-,
       right: {type: Wid::AST::Node::Integer, value: 2}
     }]
 
     _(parse("!2")).must_equal [{
-      type: Wid::AST::Expr::Unary,
+      type: Wid::AST::Node::Unary,
       operator: :!,
       right: {type: Wid::AST::Node::Integer, value: 2}
     }]
 
     _(parse("!!2")).must_equal [{
-      type: Wid::AST::Expr::Unary,
+      type: Wid::AST::Node::Unary,
       operator: :!,
       right: {
-        type: Wid::AST::Expr::Unary,
+        type: Wid::AST::Node::Unary,
         operator: :!,
         right: {type: Wid::AST::Node::Integer, value: 2}
       }
@@ -153,8 +153,8 @@ describe Wid::Parser do
 
   it "parses grouping" do
     _(parse("(2)")).must_equal [{
-      type: Wid::AST::Expr::Grouping,
-      expr: {type: Wid::AST::Node::Integer, value: 2}
+      type: Wid::AST::Node::Grouping,
+      expression: {type: Wid::AST::Node::Integer, value: 2}
     }]
   end
 end

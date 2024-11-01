@@ -45,7 +45,7 @@ module Wid
       # Expect newline or semicolon after print statement
       consume(:"\n", "Expect newline after print statement") unless match(:";")
 
-      AST::Stmt::Print.new(expressions:)
+      AST::Node::Print.new(expressions:)
     end
 
     # expression → equality ;
@@ -61,7 +61,7 @@ module Wid
         operator = previous.type
         right = comparison
 
-        expr = AST::Expr::Binary.new(left: expr, operator:, right:)
+        expr = AST::Node::Binary.new(left: expr, operator:, right:)
       end
 
       expr
@@ -75,7 +75,7 @@ module Wid
         operator = previous.type
         right = term
 
-        expr = AST::Expr::Binary.new(left: expr, operator:, right:)
+        expr = AST::Node::Binary.new(left: expr, operator:, right:)
       end
 
       expr
@@ -89,7 +89,7 @@ module Wid
         operator = previous.type
         right = factor
 
-        expr = AST::Expr::Binary.new(left: expr, operator:, right:)
+        expr = AST::Node::Binary.new(left: expr, operator:, right:)
       end
 
       expr
@@ -103,7 +103,7 @@ module Wid
         operator = previous.type
         right = unary
 
-        expr = AST::Expr::Binary.new(left: expr, operator:, right:)
+        expr = AST::Node::Binary.new(left: expr, operator:, right:)
       end
 
       expr
@@ -115,7 +115,7 @@ module Wid
         operator = previous.type
         right = unary
 
-        return AST::Expr::Unary.new(operator:, right:)
+        return AST::Node::Unary.new(operator:, right:)
       end
 
       primary
@@ -132,7 +132,7 @@ module Wid
         expr = expression
         consume(:")", "Expect ')' after expression.")
 
-        return AST::Expr::Grouping.new(expr:)
+        return AST::Node::Grouping.new(expression: expr)
       end
 
       error peek, "Expected a primary expression, got #{peek.inspect}."

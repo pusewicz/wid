@@ -11,23 +11,23 @@
 module Wid
   module AST
     class Node
-      class Float < Node
-        attr_reader :value # : Float
+      class Grouping < Node
+        attr_reader :expression # : Node
 
-        # @rbs value: Float
+        # @rbs expression: Node
         # @rbs return: void
-        def initialize(value:)
-          @value = value
+        def initialize(expression:)
+          @expression = expression
         end
 
         # @rbs visitor: Visitor -> void
         def accept(visitor)
-          visitor.visit_float_node(self)
+          visitor.visit_grouping_node(self)
         end
 
-        # @rbs return: Hash[Symbol, Float]
+        # @rbs return: Hash[Symbol, Node]
         def to_h
-          super.merge(value: @value)
+          super.merge(expression: @expression.to_h)
         end
       end
     end

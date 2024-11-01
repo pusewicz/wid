@@ -11,23 +11,26 @@
 module Wid
   module AST
     class Node
-      class Float < Node
-        attr_reader :value # : Float
+      class Unary < Node
+        attr_reader :operator # : Symbol
+        attr_reader :right # : Node
 
-        # @rbs value: Float
+        # @rbs operator: Symbol
+        # @rbs right: Node
         # @rbs return: void
-        def initialize(value:)
-          @value = value
+        def initialize(operator:, right:)
+          @operator = operator
+          @right = right
         end
 
         # @rbs visitor: Visitor -> void
         def accept(visitor)
-          visitor.visit_float_node(self)
+          visitor.visit_unary_node(self)
         end
 
-        # @rbs return: Hash[Symbol, Float]
+        # @rbs return: Hash[Symbol, Symbol | Node]
         def to_h
-          super.merge(value: @value)
+          super.merge(operator: @operator, right: @right.to_h)
         end
       end
     end

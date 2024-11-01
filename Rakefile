@@ -20,10 +20,11 @@ rule(/lib\/wid\/ast\/node\/.*\.rb$/ => "lib/wid/ast/nodes.yml") do |t|
   require "erb"
   require "ostruct"
   node_name = t.name.match(/node\/(.*)\.rb/)[1].split("_").map(&:capitalize).join
+  file_name = t.name.match(/node\/(.*)\.rb/)[1]
   erb = ERB.new File.read("lib/wid/ast/node/node.rb.erb"), trim_mode: "-"
 
-  node_struct = Struct.new(:name, :human_name, :fields)
-  field_struct = Struct.new(:_name, :type, :kind) do
+  node_struct = Data.define(:name, :human_name, :fields)
+  field_struct = Data.define(:_name, :type, :kind) do
     def name
       _name.sub(/\?$/, "")
     end
@@ -57,10 +58,11 @@ rule(/lib\/wid\/ast\/node\/.*\.rb$/ => "lib/wid/ast/nodes.yml") do |t|
 
   NODES["nodes"].find { |n| n["name"] == node_name }.tap do |node|
     node = node_struct.new(
-      node["name"],
+      file_name,
       node_name,
       node["fields"]&.map { |f| field_struct.new(f["name"], f["type"], f["kind"]) } || []
     )
+    puts "Generating Wid::AST::Node::#{node_name}..."
     File.binwrite t.name, erb.result(binding)
   end
 end

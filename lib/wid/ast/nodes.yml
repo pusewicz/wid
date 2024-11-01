@@ -1,5 +1,10 @@
 ---
 nodes:
+  - name: Program
+    fields:
+      - name: statements
+        type: node[]
+        kind: Node
   - name: Nil
   - name: Boolean
     fields:
@@ -22,3 +27,31 @@ nodes:
       - name: body
         type: node[]
         kind: Node
+  - name: Print
+    fields:
+      - name: expressions
+        type: node[]
+        kind: Node
+  - name: Binary
+    fields:
+      - name: left
+        type: node
+        kind: Node
+      - name: operator
+        kind: Symbol
+      - name: right
+        type: node
+        kind: Node
+  - name: Unary
+    fields:
+      - name: operator
+        kind: Symbol
+      - name: right
+        type: node
+        kind: Node
+  - name: Grouping
+    fields:
+      - name: expression
+        type: node
+        kind: Node
+   
