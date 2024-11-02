@@ -1,38 +1,40 @@
 ---
 nodes:
-  - name: Program
+  - name: ProgramNode
     fields:
       - name: statements
         type: node[]
         kind: Node
-  - name: Nil
-  - name: Boolean
+  - name: NilNode
+  - name: TrueNode
+  - name: FalseNode
+  - name: BooleanNode
     fields:
       - name: value
         kind: Boolean
-  - name: Float
+  - name: FloatNode
     fields:
       - name: value
         kind: Float
-  - name: Integer
+  - name: IntegerNode
     fields:
       - name: value
         kind: Integer
-  - name: String
+  - name: StringNode
     fields:
       - name: unescaped
         kind: String
-  - name: Statements
+  - name: StatementsNode
     fields:
       - name: body
         type: node[]
         kind: Node
-  - name: Print
+  - name: PrintNode
     fields:
       - name: expressions
         type: node[]
         kind: Node
-  - name: Binary
+  - name: BinaryNode
     fields:
       - name: left
         type: node
@@ -42,16 +44,36 @@ nodes:
       - name: right
         type: node
         kind: Node
-  - name: Unary
+  - name: UnaryNode
     fields:
       - name: operator
         kind: Symbol
       - name: right
         type: node
         kind: Node
-  - name: Grouping
+  - name: GroupingNode
     fields:
       - name: expression
         type: node
         kind: Node
-   
+  - name: CallNode
+    fields:
+      - name: receiver
+        type: node?
+        kind: Node
+      - name: name
+        type: constant
+        kind: Symbol
+      - name: arguments
+        type: node?
+        kind: Arguments
+      - name: block
+        type: node?
+        kind:
+          - Block
+          - BlockArgument
+  - name: ArgumentsNode
+    fields:
+      - name: arguments
+        type: node[]
+        kind: Node

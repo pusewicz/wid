@@ -37,6 +37,9 @@ GEM
     guard-rake (1.0.0)
       guard
       rake
+    guard-shell (0.7.2)
+      guard (>= 2.0.0)
+      guard-compat (~> 1.0)
     iniparse (1.5.0)
     io-console (0.7.2)
     irb (1.14.1)
@@ -67,7 +70,7 @@ GEM
     parser (3.3.5.0)
       ast (~> 2.4.1)
       racc
-    prism (1.2.0)
+    prism (1.0.0)
     pry (0.14.2)
       coderay (~> 1.1)
       method_source (~> 1.0)
@@ -81,6 +84,9 @@ GEM
       ffi (~> 1.0)
     rbs (3.6.1)
       logger
+    rbs-inline (0.9.0)
+      prism (>= 0.29, < 1.1)
+      rbs (>= 3.5.0)
     rdoc (6.7.0)
       psych (>= 4.0.0)
     regexp_parser (2.9.2)
@@ -136,10 +142,12 @@ DEPENDENCIES
   guard
   guard-minitest
   guard-rake
+  guard-shell
   maxitest
   ostruct
   overcommit
   rake
+  rbs-inline
   repl_type_completor
   standard (>= 1.35.1)
   wid!

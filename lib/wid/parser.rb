@@ -20,7 +20,7 @@ module Wid
 
       statements << statement until eof?
 
-      AST::Node::Program.new(statements: AST::Node::Statements.new(body: statements))
+      AST::ProgramNode.new(statements: AST::StatementsNode.new(body: statements))
     end
 
     # Statement → ExpressionStmt | PrintStmt
@@ -45,7 +45,7 @@ module Wid
       # Expect newline or semicolon after print statement
       consume(:"\n", "Expect newline after print statement") unless match(:";")
 
-      AST::Node::Print.new(expressions:)
+      AST::PrintNode.new(expressions:)
     end
 
     # expression → equality ;
@@ -55,58 +55,54 @@ module Wid
 
     # equality → comparison ( ( "!=" | "==" ) comparison )* ;
     def equality
-      expr = comparison
+      receiver = comparison
 
       while match(:"!=", :"==")
-        operator = previous.type
-        right = comparison
-
-        expr = AST::Node::Binary.new(left: expr, operator:, right:)
+        name = previous.type
+        arguments = AST::ArgumentsNode.new(arguments: [comparison])
+        receiver = AST::CallNode.new(receiver:, name:, arguments:, block: nil)
       end
 
-      expr
+      receiver
     end
 
     # comparison → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
     def comparison
-      expr = term
+      receiver = term
 
       while match(:>, :">=", :<, :"<=")
-        operator = previous.type
-        right = term
-
-        expr = AST::Node::Binary.new(left: expr, operator:, right:)
+        name = previous.type
+        arguments = AST::ArgumentsNode.new(arguments: [term])
+        receiver = AST::CallNode.new(receiver:, name:, arguments:, block: nil)
       end
 
-      expr
+      receiver
     end
 
     # term → factor ( ( "-" | "+" ) factor )* ;
     def term
-      expr = factor
+      receiver = factor
 
       while match(:-, :+)
-        operator = previous.type
-        right = factor
-
-        expr = AST::Node::Binary.new(left: expr, operator:, right:)
+        name = previous.type
+        arguments = AST::ArgumentsNode.new(arguments: [factor])
+        receiver = AST::CallNode.new(receiver:, name:, arguments:, block: nil)
       end
 
-      expr
+      receiver
     end
 
     # factor → unary ( ( "/" | "*" ) unary )* ;
     def factor
-      expr = unary
+      receiver = unary
 
       while match(:/, :*)
-        operator = previous.type
-        right = unary
-
-        expr = AST::Node::Binary.new(left: expr, operator:, right:)
+        name = previous.type
+        arguments = AST::ArgumentsNode.new(arguments: [unary])
+        receiver = AST::CallNode.new(receiver:, name:, arguments:, block: nil)
       end
 
-      expr
+      receiver
     end
 
     # unary → ( "!" | "-" ) unary | primary ;
@@ -115,7 +111,7 @@ module Wid
         operator = previous.type
         right = unary
 
-        return AST::Node::Unary.new(operator:, right:)
+        return AST::UnaryNode.new(operator:, right:)
       end
 
       primary
@@ -132,7 +128,7 @@ module Wid
         expr = expression
         consume(:")", "Expect ')' after expression.")
 
-        return AST::Node::Grouping.new(expression: expr)
+        return AST::GroupingNode.new(expression: expr)
       end
 
       error peek, "Expected a primary expression, got #{peek.inspect}."
@@ -140,22 +136,26 @@ module Wid
 
     def number_literal
       if previous.value.include?(".")
-        ::Wid::AST::Node::Float.new(value: Float(previous.value))
+        ::Wid::AST::FloatNode.new(value: Float(previous.value))
       else
-        ::Wid::AST::Node::Integer.new(value: Integer(previous.value))
+        ::Wid::AST::IntegerNode.new(value: Integer(previous.value))
       end
     end
 
     def string_literal
-      ::Wid::AST::Node::String.new(unescaped: previous.value[1...-1])
+      ::Wid::AST::StringNode.new(unescaped: previous.value[1...-1])
     end
 
     def bool_literal
-      ::Wid::AST::Node::Boolean.new(value: previous.value == "true")
+      if previous.value == "true"
+        ::Wid::AST::TrueNode.new
+      else
+        ::Wid::AST::FalseNode.new
+      end
     end
 
     def nil_literal
-      ::Wid::AST::Node::Nil.new
+      ::Wid::AST::NilNode.new
     end
 
     private
