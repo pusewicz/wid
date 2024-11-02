@@ -68,7 +68,7 @@ rule(/lib\/wid\/ast\/node\/.*\.rb$/ => "lib/wid/ast/nodes.yml") do |t|
 end
 
 task nodes: FILES
-task spec: FILES
+task spec: :nodes
 
 task default: [:spec, "standard:fix"]
 
