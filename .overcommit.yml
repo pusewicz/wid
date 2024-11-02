@@ -1,3 +1,8 @@
+PreCommit:
+  RuboCop:
+    enabled: true
+    command: ['bundle', 'exec', 'standardrb'] # Invoke within Bundler context
+
 PrePush:
   Minitest:
     enabled: true
