@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "wid/ast/node"
+
 module Wid
   class Parser
     class StandardError < ::StandardError; end
