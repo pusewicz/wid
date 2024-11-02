@@ -11,6 +11,8 @@ GEM
   specs:
     ast (2.4.2)
     bigdecimal (3.1.8)
+    childprocess (5.1.0)
+      logger (~> 1.5)
     coderay (1.1.3)
     debug (1.9.2)
       irb (~> 1.10)
@@ -35,6 +37,7 @@ GEM
     guard-rake (1.0.0)
       guard
       rake
+    iniparse (1.5.0)
     io-console (0.7.2)
     irb (1.14.1)
       rdoc (>= 4.0.0)
@@ -56,6 +59,10 @@ GEM
       nenv (~> 0.1)
       shellany (~> 0.0)
     ostruct (0.6.0)
+    overcommit (0.64.1)
+      childprocess (>= 0.6.3, < 6)
+      iniparse (~> 1.4)
+      rexml (>= 3.3.9)
     parallel (1.26.3)
     parser (3.3.5.0)
       ast (~> 2.4.1)
@@ -82,6 +89,7 @@ GEM
     repl_type_completor (0.1.7)
       prism (~> 1.0)
       rbs (>= 2.7.0, < 4.0.0)
+    rexml (3.3.9)
     rubocop (1.66.1)
       json (~> 2.3)
       language_server-protocol (>= 3.17.0)
@@ -130,6 +138,7 @@ DEPENDENCIES
   guard-rake
   maxitest
   ostruct
+  overcommit
   rake
   repl_type_completor
   standard (>= 1.35.1)

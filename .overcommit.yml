@@ -1,7 +1,18 @@
+gemfile: Gemfile
+
 PreCommit:
+  BundleCheck:
+    enabled: true
+
   RuboCop:
     enabled: true
     command: ['bundle', 'exec', 'standardrb'] # Invoke within Bundler context
+
+  TrailingWhitespace:
+    enabled: true
+
+  YamlSyntax:
+    enabled: true
 
 PrePush:
   Minitest:
