@@ -34,16 +34,6 @@ nodes:
       - name: expressions
         type: node[]
         kind: Node
-  - name: BinaryNode
-    fields:
-      - name: left
-        type: node
-        kind: Node
-      - name: operator
-        kind: Symbol
-      - name: right
-        type: node
-        kind: Node
   - name: UnaryNode
     fields:
       - name: operator
