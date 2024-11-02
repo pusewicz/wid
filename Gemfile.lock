@@ -32,6 +32,9 @@ GEM
     guard-minitest (2.4.6)
       guard-compat (~> 1.2)
       minitest (>= 3.0)
+    guard-rake (1.0.0)
+      guard
+      rake
     io-console (0.7.2)
     irb (1.14.1)
       rdoc (>= 4.0.0)
@@ -124,6 +127,7 @@ DEPENDENCIES
   debug
   guard
   guard-minitest
+  guard-rake
   maxitest
   ostruct
   rake
