@@ -61,3 +61,4 @@ build-iPhoneSimulator/
 # But keep the examples that are written in Wid
 !examples/*.wid
 tags
+lib/wid/ast/node.rb

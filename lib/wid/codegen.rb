@@ -1,11 +1,8 @@
 # frozen_string_literal: true
-# typed: true
 
 module Wid
   # Codegen is a class that generates code from a Wid AST using a visitor.
   class Codegen
-    extend T::Sig
-
     MAIN = %(int main() {\n%s\nreturn 0;\n}\n)
 
     def initialize
@@ -27,7 +24,6 @@ module Wid
 
     def generate_output = MAIN % (@output.join(";\n") << ";")
 
-    sig { params(node: Nodes::Node).void }
     def visit(node)
       klass_name = T.must(T.must(node.class.name).split("::").last)
       method_name = "visit_#{klass_name.gsub(/([^\^])([A-Z])/, '\1_\2').downcase}"

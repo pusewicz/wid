@@ -1,1 +1,7 @@
 parallel: true
+
+ignore:
+  - 'lib/wid/parser.rb':
+    - Performance/RegexpMatch
+  - 'lib/wid/ast/node.rb':
+    - Layout/LeadingCommentSpace

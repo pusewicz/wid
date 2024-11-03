@@ -4,46 +4,89 @@ PATH
     wid (0.0.1)
       bigdecimal (~> 3.1)
       sorbet-runtime (~> 0.5.11615)
+      zeitwerk (~> 2.7.1)
 
 GEM
   remote: https://rubygems.org/
   specs:
     ast (2.4.2)
-    attr_extras (7.1.0)
     bigdecimal (3.1.8)
-    concurrent-ruby (1.3.4)
+    childprocess (5.1.0)
+      logger (~> 1.5)
+    coderay (1.1.3)
     debug (1.9.2)
       irb (~> 1.10)
       reline (>= 0.3.8)
-    diff-lcs (1.5.1)
-    erubi (1.13.0)
+    ffi (1.17.0)
+    ffi (1.17.0-arm64-darwin)
+    ffi (1.17.0-x86_64-linux-gnu)
+    formatador (1.1.0)
+    guard (2.19.0)
+      formatador (>= 0.2.4)
+      listen (>= 2.7, < 4.0)
+      lumberjack (>= 1.0.12, < 2.0)
+      nenv (~> 0.1)
+      notiffany (~> 0.0)
+      pry (>= 0.13.0)
+      shellany (~> 0.0)
+      thor (>= 0.18.1)
+    guard-compat (1.2.1)
+    guard-minitest (2.4.6)
+      guard-compat (~> 1.2)
+      minitest (>= 3.0)
+    guard-rake (1.0.0)
+      guard
+      rake
+    guard-shell (0.7.2)
+      guard (>= 2.0.0)
+      guard-compat (~> 1.0)
+    iniparse (1.5.0)
     io-console (0.7.2)
     irb (1.14.1)
       rdoc (>= 4.0.0)
       reline (>= 0.4.2)
-    json (2.7.3)
+    json (2.7.5)
     language_server-protocol (3.17.0.3)
     lint_roller (1.1.0)
+    listen (3.9.0)
+      rb-fsevent (~> 0.10, >= 0.10.3)
+      rb-inotify (~> 0.9, >= 0.9.10)
     logger (1.6.1)
-    netrc (0.11.0)
-    optimist (3.1.0)
+    lumberjack (1.2.10)
+    maxitest (5.7.1)
+      minitest (>= 5.14.0, < 5.26.0)
+    method_source (1.1.0)
+    minitest (5.25.1)
+    nenv (0.3.0)
+    notiffany (0.1.3)
+      nenv (~> 0.1)
+      shellany (~> 0.0)
+    ostruct (0.6.0)
+    overcommit (0.64.1)
+      childprocess (>= 0.6.3, < 6)
+      iniparse (~> 1.4)
+      rexml (>= 3.3.9)
     parallel (1.26.3)
     parser (3.3.5.0)
       ast (~> 2.4.1)
       racc
-    patience_diff (1.2.0)
-      optimist (~> 3.0)
-    prism (1.2.0)
+    prism (1.0.0)
+    pry (0.14.2)
+      coderay (~> 1.1)
+      method_source (~> 1.0)
     psych (5.1.2)
       stringio
     racc (1.8.1)
     rainbow (3.1.1)
     rake (13.2.1)
-    rbi (0.2.1)
-      prism (~> 1.0)
-      sorbet-runtime (>= 0.5.9204)
+    rb-fsevent (0.11.2)
+    rb-inotify (0.11.1)
+      ffi (~> 1.0)
     rbs (3.6.1)
       logger
+    rbs-inline (0.9.0)
+      prism (>= 0.29, < 1.1)
+      rbs (>= 3.5.0)
     rdoc (6.7.0)
       psych (>= 4.0.0)
     regexp_parser (2.9.2)
@@ -52,6 +95,7 @@ GEM
     repl_type_completor (0.1.7)
       prism (~> 1.0)
       rbs (>= 2.7.0, < 4.0.0)
+    rexml (3.3.9)
     rubocop (1.66.1)
       json (~> 2.3)
       language_server-protocol (>= 3.17.0)
@@ -62,25 +106,14 @@ GEM
       rubocop-ast (>= 1.32.2, < 2.0)
       ruby-progressbar (~> 1.7)
       unicode-display_width (>= 2.4.0, < 3.0)
-    rubocop-ast (1.32.3)
+    rubocop-ast (1.33.0)
       parser (>= 3.3.1.0)
     rubocop-performance (1.22.1)
       rubocop (>= 1.48.1, < 2.0)
       rubocop-ast (>= 1.31.1, < 2.0)
     ruby-progressbar (1.13.0)
-    sorbet (0.5.11615)
-      sorbet-static (= 0.5.11615)
-    sorbet-runtime (0.5.11615)
-    sorbet-static (0.5.11615-universal-darwin)
-    sorbet-static (0.5.11615-x86_64-linux)
-    sorbet-static-and-runtime (0.5.11615)
-      sorbet (= 0.5.11615)
-      sorbet-runtime (= 0.5.11615)
-    spoom (1.5.0)
-      erubi (>= 1.10.0)
-      prism (>= 0.28.0)
-      sorbet-static-and-runtime (>= 0.5.10187)
-      thor (>= 0.19.2)
+    shellany (0.0.1)
+    sorbet-runtime (0.5.11625)
     standard (1.41.1)
       language_server-protocol (~> 3.17.0.2)
       lint_roller (~> 1.0)
@@ -94,28 +127,9 @@ GEM
       lint_roller (~> 1.1)
       rubocop-performance (~> 1.22.0)
     stringio (3.1.1)
-    super_diff (0.13.0)
-      attr_extras (>= 6.2.4)
-      diff-lcs
-      patience_diff
-    tapioca (0.16.3)
-      bundler (>= 2.2.25)
-      netrc (>= 0.11.0)
-      parallel (>= 1.21.0)
-      rbi (~> 0.2)
-      sorbet-static-and-runtime (>= 0.5.11087)
-      spoom (>= 1.2.0)
-      thor (>= 1.2.0)
-      yard-sorbet
     thor (1.3.2)
-    tldr (0.10.0)
-      concurrent-ruby (~> 1.2)
-      super_diff (~> 0.10)
     unicode-display_width (2.6.0)
-    yard (0.9.37)
-    yard-sorbet (0.9.0)
-      sorbet-runtime
-      yard
+    zeitwerk (2.7.1)
 
 PLATFORMS
   arm64-darwin-23
@@ -125,12 +139,17 @@ PLATFORMS
 
 DEPENDENCIES
   debug
-  rake (~> 13.0)
+  guard
+  guard-minitest
+  guard-rake
+  guard-shell
+  maxitest
+  ostruct
+  overcommit
+  rake
+  rbs-inline
   repl_type_completor
-  sorbet
   standard (>= 1.35.1)
-  tapioca
-  tldr (~> 0.10.0)
   wid!
 
 BUNDLED WITH

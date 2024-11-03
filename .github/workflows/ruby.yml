@@ -19,8 +19,6 @@ jobs:
         with:
           bundler-cache: true
       - name: Run tests
-        run: bin/tldr
+        run: bin/rake spec
       - name: Run standard
-        run: bin/standardrb
-      - name: Run sorbet
-        run: bin/srb typecheck
+        run: bin/rake standard
