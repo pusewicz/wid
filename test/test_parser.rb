@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "spec_helper"
-
-describe Wid::Parser do
+class ParserTest < Wid::Test
   def parse(string)
     tokenizer = Wid::Tokenizer.new(string)
     tokens = []
@@ -13,40 +11,38 @@ describe Wid::Parser do
     parser = Wid::Parser.new(tokens)
     program = parser.parse
 
-    _(program).must_be_instance_of Wid::AST::ProgramNode
-    _(program.statements).must_be_instance_of Wid::AST::StatementsNode
-    _(program.statements.body).must_be_instance_of Array
+    assert_instance_of Wid::AST::ProgramNode, program
+    assert_instance_of Wid::AST::StatementsNode, program.statements
+    assert_instance_of Array, program.statements.body
 
     program.statements.to_h[:body]
   end
 
-  it "parses numbers" do
-    _(parse("3")).must_equal [{type: :integer_node, value: 3}]
-    _(parse("2.5")).must_equal [{type: :float_node, value: 2.5}]
+  def test_parses_numbers
+    assert_equal [{type: :integer_node, value: 3}], parse("3")
+    assert_equal [{type: :float_node, value: 2.5}], parse("2.5")
   end
 
-  it "parses strings" do
+  def test_parses_strings
     [%('a string 1'), %("a string 2")].each do |string|
-      _(parse(string)).must_equal [{
+      assert_equal [{
         type: :string_node,
         unescaped: string[1...-1]
-      }]
+      }], parse(string)
     end
   end
 
-  it "parses booleans" do
-    _(parse("true")).must_equal([{type: :true_node}])
-    _(parse("false")).must_equal([{type: :false_node}])
+  def test_parses_booleans
+    assert_equal [{type: :true_node}], parse("true")
+    assert_equal [{type: :false_node}], parse("false")
   end
 
-  it "parses nil" do
-    _(parse("nil")).must_equal [{
-      type: :nil_node
-    }]
+  def test_parses_nil
+    assert_equal [{type: :nil_node}], parse("nil")
   end
 
-  it "parses equality" do
-    _(parse("1 == 2")).must_equal [{
+  def test_parses_equality
+    assert_equal [{
       type: :call_node,
       receiver: {type: :integer_node, value: 1},
       name: :==,
@@ -55,9 +51,9 @@ describe Wid::Parser do
         arguments: [{type: :integer_node, value: 2}]
       },
       block: nil
-    }]
+    }], parse("1 == 2")
 
-    _(parse("1 != 2")).must_equal [{
+    assert_equal [{
       type: :call_node,
       receiver: {type: :integer_node, value: 1},
       name: :!=,
@@ -66,11 +62,11 @@ describe Wid::Parser do
         arguments: [{type: :integer_node, value: 2}]
       },
       block: nil
-    }]
+    }], parse("1 != 2")
   end
 
-  it "parses comparison" do
-    _(parse("1 > 2")).must_equal [{
+  def test_parses_comparison
+    assert_equal [{
       type: :call_node,
       receiver: {type: :integer_node, value: 1},
       name: :>,
@@ -79,9 +75,9 @@ describe Wid::Parser do
         arguments: [{type: :integer_node, value: 2}]
       },
       block: nil
-    }]
+    }], parse("1 > 2")
 
-    _(parse("1 >= 2")).must_equal [{
+    assert_equal [{
       type: :call_node,
       receiver: {type: :integer_node, value: 1},
       name: :>=,
@@ -90,9 +86,9 @@ describe Wid::Parser do
         arguments: [{type: :integer_node, value: 2}]
       },
       block: nil
-    }]
+    }], parse("1 >= 2")
 
-    _(parse("1 < 2")).must_equal [{
+    assert_equal [{
       type: :call_node,
       receiver: {type: :integer_node, value: 1},
       name: :<,
@@ -101,9 +97,9 @@ describe Wid::Parser do
         arguments: [{type: :integer_node, value: 2}]
       },
       block: nil
-    }]
+    }], parse("1 < 2")
 
-    _(parse("1 <= 2")).must_equal [{
+    assert_equal [{
       type: :call_node,
       receiver: {type: :integer_node, value: 1},
       name: :<=,
@@ -112,11 +108,11 @@ describe Wid::Parser do
         arguments: [{type: :integer_node, value: 2}]
       },
       block: nil
-    }]
+    }], parse("1 <= 2")
   end
 
-  it "parses term" do
-    _(parse("1 + 2")).must_equal [{
+  def test_parses_term
+    assert_equal [{
       type: :call_node,
       receiver: {type: :integer_node, value: 1},
       name: :+,
@@ -125,9 +121,9 @@ describe Wid::Parser do
         arguments: [{type: :integer_node, value: 2}]
       },
       block: nil
-    }]
+    }], parse("1 + 2")
 
-    _(parse("1 - 2")).must_equal [{
+    assert_equal [{
       type: :call_node,
       receiver: {type: :integer_node, value: 1},
       name: :-,
@@ -136,11 +132,11 @@ describe Wid::Parser do
         arguments: [{type: :integer_node, value: 2}]
       },
       block: nil
-    }]
+    }], parse("1 - 2")
   end
 
-  it "parses factor" do
-    _(parse("1 * 2")).must_equal [{
+  def test_parses_factor
+    assert_equal [{
       type: :call_node,
       receiver: {type: :integer_node, value: 1},
       name: :*,
@@ -149,9 +145,9 @@ describe Wid::Parser do
         arguments: [{type: :integer_node, value: 2}]
       },
       block: nil
-    }]
+    }], parse("1 * 2")
 
-    _(parse("1 / 2")).must_equal [{
+    assert_equal [{
       type: :call_node,
       receiver: {type: :integer_node, value: 1},
       name: :/,
@@ -160,23 +156,23 @@ describe Wid::Parser do
         arguments: [{type: :integer_node, value: 2}]
       },
       block: nil
-    }]
+    }], parse("1 / 2")
   end
 
-  it "parses unary" do
-    _(parse("-2")).must_equal [{
+  def test_parses_unary
+    assert_equal [{
       type: :unary_node,
       operator: :-,
       right: {type: :integer_node, value: 2}
-    }]
+    }], parse("-2")
 
-    _(parse("!2")).must_equal [{
+    assert_equal [{
       type: :unary_node,
       operator: :!,
       right: {type: :integer_node, value: 2}
-    }]
+    }], parse("!2")
 
-    _(parse("!!2")).must_equal [{
+    assert_equal [{
       type: :unary_node,
       operator: :!,
       right: {
@@ -184,13 +180,13 @@ describe Wid::Parser do
         operator: :!,
         right: {type: :integer_node, value: 2}
       }
-    }]
+    }], parse("!!2")
   end
 
-  it "parses grouping" do
-    _(parse("(2)")).must_equal [{
+  def test_parses_grouping
+    assert_equal [{
       type: :grouping_node,
       expression: {type: :integer_node, value: 2}
-    }]
+    }], parse("(2)")
   end
 end

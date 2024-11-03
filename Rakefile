@@ -2,7 +2,7 @@
 
 require "rake/clean"
 require "standard/rake"
-require "minitest/test_task"
+require "tldr/rake"
 
 CLEAN.include("lib/wid/ast/node.rb")
 file "lib/wid/ast/node.rb" => "lib/wid/ast/node.rb.erb" do |t|
@@ -58,10 +58,7 @@ file "lib/wid/ast/node.rb" => "lib/wid/ast/node.rb.erb" do |t|
 end
 
 task nodes: ["lib/wid/ast/node.rb"]
-task spec: :nodes
+task tldr: :nodes
+task test: :tldr
 
-task default: [:spec, "standard:fix"]
-
-Minitest::TestTask.create :spec do |t|
-  t.test_globs = ["spec/**/*_spec.rb"]
-end
+task default: [:tldr, "standard:fix"]

@@ -18,7 +18,7 @@ Gem::Specification.new do |s|
   s.require_paths = ["lib"]
 
   s.required_ruby_version = Gem::Requirement.new(">= 3.3.0")
-  s.add_dependency("sorbet-runtime", "~> 0.5.11615")
   s.add_dependency("bigdecimal", "~> 3.1")
   s.add_dependency("zeitwerk", "~> 2.7.1")
+  s.add_dependency("ostruct", "~> 0.6.0")
 end
