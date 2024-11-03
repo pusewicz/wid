@@ -3,20 +3,23 @@ PATH
   specs:
     wid (0.0.1)
       bigdecimal (~> 3.1)
-      sorbet-runtime (~> 0.5.11615)
+      ostruct (~> 0.6.0)
       zeitwerk (~> 2.7.1)
 
 GEM
   remote: https://rubygems.org/
   specs:
     ast (2.4.2)
+    attr_extras (7.1.0)
     bigdecimal (3.1.8)
     childprocess (5.1.0)
       logger (~> 1.5)
     coderay (1.1.3)
+    concurrent-ruby (1.3.4)
     debug (1.9.2)
       irb (~> 1.10)
       reline (>= 0.3.8)
+    diff-lcs (1.5.1)
     ffi (1.17.0)
     ffi (1.17.0-arm64-darwin)
     ffi (1.17.0-x86_64-linux-gnu)
@@ -53,14 +56,13 @@ GEM
       rb-inotify (~> 0.9, >= 0.9.10)
     logger (1.6.1)
     lumberjack (1.2.10)
-    maxitest (5.7.1)
-      minitest (>= 5.14.0, < 5.26.0)
     method_source (1.1.0)
     minitest (5.25.1)
     nenv (0.3.0)
     notiffany (0.1.3)
       nenv (~> 0.1)
       shellany (~> 0.0)
+    optimist (3.1.0)
     ostruct (0.6.0)
     overcommit (0.64.1)
       childprocess (>= 0.6.3, < 6)
@@ -70,6 +72,8 @@ GEM
     parser (3.3.5.0)
       ast (~> 2.4.1)
       racc
+    patience_diff (1.2.0)
+      optimist (~> 3.0)
     prism (1.0.0)
     pry (0.14.2)
       coderay (~> 1.1)
@@ -113,7 +117,6 @@ GEM
       rubocop-ast (>= 1.31.1, < 2.0)
     ruby-progressbar (1.13.0)
     shellany (0.0.1)
-    sorbet-runtime (0.5.11625)
     standard (1.41.1)
       language_server-protocol (~> 3.17.0.2)
       lint_roller (~> 1.0)
@@ -127,7 +130,14 @@ GEM
       lint_roller (~> 1.1)
       rubocop-performance (~> 1.22.0)
     stringio (3.1.1)
+    super_diff (0.13.0)
+      attr_extras (>= 6.2.4)
+      diff-lcs
+      patience_diff
     thor (1.3.2)
+    tldr (0.10.0)
+      concurrent-ruby (~> 1.2)
+      super_diff (~> 0.10)
     unicode-display_width (2.6.0)
     zeitwerk (2.7.1)
 
@@ -143,13 +153,12 @@ DEPENDENCIES
   guard-minitest
   guard-rake
   guard-shell
-  maxitest
-  ostruct
   overcommit
   rake
   rbs-inline
   repl_type_completor
   standard (>= 1.35.1)
+  tldr
   wid!
 
 BUNDLED WITH

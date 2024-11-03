@@ -15,7 +15,7 @@ PreCommit:
     enabled: true
 
 PrePush:
-  Minitest:
+  Tldr:
     enabled: true
-    command: ['ruby', '-Ilib:spec', '-rminitest', "-e 'exit! Minitest.run'"]
-    include: 'spec/**/*_spec.rb'
+    command: ['bin/tldr']
+    include: 'test/**/test_*.rb'
