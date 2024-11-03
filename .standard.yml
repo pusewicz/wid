@@ -3,5 +3,5 @@ parallel: true
 ignore:
   - 'lib/wid/parser.rb':
     - Performance/RegexpMatch
-  - 'lib/wid/ast/*_node.rb':
+  - 'lib/wid/ast/node.rb':
     - Layout/LeadingCommentSpace
