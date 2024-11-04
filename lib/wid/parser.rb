@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "wid/ast/node"
+require_relative "ast/node"
 
 module Wid
   class Parser
@@ -34,6 +34,8 @@ module Wid
 
       # Parse additional expressions separated by commas
       expressions << expression while match(:comma)
+
+      consume(:"\n", "Expected newline after print statement.") if check(:"\n")
 
       AST::PrintNode.new(expressions:)
     end
@@ -175,7 +177,6 @@ module Wid
     end
 
     def eof?
-      # peek.type == :EOF
       peek.nil?
     end
 

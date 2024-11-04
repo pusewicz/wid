@@ -66,6 +66,16 @@ module Wid
       raise "Unrecognized token #{@scan.getch.inspect} at line #{@line}"
     end
 
+    def self.tokenize(string)
+      tokenizer = new(string)
+      tokens = []
+      while (token = tokenizer.next_token)
+        tokens << token
+      end
+
+      tokens
+    end
+
     def line
       @scan.string[0, @scan.pos].count("\n") + 1
     end

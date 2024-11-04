@@ -17,17 +17,8 @@ puts " * Compiling #{file}..."
 puts " **/"
 system("bat", "--language", "ruby", file)
 
-tokens = Wid::Lexer.tokenize(File.read(file))
-parser = Wid::Parser.new(tokens)
-ast = parser.parse
-
-if parser.errors.any?
-  parser.errors.each do |error|
-    warn "warning: #{error} in #{file}:#{error.token.line}:#{error.token.column}"
-  end
-end
-
-output = Wid::Codegen.generate(ast)
+input = File.read(file)
+output = Wid::Compiler.compile(input)
 
 CC = ENV["CC"] || "/opt/homebrew/bin/zig cc"
 FLAGS = %W[
