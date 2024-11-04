@@ -64,7 +64,7 @@ class TokenizerTest < Wid::Test
   end
 
   def test_tokenizes_operators
-    %w[+ - > >= < <= == !=].each do |operator|
+    %w[+ - > >= < <= == != =].each do |operator|
       assert_equal [[operator.to_sym]], tokenize(operator)
     end
   end
@@ -77,5 +77,9 @@ class TokenizerTest < Wid::Test
 
   def test_tokenizes_print_keyword
     assert_equal [[:PRINT]], tokenize("print")
+  end
+
+  def test_tokenizes_local_variable_write
+    assert_equal [[:IDENTIFIER, "a"], [:"="], [:NUMBER, "2"]], tokenize("a = 2")
   end
 end

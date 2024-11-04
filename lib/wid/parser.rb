@@ -40,9 +40,29 @@ module Wid
       AST::PrintNode.new(expressions:)
     end
 
-    # expression → equality ;
+    # expression → assignment ;
     def expression
-      equality
+      return print_statement if match(:PRINT)
+
+      assignment
+    end
+
+    # assignment → IDENTIFIER "=" assignment | equality ;
+    def assignment
+      receiver = equality
+
+      if match(:"=")
+        equals = previous
+        value = assignment
+
+        if receiver.is_a?(AST::CallNode)
+          return AST::LocalVariableWriteNode.new(name: receiver.name, value: value)
+        end
+
+        error(equals, "Invalid assignment target.")
+      end
+
+      receiver
     end
 
     # equality → comparison ( ( "!=" | "==" ) comparison )* ;
@@ -115,7 +135,7 @@ module Wid
       return string_literal if match(:STRING)
       return bool_literal if match(:BOOL)
       return nil_literal if match(:NIL)
-      return print_statement if match(:PRINT)
+      return identifier if match(:IDENTIFIER)
 
       if match(:"(")
         expr = expression
@@ -149,6 +169,10 @@ module Wid
 
     def nil_literal
       ::Wid::AST::NilNode.new
+    end
+
+    def identifier
+      ::Wid::AST::CallNode.new(receiver: nil, name: previous.value.to_sym, arguments: nil, block: nil)
     end
 
     private

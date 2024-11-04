@@ -15,7 +15,7 @@ module Wid
     FLOAT_DECIMAL = /[.][0-9]+/
     FLOAT_EXP = /[eE][+-]?[0-9]+/
     LITERALS = %w[( )]
-    OPERATORS = %w[+ - > < * / !]
+    OPERATORS = %w[+ - > < * / ! =]
     TWO_CHAR_OPERATORS = %w[>= <= == !=]
     KEYWORDS = %w[print].freeze
     SINGLE_QUOTED_STRING = /'[^']*'/
