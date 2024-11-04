@@ -39,18 +39,7 @@ puts " **/"
 system("bat", src)
 
 cmd = [*CC.split(" "), *FLAGS, src, "-o", exe]
-
-Open3.popen3(*cmd) do |stdin, stdout, stderr, wait_thr|
-  stdin.close
-  stdout.each do |line|
-    puts line
-  end
-  stderr.each do |line|
-    puts line
-  end
-  exit_status = wait_thr.value
-  exit exit_status.exitstatus if exit_status.exitstatus != 0
-end
+system(*cmd)
 
 puts "/**"
 puts " * Executing #{exe}..."
