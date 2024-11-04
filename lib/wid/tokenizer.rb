@@ -17,7 +17,7 @@ module Wid
     LITERALS = %w[( )]
     OPERATORS = %w[+ - > < * / ! =]
     TWO_CHAR_OPERATORS = %w[>= <= == !=]
-    KEYWORDS = %w[print].freeze
+    KEYWORDS = %w[print if else end].freeze
     SINGLE_QUOTED_STRING = /'[^']*'/
     DOUBLE_QUOTED_STRING = /"[^"]*"/
     IDENTIFIER = /[a-zA-Z_]\w*[!?=]?/

@@ -20,9 +20,12 @@ module Wid
     def parse
       statements = []
 
-      statements << expression until eof?
+      until eof?
+        statements << expression
+        match(:"\n")
+      end
 
-      AST::ProgramNode.new(statements: AST::StatementsNode.new(body: statements))
+      AST::ProgramNode.new(statements: AST::StatementsNode.new(body: statements.compact))
     end
 
     # print_statement → "print" expression ( "," expression )* ;
@@ -43,6 +46,7 @@ module Wid
     # expression → assignment ;
     def expression
       return print_statement if match(:PRINT)
+      return if_expression if match(:IF)
 
       assignment
     end
@@ -144,6 +148,7 @@ module Wid
         return AST::GroupingNode.new(expression: expr)
       end
 
+      return if match(:"\n")
       error peek, "Expected a primary expression, got #{peek.to_a.inspect}."
     end
 
@@ -173,6 +178,30 @@ module Wid
 
     def identifier
       ::Wid::AST::CallNode.new(receiver: nil, name: previous.value.to_sym, arguments: nil, block: nil)
+    end
+
+    def if_expression
+      predicate = expression
+      body = []
+      subsequent = nil
+
+      match(:"\n")
+      until match(:ELSE, :END)
+        body << expression
+        match(:"\n")
+      end
+
+      if previous.type == :ELSE
+        match(:"\n")
+        subsequent_body = []
+        until match(:END)
+          subsequent_body << expression
+          match(:"\n")
+        end
+        subsequent = AST::ElseNode.new(statements: AST::StatementsNode.new(body: subsequent_body))
+      end
+
+      AST::IfNode.new(predicate:, statements: AST::StatementsNode.new(body:), subsequent:)
     end
 
     private
@@ -214,7 +243,7 @@ module Wid
 
     def consume(type, message)
       return advance if check(type)
-      raise error(peek, message)
+      raise error(peek, message + " Got #{peek.to_a.inspect}.")
     end
 
     def error(token, message)

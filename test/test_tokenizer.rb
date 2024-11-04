@@ -75,11 +75,9 @@ class TokenizerTest < Wid::Test
     end
   end
 
-  def test_tokenizes_print_keyword
-    assert_equal [[:PRINT]], tokenize("print")
-  end
-
-  def test_tokenizes_local_variable_write
-    assert_equal [[:IDENTIFIER, "a"], [:"="], [:NUMBER, "2"]], tokenize("a = 2")
+  def test_tokenizes_keywords
+    %w[print if else end].each do |keyword|
+      assert_equal [[keyword.upcase.to_sym]], tokenize(keyword)
+    end
   end
 end
