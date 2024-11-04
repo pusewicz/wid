@@ -7,13 +7,13 @@ class CompilerTest < Wid::Test
 
       #include "wid.h"
 
-      int WidMain() {
+      int Wid__main() {
         printf("Hello, World!");;
         return 0;
       }
 
       int main() {
-        return WidMain();
+        return Wid__main();
       }
     C
     assert_equal expected, Wid::Compiler.compile("print 'Hello, World!'")

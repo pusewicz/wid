@@ -7,13 +7,13 @@ module Wid
       MAIN = <<~MAIN
         #include "wid.h"
 
-        int WidMain() {
+        int Wid__main() {
           %s;
           return 0;
         }
 
         int main() {
-          return WidMain();
+          return Wid__main();
         }
       MAIN
 
