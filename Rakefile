@@ -5,13 +5,16 @@ require "standard/rake"
 require "tldr/rake"
 
 CLEAN.include("lib/wid/ast/node.rb")
-file "lib/wid/ast/node.rb" => "lib/wid/ast/node.rb.erb" do |t|
+file "lib/wid/ast/node.rb" => ["lib/wid/ast/node.rb.erb", "lib/wid/ast/nodes.yml"] do |t|
   require "erb"
   require "ostruct"
   require "yaml"
 
-  nodes = YAML.load_file("lib/wid/ast/nodes.yml")["nodes"]
-  erb = ERB.new File.read(t.source), trim_mode: "-"
+  yaml_file = t.prerequisites.find { |f| f.end_with? "yml" }
+  erb_file = t.prerequisites.find { |f| f.end_with? "erb" }
+
+  nodes = YAML.load_file(yaml_file)["nodes"]
+  erb = ERB.new File.read(erb_file), trim_mode: "-"
   node_struct = Data.define(:name, :class_name, :fields)
   field_struct = Data.define(:name, :type, :kind) do
     def list?
