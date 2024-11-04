@@ -67,3 +67,11 @@ nodes:
       - name: arguments
         type: node[]
         kind: Node
+  - name: LocalVariableWriteNode
+    fields:
+      # TODO: Might need depth field
+      - name: name
+        kind: Symbol
+      - name: value
+        type: node
+        kind: Node

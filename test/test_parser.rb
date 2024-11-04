@@ -196,4 +196,12 @@ class ParserTest < Wid::Test
       expressions: [{type: :integer_node, value: 2}]
     }], parse("print 2")
   end
+
+  def test_local_variable_write
+    assert_equal [{
+      type: :local_variable_write_node,
+      name: :a,
+      value: {type: :integer_node, value: 2}
+    }], parse("a = 2")
+  end
 end
