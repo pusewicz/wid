@@ -62,14 +62,36 @@ module Wid
 
       def visit_nil(_node) = "nil"
 
-      def visit_assignment_expression(node)
-        type = infer(node.right)
+      def visit_call_node(node)
+        puts "visit_call_node: #{node.inspect}"
+        receiver = node.receiver
+        arguments = node.arguments&.arguments
+
+        if arguments
+          if receiver.value.is_a?(Numeric) && arguments.size == 1 && arguments.first.value.is_a?(Numeric)
+            "#{visit(receiver)} #{node.name} #{visit(arguments.first)}"
+          else
+            "#{visit(receiver)}.#{node.name}(#{arguments.map { visit(_1) }&.join(", ")})"
+          end
+        else
+          "#{visit(receiver)}.#{node.name}()"
+        end
+      end
+
+      def visit_if_node(node)
+        "if (#{visit(node.predicate)}) { #{visit_all(node.statements.body).join("; ")}; }" + visit(node.subsequent)
+      end
+
+      def visit_else_node(node) = " else { #{visit_all(node.statements.body).join("; ")}; }"
+
+      def visit_local_variable_write_node(node)
+        type = infer(node.value)
         formatted_type_decl = if type[-1] == "*"
           "#{type.sub("*", "")} *"
         else
           type + " "
         end
-        "#{formatted_type_decl}#{visit(node.left)} #{node.operator} #{visit(node.right)}"
+        "#{formatted_type_decl}#{node.name} = #{visit(node.value)}"
       end
 
       def visit_print_node(node)
@@ -80,16 +102,9 @@ module Wid
       # TODO: Move type inference into a separate AST pipeline pass
       def infer(node)
         case node
-        when Nodes::NumericLiteral
-          node.value.is_a?(Integer) ? "int" : "double"
-        when Nodes::StringLiteral
-          "char*"
-        when Nodes::BinaryExpression
-          if node.children.any? { |child| child.value.is_a?(Float) }
-            "double"
-          else
-            "int"
-          end
+        when AST::IntegerNode then "int"
+        when AST::FloatNode then "double"
+        when AST::StringNode then "char*"
         else
           raise("Cannot infer type of `#{node.inspect}'")
         end

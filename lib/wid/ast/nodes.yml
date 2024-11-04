@@ -75,3 +75,21 @@ nodes:
       - name: value
         type: node
         kind: Node
+  - name: IfNode
+    fields:
+      - name: predicate
+        type: node
+        kind: Node
+      - name: statements
+        type: node?
+        kind: StatementsNode
+      - name: subsequent
+        type: node?
+        kind:
+          - ElseNode
+          - IfNode
+  - name: ElseNode
+    fields:
+      - name: statements
+        type: node?
+        kind: StatementsNode

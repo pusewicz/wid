@@ -41,6 +41,11 @@ class ParserTest < Wid::Test
     assert_equal [{type: :nil_node}], parse("nil")
   end
 
+  def test_parses_new_lines
+    assert_equal [], parse("\n")
+    assert_equal [], parse("\n\n")
+  end
+
   def test_parses_equality
     assert_equal [{
       type: :call_node,
@@ -203,5 +208,41 @@ class ParserTest < Wid::Test
       name: :a,
       value: {type: :integer_node, value: 2}
     }], parse("a = 2")
+  end
+
+  def test_if_node
+    # if true
+    #   2
+    # end
+    assert_equal [{
+      type: :if_node,
+      predicate: {type: :true_node},
+      statements: {
+        type: :statements_node,
+        body: [{type: :integer_node, value: 2}]
+      },
+      subsequent: nil
+    }], parse("if true\n2\nend")
+
+    # if true
+    #   2
+    # else
+    #   3
+    # end
+    assert_equal [{
+      type: :if_node,
+      predicate: {type: :true_node},
+      statements: {
+        type: :statements_node,
+        body: [{type: :integer_node, value: 2}]
+      },
+      subsequent: {
+        type: :else_node,
+        statements: {
+          type: :statements_node,
+          body: [{type: :integer_node, value: 3}]
+        }
+      }
+    }], parse("if true\n2\nelse\n3\nend")
   end
 end
