@@ -20,18 +20,9 @@ module Wid
     def parse
       statements = []
 
-      statements << statement until eof?
+      statements << expression until eof?
 
       AST::ProgramNode.new(statements: AST::StatementsNode.new(body: statements))
-    end
-
-    # Statement → ExpressionStmt | PrintStmt
-    def statement
-      if match(:PRINT)
-        print_statement
-      else
-        expression
-      end
     end
 
     # print_statement → "print" expression ( "," expression )* ;
@@ -43,9 +34,6 @@ module Wid
 
       # Parse additional expressions separated by commas
       expressions << expression while match(:comma)
-
-      # Expect newline or semicolon after print statement
-      consume(:"\n", "Expect newline after print statement") unless match(:";")
 
       AST::PrintNode.new(expressions:)
     end
@@ -125,6 +113,7 @@ module Wid
       return string_literal if match(:STRING)
       return bool_literal if match(:BOOL)
       return nil_literal if match(:NIL)
+      return print_statement if match(:PRINT)
 
       if match(:"(")
         expr = expression
@@ -133,7 +122,7 @@ module Wid
         return AST::GroupingNode.new(expression: expr)
       end
 
-      error peek, "Expected a primary expression, got #{peek.inspect}."
+      error peek, "Expected a primary expression, got #{peek.to_a.inspect}."
     end
 
     def number_literal
