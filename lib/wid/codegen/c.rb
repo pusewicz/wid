@@ -58,7 +58,7 @@ module Wid
         "(#{visit(node.left)} #{node.operator} #{visit(node.right)})"
       end
 
-      def visit_numeric_literal(node) = node.value.to_s
+      def visit_integer_node(node) = node.value.to_s
 
       def visit_nil(_node) = "nil"
 
