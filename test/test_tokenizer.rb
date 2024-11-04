@@ -74,4 +74,8 @@ class TokenizerTest < Wid::Test
       assert_equal [[:IDENTIFIER, identifier]], tokenize(identifier)
     end
   end
+
+  def test_tokenizes_print_keyword
+    assert_equal [[:PRINT]], tokenize("print")
+  end
 end

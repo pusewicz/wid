@@ -17,7 +17,7 @@ module Wid
     LITERALS = %w[( )]
     OPERATORS = %w[+ - > < * / !]
     TWO_CHAR_OPERATORS = %w[>= <= == !=]
-    KEYWORDS = %w[].freeze
+    KEYWORDS = %w[print].freeze
     SINGLE_QUOTED_STRING = /'[^']*'/
     DOUBLE_QUOTED_STRING = /"[^"]*"/
     IDENTIFIER = /[a-zA-Z_]\w*[!?=]?/
@@ -29,6 +29,7 @@ module Wid
       STRING: /#{SINGLE_QUOTED_STRING}|#{DOUBLE_QUOTED_STRING}/,
       BOOL: /true|false/,
       NIL: /nil/,
+      KEYWORD: /#{KEYWORDS.sort.join("|")}/,
       IDENTIFIER: IDENTIFIER,
       NEWLINE: /[\n]/
     }.freeze
@@ -52,6 +53,7 @@ module Wid
           return case type
                  when :OPERATOR, :LITERAL then Token.new(type: value.to_sym, value: nil, line: @line)
                  when :NIL then Token.new(type:, value: nil, line: @line)
+                 when :KEYWORD then Token.new(type: value.upcase.to_sym, value: nil, line: @line)
                  when :NEWLINE
                    @line += 1
                    Token.new(type: value.to_sym, value: nil, line: @line)

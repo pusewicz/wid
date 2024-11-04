@@ -189,4 +189,11 @@ class ParserTest < Wid::Test
       expression: {type: :integer_node, value: 2}
     }], parse("(2)")
   end
+
+  def test_parses_print_stmt
+    assert_equal [{
+      type: :print_node,
+      expressions: [{type: :integer_node, value: 2}]
+    }], parse("print 2")
+  end
 end
