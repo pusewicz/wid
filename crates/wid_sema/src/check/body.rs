@@ -17,7 +17,8 @@ pub(crate) struct Var {
     pub ty: TyId,
     pub span: Span,
     pub read: bool,
-    /// Parameters and `_`-prefixed names are never reported as unused.
+    /// Parameters, `_`-prefixed names and poisoned variables (see
+    /// [`Checker::declare_var`]) are never reported as unused.
     pub allow_unused: bool,
     /// Source of the initializer when it was a call, for nil diagnostics.
     pub origin: Option<String>,
@@ -240,9 +241,15 @@ impl<'a> Checker<'a> {
 
     /// Declares a variable in the innermost scope. `span` is the name's: it
     /// decides which code sees the variable (see [`Var::mark`]).
+    ///
+    /// A variable of the unknown type is poisoned: its value or its type
+    /// was an error (`x = )`, `t = [4]F32`, `y: Nope = 3`), already
+    /// reported, or a value that never exists (a `Never` call), so it is
+    /// never reported as unused too.
     pub fn declare_var(&mut self, name: Name, ty: TyId, span: Span, allow_unused: bool) -> LocalId {
         let local = self.new_local(Some(name), ty);
         let mark = self.mark_at(span);
+        let allow_unused = allow_unused || matches!(self.types.kind(ty), TyKind::Unknown);
         let scope = self.frame_mut().scopes.last_mut().expect("a scope is open");
         scope.vars.push(Var {
             name,

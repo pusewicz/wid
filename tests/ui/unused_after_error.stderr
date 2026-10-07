@@ -1,0 +1,47 @@
+error[E0105]: expected an expression, found `)`
+ --> tests/ui/unused_after_error.wid:3:7
+  |
+3 |   x = )
+  |       ^ expected an expression
+  = see `wid explain E0105`
+
+error[E0323]: `[4]F32` is a type, not a value
+ --> tests/ui/unused_after_error.wid:7:7
+  |
+7 |   t = [4]F32
+  |       ^^^^^^ a type cannot be used as a value here
+help: make a value of it with `{}` where `[4]F32` is expected, or `[4]F32.new` for containers
+  = see `wid explain E0323`
+
+error[E0314]: unknown type `Nope`
+ --> tests/ui/unused_after_error.wid:8:6
+  |
+8 |   y: Nope = 3
+  |      ^^^^ no type with this name is in scope
+  = see `wid explain E0314`
+
+error[E0201]: undefined name `nope`
+ --> tests/ui/unused_after_error.wid:9:10
+  |
+9 |   a, b = nope
+  |          ^^^^ not found in this scope
+  = see `wid explain E0201`
+
+error[E0304]: cannot infer which enum this symbol belongs to
+  --> tests/ui/unused_after_error.wid:10:7
+   |
+10 |   c = :red
+   |       ^^^^ symbols need an expected enum type
+help: declare the variable's type, like `dir: Dir = :north`
+   = see `wid explain E0304`
+
+error[E0203]: `total` is assigned but never read
+  --> tests/ui/unused_after_error.wid:14:3
+   |
+14 |   total = 0
+   |   ^^^^^ this value is never used
+help: if this is intentional, prefix the name with an underscore
+   |   _total = 0
+   = see `wid explain E0203`
+
+error: could not compile due to 6 errors

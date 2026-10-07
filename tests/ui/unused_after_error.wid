@@ -1,0 +1,15 @@
+# A local whose value or type is an error is not reported as unused too.
+def parse_error
+  x = )
+end
+
+def type_error
+  t = [4]F32
+  y: Nope = 3
+  a, b = nope
+  c = :red
+end
+
+def main
+  total = 0
+end

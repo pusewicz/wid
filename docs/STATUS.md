@@ -415,6 +415,9 @@ runs the stages; `wid_cli` is the `wid` binary.
   bodies with the call chain; E0913 for generated fields and imports, E0108
   for generated statements, E0209 for `Self` without one type. E0902 is
   retired. An `include` in a type-level `comptime if` is no longer ignored.
+- Fewer cascades after errors: a local whose value or type is an error (a
+  parse error, a type used as a value, an unknown type) is not reported as
+  unused (#6).
 - Test suite: `tests/run` (clang and gcc-16, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
   `tests/test` (`wid test` reports) and every `core/` package's `_test.wid`
