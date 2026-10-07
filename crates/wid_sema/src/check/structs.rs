@@ -305,6 +305,9 @@ impl<'a> Checker<'a> {
                 );
                 continue;
             }
+            if m.value.is_none() {
+                self.member_names_macro(decl, m, value);
+            }
             members.push((m.name.name, value));
             next = value + 1;
         }
@@ -328,6 +331,42 @@ impl<'a> Checker<'a> {
         }
         self.decl_types.insert(decl, ty);
         ty
+    }
+
+    /// Reports a member written as a name alone that also names a macro
+    /// visible in the enum's body (E0914): the line was likely meant to call
+    /// the macro, which needs `()` there. The member is kept, and the enum's
+    /// missing methods aren't reported, as after a failed macro call.
+    fn member_names_macro(&mut self, decl: DeclId, member: &ast::EnumMember, value: i128) {
+        let d = &self.decls[decl.0 as usize];
+        let (enum_name, enum_loc) = (d.name, d.loc);
+        // Where the name resolves: for an enum a macro generated, the
+        // macro's file.
+        let loc = self.virtual_file(member.name.span.file).map_or(enum_loc, |v| v.loc);
+        let name = member.name.name;
+        let Some(found) = self.lookup_pkg(loc.pkg, name).or_else(|| self.lookup_prelude(name)) else { return };
+        let m = &self.decls[found.0 as usize];
+        if !self.is_macro(found) || (m.private && m.loc.pkg != loc.pkg) {
+            return;
+        }
+        let macro_span = m.span;
+        let text = name.as_str();
+        self.report(
+            Diagnostic::error(
+                codes::ENUM_MEMBER_MACRO,
+                format!("`{text}` names a macro, but alone on a line in an enum it declares a member"),
+            )
+            .primary(member.name.span, format!("this declares the member `:{text}` of `{enum_name}`"))
+            .secondary(macro_span, format!("`{text}` is a macro"))
+            .note("in an `enum` body a name alone on a line is a member, so a macro without arguments is called with `()` there")
+            .suggest(
+                "call the macro",
+                vec![wid_diagnostics::Edit { span: member.name.span.shrink_to_end(), replacement: "()".into() }],
+                Applicability::MachineApplicable,
+            )
+            .help(format!("to keep the member, write its value: `{text} = {value}`")),
+        );
+        self.macros.failed_owners.insert(decl);
     }
 
     /// Returns the value of enum member `name`, reporting unknown members.

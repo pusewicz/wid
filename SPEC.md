@@ -488,7 +488,10 @@ end
   - **Among declarations,** a call must name a macro: calling a method
     there is a statement outside a method (E0108), and an unknown name is
     an undefined macro (E0201). In an `enum` body a name alone on a line is
-    a member, so a macro without arguments is called `name()` there.
+    a member, so a macro without arguments is called `name()` there. A
+    member written as a name alone that a macro visible there also has is
+    E0914, whose fix adds the `()`; a member with a value (`name = 1`) is
+    never a call.
     - The generated declarations take the call's place and are collected
       like written ones, before any method body is checked, so code
       anywhere in the package can use them. Calls written after the call,

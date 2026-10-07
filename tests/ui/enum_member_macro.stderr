@@ -1,0 +1,15 @@
+error[E0914]: `helpers` names a macro, but alone on a line in an enum it declares a member
+  --> tests/ui/enum_member_macro.wid:9:3
+   |
+ 1 | macro def helpers -> Code
+   |           ------- `helpers` is a macro
+...
+ 9 |   helpers
+   |   ^^^^^^^ this declares the member `:helpers` of `Color`
+   = note: in an `enum` body a name alone on a line is a member, so a macro without arguments is called with `()` there
+help: call the macro
+   |   helpers()
+help: to keep the member, write its value: `helpers = 1`
+   = see `wid explain E0914`
+
+error: could not compile due to 1 error

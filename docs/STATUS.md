@@ -268,6 +268,10 @@ runs the stages; `wid_cli` is the `wid` binary.
     `declared_by_failed_macro` skips E0201 for implicit-self calls and
     constants in its methods. An undefined macro among declarations is
     still reported after an earlier failure.
+  - `enum_type` reports a member without a value whose name is a macro
+    visible in the enum's body (`member_names_macro`, E0914, fixed by
+    adding `()`), keeps the member, and adds the enum to `failed_owners`
+    so the methods the macro would generate aren't reported missing.
 
 ## Done
 
@@ -433,7 +437,8 @@ runs the stages; `wid_cli` is the `wid` binary.
   parse error, a type used as a value, an unknown type) is not reported as
   unused (#6); a macro call that fails to expand or names no macro hides
   the undefined names, missing members and unread variables that its code
-  might have declared or read (#8).
+  might have declared or read (#8); an enum member written as a name alone
+  that a macro also has is E0914, with a fix that calls the macro (#16).
 - Test suite: `tests/run` (clang and gcc-16, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
   `tests/test` (`wid test` reports) and every `core/` package's `_test.wid`
@@ -657,7 +662,7 @@ before anyone starts them.
   generates (it is undefined), and a macro runs, with the helpers it calls
   lowered, before the declarations later calls generate exist. In an
   `enum` body a macro without arguments needs `()`, since a name alone is
-  a member. A generic struct's body can't call a macro that uses `Self`
+  a member (one that a macro also has is E0914). A generic struct's body can't call a macro that uses `Self`
   (E0209): its `Self.fields` would hold placeholder types and no layout.
   `Self.methods` in a type-body macro lists the methods collected so far.
   Generated declarations whose names come from computed symbols point at

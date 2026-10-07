@@ -136,6 +136,7 @@ codes! {
     SPLICE_MISMATCH = "E0911", "spliced value doesn't fit its place";
     MACRO_ARGUMENT = "E0912", "macro argument of the wrong kind";
     MACRO_DECLARATION = "E0913", "declaration a macro can't generate";
+    ENUM_MEMBER_MACRO = "E0914", "enum member named like a macro";
 }
 
 /// Looks up a registered code by its text, case-insensitively.
