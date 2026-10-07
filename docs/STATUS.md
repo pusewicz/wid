@@ -246,18 +246,130 @@ runs the stages; `wid_cli` is the `wid` binary.
 
 ## Next
 
-1. Grow features in this order: variables and control flow → structs and
-   methods → enums, unions, optionals and flow typing → multi-return, `guard`
-   and `Error` → arrays, slices, dynamic arrays, maps, strings, context,
-   allocators and `defer` → blocks, `yield` and procs → generics, `overload`
-   and operators → modules, `using`, `extend`, packages and imports → core
-   library and `wid test` → `cimport` → `vendor:` packages and the Taste
-   sample → comptime (all done) → macros and `type_info` → `doc`, `query`,
-   `fmt` and `lsp`.
-2. `vendor:cimgui`: vendor cimgui with the Dear ImGui sources, compiled as
+Everything before macros is done (see "Done"). This is the work queue for
+the orchestrator (`docs/ORCHESTRATOR.md`). Each item is one PR unless it says
+otherwise. Items 3–6 depend only on `main` and can run in parallel with the
+macro stack.
+
+1. **Linux bring-up and CI** (`wid/linux-ci`). Do this first. The tree has
+   only ever been built on macOS (Homebrew LLVM 23, Apple clang 21, gcc-16).
+   - Make the full gate pass on Linux. Expect trouble in:
+     - runtime libc differences;
+     - `wid_cimport` discovery (`/usr/lib/llvm-*`, no `-isysroot`);
+     - pkg-config package names (`raylib`, `sdl3`);
+     - `core:os` POSIX calls;
+     - the `.cpp` link path.
+   - Add GitHub Actions jobs for Ubuntu and macOS that run
+     `cargo fmt --check`, clippy with `-D warnings`, and `cargo test` with
+     clang ≥ 19 and gcc ≥ 15. Install libclang and pkg-config; raylib and
+     SDL3 are optional.
+   - Cache cargo.
+2. **Macros and `type_info`** (`wid/macros-*`, about three stacked PRs):
+   - lexer, parser and AST for `quote` and splices;
+   - expansion, hygiene and the `attr_*` macros;
+   - `type_info`.
+
+   Settle the open questions at the end of this item first and write them
+   into SPEC.md. **Not started; no code has landed.** Today a `quote` and a
+   declaration-level macro call (`attr_reader :hp`) are E0902 ("macros
+   cannot run yet", `tests/ui/not_yet_available`), and `macro def` bodies are
+   parsed but never checked (`check/mod.rs` skips `is_macro`).
+   The design below is settled and written into SPEC.md ("Compile-time").
+   - **Lexer** (`wid_syntax/src/lexer.rs`): `#{` outside a string literal
+     emits new `SpliceBegin`/`SpliceEnd` tokens. Generalize `Interp` so a
+     `None` quote marks a splice: `{` and `}` depth tracking ends it, and
+     newlines are suppressed inside it. `@#{` emits an `AtSplice` token
+     before the splice.
+   - **Parser and AST:**
+     - `ExprKind::Quote` carries a `QuoteExpr { body, splices: Vec<Expr> }`,
+       built with a parser stack of splice lists, one per open `quote`.
+     - Splices become `ExprKind::Splice(u32)` and `TypeKind::Splice(u32)`.
+       Name positions (`def #{name}`, `.#{name}`, `@#{name}`, parameter and
+       field names) get an `Ident` placeholder named `#{i}`.
+     - A splice outside a `quote` is a parse error, with a fix that inserts
+       a space after `#` (it was meant to be a comment).
+   - **Expansion** (new `check/macros.rs`):
+     - Each argument is converted to a value: `Code` arguments become
+       fragment handles over the call-site AST, `Symbol` arguments become
+       `Name` indices (add `Name::index`/`Name::from_index`), `Type`
+       arguments become `TyId`s, and other argument types run through
+       `comptime_value`.
+     - A wrapper function calls the macro's `FnId`. It goes through
+       `lower_needed`, then the interpreter.
+     - A new `Builtin::Quote { template }` records
+       `Fragment { template, values: Vec<SpliceValue> }` in an interpreter
+       table and returns its index as the `Code` value. Splice values are
+       read from interpreter memory: `Code`, `[]Code`, `Symbol`, `Type`,
+       and scalars.
+     - The template's AST is cloned, its own binders are renamed for
+       hygiene, then splices are substituted. This needs a mutable AST
+       visitor in `wid_syntax`.
+     - Generated AST must live for `'a`. Use a `typed-arena` arena created
+       in `check_program` (`check/mod.rs:246`).
+   - **Where expansions are checked:**
+     - Statement-level expansions lower in place with `lower_stmts`.
+     - Expression-level expansions lower like `comptime` statements, into a
+       result local.
+     - Declaration-level calls are queued with the pending `comptime if`
+       items and expanded in source order. The generated items go through
+       `collect_item`.
+   - **New comptime-only types:** `Code` and first-class `Symbol` values,
+     plus `sym.to_s` and `str.to_sym`. Extend `check_comptime_only` (E0906)
+     to cover them.
+   - **`core:builtin`:** `attr_reader`, `attr_writer` and `attr_accessor`
+     macros. They look up the field type through `Self.fields`.
+   - **`type_info(x)` / `type_info(T)`:** a prelude `TypeInfo` record (name,
+     kind, size, align, fields with name/type/offset, enum members, union
+     variants). It is backed by per-type static tables that codegen emits,
+     modelled on the per-type printers in `wid_codegen_c/src/helpers.rs`,
+     and it works for cimported structs. E0906's fix should point at it.
+   - **Still open:**
+     - How errors in generated code name their expansion. The candidates
+       are a per-declaration origin map plus an expansion stack, or one
+       virtual `FileId` per expansion that aliases the template's file.
+       The second is exact but needs `SourceMap` support from the driver.
+     - The syntax for variadic macro parameters (`*names: Symbol`).
+     - Splicing a symbol literal (`:#{name}`).
+     - Whether macros can be called qualified (`pkg.name`).
+     - The expansion budgets (depth and count).
+     - The exact shape of `TypeInfo`.
+3. **`wid doc`** (`wid/doc`). Documentation for packages, types and
+   methods, generated from doc comments, including cimported C symbols
+   (SPEC "C and C++ interop", "Toolchain and CLI"). It prints text by
+   default and JSON with `-json`, and resolves `wid doc rl.draw_circle_v`
+   style queries.
+4. **`wid query`** (`wid/query`). The introspection engine in SPEC "Built
+   for humans and LLMs": symbols, types, definitions, references and call
+   sites, as stable JSON. Factor it as a reusable engine, because the LSP
+   shares it, and keep the compiler stages pure so queries can rerun them.
+5. **`wid fmt`** (`wid/fmt`). A canonical formatter. It must be
+   idempotent, and parse → format → parse must give the same AST for every
+   file in `tests/`, `core/`, `vendor/` and `examples/`. It keeps comments
+   and supports `-check`.
+6. **`wid lsp`** (`crates/wid_lsp`, `wid/lsp`, stacked on 4 and 5).
+   Diagnostics, hover, go-to-definition, completion, formatting and rename,
+   all on top of the query engine.
+7. `vendor:cimgui`: vendor cimgui with the Dear ImGui sources, compiled as
    C++ package files (the driver already builds `.cpp` files and links with
    the C++ compiler), plus a raylib or SDL3 backend. Needs a decision on
    shipping the C++ sources versus requiring a system cimgui.
+8. **Cross-target builds** (`wid/targets`). Lift E0709. Make
+   `-target:os_arch` build through clang `--target` with a sysroot. Port
+   `core:os`/`core:c` to Windows (LLP64) and make C type sizes
+   target-driven.
+9. **SPEC conformance audit** (one agent, a report and no code). List every
+   SPEC.md claim that is unimplemented or behaves differently: CLI flags such
+   as `-vet`, `-sanitize:address`, the `-o:` levels and `-collection:`;
+   `#line` in `-debug`; the prelude list; and so on. Queue each item here.
+10. **Known gaps** below: one small PR each, in any order.
+11. **Bug hunt after every large feature.** One agent probes with
+    `scripts/probe.rb` and `scripts/errdocs_drift.rb` and logs bad
+    diagnostics and crashes. Another agent fixes them. The first hunt found
+    46 real bugs.
+
+Items under SPEC.md → Open (map literal syntax, error payloads, threads,
+hot reload, a package manager, `#soa`, a REPL) need the user's decisions
+before anyone starts them.
 
 ## Known gaps
 

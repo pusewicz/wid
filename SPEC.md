@@ -402,7 +402,38 @@ end
   default.
 - A `macro def` runs at compile time. It receives types, AST and symbols, and
   returns code built with `quote do … end`, using `#{}` to splice values in.
-  `core` uses macros for `attr_reader` and `attr_accessor`.
+  `core` uses macros for `attr_reader`, `attr_writer` and `attr_accessor`.
+  - **Parameters:**
+    - A `Code` parameter receives the argument's code, unevaluated.
+    - A `Symbol` parameter receives a symbol literal (`:hp`) as a name.
+    - A `Type` parameter receives a type.
+    - Any other parameter type receives a value computed like `comptime`.
+    - A macro always returns `Code`. `Code` and `Symbol` values exist only
+      while compiling, like `Type`.
+  - **Splices:** a spliced value is inserted according to its type.
+    - `Code` inserts that code.
+    - `[]Code` inserts a sequence of statements or declarations.
+    - `Symbol` inserts a name, usable as an identifier, a method name
+      (`def #{name}`, `x.#{name}`), a field (`@#{name}`) or a parameter
+      name.
+    - `Type` inserts the type.
+    - Numbers, `Bool`s and strings insert literals.
+  - **Lexing:** `#{` outside a string literal always starts a splice, and a
+    splice is only valid inside `quote`. Comments therefore start with `# `.
+    Inside a string literal in a `quote`, `#{}` is ordinary run-time
+    interpolation of the generated code.
+  - **Where a macro call expands:** in an expression, as a statement, as a
+    declaration in a `struct`, `enum`, `module` or `extend` body, or at
+    package level. Declaration-level calls expand once every declaration
+    outside them is known, in source order, like `comptime if`. A macro
+    can't add fields, because a struct's layout is fixed before its macros
+    run.
+  - **Hygiene:** each expansion renames the locals that the quote's own code
+    binds: assignment targets, `for` variables, block parameters, and
+    `guard` and `if v =` bindings. Names that come from splices keep their
+    spelling, so a macro can deliberately bind a caller's name.
+  - **Errors** in generated code point at the line inside the `quote` and
+    at the macro call that expanded it.
 - **Reflection** at compile time: `T.fields` is a `[]FieldInfo` (`name`,
   `type`, `offset`), `T.methods` a `[]MethodInfo` (`name`, `params`, `ret`,
   `static`), and `T.name`, `T.size` and `T.align` describe the type. A type

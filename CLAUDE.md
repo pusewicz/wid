@@ -40,7 +40,12 @@ what is implemented, which conventions are fixed and what comes next.
   vendored C sources keep their license next to them.
 - `examples/`: programs that need system libraries (built, not run, by
   `crates/wid_driver/tests/vendor.rs`)
-- `docs/errors/EXXXX.md`: `wid explain` text, one file per code
+- `docs/errors/EXXXX.md`: `wid explain` text, one file per code. Whole-line
+  HTML comments are tooling markers (`<!-- flags: … -->`,
+  `<!-- drift: skip REASON -->`) and are stripped from `wid explain`.
+- `scripts/`: Ruby helpers. `errdocs_drift.rb` checks every docs/errors
+  example against the compiler; `errdocs_update.rb` rewrites drifted output;
+  `probe.rb` runs one-off programs through `wid check`.
 - `tests/run/`: `.wid` programs with expected `.stdout` (and optional
   `.stderr`, `.exitcode`)
 - `tests/ui/`: `.wid` files (or directory packages, for imports) with expected
@@ -59,6 +64,17 @@ what is implemented, which conventions are fixed and what comes next.
   `WID_TEST_CC=clang,gcc-16`.
 - Lint: `cargo clippy --all-targets -- -D warnings`
 - Format: `cargo fmt --check`
+- Error docs: `cargo build && ruby scripts/errdocs_drift.rb` after any
+  diagnostic change (E0902 fails until macros land).
+
+## Workflow
+
+- Work happens on branches in git worktrees, one task per branch, landing as
+  stacked GitHub PRs. The orchestrating session follows
+  `docs/ORCHESTRATOR.md`; a subagent works only in its own worktree, commits
+  there with `git commit -m`, and never pushes unless told to.
+- Every PR passes the full gate (fmt, clippy, `cargo test` with every
+  available C compiler) and updates `docs/STATUS.md`.
 
 ## Diagnostics bar
 
