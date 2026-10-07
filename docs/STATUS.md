@@ -422,6 +422,13 @@ runs the stages; `wid_cli` is the `wid` binary.
   E0323's help fits the type: `.new` only for `[dynamic]T` and `map[K]V`,
   `nil` for an optional, a proc literal for a proc type, `&x` for a pointer
   and `{}` otherwise.
+- Named constants as generic value arguments: `Pool(Ball, MAX)`,
+  `Pool(Ball, MAX * 2)`, `Pool(Ball, (N))` and `comptime` results work like
+  the literal, in types and in calls (`Checker::value_generic_arg`). A
+  non-integer constant is E0315 saying the parameter takes an `Int` (with a
+  `.to(Int)` fix for a float), a variable is E0315 with its declaration, an
+  unknown name is E0201, and a reported argument no longer cascades into
+  E0327 at the instance's `[N]T` fields.
 - Macro syntax: `quote` bodies holding statements and declarations, with
   splices in every expression, type, declaration and name position (`#{x}`,
   `@#{f}`, `:#{s}`), splices outside a `quote` (E0111), variadic

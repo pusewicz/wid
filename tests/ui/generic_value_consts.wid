@@ -1,0 +1,25 @@
+# A value parameter takes a constant integer: other constants, types,
+# variables and undefined names are reported once each, with no cascade
+# from the instance's fields.
+RATE = 1.5
+NAME = "pool"
+MAX = 8
+
+struct Ball
+  r: F32
+end
+
+struct Pool($T, $N: Int)
+  items: [N]T
+end
+
+def main
+  count = 3
+  a: Pool(Int, RATE) = {}
+  b = Pool(Int, NAME).new
+  c: Pool(Int, Ball) = {}
+  d: Pool(Int, MAXX) = {}
+  e = Pool(Int, RATE * 2).new
+  f: Pool(Int, count) = {}
+  p a, b, c, d, e, f
+end

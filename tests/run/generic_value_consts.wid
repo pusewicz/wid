@@ -1,0 +1,33 @@
+# A value parameter (`$N: Int`) takes a named constant, constant arithmetic
+# or a `comptime` result exactly like a literal, in types and in calls.
+N = 4
+SIZE = 2
+RATE = 2.5
+
+def squares(n: Int) -> Int = n * n
+
+COMPUTED = comptime squares(2)
+
+struct Pool($T, $N: Int)
+  items: [N]T
+  used: Int
+
+  def capacity -> Int = @items.size
+  def bigger -> Pool(T, N + 1) = {}
+end
+
+def main
+  a: Pool(Int, N) = {}
+  b: Pool(Int, SIZE * 3) = {}
+  c: Pool(Int, COMPUTED) = {}
+  d: Pool(Int, (N)) = {}
+  e: Pool(Int, RATE.to(Int)) = {}
+  f = Pool(U8, N).new
+  g = Pool(U8, SIZE * 3).new(used: 1)
+  same: Pool(Int, 4) = a
+  p a.capacity, b.capacity, c.capacity, d.capacity, e.capacity
+  p f.capacity, g.capacity, g.used, same.capacity
+  p a.bigger.capacity
+  p size_of(Pool(U8, N)), size_of(Pool(U8, N * 4))
+  puts type_info(Pool(Int, COMPUTED)).name
+end

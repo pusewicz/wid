@@ -168,7 +168,10 @@ end
   data pointer.
 - **Generics:** a `$T` in a parameter introduces a type parameter
   (`def max(a: $T, b: T) -> T`). Generic structs are written
-  `struct Pool($T, $N: Int)` and used as `Pool(Ball, 64)`.
+  `struct Pool($T, $N: Int)` and used as `Pool(Ball, 64)`. A value
+  parameter like `$N: Int` takes any constant integer: a literal, a named
+  constant (`Pool(Ball, MAX)`), constant arithmetic (`Pool(Ball, MAX * 2)`)
+  or a `comptime` result; a name there is a constant unless it names a type.
   - Type arguments are inferred from the arguments. A `[N]T` or `[dynamic]T`
     argument matches a `[]$T` parameter.
   - Generic code is checked once per set of type arguments, like a template:

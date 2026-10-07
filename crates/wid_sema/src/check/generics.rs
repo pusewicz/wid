@@ -313,6 +313,149 @@ impl<'a> Checker<'a> {
         ok
     }
 
+    /// Resolves the argument for generic parameter `index` of `decl` when
+    /// that is a value parameter (`$N: Int`) and the argument is a value: a
+    /// constant (`N`, `geo.N`, a `comptime`-computed one) or constant
+    /// arithmetic (`SIZE * 2`), like the literal `4`. Returns `None` when
+    /// the parameter takes a type, or when the argument names a type or a
+    /// generic parameter, for the caller to resolve as a type.
+    pub(super) fn value_generic_arg(
+        &mut self,
+        decl: DeclId,
+        index: usize,
+        e: &ast::Expr,
+        loc: super::DeclLoc,
+        subst: &[(Name, TyId)],
+    ) -> Option<TyId> {
+        let name = self.decls[decl.0 as usize].name;
+        let generics: &[ast::GenericParam] = match self.decls[decl.0 as usize].kind {
+            DeclKind::Struct(s) => &s.generics,
+            DeclKind::Union(u) => &u.generics,
+            _ => return None,
+        };
+        let param = generics.get(index)?;
+        let want = param.ty.as_ref()?;
+        // A macro's own code names constants where the macro is.
+        let loc = self.virtual_file(e.span.file).map_or(loc, |v| v.loc);
+        if let ast::ExprKind::Ident(var_name) = e.kind
+            && !self.body.frames.is_empty()
+            && let Some(var) = self.find_var_at(var_name, e.span)
+        {
+            // Read here, so not also reported unused.
+            var.read = true;
+            let var_span = var.span;
+            let upper = var_name.as_str().to_uppercase();
+            self.report(
+                Diagnostic::error(codes::GENERIC_ARGS, "a generic value argument must be a constant integer")
+                    .primary(e.span, format!("`{var_name}` is a variable, so its value is only known at run time"))
+                    .secondary(var_span, format!("`{var_name}` is declared here"))
+                    .secondary(param.span, format!("`{}` is a value parameter", param.name.as_str()))
+                    .help(format!("declare a package-level constant like `{upper} = …` and pass `{upper}`")),
+            );
+            return Some(self.types.unknown());
+        }
+        match self.value_arg_kind(e, loc, subst) {
+            ValueArg::Type => return None,
+            ValueArg::Undefined(name) => {
+                let candidates = self
+                    .package_names(loc.pkg)
+                    .into_iter()
+                    .filter(|n| n.chars().next().is_some_and(char::is_uppercase))
+                    .collect();
+                self.undefined(name, e.span, candidates, "constant");
+                return Some(self.types.unknown());
+            }
+            ValueArg::Value => {}
+        }
+        let errors = self.diags.error_count();
+        let value = self.eval_const(e, loc);
+        let want = self.source_text(want.span);
+        match value {
+            Some(super::items::ConstValue::Int(v)) => Some(self.types.intern(TyKind::ConstValue(v))),
+            Some(other) => {
+                let found = self.default_const(other);
+                let shown = self.types.display(found.ty);
+                let text = self.source_text(e.span);
+                let diag = Diagnostic::error(
+                    codes::GENERIC_ARGS,
+                    format!(
+                        "`{name}` takes a constant `{want}` for `{}`, but `{text}` is a `{shown}`",
+                        param.name.as_str()
+                    ),
+                )
+                .primary(e.span, format!("expected a constant `{want}`"))
+                .secondary(param.span, format!("`{}` is a value parameter", param.name.as_str()));
+                let diag = if self.types.is_numeric(found.ty) {
+                    super::items::conversion_help(diag, e.span, &text, &want)
+                } else {
+                    diag.help("pass an integer constant, like `4`, `SIZE` or `SIZE * 2`")
+                };
+                self.report(diag);
+                Some(self.types.unknown())
+            }
+            None => {
+                if self.diags.error_count() == errors && !super::runtime::holds_parse_error(e) {
+                    self.report(
+                        Diagnostic::error(codes::GENERIC_ARGS, "a generic value argument must be a constant integer")
+                            .primary(e.span, "not a constant")
+                            .secondary(param.span, format!("`{}` is a value parameter", param.name.as_str()))
+                            .help("pass a literal like `4`, a constant like `SIZE`, or arithmetic on them"),
+                    );
+                }
+                Some(self.types.unknown())
+            }
+        }
+    }
+
+    /// Whether a value parameter's argument is a value, or names a type or
+    /// generic parameter, or an undefined constant.
+    fn value_arg_kind(&mut self, e: &ast::Expr, loc: super::DeclLoc, subst: &[(Name, TyId)]) -> ValueArg {
+        use ast::ExprKind as E;
+        let decl = match &e.kind {
+            E::Type(_) => return ValueArg::Type,
+            E::Paren(inner) => return self.value_arg_kind(inner, loc, subst),
+            E::Const(n) => {
+                if lookup(subst, *n).is_some() || n.as_str() == "Self" {
+                    return ValueArg::Type;
+                }
+                match self.lookup_pkg(loc.pkg, *n).or_else(|| self.lookup_prelude(*n)) {
+                    Some(decl) => decl,
+                    None if super::ty::PRIMITIVE_NAMES.contains(&n.as_str()) => return ValueArg::Type,
+                    None if self.import_failed(loc, *n) => return ValueArg::Type,
+                    None => return ValueArg::Undefined(*n),
+                }
+            }
+            E::Member { recv, name, safe: false } => {
+                let pkg = match recv.kind {
+                    E::Ident(p) | E::Const(p) => self.lookup_import(loc, p),
+                    _ => None,
+                };
+                let Some(pkg) = pkg else { return ValueArg::Value };
+                if self.input.packages[pkg.0 as usize].path == "core:c" {
+                    return ValueArg::Type;
+                }
+                match self.lookup_pkg(pkg, name.name) {
+                    Some(decl) => decl,
+                    None => return ValueArg::Type,
+                }
+            }
+            E::Call(call) => {
+                let ast::Callee::Name(n) = &call.callee else { return ValueArg::Value };
+                match self.lookup_pkg(loc.pkg, n.name).or_else(|| self.lookup_prelude(n.name)) {
+                    Some(decl) => decl,
+                    None => return ValueArg::Value,
+                }
+            }
+            _ => return ValueArg::Value,
+        };
+        let d = &self.decls[decl.0 as usize];
+        match d.kind {
+            DeclKind::Const(c) if !self.is_type_alias_value(&c.value, d.loc, 0) => ValueArg::Value,
+            DeclKind::Fn(_) => ValueArg::Value,
+            _ => ValueArg::Type,
+        }
+    }
+
     /// Returns the instance of a generic struct for `args`, creating it and
     /// resolving its fields the first time.
     pub fn struct_instance(&mut self, decl: DeclId, args: Vec<TyId>, span: Span) -> TyId {
@@ -549,6 +692,17 @@ impl<'a> Checker<'a> {
         *n += 1;
         *n
     }
+}
+
+/// What a value parameter's argument is (see
+/// [`Checker::value_generic_arg`]).
+enum ValueArg {
+    /// A value to evaluate as a constant.
+    Value,
+    /// A type or a generic parameter, resolved as a type.
+    Type,
+    /// A name nothing declares.
+    Undefined(Name),
 }
 
 /// Collects `$T` names mentioned in a type expression.

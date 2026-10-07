@@ -2267,7 +2267,44 @@ impl<'a> Parser<'a> {
 
     fn parse_generic_arg(&mut self) -> GenericArg {
         match self.kind() {
-            T::Const | T::Caret | T::LBracket | T::TypeParam | T::LParen => GenericArg::Type(self.parse_type()),
+            // A name may be a type or a constant, which the checker tells
+            // apart; one followed by more (`SIZE * 2`, `(N + 1)`) is a
+            // value for a value parameter.
+            T::Const | T::LParen => {
+                let ends = |p: &Self| {
+                    let next = p.tokens[p.pos..].iter().find(|t| t.kind != T::Newline);
+                    next.is_some_and(|t| matches!(t.kind, T::Comma | T::RParen))
+                };
+                let (pos, diags, last, splices) = (self.pos, self.diags.len(), self.last_error_at, self.splice_mark());
+                if let Some(ty) = self.try_parse_type()
+                    && ends(self)
+                {
+                    return GenericArg::Type(ty);
+                }
+                self.pos = pos;
+                self.rewind_splices(splices);
+                let value = self.parse_expr();
+                if self.diags.len() == diags && ends(self) {
+                    return GenericArg::Expr(value);
+                }
+                // Neither: report it as the type it most likely is, unless
+                // no type starts that way (`(2 + )`).
+                let first = self.tokens[pos..].iter().find(|t| t.kind != T::LParen).map(|t| t.kind);
+                if !first.is_some_and(|k| {
+                    matches!(
+                        k,
+                        T::Const | T::Ident | T::Caret | T::LBracket | T::TypeParam | T::AtBracket | T::SpliceBegin
+                    )
+                }) {
+                    return GenericArg::Expr(value);
+                }
+                self.pos = pos;
+                self.diags.truncate(diags);
+                self.last_error_at = last;
+                self.rewind_splices(splices);
+                GenericArg::Type(self.parse_type())
+            }
+            T::Caret | T::LBracket | T::TypeParam => GenericArg::Type(self.parse_type()),
             T::Ident if matches!(self.text_of(self.peek().span), "map" | "proc" | "distinct") => {
                 GenericArg::Type(self.parse_type())
             }
