@@ -1659,7 +1659,7 @@ impl<'a> Parser<'a> {
                         .primary(param.span, "this would collect the remaining arguments")
                         .note(format!(
                             "{what} takes a fixed number of arguments; a `*` parameter is for macros, \
-                         like `attr_reader :hp, :mana`"
+                         like `flags :READ, :WRITE`"
                         ))
                         .suggest(
                             format!("take a slice instead, and pass an array literal: `{call}`"),

@@ -220,6 +220,10 @@ end
   zero. `new` is reserved for this, so name custom constructors otherwise
   (`def self.create`). `==` compares structs field by field when every field
   is comparable; define `==` to customize it.
+- **Fields are always public**, as in Odin: code reads and writes them
+  directly (`hero.hp`, `hero.hp = 3`, `@hp` inside a method). There are no
+  getter or setter methods and no accessor macros like Ruby's `attr_reader`,
+  and a method can't share a field's name (E0202).
 - **No implicit overloading.** Two defs can't share a name. To overload, you
   declare an explicit set, like an Odin proc group:
   `overload :clamp, :clamp_f32, :clamp_int`. A call picks the member with the
@@ -419,7 +423,6 @@ end
   default.
 - A `macro def` runs at compile time. It receives types, AST and symbols, and
   returns code built with `quote do … end`, using `#{}` to splice values in.
-  `core` uses macros for `attr_reader`, `attr_writer` and `attr_accessor`.
   - **Parameters:**
     - A `Code` parameter receives the argument's code, unevaluated. The
       code runs where the `quote` splices it, as often as it is spliced.
@@ -430,9 +433,10 @@ end
       for a `Symbol` or a value for a `Type`, is E0912.
     - The last parameter may be written `*names: T`. It collects the
       remaining positional arguments, zero or more, into a `[]T`, each
-      converted by `T`'s rule, so `*names: Symbol` takes
-      `attr_reader :hp, :mana`. It can't have a default. Only macros take
-      one; other methods take a `[]T` and an array literal (E0112).
+      converted by `T`'s rule, so `macro def flags(*names: Symbol) -> Code`
+      takes `flags :READ, :WRITE, :EXEC` and can generate a constant for
+      each name. It can't have a default. Only macros take one; other
+      methods take a `[]T` and an array literal (E0112).
     - A macro always returns `Code` and says so (`-> Code`, E0310). It
       takes no `$T` parameters (E0315, take a `Type`) and no block (E0319,
       take a `Code`).

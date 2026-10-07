@@ -378,9 +378,18 @@ impl<'a> Checker<'a> {
             .note("a call among declarations runs a macro, and the declarations it generates take the call's place");
         let in_enum = owner.is_some_and(|o| matches!(self.decls[o.0 as usize].kind, DeclKind::Enum(_)));
         if matches!(name, "attr_reader" | "attr_writer" | "attr_accessor") && parts.pkg.is_none() {
-            diag = diag.note(format!("`core` doesn't define `{name}` yet")).help(
-                "write the method out, like `def current_hp -> Int = @hp`; a method can't share its field's name",
-            );
+            // Ruby's accessors: Wid's fields are public instead.
+            let field = parts.args.iter().find_map(|a| match a.value.kind {
+                E::Symbol(s) => Some(s.as_str()),
+                _ => None,
+            });
+            let field = field.unwrap_or("hp");
+            let set = if name == "attr_writer" { " = …" } else { "" };
+            diag = diag
+                .note("Wid has no accessor macros: fields are always public, and code reads and writes them directly")
+                .help(format!(
+                    "remove the call and use the field itself, like `hero.{field}{set}` or `@{field}{set}` in a method"
+                ));
         } else if in_enum && bare {
             diag = diag
                 .note("an enum's members are fixed before the macros in its body run, so a macro can't add members")

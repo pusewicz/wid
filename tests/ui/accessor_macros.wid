@@ -1,0 +1,18 @@
+# Wid has no accessor macros: fields are always public, so Ruby's
+# `attr_reader` and friends are undefined, with a note to use the field.
+struct Hero
+  attr_reader :hp
+  attr_writer :mana
+  attr_accessor :name
+  hp: Int
+  mana: Int
+  name: String
+end
+
+attr_reader
+
+def main
+  hero = Hero.new
+  hero.mana = 3
+  p hero.hp, hero.mana, hero.name
+end

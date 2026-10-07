@@ -1,0 +1,27 @@
+# Wid has no accessor macros, since fields are always public, but a program
+# may still name a macro of its own like one of Ruby's, such as
+# `attr_reader`. This one generates a `NAME_text` method per field.
+macro def attr_reader(*names: Symbol) -> Code
+  methods = [dynamic]Code.new
+  for name in names
+    method = "#{name.to_s}_text".to_sym
+    methods << quote do
+      def #{method} -> String = "#{@#{name}}"
+    end
+  end
+  quote do
+    #{methods}
+  end
+end
+
+struct Hero
+  hp: Int = 100
+  name: String = "Ayla"
+  attr_reader :hp, :name
+end
+
+def main
+  hero = Hero.new
+  hero.hp = 90
+  puts hero.hp_text, hero.name_text
+end

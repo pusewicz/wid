@@ -1,9 +1,0 @@
-# `core` doesn't have the `attr_*` macros yet.
-struct Hero
-  attr_reader :hp
-  hp: Int
-end
-
-def main
-  p Hero.new
-end
