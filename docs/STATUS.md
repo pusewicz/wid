@@ -380,6 +380,10 @@ runs the stages; `wid_cli` is the `wid` binary.
   (`size_of(Int ?)`) is E0105 with a fix, a variable given as a type
   (`size_of(count)`) is E0322 with a fix that writes its type, and an
   optional proc displays as `(proc(Int) -> Int)?`.
+- A `$T` written as a parameter of its own (`$T, xs: []T`, or Odin's
+  `$T: typeid`) is one E0105 at `$T`, with a fix that introduces it where a
+  parameter's type first uses `T` (`xs: []$T`); the parameter list recovers
+  as that fix, so the rest of the file is checked normally.
 - Macro syntax: `quote` bodies holding statements and declarations, with
   splices in every expression, type, declaration and name position (`#{x}`,
   `@#{f}`, `:#{s}`), splices outside a `quote` (E0111), variadic
