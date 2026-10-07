@@ -1,11 +1,15 @@
 # Runs each program in a probe file through `wid check main.wid -file`.
 # Programs are separated by lines starting with `### ` followed by a name.
 #
+# The probe file is read as UTF-8 whatever the locale.
+#
 # Usage: ruby scripts/probe.rb FILE
 
 require "fileutils"
 require "open3"
 require "tmpdir"
+
+Encoding.default_external = Encoding::UTF_8
 
 ROOT = File.expand_path("..", __dir__)
 WID = ENV.fetch("WID_BIN", "#{ROOT}/target/debug/wid")
