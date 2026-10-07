@@ -78,6 +78,19 @@ what is implemented, which conventions are fixed and what comes next.
   there with `git commit -m`, and never pushes unless told to.
 - Every PR passes the full gate (fmt, clippy, `cargo test` with every
   available C compiler) and updates `docs/STATUS.md`.
+- File a GitHub issue for every problem you find that the current task doesn't
+  fix: a bug, a poor diagnostic, a flaky test, missing docs. Subagents file
+  them directly with `gh issue create`; this is the one outward-facing action
+  they need no permission for. A problem that blocks the current PR's gate is
+  fixed in the branch instead, and a code/spec disagreement is still raised
+  with the user as well as filed.
+  - Search first (`gh issue list --search "…"`) and comment on a match
+    rather than filing a duplicate.
+  - Write the issue so an agent with no other context can fix it: a minimal
+    `.wid` reproduction and the command that runs it, what happens, what
+    should happen, and where the cause probably lies. Label it `bug`,
+    `enhancement` or `documentation`.
+  - List the issue numbers in your final report.
 
 ## Diagnostics bar
 
