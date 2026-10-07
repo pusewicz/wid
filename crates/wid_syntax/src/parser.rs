@@ -121,6 +121,10 @@ fn infix_bp(kind: TokenKind) -> Option<(u8, u8)> {
     })
 }
 
+/// Builtins whose arguments are types (`type_info` also takes a value), so
+/// a type is expected there.
+const TYPE_ARG_BUILTINS: &[&str] = &["size_of", "align_of", "type_info"];
+
 const PREFIX_NEG_BP: u8 = 14;
 const PREFIX_NOT_BP: u8 = 17;
 
@@ -2478,6 +2482,10 @@ impl<'a> Parser<'a> {
             self.bump();
             match tok.kind {
                 T::Question => {
+                    if self.spaced_optional(&lhs, tok) {
+                        lhs = Expr { kind: ExprKind::Error, span: lhs.span.to(tok.span) };
+                        continue;
+                    }
                     self.skip_newlines();
                     let then = self.parse_expr_bp(0, false);
                     self.skip_newlines();
@@ -2512,6 +2520,39 @@ impl<'a> Parser<'a> {
             }
         }
         lhs
+    }
+
+    /// Reports `Int ?` before `)` or `,`, where the `?` (just consumed) reads
+    /// as an unfinished `x ? a : b` but a type's `?` was likely meant: one
+    /// after a space is a conditional's.
+    fn spaced_optional(&mut self, lhs: &Expr, q: Token) -> bool {
+        let upper = |name: &Ident| name.as_str().starts_with(|c: char| c.is_ascii_uppercase());
+        let package = |recv: &Expr| matches!(recv.kind, ExprKind::Ident(_) | ExprKind::Const(_));
+        // `Int`, `rl.Color`, `Pool(Ball, 64)`, `geo.Pool(Ball, 64)`.
+        let names_type = match &lhs.kind {
+            ExprKind::Const(_) => true,
+            ExprKind::Member { recv, name, safe: false } => package(recv) && upper(name),
+            ExprKind::Call(call) if call.block.is_none() => match &call.callee {
+                Callee::Name(name) => upper(name),
+                Callee::Method { recv, name, safe: false } => package(recv) && upper(name),
+                Callee::Method { .. } => false,
+            },
+            _ => false,
+        };
+        if !names_type || !q.space_before || !matches!(self.kind(), T::RParen | T::Comma) {
+            return false;
+        }
+        let gap = Span::new(self.file, lhs.span.end, q.span.start);
+        self.report(
+            Diagnostic::error(codes::UNEXPECTED_TOKEN, "a `?` after a space starts a conditional")
+                .primary(q.span, "this reads as `cond ? a : b`, which needs both values")
+                .suggest(
+                    "for an optional type, write the `?` right after the type",
+                    vec![Edit { span: gap, replacement: String::new() }],
+                    Applicability::MaybeIncorrect,
+                ),
+        );
+        true
     }
 
     fn parse_prefix(&mut self, cmd: bool) -> Expr {
@@ -3001,7 +3042,9 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_args_in_parens(&mut self) -> Vec<Arg> {
+    /// Parses `(args)`. `types` is true for the builtins whose arguments are
+    /// types (see [`Parser::parse_type_arg`]).
+    fn parse_args_in_parens(&mut self, types: bool) -> Vec<Arg> {
         self.bump();
         let saved = self.no_do;
         self.no_do = false;
@@ -3011,7 +3054,7 @@ impl<'a> Parser<'a> {
             if self.at(T::RParen) || self.at(T::Eof) {
                 break;
             }
-            args.push(self.parse_arg());
+            args.push(self.parse_arg(types));
             self.skip_newlines();
             if !self.eat(T::Comma) {
                 break;
@@ -3023,25 +3066,134 @@ impl<'a> Parser<'a> {
         args
     }
 
-    fn parse_arg(&mut self) -> Arg {
+    fn parse_arg(&mut self, types: bool) -> Arg {
         if let Some(len) = self.name_len(0)
             && self.nth(len).kind == T::Colon
         {
             let name = self.parse_name("an argument name");
             self.bump();
             self.skip_newlines();
-            let value = self.parse_expr();
+            let value = self.parse_arg_value(types);
             return Arg { name: Some(name), value, splat: false };
         }
         if self.at(T::Star) {
             self.bump();
             return Arg { name: None, value: self.parse_expr(), splat: true };
         }
-        Arg { name: None, value: self.parse_expr(), splat: false }
+        Arg { name: None, value: self.parse_arg_value(types), splat: false }
+    }
+
+    /// An argument's value: an expression, or a type written in place.
+    fn parse_arg_value(&mut self, types: bool) -> Expr {
+        match self.parse_type_arg(types) {
+            Some(ty) => Expr { span: ty.span, kind: ExprKind::Type(Box::new(ty)) },
+            None => self.parse_expr(),
+        }
+    }
+
+    /// Parses a call argument as a type when it is a type that no
+    /// expression spells, followed by `,` or `)`:
+    ///
+    /// - in any call, a type ending in a `?` of its own (`Int?`,
+    ///   `rl.Color?`, `Pool(Ball, 64)?`; in `empty?` the `?` belongs to the
+    ///   name), a `proc(…) -> R` type, or one with attributes
+    ///   (`@[c] proc(I32)`). No expression ends in `?` or goes on with `->`.
+    /// - where a type is expected (`types`: the arguments of `size_of`,
+    ///   `align_of` and `type_info`), also any type that starts with `proc`,
+    ///   `block` or `distinct` (keywords there, unless a local has the
+    ///   name), `$T`, and a tuple type `(A, B)`.
+    ///
+    /// Types that also read as expressions (`Vec2`, `C.int`,
+    /// `Pool(Ball, 64)`) stay expressions, which the checker resolves as
+    /// types, and `[`, `^`, `map[` and `matrix[` start types in any
+    /// expression. Returns `None`, with nothing consumed, for anything else.
+    fn parse_type_arg(&mut self, types: bool) -> Option<TypeExpr> {
+        let tok = self.peek();
+        let text = self.text_of(tok.span);
+        let local = tok.kind == T::Ident && self.is_local(Name::new(text));
+        let keyword = tok.kind == T::Ident && !local && matches!(text, "proc" | "block" | "distinct");
+        // These can't start an expression, so they are types even when
+        // malformed, and the type parser reports what is wrong.
+        if tok.kind == T::AtBracket || (types && (keyword || tok.kind == T::TypeParam)) {
+            return Some(self.parse_type());
+        }
+        let candidate = match tok.kind {
+            T::Const | T::Ident | T::SpliceBegin if !local => {
+                let (question, arrow) = self.scan_arg();
+                question || (arrow && text == "proc")
+            }
+            T::LParen => types,
+            _ => false,
+        };
+        if !candidate {
+            return None;
+        }
+        let saved_pos = self.pos;
+        let saved_splices = self.splice_mark();
+        let ty = self.try_parse_type()?;
+        let tuple = types && matches!(ty.kind, TypeKind::Tuple(_));
+        if self.at_arg_end() && (tuple || self.only_type(&ty)) {
+            return Some(ty);
+        }
+        self.pos = saved_pos;
+        self.rewind_splices(saved_splices);
+        None
+    }
+
+    /// Reads the tokens of the argument that starts here, up to the `,`,
+    /// `)` or line end that closes it (outside brackets): whether its last
+    /// token is a `?` written right after the token before, and whether a
+    /// `->` appears outside brackets. Consumes nothing.
+    fn scan_arg(&self) -> (bool, bool) {
+        let mut depth = 0usize;
+        let mut arrow = false;
+        let mut last = None;
+        for tok in &self.tokens[self.pos..] {
+            match tok.kind {
+                T::LParen | T::LBracket | T::LBrace | T::AtBracket | T::StrBegin | T::SpliceBegin => depth += 1,
+                T::Comma | T::RParen | T::RBracket | T::RBrace | T::Newline | T::Eof if depth == 0 => break,
+                T::RParen | T::RBracket | T::RBrace | T::StrEnd | T::SpliceEnd => {
+                    depth = depth.saturating_sub(1);
+                }
+                T::Arrow if depth == 0 => arrow = true,
+                _ => {}
+            }
+            last = Some(*tok);
+        }
+        (last.is_some_and(|t| t.kind == T::Question && !t.space_before), arrow)
+    }
+
+    /// Whether the position, after any newlines, is the `,` or `)` that
+    /// ends an argument.
+    fn at_arg_end(&self) -> bool {
+        let next = self.tokens[self.pos..].iter().find(|t| t.kind != T::Newline);
+        next.is_some_and(|t| matches!(t.kind, T::Comma | T::RParen))
+    }
+
+    /// Whether a type parsed as an argument can't be read as an expression:
+    /// an optional whose `?` is a token of its own, or a proc type with a
+    /// return type or attributes.
+    fn only_type(&self, ty: &TypeExpr) -> bool {
+        match &ty.kind {
+            TypeKind::Optional(inner) => {
+                let at = self.tokens.partition_point(|t| t.span.start < inner.span.end);
+                self.tokens.get(at).is_some_and(|t| t.kind == T::Question && t.span.start == inner.span.end)
+                    || self.only_type(inner)
+            }
+            TypeKind::Proc { ret, c_abi, .. } => ret.is_some() || *c_abi,
+            _ => false,
+        }
+    }
+
+    /// Whether `callee` is `size_of`, `align_of` or `type_info`, whose
+    /// arguments are types (`type_info` also takes a value).
+    fn takes_type_args(&self, callee: &Callee) -> bool {
+        matches!(callee, Callee::Name(n) if TYPE_ARG_BUILTINS.contains(&n.as_str()) && !self.is_local(n.name))
     }
 
     fn parse_call_with_parens(&mut self, callee: Callee, start: Span) -> Expr {
-        let args = self.parse_args_in_parens();
+        let types = self.takes_type_args(&callee);
+        let args = self.parse_args_in_parens(types);
         let block = self.parse_block_arg();
         Expr {
             kind: ExprKind::Call(Box::new(Call { callee, args, block, parens: true })),
@@ -3050,10 +3202,11 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_command_call(&mut self, callee: Callee, start: Span) -> Expr {
-        let mut args = vec![self.parse_arg()];
+        let types = self.takes_type_args(&callee);
+        let mut args = vec![self.parse_arg(types)];
         while self.eat(T::Comma) {
             self.skip_newlines();
-            args.push(self.parse_arg());
+            args.push(self.parse_arg(types));
         }
         let block = if self.at_kw(K::Do) && !self.no_do { self.parse_block_arg() } else { None };
         Expr {
@@ -3066,10 +3219,11 @@ impl<'a> Parser<'a> {
     /// allowed, reporting it with a fix and keeping the call for recovery.
     fn parse_nested_command_call(&mut self, callee: Callee, start: Span, name_span: Span) -> Expr {
         let first = self.peek().span;
-        let mut args = vec![self.parse_arg()];
+        let types = self.takes_type_args(&callee);
+        let mut args = vec![self.parse_arg(types)];
         while self.at(T::Comma) && self.can_start_expr(self.nth(1)) {
             self.bump();
-            args.push(self.parse_arg());
+            args.push(self.parse_arg(types));
         }
         let last = self.prev_span();
         let name = self.text_of(name_span).to_string();
@@ -3893,6 +4047,151 @@ end
         let (file, _) = parse_file(FileId(0), "enum Kind\n  a\n  struct Inner\n  end\nend\n");
         let ItemKind::Enum(e) = &file.items[0].kind else { panic!("expected an enum") };
         assert_eq!(e.members.len(), 1);
+    }
+
+    /// The first argument of the call on each line of `main`'s body.
+    fn first_args(body: &str) -> Vec<ExprKind> {
+        let file = parse_ok(&format!("def main\n{body}end\n"));
+        let ItemKind::Def(def) = &file.items[0].kind else { panic!("not a def") };
+        let FnBody::Block(stmts) = &def.body else { panic!("endless def") };
+        stmts
+            .iter()
+            .filter_map(|s| match &s.kind {
+                StmtKind::Expr(Expr { kind: ExprKind::Call(call), .. }) => Some(call.args[0].value.kind.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn written_type(kind: &ExprKind) -> &TypeKind {
+        match kind {
+            ExprKind::Type(t) => &t.kind,
+            other => panic!("not a type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn types_written_in_place_as_arguments() {
+        let args = first_args(
+            "  size_of(Int?)\n\
+             \x20 align_of(proc(Int) -> Int)\n\
+             \x20 type_info(@[c] proc(I32))\n\
+             \x20 size_of((Int, Bool))\n\
+             \x20 size_of(proc(Int))\n\
+             \x20 type_info(proc)\n\
+             \x20 size_of(distinct F64)\n\
+             \x20 align_of(block(Int))\n\
+             \x20 size_of($T)\n\
+             \x20 size_of(Pool(Ball, 64)?)\n\
+             \x20 type_info(rl.Color?)\n\
+             \x20 size_of((Int?))\n\
+             \x20 f(Int?, proc(Int) -> Int?)\n\
+             \x20 f(@[c] proc())\n\
+             \x20 f(\n    Int??\n  )\n\
+             \x20 f(t: Int?)\n",
+        );
+        assert_eq!(args.len(), 16);
+        let optional_of = |k: &TypeKind| match k {
+            TypeKind::Optional(inner) => inner.kind.clone(),
+            other => panic!("not optional: {other:?}"),
+        };
+        let path = |k: &TypeKind| match k {
+            TypeKind::Path { segments, args } => {
+                (segments.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("."), args.len())
+            }
+            other => panic!("not a path: {other:?}"),
+        };
+        assert_eq!(path(&optional_of(written_type(&args[0]))), ("Int".into(), 0));
+        assert!(matches!(written_type(&args[1]), TypeKind::Proc { ret: Some(_), c_abi: false, .. }));
+        assert!(matches!(written_type(&args[2]), TypeKind::Proc { ret: None, c_abi: true, .. }));
+        assert!(matches!(written_type(&args[3]), TypeKind::Tuple(elems) if elems.len() == 2));
+        assert!(matches!(written_type(&args[4]), TypeKind::Proc { params, ret: None, .. } if params.len() == 1));
+        assert!(matches!(written_type(&args[5]), TypeKind::Proc { params, .. } if params.is_empty()));
+        assert!(matches!(written_type(&args[6]), TypeKind::Distinct(_)));
+        assert!(matches!(written_type(&args[7]), TypeKind::Block { .. }));
+        assert!(matches!(written_type(&args[8]), TypeKind::Param(n) if n.as_str() == "T"));
+        assert_eq!(path(&optional_of(written_type(&args[9]))), ("Pool".into(), 2));
+        assert_eq!(path(&optional_of(written_type(&args[10]))), ("rl.Color".into(), 0));
+        assert_eq!(path(&optional_of(written_type(&args[11]))), ("Int".into(), 0));
+        assert_eq!(path(&optional_of(written_type(&args[12]))), ("Int".into(), 0));
+        assert!(matches!(written_type(&args[13]), TypeKind::Proc { c_abi: true, .. }));
+        assert!(matches!(optional_of(written_type(&args[14])), TypeKind::Optional(_)));
+        assert_eq!(path(&optional_of(written_type(&args[15]))), ("Int".into(), 0));
+
+        // The second argument of `f(Int?, proc(Int) -> Int?)` too.
+        let file = parse_ok("def main\n  f(Int?, proc(Int) -> Int?)\nend\n");
+        let ItemKind::Def(def) = &file.items[0].kind else { panic!() };
+        let FnBody::Block(stmts) = &def.body else { panic!() };
+        let StmtKind::Expr(Expr { kind: ExprKind::Call(call), .. }) = &stmts[0].kind else { panic!() };
+        let TypeKind::Proc { ret: Some(ret), .. } = written_type(&call.args[1].value.kind) else { panic!() };
+        assert!(matches!(ret.kind, TypeKind::Optional(_)));
+
+        // A splice too; a type tried and given up doesn't keep its splices.
+        let file = parse_ok(
+            "macro def m(t: Type, a: Code) -> Code\n  quote do\n    size_of(#{t}?)\n    f(#{a}?\n      1 : 2)\n  end\nend\n",
+        );
+        let q = first_quote(&file);
+        assert_eq!(q.splices.len(), 2);
+        let StmtKind::Expr(Expr { kind: ExprKind::Call(call), .. }) = &q.body[0].kind else { panic!() };
+        let TypeKind::Optional(inner) = written_type(&call.args[0].value.kind) else { panic!() };
+        assert!(matches!(inner.kind, TypeKind::Splice(0)));
+        let StmtKind::Expr(Expr { kind: ExprKind::Call(call), .. }) = &q.body[1].kind else { panic!() };
+        let ExprKind::Ternary { cond, .. } = &call.args[0].value.kind else { panic!("{:?}", call.args[0]) };
+        assert!(matches!(cond.kind, ExprKind::Splice(1)));
+    }
+
+    #[test]
+    fn arguments_that_read_as_expressions_stay_expressions() {
+        let args = first_args(
+            "  f(FLAG? 1 : 2)\n\
+             \x20 f(FLAG ? 1 : 2)\n\
+             \x20 f(FLAG?\n    1 : 2)\n\
+             \x20 f(FLAG ?\n    1 : 2)\n\
+             \x20 f(xs.empty?)\n\
+             \x20 f(empty?)\n\
+             \x20 f(Foo.ready?)\n\
+             \x20 type_info(x)\n\
+             \x20 type_info((x))\n\
+             \x20 size_of(Vec2)\n\
+             \x20 size_of(C.int)\n\
+             \x20 size_of(C.int?)\n\
+             \x20 size_of(Pool(Ball, 64))\n\
+             \x20 f(proc(x))\n\
+             \x20 f(Int)\n",
+        );
+        let shapes: Vec<&str> = args
+            .iter()
+            .map(|k| match k {
+                ExprKind::Ternary { .. } => "ternary",
+                ExprKind::Member { .. } => "member",
+                ExprKind::Ident(_) => "ident",
+                ExprKind::Paren(_) => "paren",
+                ExprKind::Const(_) => "const",
+                ExprKind::Call(_) => "call",
+                other => panic!("unexpected {other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            shapes,
+            [
+                "ternary", "ternary", "ternary", "ternary", "member", "ident", "member", "ident", "paren", "const",
+                "member", "member", "call", "call", "const"
+            ]
+        );
+        // A local named `proc` is called, not a type.
+        let args = first_args("  proc = ->(x: Int) -> Int { x }\n  type_info(proc(1))\n  size_of(proc)\n");
+        assert!(matches!(&args[0], ExprKind::Call(_)));
+        assert!(matches!(&args[1], ExprKind::Ident(_)));
+    }
+
+    #[test]
+    fn a_spaced_question_mark_before_the_argument_end() {
+        let (_, diags) = parse_file(FileId(0), "def main\n  size_of(Int ?)\n  f(rl.Color ?, Pool(Ball, 4) ?)\nend\n");
+        let found: Vec<_> = diags.iter().map(|d| (d.code.as_str(), d.helps[0].edits[0].replacement.as_str())).collect();
+        assert_eq!(found, [("E0105", ""), ("E0105", ""), ("E0105", "")]);
+        // Anything else stays an unfinished conditional.
+        assert_eq!(codes_of("def main\n  f(x ?)\nend\n"), ["E0105"]);
+        assert!(parse_file(FileId(0), "def main\n  f(x ?)\nend\n").1.iter().all(|d| d.helps.is_empty()));
     }
 
     #[test]

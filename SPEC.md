@@ -96,6 +96,16 @@ end
   - A line that ends with an operator or `,`, or a next line that starts with
     `.method`, continues the statement.
   - `x ? a : b` needs spaces around `?`, because `x?` is a predicate name.
+  - A call argument is a type when no expression reads the same way and
+    `,` or `)` follows it: a type that ends in its own `?` (`Int?`,
+    `rl.Color?`, `Pool(Ball, 64)?`, unlike the name `empty?`), or a
+    `proc(…) -> R` or `@[c] proc(…)` type. `size_of(T)` and `align_of(T)`
+    (a type's size and alignment in bytes) and `type_info(T)` expect a
+    type, so there `proc`, `block` and `distinct` start one too (unless a
+    local has that name), as do `$T` and a tuple type `(A, B)`: any type
+    can be written in place, like `size_of(Int?)` or `align_of(proc(Int))`.
+    Other types already read as expressions (`Vec2`, `[]Int`, `C.int`,
+    `Pool(Ball, 64)`).
 
 ## Types
 
@@ -516,12 +526,13 @@ end
   a `Type` value; it answers `.name`, `.size`, `.align` and `.fields` and
   compares with `==`. `Type` values exist only while compiling: a method the
   built program runs can't use them (E0906). `p x` pretty-prints any value.
-- **`type_info(T)`** and **`type_info(x)`** describe a type at run time. For
-  an expression only its static type counts: `x` is checked but not
-  evaluated. Both return a `^TypeInfo` that points at a read-only static
-  table, and the same type always gives the same pointer, so
-  `type_info(a) == type_info(b)` compares types. The prelude declares the
-  records:
+- **`type_info(T)`** and **`type_info(x)`** describe a type at run time. `T`
+  is any type, written in place (`type_info(Int?)`,
+  `type_info(proc(Int) -> Int)`). For an expression only its static type
+  counts: `x` is checked but not evaluated. Both return a `^TypeInfo` that
+  points at a read-only static table, and the same type always gives the
+  same pointer, so `type_info(a) == type_info(b)` compares types. The
+  prelude declares the records:
   - `TypeInfo` has `name` (as Wid displays the type: `"[]Vec2"`,
     `"Pool(Ball, 64)"`), `kind` (a `TypeKind`: `:int`, `:uint`, `:float`,
     `:bool`, `:rune`, `:string`, `:cstring`, `:rawptr`, `:typeid`, `:any`,

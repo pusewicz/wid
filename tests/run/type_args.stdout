@@ -1,0 +1,89 @@
+-- optionals
+Int?: optional, size 16, align 8, elem Int
+Vec3?: optional, size 16, align 4, elem Vec3
+^Int?: optional, size 8, align 8, elem ^Int
+^(Int?): pointer, size 8, align 8, elem Int?
+[^]U8?: optional, size 8, align 8, elem [^]U8
+[]Int?: slice, size 16, align 8, elem Int?
+[4]U8?: array, size 8, align 1, elem U8?
+[dynamic]Int?: dynamic_array, size 40, align 8, elem Int?
+map[String]Int?: map, size 40, align 8, elem Int?
+-- other constructors
+[3]F32: array, size 12, align 4, elem F32
+map[String]Int: map, size 40, align 8, elem Int
+matrix[2, 3]F32: matrix, size 24, align 4, elem F32
+(Int, Bool): struct, size 16, align 8
+  0: Int @0
+  1: Bool @8
+-- procs
+proc(Int) -> Int: proc, size 8, align 8, elem Int
+  : Int @0
+proc(Int, String) -> Bool: proc, size 8, align 8, elem Bool
+  : Int @0
+  : String @0
+proc(Int): proc, size 8, align 8
+  : Int @0
+proc(): proc, size 8, align 8
+proc(): proc, size 8, align 8
+proc(I32) -> I32: proc, size 8, align 8, elem I32
+  : I32 @0
+proc(Int) -> Int?: proc, size 8, align 8, elem Int?
+  : Int @0
+(proc(Int) -> Int)?: optional, size 8, align 8, elem proc(Int) -> Int
+-- aliases
+Int?: optional, size 16, align 8, elem Int
+proc(Int) -> Int: proc, size 8, align 8, elem Int
+  : Int @0
+-- generic instances
+Pool(Vec3, 4): struct, size 56, align 8
+  items: [4]Vec3 @0
+  used: Int @48
+Pool(Vec3, 4)?: optional, size 64, align 8, elem Pool(Vec3, 4)
+Pool(Int?, 2): struct, size 40, align 8
+  items: [2]Int? @0
+  used: Int @32
+Pool(proc(Int) -> Int, 2): struct, size 24, align 8
+  items: [2]proc(Int) -> Int @0
+  used: Int @16
+Outcome(Int): union, size 24, align 8
+-- packages
+Point: struct, size 4, align 2
+  x: I16 @0
+  y: I16 @2
+Point?: optional, size 6, align 2, elem Point
+^Point?: optional, size 8, align 8, elem ^Point
+Point?: optional, size 6, align 2, elem Point
+Grid(Point, 3): struct, size 12, align 2
+  cells: [3]Point @0
+Grid(Int, 2)?: optional, size 24, align 8, elem Grid(Int, 2)
+Either(F64): union, size 16, align 8
+I32: int, size 4, align 4
+I32?: optional, size 8, align 4, elem I32
+[]I32?: slice, size 16, align 8, elem I32?
+-- generic code
+Int?: optional, size 16, align 8, elem Int
+[]Int?: slice, size 16, align 8, elem Int?
+proc(Int) -> Int?: proc, size 8, align 8, elem Int?
+  : Int @0
+Pool(Int?, 2): struct, size 40, align 8
+  items: [2]Int? @0
+  used: Int @32
+Vec3?: optional, size 16, align 4, elem Vec3
+[]Vec3?: slice, size 16, align 8, elem Vec3?
+proc(Vec3) -> Vec3?: proc, size 8, align 8, elem Vec3?
+  : Vec3 @0
+Pool(Vec3?, 2): struct, size 40, align 8
+  items: [2]Vec3? @0
+  used: Int @32
+-- identity
+true
+true
+true
+false
+-- values stay values
+Bool
+Int?
+-- other calls
+true
+true
+16

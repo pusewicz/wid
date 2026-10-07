@@ -1,0 +1,97 @@
+error[E0322]: `distinct` types need a name
+  --> tests/ui/type_args.wid:11:16
+   |
+11 |   puts size_of(distinct Int)
+   |                ^^^^^^^^^^^^ a `distinct` type is declared once, as a constant
+   = note: each `distinct` declaration creates a new type, so an unnamed one could never match another
+help: declare it at package level, like `Meters = distinct Int`, then use `Meters`
+   = see `wid explain E0322`
+
+error[E0319]: `block(…)` types only describe `&block` parameters
+  --> tests/ui/type_args.wid:12:17
+   |
+12 |   puts align_of(block(Int))
+   |                 ^^^^^^^^^^ a block cannot be stored or passed as a value
+help: for a storable callback, use a `proc(…)` type
+   = see `wid explain E0319`
+
+error[E0105]: `export` is not a proc type attribute
+  --> tests/ui/type_args.wid:13:18
+   |
+13 |   puts size_of(@[export] proc(Int))
+   |                  ^^^^^^ proc types only take `c`, as in `@[c] proc(C.int)`
+   = see `wid explain E0105`
+
+error[E0301]: optional of an optional
+  --> tests/ui/type_args.wid:14:16
+   |
+14 |   puts size_of(Int??)
+   |                ^^^^^ `T??` is the same as `T?`
+   = see `wid explain E0301`
+
+error[E0105]: a `?` after a space starts a conditional
+  --> tests/ui/type_args.wid:15:20
+   |
+15 |   puts size_of(Int ?)
+   |                    ^ this reads as `cond ? a : b`, which needs both values
+help: for an optional type, write the `?` right after the type
+   |   puts size_of(Int?)
+   = see `wid explain E0105`
+
+error[E0105]: a `?` after a space starts a conditional
+  --> tests/ui/type_args.wid:16:31
+   |
+16 |   puts type_info(Pool(Int, 2) ?).name
+   |                               ^ this reads as `cond ? a : b`, which needs both values
+help: for an optional type, write the `?` right after the type
+   |   puts type_info(Pool(Int, 2)?).name
+   = see `wid explain E0105`
+
+error[E0322]: `count` is a variable, not a type
+  --> tests/ui/type_args.wid:17:16
+   |
+10 |   count = 3
+   |   ----- `count` is declared here
+...
+17 |   puts size_of(count)
+   |                ^^^^^ `size_of` takes a type
+help: to use the type of `count`, write it
+   |   puts size_of(Int)
+   = see `wid explain E0322`
+
+error[E0322]: expected a type
+  --> tests/ui/type_args.wid:18:17
+   |
+18 |   puts align_of(count + 1)
+   |                 ^^^^^^^^^ this is a value
+help: types are written like `Vec2`, `[]Int`, `Int?`, `^Node` or `proc(Int) -> Int`
+   = see `wid explain E0322`
+
+error[E0315]: `Pool` takes 2 generic arguments, but 1 was given
+  --> tests/ui/type_args.wid:19:18
+   |
+ 3 | struct Pool($T, $N: Int)
+   |        ---- `Pool` is declared here
+...
+19 |   puts type_info(Pool(Int?)).name
+   |                  ^^^^^^^^^^ write it like `Pool(T, N)`
+   = note: `N` is a constant `Int`
+   = see `wid explain E0315`
+
+error[E0323]: `Int?` is a type, not a value
+  --> tests/ui/type_args.wid:20:15
+   |
+20 |   puts double(Int?)
+   |               ^^^^ a type cannot be used as a value here
+help: make a value of it with `{}` where `Int?` is expected, or `Int?.new` for containers
+   = see `wid explain E0323`
+
+error[E0323]: `proc(Int) -> Int` is a type, not a value
+  --> tests/ui/type_args.wid:21:15
+   |
+21 |   puts double(proc(Int) -> Int)
+   |               ^^^^^^^^^^^^^^^^ a type cannot be used as a value here
+help: make a value of it with `{}` where `proc(Int) -> Int` is expected, or `proc(Int) -> Int.new` for containers
+   = see `wid explain E0323`
+
+error: could not compile due to 11 errors

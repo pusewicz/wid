@@ -5,7 +5,7 @@
 use wid_diagnostics::{Applicability, Diagnostic, Span, codes};
 use wid_syntax::ast::{self, ExprKind as E};
 
-use super::members::{Receiver, expr_as_type};
+use super::members::expr_as_type;
 use super::{Checker, DeclKind};
 use crate::ir::{self, Builtin, ExprKind};
 use crate::type_info::{self, Undescribable};
@@ -92,9 +92,9 @@ impl<'a> Checker<'a> {
     }
 
     /// The type an expression names, when it names one rather than a value:
-    /// `Ball`, `[]Int`, `Pool(Ball, 64)`, `C.int`, `rl.Color`, a type alias
-    /// or a generic parameter.
-    fn named_type(&mut self, e: &ast::Expr) -> Option<TyId> {
+    /// `Ball`, `[]Int`, `Int?`, `Pool(Ball, 64)`, `geo.Pool(Ball, 64)`,
+    /// `C.int`, `C.int?`, `rl.Color`, a type alias or a generic parameter.
+    pub(super) fn named_type(&mut self, e: &ast::Expr) -> Option<TyId> {
         let names_type = match &e.kind {
             E::Type(_) => true,
             E::Const(n) => {
@@ -118,14 +118,7 @@ impl<'a> Checker<'a> {
                     }
                 }
             }
-            E::Call(call) => {
-                let generic =
-                    matches!(&call.callee, ast::Callee::Name(n) if n.as_str().starts_with(char::is_uppercase));
-                if generic && let Receiver::Type(t) = self.classify_receiver(e) {
-                    return Some(t);
-                }
-                false
-            }
+            E::Call(call) => return self.generic_instance(call, e.span),
             E::Member { recv, name, safe: false } => {
                 let pkg = match recv.kind {
                     E::Ident(p) if self.find_var_at(p, recv.span).is_none() => {
@@ -158,6 +151,42 @@ impl<'a> Checker<'a> {
         let texpr = expr_as_type(e);
         let ctx = self.body_ctx();
         Some(self.resolve_type(&texpr, &ctx))
+    }
+
+    /// The instance a call like `Pool(Ball, 64)` or `geo.Pool(Ball, 64)`
+    /// names, or `None` when the callee is not a generic struct or union.
+    /// Wrong type arguments are reported and give the unknown type.
+    fn generic_instance(&mut self, call: &ast::Call, span: Span) -> Option<TyId> {
+        if call.block.is_some() {
+            return None;
+        }
+        let loc = self.loc();
+        let (decl, name) = match &call.callee {
+            ast::Callee::Name(n) => (self.lookup_pkg(loc.pkg, n.name).or_else(|| self.lookup_prelude(n.name))?, *n),
+            ast::Callee::Method { recv, name, safe: false } => {
+                let pkg = match recv.kind {
+                    E::Ident(p) if self.find_var_at(p, recv.span).is_none() => {
+                        self.lookup_import(self.loc_at(recv.span), p)
+                    }
+                    E::Const(p) => self.lookup_import(loc, p),
+                    _ => None,
+                }?;
+                (self.lookup_pkg(pkg, name.name)?, *name)
+            }
+            ast::Callee::Method { .. } => return None,
+        };
+        let union = match self.decls[decl.0 as usize].kind {
+            DeclKind::Struct(s) if !s.generics.is_empty() => false,
+            DeclKind::Union(u) if !u.generics.is_empty() => true,
+            _ => return None,
+        };
+        self.check_visible(decl, name.span);
+        let args: Vec<TyId> = call.args.iter().map(|a| self.generic_arg_type(&a.value)).collect();
+        let spans: Vec<Span> = call.args.iter().map(|a| a.value.span).collect();
+        if !self.check_generic_args(decl, &args, &spans, span) {
+            return Some(self.types.unknown());
+        }
+        Some(if union { self.union_instance(decl, args, span) } else { self.struct_instance(decl, args, span) })
     }
 
     /// `type_info(Never)`, or of code that never finishes.

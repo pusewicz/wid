@@ -1,0 +1,117 @@
+# `size_of`, `align_of` and `type_info` take any type written in place.
+import "./geo"
+import "core:c", as: :C
+
+MaybeInt = Int?
+Callback = proc(Int) -> Int
+
+struct Vec3
+  x: F32
+  y: F32
+  z: F32
+end
+
+struct Pool($T, $N: Int)
+  items: [N]T
+  used: Int
+end
+
+union Outcome($T) = T | Vec3
+
+def show(t: ^TypeInfo, size: Int, align: Int)
+  line = "#{t.name}: #{t.kind}, size #{size}, align #{align}"
+  if e = t.elem
+    line = "#{line}, elem #{e.name}"
+  end
+  if t.size != size || t.align != align
+    line = "#{line} (but type_info says size #{t.size}, align #{t.align})"
+  end
+  puts line
+  for f in t.fields
+    puts "  #{f.name}: #{f.type.name} @#{f.offset}"
+  end
+end
+
+def generic(x: $T)
+  show(type_info(T?), size_of(T?), align_of(T?))
+  show(type_info([]T?), size_of([]T?), align_of([]T?))
+  show(type_info(proc(T) -> T?), size_of(proc(T) -> T?), align_of(proc(T) -> T?))
+  show(type_info(Pool(T?, 2)), size_of(Pool(T?, 2)), align_of(Pool(T?, 2)))
+end
+
+OPTIONAL_SIZE = comptime type_info(Vec3?).size
+
+def main
+  puts "-- optionals"
+  show(type_info(Int?), size_of(Int?), align_of(Int?))
+  show(type_info(Vec3?), size_of(Vec3?), align_of(Vec3?))
+  show(type_info(^Int?), size_of(^Int?), align_of(^Int?))
+  show(type_info(^(Int?)), size_of(^(Int?)), align_of(^(Int?)))
+  show(type_info([^]U8?), size_of([^]U8?), align_of([^]U8?))
+  show(type_info([]Int?), size_of([]Int?), align_of([]Int?))
+  show(type_info([4]U8?), size_of([4]U8?), align_of([4]U8?))
+  show(type_info([dynamic]Int?), size_of([dynamic]Int?), align_of([dynamic]Int?))
+  show(type_info(map[String]Int?), size_of(map[String]Int?), align_of(map[String]Int?))
+
+  puts "-- other constructors"
+  show(type_info([3]F32), size_of([3]F32), align_of([3]F32))
+  show(type_info(map[String]Int), size_of(map[String]Int), align_of(map[String]Int))
+  show(type_info(matrix[2, 3]F32), size_of(matrix[2, 3]F32), align_of(matrix[2, 3]F32))
+  show(type_info((Int, Bool)), size_of((Int, Bool)), align_of((Int, Bool)))
+
+  puts "-- procs"
+  show(type_info(proc(Int) -> Int), size_of(proc(Int) -> Int), align_of(proc(Int) -> Int))
+  show(type_info(proc(Int, String) -> Bool), size_of(proc(Int, String) -> Bool), align_of(proc(Int, String) -> Bool))
+  show(type_info(proc(Int)), size_of(proc(Int)), align_of(proc(Int)))
+  show(type_info(proc()), size_of(proc()), align_of(proc()))
+  show(type_info(proc), size_of(proc), align_of(proc))
+  show(type_info(@[c] proc(I32) -> I32), size_of(@[c] proc(I32) -> I32), align_of(@[c] proc(I32) -> I32))
+  show(type_info(proc(Int) -> Int?), size_of(proc(Int) -> Int?), align_of(proc(Int) -> Int?))
+  show(type_info((proc(Int) -> Int)?), size_of((proc(Int) -> Int)?), align_of((proc(Int) -> Int)?))
+
+  puts "-- aliases"
+  show(type_info(MaybeInt), size_of(MaybeInt), align_of(MaybeInt))
+  show(type_info(Callback), size_of(Callback), align_of(Callback))
+
+  puts "-- generic instances"
+  show(type_info(Pool(Vec3, 4)), size_of(Pool(Vec3, 4)), align_of(Pool(Vec3, 4)))
+  show(type_info(Pool(Vec3, 4)?), size_of(Pool(Vec3, 4)?), align_of(Pool(Vec3, 4)?))
+  show(type_info(Pool(Int?, 2)), size_of(Pool(Int?, 2)), align_of(Pool(Int?, 2)))
+  show(type_info(Pool(proc(Int) -> Int, 2)), size_of(Pool(proc(Int) -> Int, 2)), align_of(Pool(proc(Int) -> Int, 2)))
+  show(type_info(Outcome(Int)), size_of(Outcome(Int)), align_of(Outcome(Int)))
+
+  puts "-- packages"
+  show(type_info(geo.Point), size_of(geo.Point), align_of(geo.Point))
+  show(type_info(geo.Point?), size_of(geo.Point?), align_of(geo.Point?))
+  show(type_info(^geo.Point?), size_of(^geo.Point?), align_of(^geo.Point?))
+  show(type_info(geo.MaybePoint), size_of(geo.MaybePoint), align_of(geo.MaybePoint))
+  show(type_info(geo.Grid(geo.Point, 3)), size_of(geo.Grid(geo.Point, 3)), align_of(geo.Grid(geo.Point, 3)))
+  show(type_info(geo.Grid(Int, 2)?), size_of(geo.Grid(Int, 2)?), align_of(geo.Grid(Int, 2)?))
+  show(type_info(geo.Either(F64)), size_of(geo.Either(F64)), align_of(geo.Either(F64)))
+  show(type_info(C.int), size_of(C.int), align_of(C.int))
+  show(type_info(C.int?), size_of(C.int?), align_of(C.int?))
+  show(type_info([]C.int?), size_of([]C.int?), align_of([]C.int?))
+
+  puts "-- generic code"
+  generic(1)
+  generic(Vec3.new)
+
+  puts "-- identity"
+  puts type_info(MaybeInt) == type_info(Int?)
+  puts type_info(Callback) == type_info(proc(Int) -> Int)
+  puts type_info(geo.MaybePoint) == type_info(geo.Point?)
+  puts type_info(^Int?) == type_info(^(Int?))
+
+  puts "-- values stay values"
+  xs = [1, 2, 3]
+  puts type_info(xs.empty?).name
+  puts type_info(xs.first).name
+
+  puts "-- other calls"
+  p = alloc(Int?)
+  puts p^.nil?
+  free(p)
+  pool = Pool(Int?, 2).new
+  puts pool.items[0].nil?
+  puts OPTIONAL_SIZE
+end
