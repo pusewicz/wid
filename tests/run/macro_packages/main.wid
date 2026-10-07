@@ -1,0 +1,17 @@
+# Macros from another package: a qualified call reaches `stats`'s macros,
+# whose own code resolves names in `stats`, private ones included, while
+# the code and names the caller passes stay the caller's.
+import "./stats"
+
+# Not the `scale` the macro's code calls: that one is private to `stats`.
+def scale(x: Int) -> Int = x * 1000
+
+def main
+  scale = 3
+  p stats.scaled(scale)
+  p stats.scaled(4)
+  total = 10
+  stats.add_twice :total, 5
+  p total
+  stats.report :total
+end

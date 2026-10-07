@@ -1,0 +1,14 @@
+# A panic in code a macro generated reports the line inside the `quote`.
+macro def checked_div(a: Code, b: Code) -> Code
+  quote do
+    divisor = #{b}
+    assert divisor != 0, "checked_div: the divisor is zero"
+    #{a} / divisor
+  end
+end
+
+def main
+  zero = 0
+  puts checked_div(10, 2)
+  puts checked_div(1, zero)
+end

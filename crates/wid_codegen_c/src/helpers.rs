@@ -29,9 +29,13 @@ impl Gen<'_> {
             TyKind::Optional(_) if self.p.types.optional_is_pointer(base) => {
                 format!("wid_w_ptr({w}, (const void *)({value}));")
             }
-            TyKind::Unknown | TyKind::Void | TyKind::Never | TyKind::Nil | TyKind::Symbol | TyKind::TypeValue(_) => {
-                "(void)0;".into()
-            }
+            TyKind::Unknown
+            | TyKind::Void
+            | TyKind::Never
+            | TyKind::Nil
+            | TyKind::Symbol
+            | TyKind::Code
+            | TyKind::TypeValue(_) => "(void)0;".into(),
             _ => {
                 let name = self.print_helper(base);
                 format!("{name}({w}, {value}, {inspect});")

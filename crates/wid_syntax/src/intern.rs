@@ -37,6 +37,19 @@ impl Name {
     pub fn as_str(self) -> &'static str {
         INTERNER.read().expect("interner lock").strings[self.0 as usize]
     }
+
+    /// The name's number in the interner. It is the same for the same text
+    /// for the life of the process, so compile-time code can hold a name as
+    /// an integer (a `Symbol` value).
+    pub fn index(self) -> u32 {
+        self.0
+    }
+
+    /// The name with this number, or `None` when no name has it.
+    pub fn from_index(index: u32) -> Option<Name> {
+        let count = INTERNER.read().expect("interner lock").strings.len();
+        ((index as usize) < count).then_some(Name(index))
+    }
 }
 
 impl fmt::Debug for Name {

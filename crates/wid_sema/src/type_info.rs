@@ -188,7 +188,7 @@ pub fn check(types: &TypeTable, errors: &[Name], ty: TyId) -> Result<(), Undescr
             // An uninstantiated generic parameter only appears in code that
             // is never lowered for real; there is nothing useful to report.
             TyKind::Unknown | TyKind::Param(_) | TyKind::ConstValue(_) => return Err(Undescribable::Poisoned),
-            TyKind::Type | TyKind::Symbol | TyKind::Nil | TyKind::TypeValue(_) => {
+            TyKind::Type | TyKind::Code | TyKind::Symbol | TyKind::Nil | TyKind::TypeValue(_) => {
                 let mut path = Vec::new();
                 let mut at = t;
                 while let Some(Some((from, step))) = parent.get(&at) {

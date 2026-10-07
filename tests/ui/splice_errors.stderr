@@ -59,6 +59,13 @@ help: if this is a comment, add a space after `#`
 help: to build code in a macro, splice values into a `quote do … end` and return it
    = see `wid explain E0111`
 
+error[E0305]: a `Symbol` cannot be called
+  --> tests/ui/splice_errors.wid:24:11
+   |
+24 |     def #{name(#{name})} = 1
+   |           ^^^^^^^^^^^^^ not a proc
+   = see `wid explain E0305`
+
 error[E0111]: a splice inside a splice
   --> tests/ui/splice_errors.wid:24:16
    |
@@ -86,4 +93,4 @@ help: close it with `}`
    |     def #{name}
    = see `wid explain E0102`
 
-error: could not compile due to 9 errors
+error: could not compile due to 10 errors

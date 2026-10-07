@@ -7,7 +7,8 @@
 //!   `-std=c23 -Wall -Wextra -Wpedantic -Werror`.
 //! - `tests/ui/NAME.wid` (or a directory package `tests/ui/NAME/`, for
 //!   imports) is checked and its rendered diagnostics must match
-//!   `NAME.stderr`.
+//!   `NAME.stderr`; with `-json-errors` in `NAME.flags`, the JSON document
+//!   `wid check -json-errors` prints must.
 //! - `tests/test/NAME/` is run with `wid test`; the report must match
 //!   `tests/test/NAME.stdout`.
 //! - Every `core/` package with `_test.wid` files is run with `wid test`, and
@@ -21,7 +22,7 @@ use std::process::Command;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use wid_diagnostics::{RenderOptions, render_all};
+use wid_diagnostics::{RenderOptions, render_all, render_json};
 use wid_driver::Options;
 
 fn repo_root() -> PathBuf {
@@ -130,12 +131,16 @@ fn compilers() -> Vec<String> {
 
 /// Applies build flags listed in a `NAME.flags` file (`-debug`,
 /// `-no-bounds-check`, `-o:speed`, `-define:NAME=value`, `-target:os_arch`).
-fn apply_flags(opts: &mut Options, path: &Path) {
-    let Ok(text) = std::fs::read_to_string(path) else { return };
+/// Returns whether it lists `-json-errors`, which makes a ui case expect the
+/// JSON document `wid check -json-errors` prints.
+fn apply_flags(opts: &mut Options, path: &Path) -> bool {
+    let Ok(text) = std::fs::read_to_string(path) else { return false };
+    let mut json = false;
     for flag in text.split_whitespace() {
         match flag {
             "-debug" => opts.debug = true,
             "-no-bounds-check" => opts.bounds_checks = false,
+            "-json-errors" => json = true,
             other => {
                 if let Some(level) = other.strip_prefix("-o:").and_then(wid_driver::OptLevel::parse) {
                     opts.opt = level;
@@ -152,6 +157,7 @@ fn apply_flags(opts: &mut Options, path: &Path) {
             }
         }
     }
+    json
 }
 
 /// Makes rendered output independent of where the repository lives.
@@ -209,9 +215,13 @@ fn run_case(case: &Case, root: &Path, ccs: &[String], bless: bool) -> Vec<String
             let mut opts = Options::new(file);
             opts.file_mode = !file.is_dir();
             opts.wid_root = Some(root.to_path_buf());
-            apply_flags(&mut opts, &file.with_extension("flags"));
+            let json = apply_flags(&mut opts, &file.with_extension("flags"));
             let checked = wid_driver::check(&opts);
-            let rendered = render_all(&checked.diags, &checked.sources, RenderOptions { color: false });
+            let rendered = if json {
+                render_json(&checked.diags, &checked.sources) + "\n"
+            } else {
+                render_all(&checked.diags, &checked.sources, RenderOptions { color: false })
+            };
             let rendered = normalize(&rendered, root);
             if checked.diags.is_empty() {
                 failures.push("expected diagnostics, but the file checked cleanly".into());
@@ -248,7 +258,7 @@ fn run_case(case: &Case, root: &Path, ccs: &[String], bless: bool) -> Vec<String
                 opts.wid_root = Some(root.to_path_buf());
                 opts.cc = Some(cc.clone());
                 opts.strict_c = true;
-                apply_flags(&mut opts, &PathBuf::from(format!("{}.flags", expect_base.display())));
+                let _ = apply_flags(&mut opts, &PathBuf::from(format!("{}.flags", expect_base.display())));
                 let out_dir = std::env::temp_dir().join(format!("wid-suite-{}", std::process::id()));
                 std::fs::create_dir_all(&out_dir).expect("temp dir");
                 let exe = out_dir.join(format!("{name}-{cc}").replace(['/', '\\'], "_"));

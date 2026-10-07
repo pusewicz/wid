@@ -33,7 +33,7 @@ syn match widFloat /\<\d[0-9_]*\%(\.\d[0-9_]*\%([eE][-+]\=\d\+\)\=\|[eE][-+]\=\d
 syn match widType /\<\u\w*\>/
 syn match widConstant /\<\u[A-Z0-9_]\+\>/
 syn keyword widBuiltinType Int UInt I8 I16 I32 I64 U8 U16 U32 U64 F32 F64 Bool Rune
-syn keyword widBuiltinType String CString RawPtr TypeId Any Error Never Type Self
+syn keyword widBuiltinType String CString RawPtr TypeId Any Error Never Type Code Symbol Self
 syn keyword widBuiltinType Context Allocator AllocMode Location Logger Os Arch FieldInfo MethodInfo
 syn keyword widBuiltinType TypeInfo TypeKind TypeInfoField TypeInfoMember
 

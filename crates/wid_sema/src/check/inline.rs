@@ -284,6 +284,7 @@ impl<'a> Checker<'a> {
             no_bounds: d.item.has_attr("no_bounds_check"),
             is_proc: false,
             decl: Some(decl),
+            site: None,
         });
         let frame = self.body.frames.len() - 1;
         self.body.exits.push(Exit::Region { end_label, result, frame });
@@ -296,6 +297,7 @@ impl<'a> Checker<'a> {
         self.begin_block();
         self.push_scope();
         for (p, local) in sig.params.iter().zip(param_locals) {
+            let mark = self.mark_at(p.span);
             self.frame_mut().scopes.last_mut().expect("scope").vars.push(Var {
                 name: p.name,
                 local: *local,
@@ -307,6 +309,8 @@ impl<'a> Checker<'a> {
                 decl_stmt: None,
                 address_taken: false,
                 indirect: false,
+                mark,
+                open: mark.is_some(),
             });
         }
         let dest = match result {
@@ -539,6 +543,7 @@ impl<'a> Checker<'a> {
             no_bounds: d.item.has_attr("no_bounds_check"),
             is_proc: false,
             decl: Some(decl),
+            site: None,
         });
         self.body.exits.push(Exit::Function { frame: 0 });
         self.begin_block();
@@ -569,6 +574,9 @@ impl<'a> Checker<'a> {
     /// Lowers `->(x: Int) -> Int { … }` into a separate function.
     pub fn lower_lambda(&mut self, lambda: &ast::Lambda, expected: Option<TyId>, span: Span) -> ir::Expr {
         let loc = self.loc();
+        // A proc in a macro's code keeps resolving the code spliced into it
+        // where the macro was called.
+        let (base_loc, site) = (self.frame().loc, self.frame().site);
         let ctx = self.body_ctx();
         let expected_sig = expected.and_then(|t| match self.types.kind(t) {
             TyKind::Proc(sig) => Some(sig.clone()),
@@ -591,7 +599,7 @@ impl<'a> Checker<'a> {
         let c_name = format!("{prefix}__proc_{}", self.lambda_count);
         let mut func = self.new_function_shell("proc".into(), c_name, ret, span);
         self.body.frames.push(Frame {
-            loc,
+            loc: base_loc,
             scopes: Vec::new(),
             ret,
             self_ty: None,
@@ -602,6 +610,7 @@ impl<'a> Checker<'a> {
             no_bounds,
             is_proc: true,
             decl: None,
+            site,
         });
         self.body.exits.push(Exit::Function { frame: 0 });
         self.begin_block();
@@ -702,6 +711,16 @@ impl<'a> Checker<'a> {
             self.undefined(name, arg.value.span, candidates, "method");
             return ir::Expr::new(ExprKind::Zero, unknown);
         };
+        if self.is_macro(decl) {
+            self.report(
+                Diagnostic::error(codes::NOT_A_VALUE, format!("the macro `{name}` cannot be used as a proc"))
+                    .primary(arg.value.span, "a macro runs while compiling and leaves code behind")
+                    .secondary(self.decls[decl.0 as usize].span, "declared as a `macro def` here")
+                    .note("a proc is a method the program calls while it runs; a macro has no such method")
+                    .help(format!("call `{name}` where its code should go, or write a `def` that a proc can name")),
+            );
+            return ir::Expr::new(ExprKind::Zero, unknown);
+        }
         let sig = self.fn_sig(decl);
         if sig.block.is_some() || sig.receiver.is_some() {
             self.report(

@@ -10,6 +10,7 @@ mod flow;
 mod generics;
 mod inline;
 mod items;
+mod macros;
 mod matrix;
 mod members;
 mod overloads;
@@ -241,10 +242,16 @@ pub(crate) struct Checker<'a> {
     /// Each source file's display name and text, for `caller_location` at
     /// compile time.
     pub file_positions: HashMap<FileId, (String, std::sync::Arc<str>)>,
+    /// Owns the code macros generate, which lives as long as the input's
+    /// syntax (see `macros.rs`).
+    pub generated: &'a typed_arena::Arena<Vec<ast::Stmt>>,
+    /// Macro templates, expansions and their virtual files.
+    pub macros: macros::MacroState,
 }
 
 /// Checks a whole program and lowers it to IR.
 pub fn check_program(input: &ProgramInput) -> (ir::Program, Diagnostics) {
+    let generated = typed_arena::Arena::new();
     let mut checker = Checker {
         input,
         diags: Diagnostics::new(),
@@ -304,8 +311,11 @@ pub fn check_program(input: &ProgramInput) -> (ir::Program, Diagnostics) {
             .iter()
             .flat_map(|p| p.files.iter().map(|f| (f.ast.file, f.text.clone())))
             .collect(),
+        generated: &generated,
+        macros: Default::default(),
     };
     checker.init_file_positions();
+    checker.init_macro_files();
     checker.collect();
     let main = checker.find_main();
     checker.check_all_roots();
@@ -321,6 +331,7 @@ pub fn check_program(input: &ProgramInput) -> (ir::Program, Diagnostics) {
             .map(|(i, _)| FnId(i as u32)),
     );
     checker.check_comptime_only(&roots);
+    let expansions = checker.expansion_files();
     let functions = checker.functions.into_iter().map(|f| f.expect("every queued function is lowered")).collect();
     let mut c = cimport::CBuild::default();
     for p in &input.packages {
@@ -344,6 +355,7 @@ pub fn check_program(input: &ProgramInput) -> (ir::Program, Diagnostics) {
         embedded_files: checker.embedded_files,
         checks: ir::Checks { bounds: input.options.bounds_checks, overflow: input.options.overflow_checks },
         debug: input.options.debug,
+        expansions,
     };
     let mut diags = checker.diags;
     diags.sort();
@@ -425,6 +437,13 @@ impl<'a> Checker<'a> {
         for i in 0..count {
             let decl = &self.decls[i];
             let check = decl.loc.pkg == PackageId(0) || self.input.options.check_all_packages;
+            if check && matches!(decl.kind, DeclKind::Fn(f) if f.is_macro) {
+                // A macro's body is checked even if nothing calls it.
+                if self.check_macro(DeclId(i as u32)) {
+                    self.fn_instance(DeclId(i as u32));
+                }
+                continue;
+            }
             if check && matches!(decl.kind, DeclKind::Fn(f) if !f.is_macro) {
                 self.fn_sig(DeclId(i as u32));
             }
@@ -475,9 +494,19 @@ impl<'a> Checker<'a> {
 
     fn drain_queue(&mut self) {
         while let Some(pending) = self.queue.pop_front() {
-            let func = self.lower_function(pending.decl, pending.subst, pending.origin);
-            self.functions[pending.id.0 as usize] = Some(func);
+            self.lower_pending(pending);
         }
+    }
+
+    /// Lowers a queued function, remembering whether its body had errors
+    /// (a macro with errors never runs).
+    pub(crate) fn lower_pending(&mut self, pending: PendingFn) {
+        let errors = self.diags.error_count();
+        let func = self.lower_function(pending.decl, pending.subst, pending.origin);
+        if self.diags.error_count() > errors {
+            self.macros.failed.insert(pending.id);
+        }
+        self.functions[pending.id.0 as usize] = Some(func);
     }
 
     /// Returns names visible at package level for "did you mean" hints.

@@ -1,0 +1,13 @@
+error[E0205]: `twice` is private to package `tools`
+ --> tests/ui/macro_private/main.wid:7:11
+  |
+7 |   p tools.twice(2)
+  |           ^^^^^ not visible from here
+ ::: tests/ui/macro_private/tools/tools.wid:1:19
+  |
+1 | private macro def twice(e: Code) -> Code
+  |                   ----- declared `private` here
+help: use a public method of `tools` instead, or remove `private` from the declaration
+  = see `wid explain E0205`
+
+error: could not compile due to 1 error

@@ -230,6 +230,15 @@ impl<'a> Checker<'a> {
     fn collect_item(&mut self, item: &'a ast::Item, loc: DeclLoc, owner: Option<DeclId>) {
         self.check_item_attributes(item);
         let (name, span, kind) = match &item.kind {
+            ItemKind::Def(f) if f.is_macro && owner.is_some() => {
+                self.report(
+                    Diagnostic::error(codes::UNEXPECTED_TOKEN, "a `macro def` belongs at the top level of a file")
+                        .primary(f.name.span, "a macro inside a type")
+                        .note("macros are package members, called like `name(…)` or `pkg.name(…)`")
+                        .help("move the `macro def` out of this declaration"),
+                );
+                return;
+            }
             ItemKind::Def(f) if owner.is_some() && f.params.is_empty() && matches!(f.name.as_str(), "-" | "~") => {
                 (Name::new(&format!("{}@", f.name.as_str())), f.name.span, DeclKind::Fn(f))
             }
@@ -246,9 +255,10 @@ impl<'a> Checker<'a> {
                     self.report(
                         Diagnostic::error(
                             codes::MACRO_FAILED,
-                            format!("`{text}` cannot expand: macros cannot run yet"),
+                            format!("`{text}` cannot expand: macro calls among declarations don't run yet"),
                         )
                         .primary(expr.span, "a macro call inside a type")
+                        .note("macro calls expand in method bodies; declaration-level expansion is not implemented yet")
                         .help("write the methods out, for example `def hp = @hp` for a reader"),
                     );
                 } else {
@@ -552,7 +562,11 @@ impl<'a> Checker<'a> {
         let ctx = super::ty::TyCtx { loc: d.loc, self_ty: owner_ty, subst };
         let mut params = Vec::new();
         for p in &f.params {
-            let ty = self.resolve_type(&p.ty, &ctx);
+            let mut ty = self.resolve_type(&p.ty, &ctx);
+            // A macro's `*names: T` collects its arguments into a `[]T`.
+            if p.splat && f.is_macro {
+                ty = self.types.slice(ty);
+            }
             params.push(ParamSig { name: p.name.name, ty, span: p.span });
         }
         let block = f.block.as_ref().and_then(|b| self.block_sig(b, &ctx));

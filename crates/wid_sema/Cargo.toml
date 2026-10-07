@@ -8,6 +8,8 @@ license.workspace = true
 [dependencies]
 wid_diagnostics.workspace = true
 wid_syntax.workspace = true
+# Owns the code macros generate for as long as the checker borrows syntax.
+typed-arena = "2.0.2"
 
 [lints]
 workspace = true

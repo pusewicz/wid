@@ -669,9 +669,14 @@ impl<'p> Gen<'p> {
     fn zero_value(&mut self, ty: TyId) -> String {
         match self.p.types.kind(self.p.types.base(ty)) {
             TyKind::Bool => "false".into(),
-            TyKind::Int(_) | TyKind::Enum(_) | TyKind::Rune | TyKind::Error | TyKind::TypeId | TyKind::Type => {
-                "0".into()
-            }
+            TyKind::Int(_)
+            | TyKind::Enum(_)
+            | TyKind::Rune
+            | TyKind::Error
+            | TyKind::TypeId
+            | TyKind::Type
+            | TyKind::Code
+            | TyKind::Symbol => "0".into(),
             TyKind::Float(FloatTy::F32) => "0.0f".into(),
             TyKind::Float(FloatTy::F64) => "0.0".into(),
             TyKind::Pointer(_) | TyKind::MultiPointer(_) | TyKind::RawPtr | TyKind::CString | TyKind::Proc(_) => {
@@ -1012,7 +1017,12 @@ impl<'p> Gen<'p> {
                 let v = self.expr(&args[0]);
                 format!("wid_string_from_cstring({})", strip_parens(&v))
             }
-            Builtin::TypeName | Builtin::TypeSize | Builtin::TypeAlign | Builtin::TypeFields => self.zero_value(ty),
+            Builtin::TypeName
+            | Builtin::TypeSize
+            | Builtin::TypeAlign
+            | Builtin::TypeFields
+            | Builtin::Quote { .. }
+            | Builtin::ToSymbol => self.zero_value(ty),
             Builtin::StringCmp => {
                 let a = self.expr(&args[0]);
                 let b = self.expr(&args[1]);

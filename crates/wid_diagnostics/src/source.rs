@@ -4,8 +4,44 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Identifies a file registered in a [`SourceMap`].
+///
+/// Ids from [`FileId::EXPANSION_BASE`] up name macro expansions rather than
+/// files on disk; see [`Expansion`].
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default)]
 pub struct FileId(pub u32);
+
+impl FileId {
+    /// The first id that names a macro expansion.
+    pub const EXPANSION_BASE: u32 = 1 << 31;
+
+    /// The id of expansion number `index` of [`SourceMap::set_expansions`].
+    pub fn expansion(index: u32) -> FileId {
+        FileId(Self::EXPANSION_BASE | index)
+    }
+
+    /// For an expansion's id, its number; `None` for a real file.
+    pub fn expansion_index(self) -> Option<u32> {
+        self.0.checked_sub(Self::EXPANSION_BASE)
+    }
+}
+
+/// Code that a macro call generated.
+///
+/// Generated code is a copy of the macro's `quote`, so its spans have the
+/// offsets of the `quote` in the macro's file. They use the expansion's own
+/// [`FileId`] instead of that file's, which keeps the call that generated
+/// them: [`SourceMap::file`] resolves the id to the macro's file, and
+/// [`SourceMap::expansion_chain`] lists the calls that led to a span.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Expansion {
+    /// The file the code's text comes from: the macro's file, or, for a
+    /// macro that generated code itself generated, another expansion.
+    pub template: FileId,
+    /// The macro call.
+    pub call_site: Span,
+    /// The macro, as the call names it (`twice`, `lib.twice`).
+    pub name: String,
+}
 
 /// A half-open byte range `start..end` inside one file.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default, PartialOrd, Ord)]
@@ -163,7 +199,12 @@ impl SourceFile {
 #[derive(Debug, Default)]
 pub struct SourceMap {
     files: Vec<SourceFile>,
+    expansions: Vec<Expansion>,
 }
+
+/// How many expansions [`SourceMap::expansion_chain`] follows at most; the
+/// checker stops expanding long before.
+const MAX_CHAIN: usize = 4096;
 
 impl SourceMap {
     /// Creates an empty source map.
@@ -178,9 +219,50 @@ impl SourceMap {
         id
     }
 
-    /// Returns the file with the given id.
+    /// Registers the macro expansions of a check, replacing any earlier
+    /// ones: entry `i` is the file [`FileId::expansion`]`(i)`.
+    pub fn set_expansions(&mut self, expansions: Vec<Expansion>) {
+        self.expansions = expansions;
+    }
+
+    /// The expansion an id names, if it names one.
+    pub fn expansion(&self, id: FileId) -> Option<&Expansion> {
+        self.expansions.get(id.expansion_index()? as usize)
+    }
+
+    /// The macro calls that generated the code at `span`, innermost first:
+    /// the call whose expansion holds `span`, then the call that generated
+    /// that call, and so on. Empty for code written in a file.
+    pub fn expansion_chain(&self, span: Span) -> Vec<&Expansion> {
+        let mut chain = Vec::new();
+        let mut file = span.file;
+        while let Some(e) = self.expansion(file) {
+            if chain.len() >= MAX_CHAIN {
+                break;
+            }
+            chain.push(e);
+            file = e.call_site.file;
+        }
+        chain
+    }
+
+    /// The real file an id stands for: the file itself, or for an
+    /// expansion, the file its code was copied from.
+    pub fn real_file(&self, id: FileId) -> FileId {
+        let mut id = id;
+        for _ in 0..MAX_CHAIN {
+            match self.expansion(id) {
+                Some(e) => id = e.template,
+                None => break,
+            }
+        }
+        id
+    }
+
+    /// Returns the file with the given id. An expansion's id gives the file
+    /// its code was copied from.
     pub fn file(&self, id: FileId) -> &SourceFile {
-        &self.files[id.0 as usize]
+        &self.files[self.real_file(id).0 as usize]
     }
 
     /// Returns every registered file.

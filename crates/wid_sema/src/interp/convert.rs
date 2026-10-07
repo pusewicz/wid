@@ -103,6 +103,18 @@ impl Conv<'_> {
                     "use the information you need from it instead, like `t.name` or `t.size`",
                 ));
             }
+            TyKind::Symbol => {
+                return Err(self.escape(
+                    "a `Symbol`, which exists only at compile time",
+                    "use its name as a string instead, like `name.to_s`",
+                ));
+            }
+            TyKind::Code => {
+                return Err(self.escape(
+                    "a `Code` value, which exists only while macros run",
+                    "return the code from a `macro def`, and call the macro where the code should go",
+                ));
+            }
             TyKind::String => {
                 let len = i64_at(v, 8).max(0) as u64;
                 let bytes = if len == 0 { Vec::new() } else { self.read(u64::from_le_bytes(word(v)), len)? };

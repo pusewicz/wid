@@ -1,0 +1,25 @@
+# Expansions nest at most 64 deep, and a build runs at most 65,536.
+
+# Its code calls itself with nothing to stop it.
+macro def forever(n: Int) -> Code
+  quote do
+    forever(#{n + 1})
+  end
+end
+
+# Each call makes two more: 2^17 calls in all.
+macro def fan(n: Int) -> Code
+  if n == 0
+    return quote do
+      1
+    end
+  end
+  quote do
+    fan(#{n - 1}) + fan(#{n - 1})
+  end
+end
+
+def main
+  forever(0)
+  p fan(16)
+end

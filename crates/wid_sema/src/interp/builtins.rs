@@ -307,6 +307,14 @@ impl<'c> Interp<'c> {
                     _ => self.type_fields(t, span),
                 }
             }
+            B::Quote { template } => self.quote(template, args, span),
+            B::ToSymbol => {
+                let s = self.eval(arg(0))?;
+                let bytes = self.string_bytes(&s)?;
+                let text = String::from_utf8(bytes)
+                    .map_err(|_| self.fail_at(span, "`to_sym` needs a string of valid UTF-8"))?;
+                Ok(u64::from(wid_syntax::Name::new(&text).index()).to_le_bytes().to_vec())
+            }
         }
     }
 

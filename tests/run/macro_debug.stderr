@@ -1,0 +1,2 @@
+panic: checked_div: the divisor is zero
+  at tests/run/macro_debug.wid:5:5 in `main`

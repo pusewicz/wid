@@ -46,12 +46,15 @@ pub(crate) const PRIMITIVE_NAMES: &[&str] = &[
     "Logger",
     "Never",
     "Type",
+    "Code",
+    "Symbol",
 ];
 
 /// Builtin types a package may declare its own type under: library types
 /// that are predeclared, as opposed to the language's own types. Inside such
 /// a package the name means the package's type.
-pub(crate) const SHADOWABLE_NAMES: &[&str] = &["Context", "Allocator", "AllocMode", "Location", "Logger", "Type"];
+pub(crate) const SHADOWABLE_NAMES: &[&str] =
+    &["Context", "Allocator", "AllocMode", "Location", "Logger", "Type", "Code", "Symbol"];
 
 /// Whether a package-level declaration can't use `name`, because it is one
 /// of the language's builtin types (`Int`, `String`, `Bool`, …).
@@ -137,6 +140,8 @@ impl<'a> Checker<'a> {
             "RawPtr" => TyKind::RawPtr,
             "TypeId" => TyKind::TypeId,
             "Type" => TyKind::Type,
+            "Code" => TyKind::Code,
+            "Symbol" => TyKind::Symbol,
             "Any" => TyKind::Any,
             "Error" => TyKind::Error,
             "Never" => TyKind::Never,
@@ -170,8 +175,10 @@ impl<'a> Checker<'a> {
     fn resolve_type_inner(&mut self, texpr: &ast::TypeExpr, ctx: &TyCtx) -> TyId {
         let pointee = std::mem::take(&mut self.pointee);
         match &texpr.kind {
-            // Splices exist only inside `quote`, which is never resolved.
+            // A splice outside generated code is a parse error, reported.
             T::Error | T::Splice(_) => self.types.unknown(),
+            T::Spliced(id) if (*id as usize) < self.types.len() => TyId(*id),
+            T::Spliced(_) => self.types.unknown(),
             T::Path { segments, args } => {
                 let ty = self.resolve_path_type(segments, args, texpr.span, ctx);
                 if !pointee {
@@ -235,7 +242,8 @@ impl<'a> Checker<'a> {
                 } {
                     return self.types.intern(TyKind::Array(elem, 0));
                 }
-                match bound.or_else(|| self.eval_const(len, ctx.loc)) {
+                let loc = self.virtual_file(len.span.file).map_or(ctx.loc, |v| v.loc);
+                match bound.or_else(|| self.eval_const(len, loc)) {
                     Some(ConstValue::Int(n)) if n >= 0 => self.types.intern(TyKind::Array(elem, n as u64)),
                     Some(ConstValue::Int(_)) => {
                         self.report(
@@ -343,6 +351,16 @@ impl<'a> Checker<'a> {
         span: Span,
         ctx: &TyCtx,
     ) -> TyId {
+        // A type a macro's own code names resolves where the macro is
+        // defined; one spliced from the call site, where it was called.
+        let at_macro;
+        let ctx = match segments.first().and_then(|s| self.virtual_file(s.span.file)) {
+            Some(v) => {
+                at_macro = TyCtx { loc: v.loc, ..ctx.clone() };
+                &at_macro
+            }
+            None => ctx,
+        };
         let (pkg, name) = match segments {
             [only] => (ctx.loc.pkg, *only),
             [pkg, name] => match self.lookup_import(ctx.loc, pkg.name) {
@@ -488,7 +506,7 @@ impl<'a> Checker<'a> {
         }
         if segments.len() == 1
             && self.body.frames.last().is_some_and(|f| f.loc.pkg == pkg)
-            && let Some(var) = self.find_var(name.name)
+            && let Some(var) = self.find_var_at(name.name, name.span)
         {
             var.read = true;
             let (var_ty, var_span) = (var.ty, var.span);

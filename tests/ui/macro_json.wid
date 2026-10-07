@@ -1,0 +1,18 @@
+# JSON output for an error in code macros generated: `expansions` lists the
+# macro calls that led to it, innermost first.
+macro def declare_count -> Code
+  quote do
+    count: Int = "zero"
+    count
+  end
+end
+
+macro def outer -> Code
+  quote do
+    declare_count
+  end
+end
+
+def main
+  p outer
+end

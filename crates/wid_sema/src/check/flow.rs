@@ -41,7 +41,7 @@ impl<'a> Checker<'a> {
     /// Returns the optional local an expression names, if any.
     fn optional_local(&mut self, e: &ast::Expr) -> Option<LocalId> {
         let E::Ident(name) = e.kind else { return None };
-        let var = self.find_var(name)?;
+        let var = self.find_var_at(name, e.span)?;
         let (local, ty) = (var.local, var.ty);
         self.types.is_nilable(ty).then_some(local)
     }
@@ -647,7 +647,7 @@ impl<'a> Checker<'a> {
         let unknown = self.types.unknown();
         for t in targets {
             if let E::Ident(name) = t.kind
-                && self.find_var(name).is_none()
+                && self.find_var_at(name, t.span).is_none()
             {
                 let local = self.declare_var(name, unknown, t.span, true);
                 self.emit(Stmt::Let { local, init: None });
@@ -658,7 +658,7 @@ impl<'a> Checker<'a> {
     /// Returns the type of an existing assignment target, if it has one.
     fn target_type(&mut self, target: &ast::Expr) -> Option<TyId> {
         match &target.kind {
-            E::Ident(n) => self.find_var(*n).map(|v| v.ty),
+            E::Ident(n) => self.find_var_at(*n, target.span).map(|v| v.ty),
             _ => None,
         }
     }
@@ -672,7 +672,7 @@ impl<'a> Checker<'a> {
                 }
                 return;
             }
-            let existing = self.find_var(name).map(|v| (v.local, v.ty, v.indirect));
+            let existing = self.find_var_at(name, target.span).map(|v| (v.local, v.ty, v.indirect));
             match existing {
                 Some((local, ty, indirect)) => {
                     let v = self.coerce(value, ty, target.span);

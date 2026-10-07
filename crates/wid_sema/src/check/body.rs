@@ -27,6 +27,14 @@ pub(crate) struct Var {
     pub address_taken: bool,
     /// The local holds a pointer; reads and writes go through it (`for &x`).
     pub indirect: bool,
+    /// The macro expansion whose own code declared the variable, or `None`
+    /// for code written in a file. Only code of the same expansion sees it
+    /// (hygiene; see `check/macros.rs`).
+    pub mark: Option<u32>,
+    /// A parameter of a method a macro generated: part of the method's
+    /// interface, so code spliced in from the macro's call site sees it
+    /// too.
+    pub open: bool,
 }
 
 /// A lexical scope.
@@ -61,6 +69,11 @@ pub(crate) struct Frame {
     pub is_proc: bool,
     /// The method whose body this frame lowers, if any.
     pub decl: Option<super::DeclId>,
+    /// While code a macro generated is being lowered, the virtual file its
+    /// spans are in (an index into `MacroState::files`); `None` for code
+    /// written in a file. It decides where names resolve ([`Checker::loc`])
+    /// and which variables are visible ([`Checker::find_var`]).
+    pub site: Option<u32>,
 }
 
 /// An entry of the dynamic exit stack.
@@ -147,8 +160,30 @@ impl<'a> Checker<'a> {
         self.body.frames.last_mut().expect("a frame is active")
     }
 
+    /// Where the names of the code being lowered resolve: the frame's
+    /// package and file, or for a macro's own code, the macro's.
     pub fn loc(&self) -> DeclLoc {
-        self.frame().loc
+        let frame = self.frame();
+        frame.site.and_then(|v| self.macros.files.get(v as usize)).map_or(frame.loc, |v| v.loc)
+    }
+
+    /// Where a name written at `span` resolves: like [`Checker::loc`], but
+    /// for the name's own span, which differs from the code around it for
+    /// a name spliced into a macro's code.
+    pub fn loc_at(&self, span: Span) -> DeclLoc {
+        if let Some(v) = self.virtual_file(span.file) {
+            return v.loc;
+        }
+        match self.body.frames.last() {
+            Some(_) if span == Span::default() => self.loc(),
+            Some(frame) => frame.loc,
+            None => self
+                .macros
+                .file_locs
+                .get(&span.file)
+                .copied()
+                .unwrap_or(DeclLoc { pkg: crate::input::PackageId(0), file: 0 }),
+        }
     }
 
     /// The type context of the code being lowered.
@@ -203,9 +238,11 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Declares a variable in the innermost scope.
+    /// Declares a variable in the innermost scope. `span` is the name's: it
+    /// decides which code sees the variable (see [`Var::mark`]).
     pub fn declare_var(&mut self, name: Name, ty: TyId, span: Span, allow_unused: bool) -> LocalId {
         let local = self.new_local(Some(name), ty);
+        let mark = self.mark_at(span);
         let scope = self.frame_mut().scopes.last_mut().expect("a scope is open");
         scope.vars.push(Var {
             name,
@@ -218,14 +255,80 @@ impl<'a> Checker<'a> {
             decl_stmt: None,
             address_taken: false,
             indirect: false,
+            mark,
+            open: false,
         });
         local
     }
 
-    /// Finds a variable by name in the current frame, innermost first.
+    /// Declares a parameter of the method being lowered. A generated
+    /// method's parameters are open to the macro's caller (see
+    /// [`Var::open`]).
+    pub fn declare_param(&mut self, name: Name, ty: TyId, span: Span) -> LocalId {
+        let local = self.declare_var(name, ty, span, true);
+        if let Some(var) = self.frame_mut().scopes.last_mut().and_then(|s| s.vars.last_mut()) {
+            var.open = var.mark.is_some();
+        }
+        local
+    }
+
+    /// Finds a variable by name in the current frame, innermost first, as
+    /// the code being lowered sees it.
     pub fn find_var(&mut self, name: Name) -> Option<&mut Var> {
+        let mark = self.site_mark();
+        self.find_marked_var(name, mark)
+    }
+
+    /// Finds the variable a name written at `span` refers to.
+    pub fn find_var_at(&mut self, name: Name, span: Span) -> Option<&mut Var> {
+        let mark = self.mark_at(span);
+        self.find_marked_var(name, mark)
+    }
+
+    fn find_marked_var(&mut self, name: Name, mark: Option<u32>) -> Option<&mut Var> {
+        let macros = &self.macros;
+        // The hygiene mark of the code that called expansion `e`.
+        let caller = |e: u32| {
+            let call = macros.expansions.get(e as usize)?.call_site;
+            macros.files.get(call.file.expansion_index()? as usize).map(|v| v.expansion)
+        };
+        let visible = |v: &Var| v.mark == mark || (v.open && v.mark.and_then(caller) == mark);
         let frame = self.body.frames.last_mut()?;
-        frame.scopes.iter_mut().rev().find_map(|s| s.vars.iter_mut().rev().find(|v| v.name == name))
+        frame.scopes.iter_mut().rev().find_map(|s| s.vars.iter_mut().rev().find(|v| v.name == name && visible(v)))
+    }
+
+    /// The hygiene mark of the code being lowered: its macro expansion.
+    fn site_mark(&self) -> Option<u32> {
+        let site = self.body.frames.last()?.site?;
+        self.macros.files.get(site as usize).map(|v| v.expansion)
+    }
+
+    /// The hygiene mark of code written at `span`.
+    pub fn mark_at(&self, span: Span) -> Option<u32> {
+        if span == Span::default() {
+            return self.site_mark();
+        }
+        self.virtual_file(span.file).map(|v| v.expansion)
+    }
+
+    /// Makes the code at `span` the code being lowered (see [`Frame::site`])
+    /// and returns what to restore with [`Checker::leave_site`].
+    pub fn enter_site(&mut self, span: Span) -> Option<Option<u32>> {
+        if span == Span::default() {
+            return None;
+        }
+        let site = span.file.expansion_index().filter(|i| (*i as usize) < self.macros.files.len());
+        let frame = self.body.frames.last_mut()?;
+        Some(std::mem::replace(&mut frame.site, site))
+    }
+
+    /// Undoes [`Checker::enter_site`].
+    pub fn leave_site(&mut self, saved: Option<Option<u32>>) {
+        if let Some(site) = saved
+            && let Some(frame) = self.body.frames.last_mut()
+        {
+            frame.site = site;
+        }
     }
 
     /// Returns true when an optional local is known to hold a value here.
@@ -402,6 +505,7 @@ impl<'a> Checker<'a> {
             self.instance_stack.push((display.clone(), origin, body_span));
         }
         let saved = std::mem::take(&mut self.body);
+        let saved_macro = std::mem::replace(&mut self.macros.in_macro, f.is_macro);
         self.body.frames.push(Frame {
             loc: d.loc,
             scopes: Vec::new(),
@@ -414,6 +518,7 @@ impl<'a> Checker<'a> {
             no_bounds: d.item.has_attr("no_bounds_check"),
             is_proc: false,
             decl: Some(decl),
+            site: None,
         });
         self.body.exits.push(Exit::Function { frame: 0 });
         self.begin_block();
@@ -425,7 +530,7 @@ impl<'a> Checker<'a> {
             func.params.push(local);
         }
         for p in &sig.params {
-            let local = self.declare_var(p.name, p.ty, p.span, true);
+            let local = self.declare_param(p.name, p.ty, p.span);
             func.params.push(local);
         }
         let ret = sig.ret;
@@ -446,7 +551,10 @@ impl<'a> Checker<'a> {
                         .help("end the method with `panic`, an endless `loop`, or a call to another `-> Never` method"),
                     );
                     self.emit(Stmt::Unreachable);
-                } else if wants_value && !self.current_block_diverges() {
+                } else if wants_value
+                    && !self.current_block_diverges()
+                    && !matches!(stmts.last(), Some(ast::Stmt { kind: ast::StmtKind::Error, .. }))
+                {
                     let ret_name = self.types.display(ret);
                     let span = match stmts.last() {
                         Some(s) => s.span,
@@ -510,6 +618,7 @@ impl<'a> Checker<'a> {
         let block = self.end_block();
         self.body.exits.pop();
         let body = std::mem::replace(&mut self.body, saved);
+        self.macros.in_macro = saved_macro;
         if generic_context {
             self.instance_stack.pop();
         }

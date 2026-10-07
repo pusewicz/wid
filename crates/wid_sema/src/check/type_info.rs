@@ -128,7 +128,9 @@ impl<'a> Checker<'a> {
             }
             E::Member { recv, name, safe: false } => {
                 let pkg = match recv.kind {
-                    E::Ident(p) if self.find_var(p).is_none() => self.lookup_import(self.loc(), p),
+                    E::Ident(p) if self.find_var_at(p, recv.span).is_none() => {
+                        self.lookup_import(self.loc_at(recv.span), p)
+                    }
                     E::Const(p) => self.lookup_import(self.loc(), p),
                     _ => None,
                 };

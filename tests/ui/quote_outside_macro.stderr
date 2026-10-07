@@ -1,0 +1,20 @@
+error[E0910]: `quote` only works inside a `macro def`
+ --> tests/ui/quote_outside_macro.wid:4:3
+  |
+4 |   quote do
+  |   ^^^^^^^^ this is not inside a macro
+  = note: a `quote` builds code for a macro to return, and the macro's caller gets that code in place of the call
+help: write the code directly
+  |   x * 2
+  = see `wid explain E0910`
+
+error[E0910]: `quote` only works inside a `macro def`
+  --> tests/ui/quote_outside_macro.wid:10:10
+   |
+10 |   code = quote do
+   |          ^^^^^^^^ this is not inside a macro
+   = note: a `quote` builds code for a macro to return, and the macro's caller gets that code in place of the call
+help: write the code directly, or move the `quote` into a `macro def … -> Code` and call the macro where the code should go
+   = see `wid explain E0910`
+
+error: could not compile due to 2 errors

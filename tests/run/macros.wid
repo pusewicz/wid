@@ -1,0 +1,229 @@
+# Macros in expressions and statements: arguments by kind, splices by
+# value, hygiene, and macros whose code calls macros.
+
+struct Vec2
+  x: F32
+  y: F32
+end
+
+enum Dir
+  north
+  south
+end
+
+# An expression macro: its code is the call's value.
+macro def twice(e: Code) -> Code
+  quote do
+    #{e} * 2
+  end
+end
+
+# A statement macro. `tmp` is the macro's own: it never touches a caller's
+# `tmp`. The names spliced from symbols are the caller's variables.
+macro def swap(a: Symbol, b: Symbol) -> Code
+  quote do
+    tmp = #{a}
+    #{a} = #{b}
+    #{b} = tmp
+  end
+end
+
+# The code of `e` runs where the quote puts it: once here, even though the
+# macro body mentions `e` twice.
+macro def logged(e: Code) -> Code
+  quote do
+    value = #{e}
+    puts "logged #{value}"
+    value
+  end
+end
+
+def tick(counter: ^Int) -> Int
+  counter^ += 1
+  counter^
+end
+
+# `*names: Symbol` collects the remaining arguments; the code is a `[]Code`
+# built in a loop.
+macro def zeroed(*names: Symbol) -> Code
+  decls = [dynamic]Code.new
+  for name in names
+    decls << quote do
+      #{name} = 0
+    end
+  end
+  quote do
+    #{decls}
+  end
+end
+
+# Numbers, strings and `Bool`s splice as literals; `:#{name}` makes a
+# symbol literal from a `Symbol` (here one made from a string).
+macro def literals(name: String) -> Code
+  quote do
+    d: Dir = :#{name.to_sym}
+    p #{42}, #{-7}, #{2.5}, #{true}, #{"text"}, d
+  end
+end
+
+# A `Type` splices where a type goes, and as a value: `#{t}.new(…)`.
+macro def zero_of(t: Type) -> Code
+  quote do
+    v: #{t} = {}
+    v
+  end
+end
+
+macro def make(t: Type) -> Code
+  quote do
+    #{t}.new(x: 1.0, y: 2.0)
+  end
+end
+
+macro def size_in_bits(t: Type) -> Code
+  bits = t.size * 8
+  quote do
+    #{bits}
+  end
+end
+
+macro def convert(e: Code, t: Type) -> Code
+  quote do
+    #{e}.to(#{t})
+  end
+end
+
+macro def bytes_of(t: Type) -> Code
+  quote do
+    size_of(#{t})
+  end
+end
+
+# A macro calls ordinary methods while it runs.
+def banner_text(name: String) -> String = "== #{name} =="
+
+macro def banner(name: Symbol) -> Code
+  text = banner_text(name.to_s)
+  quote do
+    puts #{text}
+  end
+end
+
+# Macros compare symbols and build names.
+macro def pick(which: Symbol) -> Code
+  if which == :first
+    return quote do
+      "the first"
+    end
+  end
+  quote do
+    "something else"
+  end
+end
+
+macro def getter_name(field: Symbol) -> Code
+  name = "get_#{field.to_s}".to_sym
+  quote do
+    #{name}
+  end
+end
+
+def get_hp -> Int = 75
+
+# Code a macro generates may call macros.
+macro def quadruple(e: Code) -> Code
+  quote do
+    twice(twice(#{e}))
+  end
+end
+
+# A `[]Code` splices as call arguments too.
+macro def print_all(*items: Code) -> Code
+  quote do
+    p #{items}
+  end
+end
+
+# A `quote` with nothing in it is no code.
+macro def nothing -> Code
+  quote do
+  end
+end
+
+# The loop variable is the macro's own: `body` can't see it.
+macro def times(n: Int, body: Code) -> Code
+  quote do
+    for _i in 0...#{n}
+      #{body}
+    end
+  end
+end
+
+# Here the caller names the loop variable, so `body` can use it.
+macro def each_index(name: Symbol, n: Int, body: Code) -> Code
+  quote do
+    for #{name} in 0...#{n}
+      #{body}
+    end
+  end
+end
+
+# Generated code runs where the call is: `return` leaves the caller.
+macro def bail_if(cond: Code, value: Code) -> Code
+  quote do
+    if #{cond}
+      return #{value}
+    end
+  end
+end
+
+def checked(x: Int) -> Int
+  bail_if x < 0, -1
+  x * 10
+end
+
+# A generated `defer` runs when the caller's block ends.
+macro def with_note(body: Code) -> Code
+  quote do
+    defer puts("note: done")
+    #{body}
+  end
+end
+
+def noted
+  with_note puts("working")
+  puts "after"
+end
+
+def main
+  puts twice(21)
+  x = 1
+  y = 2
+  tmp = 99
+  swap :x, :y
+  p x, y, tmp
+
+  count = 0
+  p logged(tick(&count)), count
+
+  zeroed :hits, :misses
+  hits += 3
+  p hits, misses
+
+  literals "south"
+  p zero_of(Int), zero_of(F32), zero_of(Vec2)
+  p make(Vec2)
+  p size_in_bits(Vec2), convert(3, F32), bytes_of(I16)
+  banner :report
+  puts pick(:first), pick(:second)
+  p getter_name(:hp)
+  p quadruple(5)
+  print_all 1, "two", 3.0
+  nothing
+  i = 100
+  times 2, puts(i)
+  each_index :k, 2, puts(k)
+  p checked(-5), checked(3)
+  noted
+  puts "done"
+end

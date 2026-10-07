@@ -41,6 +41,18 @@ pub(crate) enum CaptureKind {
     Comptime,
 }
 
+/// The outcome of running compile-time code in the interpreter.
+pub(crate) struct Run {
+    /// The bytes of the result, or why the code stopped.
+    pub result: Result<Vec<u8>, Failure>,
+    /// What `puts`, `print` and `p` wrote.
+    pub output: Vec<u8>,
+    /// The `quote`s the code ran, for a macro.
+    pub fragments: Vec<interp::Fragment>,
+    /// The memory the result's pointers point into.
+    pub memory: interp::Memory,
+}
+
 /// A declaration-level `comptime if` waiting for its condition.
 #[derive(Clone, Copy)]
 pub(crate) struct PendingIf<'a> {
@@ -98,6 +110,7 @@ impl<'a> Checker<'a> {
             no_bounds: false,
             is_proc: true,
             decl: None,
+            site: None,
         });
         self.body.exits.push(Exit::Function { frame: 0 });
         self.begin_block();
@@ -142,7 +155,7 @@ impl<'a> Checker<'a> {
             let mut func = self.new_function_shell("comptime".into(), String::new(), ty, span);
             func.locals = body.locals;
             func.body = Some(block);
-            self.lower_needed(&func);
+            let _ = self.lower_needed(&func);
             if self.diags.error_count() > errors_before { None } else { self.run_comptime(&func, ty, span) }
         };
         self.comptime_depth -= 1;
@@ -154,17 +167,20 @@ impl<'a> Checker<'a> {
     /// the interpreter needs their IR, without the state of the code being
     /// lowered now. A function still being lowered (one whose body holds
     /// this `comptime`) stays unlowered; calling it fails at run time.
-    fn lower_needed(&mut self, root: &ir::Function) {
+    /// Returns whether a function it reaches had errors in its body.
+    pub(super) fn lower_needed(&mut self, root: &ir::Function) -> bool {
         let saved_instances = std::mem::take(&mut self.instance_stack);
         let saved_inline = std::mem::take(&mut self.inline_stack);
         let saved_bindings = std::mem::take(&mut self.owner_bindings);
         let saved_capturable = std::mem::take(&mut self.capturable);
         let saved_const = self.const_init.take();
+        let saved_macro = std::mem::take(&mut self.macros.in_macro);
         let mut seen = HashSet::new();
         let mut stack = Vec::new();
         if let Some(body) = &root.body {
             visit_block(body, &mut |e| callee(e, &mut stack));
         }
+        let mut failed = false;
         while let Some(id) = stack.pop() {
             if !seen.insert(id) {
                 continue;
@@ -172,9 +188,9 @@ impl<'a> Checker<'a> {
             if self.functions[id.0 as usize].is_none() {
                 let Some(pos) = self.queue.iter().position(|p| p.id == id) else { continue };
                 let Some(pending) = self.queue.remove(pos) else { continue };
-                let func = self.lower_function(pending.decl, pending.subst, pending.origin);
-                self.functions[id.0 as usize] = Some(func);
+                self.lower_pending(pending);
             }
+            failed |= self.macros.failed.contains(&id);
             if let Some(Some(f)) = self.functions.get(id.0 as usize)
                 && let Some(body) = &f.body
             {
@@ -186,10 +202,14 @@ impl<'a> Checker<'a> {
         self.owner_bindings = saved_bindings;
         self.capturable = saved_capturable;
         self.const_init = saved_const;
+        self.macros.in_macro = saved_macro;
+        failed
     }
 
-    /// Runs a lowered compile-time function and converts its result.
-    fn run_comptime(&mut self, func: &ir::Function, ty: TyId, span: Span) -> Option<ir::Expr> {
+    /// Runs a lowered compile-time function in the interpreter. A macro's
+    /// `Code` arguments are numbered before the run: `first_fragment` says
+    /// how many there are.
+    pub(super) fn interpret(&mut self, func: &ir::Function, span: Span, first_fragment: u64) -> Run {
         let field_info = self.prelude_struct("FieldInfo");
         let files = &self.file_positions;
         let positions = |s: Span| -> (String, u32, u32) {
@@ -204,33 +224,47 @@ impl<'a> Checker<'a> {
                 None => (String::new(), 0, 0),
             }
         };
-        let (result, output, memory) = {
-            let program = interp::Program {
-                types: &self.types,
-                functions: &self.functions,
-                globals: &self.globals,
-                errors: &self.errors,
-                positions: &positions,
-                field_info,
-            };
-            let mut it = Interp::new(program, Limits::default());
-            let result = it.run(func, span);
-            let output = std::mem::take(&mut it.output);
-            (result, output, it.into_memory())
+        let program = interp::Program {
+            types: &self.types,
+            functions: &self.functions,
+            globals: &self.globals,
+            errors: &self.errors,
+            positions: &positions,
+            field_info,
         };
-        if !output.is_empty() {
-            let text = String::from_utf8_lossy(&output).trim_end_matches('\n').to_string();
-            self.report(
-                Diagnostic::warning(codes::COMPTIME_OUTPUT, "`comptime` code printed output")
-                    .primary(span, "this ran while compiling")
-                    .note(format!("it printed:\n{text}"))
-                    .help("remove the printing once you are done debugging; compile-time output is not part of the program"),
-            );
+        let mut it = Interp::new(program, Limits::default());
+        it.first_fragment = first_fragment;
+        let result = it.run(func, span);
+        let output = std::mem::take(&mut it.output);
+        let fragments = std::mem::take(&mut it.fragments);
+        Run { result, output, fragments, memory: it.into_memory() }
+    }
+
+    /// Reports what compile-time code printed (E0909). `what` names the
+    /// code, like "`comptime` code".
+    pub(super) fn report_output(&mut self, output: &[u8], what: &str, span: Span) {
+        if output.is_empty() {
+            return;
         }
+        let text = String::from_utf8_lossy(output).trim_end_matches('\n').to_string();
+        self.report(
+            Diagnostic::warning(codes::COMPTIME_OUTPUT, format!("{what} printed output"))
+                .primary(span, "this ran while compiling")
+                .note(format!("it printed:\n{text}"))
+                .help(
+                    "remove the printing once you are done debugging; compile-time output is not part of the program",
+                ),
+        );
+    }
+
+    /// Runs a lowered compile-time function and converts its result.
+    fn run_comptime(&mut self, func: &ir::Function, ty: TyId, span: Span) -> Option<ir::Expr> {
+        let Run { result, output, memory, .. } = self.interpret(func, span, 0);
+        self.report_output(&output, "`comptime` code", span);
         let bytes = match result {
             Ok(bytes) => bytes,
             Err(failure) => {
-                self.report_failure(failure, span);
+                self.report_failure(failure, span, "`comptime` code", "while running this at compile time");
                 return None;
             }
         };
@@ -295,17 +329,19 @@ impl<'a> Checker<'a> {
         ir::Expr::new(ExprKind::ConstGlobal(id), ty)
     }
 
-    /// Reports why compile-time code stopped.
-    fn report_failure(&mut self, f: Failure, span: Span) {
+    /// Reports why compile-time code stopped. `what` names the code, like
+    /// "`comptime` code", and `running` labels `span`, the code that
+    /// started the run.
+    pub(super) fn report_failure(&mut self, f: Failure, span: Span, what: &str, running: &str) {
         let (code, title) = match f.kind {
-            FailKind::Error => (codes::COMPTIME_FAILED, format!("`comptime` code failed: {}", f.message)),
-            FailKind::Limit => (codes::COMPTIME_LIMIT, format!("`comptime` code stopped: {}", f.message)),
-            FailKind::Foreign => (codes::COMPTIME_FOREIGN, format!("`comptime` code can't call C: it {}", f.message)),
+            FailKind::Error => (codes::COMPTIME_FAILED, format!("{what} failed: {}", f.message)),
+            FailKind::Limit => (codes::COMPTIME_LIMIT, format!("{what} stopped: {}", f.message)),
+            FailKind::Foreign => (codes::COMPTIME_FOREIGN, format!("{what} can't call C: it {}", f.message)),
         };
         let at = if f.span == Span::default() { span } else { f.span };
         let mut diag = Diagnostic::error(code, title).primary(at, "failed here");
         if at != span {
-            diag = diag.secondary(span, "while running this at compile time");
+            diag = diag.secondary(span, running.to_string());
         }
         for (name, site) in f.chain.iter().skip(1) {
             if *site != Span::default() && *site != at && *site != span {
@@ -703,7 +739,7 @@ impl<'a> Checker<'a> {
     }
 
     /// A slice over compile-time-only static data.
-    fn comptime_array(&mut self, elem: TyId, elems: Vec<ir::Expr>, slice_ty: TyId) -> ir::Expr {
+    pub(super) fn comptime_array(&mut self, elem: TyId, elems: Vec<ir::Expr>, slice_ty: TyId) -> ir::Expr {
         if elems.is_empty() {
             return ir::Expr::new(ExprKind::Zero, slice_ty);
         }
@@ -768,11 +804,12 @@ impl<'a> Checker<'a> {
     // ----- compile-time-only code ------------------------------------------------------
 
     /// Marks the functions that use compile-time-only values (`Type`,
-    /// `T.fields`), or call functions that do, and reports any that the
-    /// program would run: at the run-time call that reaches them.
+    /// `Code`, `Symbol`, `T.fields`), or call functions that do, and reports
+    /// any that the program would run: at the run-time call that reaches
+    /// them.
     pub(super) fn check_comptime_only(&mut self, roots: &[FnId]) {
         let n = self.functions.len();
-        let mut direct: Vec<Option<(Span, String)>> = vec![None; n];
+        let mut direct: Vec<Option<OnlyUse>> = vec![None; n];
         let mut callers: Vec<Vec<usize>> = vec![Vec::new(); n];
         for (i, f) in self.functions.iter().enumerate() {
             let Some(f) = f else { continue };
@@ -810,8 +847,8 @@ impl<'a> Checker<'a> {
             if i >= n || !seen.insert(i) {
                 continue;
             }
-            if let Some((span, why)) = &direct[i] {
-                reports.push((i, *span, why.clone(), None));
+            if let Some(found) = &direct[i] {
+                reports.push((i, found.span, found.why.clone(), None, found.kind));
                 continue;
             }
             let Some(Some(f)) = self.functions.get(i) else { continue };
@@ -827,15 +864,15 @@ impl<'a> Checker<'a> {
                 if only[c] {
                     if reported.insert(c) {
                         let why = self.comptime_only_reason(c, &direct, &only);
-                        reports.push((i, line, display(self, c), Some((c, why))));
+                        let kind = why.kind;
+                        reports.push((i, line, display(self, c), Some((c, why)), kind));
                     }
                 } else {
                     stack.push(c);
                 }
             }
         }
-        const RUN_TIME: &str = "for type information while the program runs, use `type_info(T)`, or `type_info(x)` for the type of a value";
-        for (i, span, what, why) in reports {
+        for (i, span, what, why, kind) in reports {
             let caller = display(self, i);
             let diag = match why {
                 None => {
@@ -844,33 +881,31 @@ impl<'a> Checker<'a> {
                         format!("`{caller}` uses a compile-time-only value"),
                     )
                     .primary(span, what)
-                    .note(format!(
-                        "`{caller}` runs when the program runs, but `Type` values and reflection exist only while compiling"
-                    ));
+                    .note(format!("`{caller}` runs when the program runs, but {}", kind.lifetime()));
                     match self.fields_at_run_time(i) {
-                        Some((at, replacement)) => diag.suggest_replace(
+                        Some((at, replacement)) if kind == Only::Type => diag.suggest_replace(
                             format!("read the fields while the program runs with `{replacement}`"),
                             at,
                             replacement,
                             Applicability::MaybeIncorrect,
                         ),
-                        None => diag.help(RUN_TIME),
+                        _ => diag.help(kind.help()),
                     }
                 }
-                Some((c, (reason_span, reason))) => {
+                Some((c, reason)) => {
                     let diag =
                         Diagnostic::error(codes::COMPTIME_AT_RUNTIME, format!("`{what}` works only at compile time"))
                             .primary(span, format!("`{caller}` calls it when the program runs"))
-                            .secondary(reason_span, reason)
+                            .secondary(reason.span, reason.why)
                             .help(format!("call it while compiling instead, like `x = comptime {what}(…)`"));
                     match self.type_argument(i, c) {
-                        Some(t) => {
+                        Some(t) if kind == Only::Type => {
                             let shown = self.types.display(t);
                             diag.help(format!(
                                 "to describe `{shown}` while the program runs, use `type_info({shown})`: a `^TypeInfo` with its `name`, `size`, `align`, `fields` and more"
                             ))
                         }
-                        None => diag.help(RUN_TIME),
+                        _ => diag.help(kind.help()),
                     }
                 }
             };
@@ -919,7 +954,7 @@ impl<'a> Checker<'a> {
 
     /// Why a compile-time-only function is one: the use inside it, or the
     /// first compile-time-only function it calls.
-    fn comptime_only_reason(&self, mut i: usize, direct: &[Option<(Span, String)>], only: &[bool]) -> (Span, String) {
+    fn comptime_only_reason(&self, mut i: usize, direct: &[Option<OnlyUse>], only: &[bool]) -> OnlyUse {
         for _ in 0..64 {
             if let Some(r) = &direct[i] {
                 return r.clone();
@@ -931,35 +966,71 @@ impl<'a> Checker<'a> {
             match calls.into_iter().find(|(c, _)| only.get(c.0 as usize).copied().unwrap_or(false)) {
                 Some((c, line)) => {
                     let name = self.functions[c.0 as usize].as_ref().map(|f| f.display.clone()).unwrap_or_default();
-                    if direct[c.0 as usize].is_some() {
-                        return (line, format!("it calls `{name}`, which uses compile-time-only values"));
+                    if let Some(found) = &direct[c.0 as usize] {
+                        let why = format!("it calls `{name}`, which uses compile-time-only values");
+                        return OnlyUse { span: line, why, kind: found.kind };
                     }
                     i = c.0 as usize;
                 }
                 None => break,
             }
         }
-        (Span::default(), "it uses compile-time-only values".into())
+        OnlyUse { span: Span::default(), why: "it uses compile-time-only values".into(), kind: Only::Type }
     }
 
     /// Where a function uses a compile-time-only value, if it does.
-    fn comptime_only_use(&self, f: &ir::Function) -> Option<(Span, String)> {
-        let mut found: Option<(Span, String)> = None;
+    fn comptime_only_use(&self, f: &ir::Function) -> Option<OnlyUse> {
+        let mut found: Option<OnlyUse> = None;
         if let Some(body) = &f.body {
             visit_block(body, &mut |e| {
-                if found.is_none()
-                    && let ExprKind::Builtin { op, span, .. } = &e.kind
-                    && matches!(op, Builtin::TypeFields | Builtin::TypeName | Builtin::TypeSize | Builtin::TypeAlign)
-                {
-                    found = Some((*span, "reads a `Type`, which exists only while compiling".into()));
+                let ExprKind::Builtin { op, span, .. } = &e.kind else { return };
+                if found.is_some() {
+                    return;
                 }
+                let (why, kind) = match op {
+                    Builtin::TypeFields | Builtin::TypeName | Builtin::TypeSize | Builtin::TypeAlign => {
+                        ("reads a `Type`, which exists only while compiling", Only::Type)
+                    }
+                    Builtin::Quote { .. } => ("builds code with `quote`, which only a macro can do", Only::Code),
+                    Builtin::ToSymbol => ("makes a `Symbol`, which exists only while compiling", Only::Symbol),
+                    _ => return,
+                };
+                found = Some(OnlyUse { span: *span, why: why.into(), kind });
             });
         }
         if found.is_some() {
             return found;
         }
-        let uses_type = f.locals.iter().any(|l| self.contains_type(l.ty, 0)) || self.contains_type(f.ret, 0);
-        uses_type.then(|| (f.span, "uses `Type` values, which exist only while compiling".into()))
+        let kind = f
+            .locals
+            .iter()
+            .find_map(|l| self.comptime_only_kind(l.ty, 0))
+            .or_else(|| self.comptime_only_kind(f.ret, 0))?;
+        let span = f.body.as_ref().and_then(|b| self.line_using(b, f)).unwrap_or(f.span);
+        Some(OnlyUse { span, why: kind.uses().into(), kind })
+    }
+
+    /// The first line of a body that uses a value of a compile-time-only
+    /// type.
+    fn line_using(&self, body: &ir::Block, f: &ir::Function) -> Option<Span> {
+        let mut line = None;
+        let mut found = None;
+        visit_lines(body, &mut |stmt| {
+            if found.is_some() {
+                return;
+            }
+            if let Stmt::Line(span) = stmt {
+                line = Some(*span);
+                return;
+            }
+            let mut uses = matches!(stmt, Stmt::Let { local, .. } | Stmt::LetUninit(local)
+                if f.locals.get(local.0 as usize).is_some_and(|l| self.comptime_only_kind(l.ty, 0).is_some()));
+            visit_stmt_exprs(stmt, &mut |e| uses |= self.comptime_only_kind(e.ty, 0).is_some());
+            if uses {
+                found = line;
+            }
+        });
+        found
     }
 
     /// Whether a value of type `ty` is, or holds, a `target`.
@@ -985,24 +1056,27 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Whether a type holds a `Type` value somewhere.
-    fn contains_type(&self, ty: TyId, depth: u32) -> bool {
+    /// Which compile-time-only value a type is or holds, if any: a `Type`,
+    /// `Code` or `Symbol`.
+    pub(super) fn comptime_only_kind(&self, ty: TyId, depth: u32) -> Option<Only> {
         if depth > 8 {
-            return false;
+            return None;
         }
         match self.types.kind(self.types.base(ty)) {
-            TyKind::Type => true,
+            TyKind::Type => Some(Only::Type),
+            TyKind::Code => Some(Only::Code),
+            TyKind::Symbol => Some(Only::Symbol),
             TyKind::Array(t, _)
             | TyKind::Slice(t)
             | TyKind::Dynamic(t)
             | TyKind::Optional(t)
             | TyKind::Pointer(t)
-            | TyKind::MultiPointer(t) => self.contains_type(*t, depth + 1),
-            TyKind::Tuple(ts) => ts.iter().any(|t| self.contains_type(*t, depth + 1)),
+            | TyKind::MultiPointer(t) => self.comptime_only_kind(*t, depth + 1),
+            TyKind::Tuple(ts) => ts.iter().find_map(|t| self.comptime_only_kind(*t, depth + 1)),
             TyKind::Struct(id) => {
-                self.types.struct_info(*id).fields.iter().any(|f| self.contains_type(f.ty, depth + 1))
+                self.types.struct_info(*id).fields.iter().find_map(|f| self.comptime_only_kind(f.ty, depth + 1))
             }
-            _ => false,
+            _ => None,
         }
     }
 
@@ -1015,6 +1089,88 @@ impl<'a> Checker<'a> {
             }
         }
         self.file_positions = out;
+    }
+}
+
+/// The kinds of values that exist only while compiling.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Only {
+    Type,
+    Code,
+    Symbol,
+}
+
+impl Only {
+    /// Says that code uses such values, for labels.
+    fn uses(self) -> &'static str {
+        match self {
+            Only::Type => "uses `Type` values, which exist only while compiling",
+            Only::Code => "uses `Code` values, which exist only while macros run",
+            Only::Symbol => "uses `Symbol` values, which exist only while compiling",
+        }
+    }
+
+    /// Says how long such values live, for messages.
+    fn lifetime(self) -> &'static str {
+        match self {
+            Only::Type => "`Type` values and reflection exist only while compiling",
+            Only::Code => "`Code` values exist only while macros run",
+            Only::Symbol => "`Symbol` values exist only while compiling",
+        }
+    }
+
+    /// How to do without such a value at run time.
+    fn help(self) -> &'static str {
+        match self {
+            Only::Type => {
+                "for type information while the program runs, use `type_info(T)`, or `type_info(x)` for the type of a value"
+            }
+            Only::Code => {
+                "build the code in a `macro def` and call the macro where the code should go; only macros take and return `Code`"
+            }
+            Only::Symbol => {
+                "while the program runs, name things with a `String` or an enum; `sym.to_s` gives a symbol's name as a `String` while compiling"
+            }
+        }
+    }
+}
+
+/// Where a function uses a compile-time-only value, and why it is one.
+#[derive(Clone, Debug)]
+struct OnlyUse {
+    span: Span,
+    why: String,
+    kind: Only,
+}
+
+/// Visits every statement of a block, nested ones included, in order.
+fn visit_lines(block: &ir::Block, f: &mut impl FnMut(&Stmt)) {
+    for stmt in &block.stmts {
+        f(stmt);
+        match stmt {
+            Stmt::If { then, else_, .. } => {
+                visit_lines(then, f);
+                visit_lines(else_, f);
+            }
+            Stmt::Loop { body, .. } | Stmt::Labeled { body, .. } | Stmt::Scope(body) | Stmt::WithContext(body) => {
+                visit_lines(body, f);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Visits the expressions of one statement, not of its nested blocks.
+fn visit_stmt_exprs(stmt: &Stmt, f: &mut impl FnMut(&ir::Expr)) {
+    match stmt {
+        Stmt::Let { init: Some(e), .. } | Stmt::Expr(e) | Stmt::Return(Some(e)) | Stmt::If { cond: e, .. } => {
+            visit_expr(e, f);
+        }
+        Stmt::Assign { target, value } => {
+            visit_expr(target, f);
+            visit_expr(value, f);
+        }
+        _ => {}
     }
 }
 
@@ -1071,7 +1227,7 @@ pub(crate) fn is_type_query(name: &str) -> bool {
 }
 
 /// Whether a statement can give a block its value.
-fn produces_value(stmt: &ast::Stmt) -> bool {
+pub(super) fn produces_value(stmt: &ast::Stmt) -> bool {
     match &stmt.kind {
         ast::StmtKind::Expr(e) => {
             !matches!(e.kind, ast::ExprKind::While { .. } | ast::ExprKind::For(_) | ast::ExprKind::Loop(_))
