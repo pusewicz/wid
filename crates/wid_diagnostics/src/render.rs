@@ -73,10 +73,16 @@ pub fn render(diag: &Diagnostic, sources: &SourceMap, opts: RenderOptions) -> St
         p.bold(&format!(": {}", diag.message))
     );
 
+    let primary = diag.primary_span();
+    let frames = primary.map(|s| expansion_frames(sources, s)).unwrap_or_default();
+
     let mut max_line = 1u32;
     for label in &diag.labels {
         let file = sources.file(label.span.file);
         max_line = max_line.max(file.line_col(label.span.end).0);
+    }
+    for frame in &frames {
+        max_line = max_line.max(sources.file(frame.span.file).line_col(frame.span.end).0);
     }
     for help in &diag.helps {
         for edit in &help.edits {
@@ -87,7 +93,6 @@ pub fn render(diag: &Diagnostic, sources: &SourceMap, opts: RenderOptions) -> St
     let width = max_line.to_string().len();
     let pad = " ".repeat(width);
 
-    let primary = diag.primary_span();
     let mut by_file: BTreeMap<(bool, FileId), Vec<&Label>> = BTreeMap::new();
     for label in &diag.labels {
         let is_other = Some(label.span.file) != primary.map(|s| s.file);
@@ -104,6 +109,20 @@ pub fn render(diag: &Diagnostic, sources: &SourceMap, opts: RenderOptions) -> St
         let _ = writeln!(out, "{pad} {}", p.gutter("|"));
         render_labels(&mut out, &p, file, labels, &pad, width);
         first_file = false;
+    }
+
+    // Code a macro generated: each call that led to it, innermost first.
+    for frame in &frames {
+        let file = sources.file(frame.span.file);
+        let (line, col) = file.line_col(frame.span.start);
+        let _ = writeln!(out, "{pad}{} {}:{line}:{col}", p.gutter(":::"), file.display);
+        let _ = writeln!(out, "{pad} {}", p.gutter("|"));
+        let message = match frame.count {
+            1 => format!("`{}` expands here", frame.name),
+            n => format!("`{}` expands here ({n} nested calls)", frame.name),
+        };
+        let label = Label { span: frame.span, message, primary: false };
+        render_labels(&mut out, &p, file, &[&label], &pad, width);
     }
 
     for note in &diag.notes {
@@ -140,6 +159,29 @@ fn indent_continuation(text: &str, indent: &str) -> String {
 
 fn note_text(note: &str) -> String {
     format!("note: {note}")
+}
+
+/// One macro call shown under a diagnostic in generated code.
+struct Frame<'a> {
+    span: Span,
+    name: &'a str,
+    /// How many nested calls at this same place the frame stands for: a
+    /// recursive macro calls itself from one line of its `quote`.
+    count: usize,
+}
+
+/// The calls that led to code at `span`, innermost first, with runs of
+/// calls of the same macro from the same place merged.
+fn expansion_frames(sources: &SourceMap, span: Span) -> Vec<Frame<'_>> {
+    let mut frames: Vec<Frame<'_>> = Vec::new();
+    for e in sources.expansion_chain(span) {
+        let at = |s: Span| (sources.real_file(s.file), s.start, s.end);
+        match frames.last_mut() {
+            Some(last) if last.name == e.name && at(last.span) == at(e.call_site) => last.count += 1,
+            _ => frames.push(Frame { span: e.call_site, name: &e.name, count: 1 }),
+        }
+    }
+    frames
 }
 
 fn render_labels(out: &mut String, p: &Palette, file: &SourceFile, labels: &[&Label], pad: &str, width: usize) {
@@ -244,6 +286,13 @@ fn span_json(sources: &SourceMap, span: Span) -> serde_json::Map<String, Value> 
 }
 
 /// Converts one diagnostic to a JSON value with resolved positions.
+///
+/// Every position is an object with `file`, `line`, `column`, `end_line`,
+/// `end_column` and the byte offsets `start` and `end`. A position in code a
+/// macro generated is the position in the macro's `quote`. `expansions`
+/// lists the macro calls that generated the code the diagnostic points at,
+/// innermost first, each a position with the macro's name in `macro`; it is
+/// empty for code written in a file.
 pub fn to_json(diag: &Diagnostic, sources: &SourceMap) -> Value {
     let labels: Vec<Value> = diag
         .labels
@@ -286,6 +335,18 @@ pub fn to_json(diag: &Diagnostic, sources: &SourceMap) -> Value {
         }
     }
     obj.insert("labels".into(), Value::Array(labels));
+    let expansions: Vec<Value> = diag
+        .primary_span()
+        .map(|span| sources.expansion_chain(span))
+        .unwrap_or_default()
+        .into_iter()
+        .map(|e| {
+            let mut m = span_json(sources, e.call_site);
+            m.insert("macro".into(), json!(e.name));
+            Value::Object(m)
+        })
+        .collect();
+    obj.insert("expansions".into(), Value::Array(expansions));
     obj.insert("notes".into(), json!(diag.notes));
     obj.insert("helps".into(), Value::Array(helps));
     obj.insert("explain".into(), json!(format!("wid explain {}", diag.code)));
@@ -301,4 +362,89 @@ pub fn render_json(diags: &Diagnostics, sources: &SourceMap) -> String {
         "diagnostics": list,
     });
     serde_json::to_string_pretty(&doc).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::{RenderOptions, render, to_json};
+    use crate::codes;
+    use crate::diagnostic::Diagnostic;
+    use crate::source::{Expansion, FileId, SourceMap, Span};
+
+    /// `lib.wid` defines `inner` and `outer`, whose `quote` calls `inner`.
+    /// Expansion 0 is `outer` called from `main.wid`; expansion 1 is
+    /// `inner` called from it, and expansion 2 another `inner` nested in
+    /// that one, as a recursive macro would.
+    fn sources() -> SourceMap {
+        let mut sources = SourceMap::new();
+        let lib = sources.add(
+            PathBuf::from("lib.wid"),
+            "lib.wid".into(),
+            "macro def inner -> Code\n  quote do\n    x: Int = \"a\"\n  end\nend\n\nmacro def outer -> Code\n  quote do\n    inner\n  end\nend\n",
+        );
+        let main = sources.add(PathBuf::from("main.wid"), "main.wid".into(), "def main\n  outer\nend\n");
+        let call = |file: FileId| Span::new(file, 102, 107);
+        sources.set_expansions(vec![
+            Expansion { template: lib, call_site: Span::new(main, 11, 16), name: "outer".into() },
+            Expansion { template: lib, call_site: call(FileId::expansion(0)), name: "inner".into() },
+            Expansion { template: lib, call_site: call(FileId::expansion(1)), name: "inner".into() },
+        ]);
+        sources
+    }
+
+    fn error_at(file: FileId) -> Diagnostic {
+        Diagnostic::error(codes::TYPE_MISMATCH, "expected `Int`, found `String`")
+            .primary(Span::new(file, 48, 51), "this has type `String`")
+    }
+
+    #[test]
+    fn expansion_ids_resolve_to_the_template() {
+        let sources = sources();
+        assert_eq!(sources.file(FileId::expansion(2)).display, "lib.wid");
+        assert_eq!(sources.slice(Span::new(FileId::expansion(1), 48, 51)), "\"a\"");
+        assert_eq!(FileId::expansion(3).expansion_index(), Some(3));
+        assert_eq!(FileId(3).expansion_index(), None);
+        let chain = sources.expansion_chain(Span::new(FileId::expansion(2), 0, 1));
+        let names: Vec<&str> = chain.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, ["inner", "inner", "outer"]);
+    }
+
+    #[test]
+    fn human_output_lists_the_calls_innermost_first() {
+        let text = render(&error_at(FileId::expansion(2)), &sources(), RenderOptions::default());
+        let expected = "\
+error[E0301]: expected `Int`, found `String`
+ --> lib.wid:3:14
+  |
+3 |     x: Int = \"a\"
+  |              ^^^ this has type `String`
+ ::: lib.wid:9:5
+  |
+9 |     inner
+  |     ----- `inner` expands here (2 nested calls)
+ ::: main.wid:2:3
+  |
+2 |   outer
+  |   ----- `outer` expands here
+  = see `wid explain E0301`
+";
+        assert_eq!(text, expected);
+    }
+
+    #[test]
+    fn json_lists_every_call() {
+        let sources = sources();
+        let value = to_json(&error_at(FileId::expansion(2)), &sources);
+        assert_eq!(value["file"], "lib.wid");
+        assert_eq!(value["line"], 3);
+        let chain = value["expansions"].as_array().expect("an array");
+        let names: Vec<&str> = chain.iter().map(|e| e["macro"].as_str().unwrap_or_default()).collect();
+        assert_eq!(names, ["inner", "inner", "outer"]);
+        assert_eq!((&chain[0]["file"], &chain[0]["line"]), (&"lib.wid".into(), &9.into()));
+        assert_eq!((&chain[2]["file"], &chain[2]["line"]), (&"main.wid".into(), &2.into()));
+        let plain = to_json(&error_at(FileId(0)), &sources);
+        assert_eq!(plain["expansions"].as_array().map(Vec::len), Some(0));
+    }
 }

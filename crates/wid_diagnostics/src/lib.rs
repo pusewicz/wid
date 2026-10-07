@@ -9,7 +9,7 @@ mod source;
 pub use codes::{Code, CodeInfo};
 pub use diagnostic::{Applicability, Diagnostic, Diagnostics, Edit, Help, Label, Severity};
 pub use render::{RenderOptions, render, render_all, render_json, to_json};
-pub use source::{FileId, SourceFile, SourceMap, Span};
+pub use source::{Expansion, FileId, SourceFile, SourceMap, Span};
 
 mod explanations {
     include!(concat!(env!("OUT_DIR"), "/explanations.rs"));

@@ -132,6 +132,9 @@ codes! {
     EMBED_FAILED = "E0907", "cannot embed file";
     BAD_DEFINE = "E0908", "invalid `-define:` value";
     COMPTIME_OUTPUT = "E0909", "compile-time code printed output";
+    QUOTE_OUTSIDE_MACRO = "E0910", "`quote` outside a `macro def`";
+    SPLICE_MISMATCH = "E0911", "spliced value doesn't fit its place";
+    MACRO_ARGUMENT = "E0912", "macro argument of the wrong kind";
 }
 
 /// Looks up a registered code by its text, case-insensitively.
