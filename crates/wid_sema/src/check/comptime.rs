@@ -62,6 +62,15 @@ pub(crate) struct PendingIf<'a> {
     pub owner: Option<DeclId>,
 }
 
+/// A declaration waiting for every declaration outside it to be known: a
+/// `comptime if` or a macro call among declarations. They are resolved in
+/// source order, after the unconditional declarations.
+#[derive(Clone, Copy)]
+pub(crate) enum Pending<'a> {
+    If(PendingIf<'a>),
+    Macro(super::decl_macros::PendingMacro<'a>),
+}
+
 impl<'a> Checker<'a> {
     // ----- running code ----------------------------------------------------------
 
@@ -434,25 +443,36 @@ impl<'a> Checker<'a> {
         ir::Expr::new(ExprKind::Local(local), ty)
     }
 
-    /// Chooses the branches of declaration-level `comptime if`s and collects
-    /// their declarations. Conditions run once every unconditional
-    /// declaration is known, in source order; a chosen branch may hold more.
-    pub(super) fn resolve_comptime_ifs(&mut self) {
-        while !self.pending_ifs.is_empty() {
-            let batch = std::mem::take(&mut self.pending_ifs);
+    /// Resolves the pending declarations: chooses the branches of
+    /// declaration-level `comptime if`s and expands macro calls among
+    /// declarations, collecting the declarations they give. Each runs once
+    /// every declaration outside it is known, in source order; what they
+    /// give may hold more, which run in the next round.
+    pub(super) fn resolve_pending(&mut self) {
+        while !self.pending_decls.is_empty() {
+            let batch = std::mem::take(&mut self.pending_decls);
             for pending in batch {
-                let Some(holds) = self.comptime_bool(&pending.item.cond, pending.loc) else { continue };
-                let chosen = if holds { &pending.item.then } else { &pending.item.else_ };
-                self.report_deferred(pending.loc, chosen);
-                match pending.owner {
-                    Some(owner) => {
-                        for item in chosen {
-                            self.collect_member_item(item, pending.loc, owner);
-                        }
-                    }
-                    None => self.collect_conditional(chosen, pending.loc),
+                match pending {
+                    Pending::If(pending) => self.resolve_comptime_if(pending),
+                    Pending::Macro(pending) => self.expand_item_macro(pending),
                 }
             }
+        }
+    }
+
+    /// Chooses the branch of a declaration-level `comptime if` and collects
+    /// its declarations.
+    fn resolve_comptime_if(&mut self, pending: PendingIf<'a>) {
+        let Some(holds) = self.comptime_bool(&pending.item.cond, pending.loc) else { return };
+        let chosen = if holds { &pending.item.then } else { &pending.item.else_ };
+        self.report_deferred(pending.loc, chosen);
+        match pending.owner {
+            Some(owner) => {
+                for item in chosen {
+                    self.collect_member_item(item, pending.loc, owner);
+                }
+            }
+            None => self.collect_conditional(chosen, pending.loc),
         }
     }
 
@@ -461,6 +481,10 @@ impl<'a> Checker<'a> {
         let file = &self.input.packages[loc.pkg.0 as usize].files[loc.file];
         let mut found = Vec::new();
         for item in items {
+            // A macro generated it: its offsets are in the macro's file.
+            if item.span.file.expansion_index().is_some() {
+                continue;
+            }
             if let Some(list) = file.deferred.get(&item.span.start) {
                 found.extend(list.iter().cloned());
             }

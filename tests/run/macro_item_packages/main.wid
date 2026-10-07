@@ -1,0 +1,30 @@
+# Qualified macro calls among declarations: the generated declarations
+# belong to this package, while the macros' own code resolves names in
+# `shapes`, private ones and imports included.
+import "./shapes"
+
+shapes.record :Point, :x, :y
+shapes.hexer :hex
+
+struct Size
+  w: Int
+  h: Int
+  shapes.summed
+end
+
+extend Int
+  shapes.hexer :as_hex
+end
+
+# Not the `double` the generated code calls: that one is private to `shapes`.
+def double(x: Int) -> Int = x * 1000
+
+def main
+  pt = Point.new(x: 1, y: 2)
+  p pt, pt.sum
+  puts pt.measured
+  puts hex(1)
+  p Size.new(w: 3, h: 4).sum
+  puts 7.as_hex(2)
+  p double(1)
+end

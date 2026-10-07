@@ -1,0 +1,15 @@
+# Qualified macro calls among declarations that go wrong.
+import "./tools"
+
+tools.helper
+tools.secret
+toolz.helpers
+
+struct Hero
+  hp: Int
+  tools.broken
+end
+
+def main
+  p Hero.new(hp: 1)
+end

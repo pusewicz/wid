@@ -1,0 +1,17 @@
+# Expansions among declarations nest at most 64 deep, like those in code.
+
+# Each call generates a method and calls itself again, with nothing to stop
+# it.
+macro def ladder(n: Int) -> Code
+  name = "step_#{n}".to_sym
+  quote do
+    def #{name} -> Int = #{n}
+    ladder #{n + 1}
+  end
+end
+
+ladder 0
+
+def main
+  p step_0, step_63
+end

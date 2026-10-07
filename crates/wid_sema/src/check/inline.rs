@@ -292,7 +292,7 @@ impl<'a> Checker<'a> {
         let generic_context = !subst.is_empty();
         if generic_context {
             let shown = self.instance_display(&display_name, &subst);
-            self.instance_stack.push((shown, call_site, d.item.span));
+            self.instance_stack.push((shown, call_site, d.item.span, None));
         }
         self.begin_block();
         self.push_scope();

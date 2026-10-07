@@ -1,0 +1,54 @@
+import "core:fmt"
+
+# The code these macros generate resolves its own names here: this
+# package's private helpers and imports, which the caller needn't see.
+private def double(x: Int) -> Int = x * 2
+
+private SCALE = 10
+
+module Measured
+  def measured -> String = "measured"
+end
+
+# A struct with the given `Int` fields, which includes `Measured` and gets
+# a method summing its fields.
+macro def record(name: Symbol, *fields: Symbol) -> Code
+  decls = [dynamic]Code.new
+  for f in fields
+    decls << quote do
+      #{f}: Int
+    end
+  end
+  quote do
+    struct #{name}
+      #{decls}
+      include Measured
+      summed
+    end
+  end
+end
+
+# A method adding up the fields of `Self`, the type whose body holds the
+# call.
+macro def summed -> Code
+  terms = [dynamic]Code.new
+  for f in Self.fields
+    field = f.name.to_sym
+    terms << quote do
+      total += @#{field}
+    end
+  end
+  quote do
+    def sum -> Int
+      total = 0
+      #{terms}
+      total
+    end
+  end
+end
+
+macro def hexer(name: Symbol) -> Code
+  quote do
+    def #{name}(x: Int) -> String = fmt.int(double(x) * SCALE, base: 16)
+  end
+end

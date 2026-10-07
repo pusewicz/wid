@@ -502,7 +502,10 @@ impl<'a> Checker<'a> {
         let generic_context = !subst.is_empty();
         if generic_context {
             let body_span = self.decls[decl.0 as usize].item.span;
-            self.instance_stack.push((display.clone(), origin, body_span));
+            let macro_self = super::generics::lookup(&subst, Name::new("Self"))
+                .filter(|_| f.is_macro)
+                .map(|t| self.types.display(t));
+            self.instance_stack.push((display.clone(), origin, body_span, macro_self));
         }
         let saved = std::mem::take(&mut self.body);
         let saved_macro = std::mem::replace(&mut self.macros.in_macro, f.is_macro);

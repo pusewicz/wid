@@ -1,0 +1,157 @@
+error[E0913]: a macro can't add fields to `Hero`
+  --> tests/ui/macro_item_errors.wid:72:14
+   |
+72 |   add_field :mana
+   |              ^^^^ `add_field` generates this field
+   = note: a struct's layout is fixed before the macros in its body run, which is what lets them read `Self.fields`
+help: declare `mana` in `Hero` itself, and let the macro generate the methods that use it
+   = see `wid explain E0913`
+
+error[E0209]: `type_name` needs one `Self`, but here it stands for many types
+  --> tests/ui/macro_item_errors.wid:76:3
+   |
+36 |   name = Self.name
+   |          ---- the macro's code uses `Self` here
+...
+76 |   type_name
+   |   ^^^^^^^^^ `type_name` expands here, where `Self` has no single type
+   = note: in a `module` or `extend` body, `Self` is each type that includes or is extended by it, and in a generic struct's body it is each instance; a macro runs once for the call, so it can't use all of them
+help: call `type_name` in the body or a method of a `struct` or `enum`, or give the macro a `Type` parameter and pass the type
+   = see `wid explain E0209`
+
+error[E0209]: `named` needs one `Self`, but here it stands for many types
+  --> tests/ui/macro_item_errors.wid:77:3
+   |
+77 |   named Self
+   |   ^^^^^^^^^^ `named` expands here, where `Self` has no single type
+   |         ---- this argument is `Self`
+   = note: in a `module` or `extend` body, `Self` is each type that includes or is extended by it, and in a generic struct's body it is each instance; a macro runs once for the call, so it can't use all of them
+help: pass a named type instead of `Self`, or call `named` in the body of each type that needs it
+   = see `wid explain E0209`
+
+error[E0209]: `type_name` needs one `Self`, but here it stands for many types
+  --> tests/ui/macro_item_errors.wid:82:3
+   |
+36 |   name = Self.name
+   |          ---- the macro's code uses `Self` here
+...
+82 |   type_name
+   |   ^^^^^^^^^ `type_name` expands here, where `Self` has no single type
+   = note: in a `module` or `extend` body, `Self` is each type that includes or is extended by it, and in a generic struct's body it is each instance; a macro runs once for the call, so it can't use all of them
+help: call `type_name` in the body or a method of a `struct` or `enum`, or give the macro a `Type` parameter and pass the type
+   = see `wid explain E0209`
+
+error[E0209]: `type_name` needs a `Self`, but this call has none
+  --> tests/ui/macro_item_errors.wid:91:1
+   |
+36 |   name = Self.name
+   |          ---- the macro's code uses `Self` here
+...
+91 | type_name
+   | ^^^^^^^^^ `type_name` expands here, outside any type
+   = note: a macro's `Self` is the type whose body or method holds the call
+help: call `type_name` in the body or a method of a `struct` or `enum`, or give the macro a `Type` parameter and pass the type
+   = see `wid explain E0209`
+
+error[E0108]: statements must be inside a method
+  --> tests/ui/macro_item_errors.wid:93:1
+   |
+93 | helper
+   | ^^^^^^ this call is outside any `def`
+   = note: `helper` is a method, not a macro; only a macro call can stand among declarations
+help: move it into `def main … end`, which runs when the program starts
+   = see `wid explain E0108`
+
+error[E0201]: undefined macro `undefined_macro`
+  --> tests/ui/macro_item_errors.wid:94:1
+   |
+94 | undefined_macro :x
+   | ^^^^^^^^^^^^^^^ no macro with this name is in scope
+   = note: a call among declarations runs a macro, and the declarations it generates take the call's place
+   = see `wid explain E0201`
+
+error[E0328]: `@[inline]` doesn't apply to a macro call
+  --> tests/ui/macro_item_errors.wid:95:3
+   |
+95 | @[inline] nothing
+   |   ^^^^^^ a macro call takes no attributes
+   = note: attributes belong on the declarations the macro generates
+help: remove `@[inline]`, or write it on the declarations inside the macro's `quote`
+   = see `wid explain E0328`
+
+error[E0108]: statements must be inside a method
+  --> tests/ui/macro_item_errors.wid:96:1
+   |
+96 | puts "hi"
+   | ^^^^^^^^^ this call is outside any `def`
+help: move it into `def main … end`, which runs when the program starts
+   = see `wid explain E0108`
+
+error[E0201]: undefined macro `blue`
+  --> tests/ui/macro_item_errors.wid:63:5
+   |
+63 |     blue
+   |     ^^^^ no macro with this name is in scope
+  ::: tests/ui/macro_item_errors.wid:87:3
+   |
+87 |   member()
+   |   -------- `member` expands here
+   = note: a call among declarations runs a macro, and the declarations it generates take the call's place
+   = note: an enum's members are fixed before the macros in its body run, so a macro can't add members
+help: list the member in the enum itself, or have a macro called at package level generate the whole `enum`
+   = see `wid explain E0201`
+
+error[E0108]: statements must be inside a method
+  --> tests/ui/macro_item_errors.wid:29:5
+   |
+29 |     count = 1
+   |     ^^^^^^^^^ this statement is outside any `def`
+  ::: tests/ui/macro_item_errors.wid:90:1
+   |
+90 | statements
+   | ---------- `statements` expands here
+   = note: `statements` is called among declarations, so its code must be declarations: methods, constants, types, `include`s or macro calls
+help: put the statement inside a `def` in the `quote`, or call `statements` inside a method
+   = see `wid explain E0108`
+
+error[E0108]: statements must be inside a method
+  --> tests/ui/macro_item_errors.wid:30:5
+   |
+30 |     puts count
+   |     ^^^^^^^^^^ this call is outside any `def`
+  ::: tests/ui/macro_item_errors.wid:90:1
+   |
+90 | statements
+   | ---------- `statements` expands here
+help: put the call inside a `def` in the `quote`, or call `statements` inside a method
+   = see `wid explain E0108`
+
+error[E0913]: a macro can't generate an `import`
+  --> tests/ui/macro_item_errors.wid:52:5
+   |
+52 |     import "core:fmt"
+   |     ^^^^^^^^^^^^^^^^^ an `import` in generated code
+  ::: tests/ui/macro_item_errors.wid:92:1
+   |
+92 | imports
+   | ------- `imports` expands here
+   = note: packages are loaded and C headers imported before any macro runs
+help: write it in the file that defines the macro: names in the `quote`'s own code resolve with that file's imports, so the generated code can use the package without importing it
+   = see `wid explain E0913`
+
+error[E0301]: expected `Int`, found `String`
+  --> tests/ui/macro_item_errors.wid:8:7
+   |
+ 8 |       "not a number"
+   |       ^^^^^^^^^^^^^^ this has type `String`
+  ::: tests/ui/macro_item_errors.wid:15:5
+   |
+15 |     broken_method
+   |     ------------- `broken_method` expands here
+  ::: tests/ui/macro_item_errors.wid:71:3
+   |
+71 |   wraps_broken
+   |   ------------ `wraps_broken` expands here
+   = see `wid explain E0301`
+
+error: could not compile due to 14 errors

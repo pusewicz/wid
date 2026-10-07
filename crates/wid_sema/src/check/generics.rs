@@ -37,7 +37,7 @@ impl<'a> Checker<'a> {
         if let Some(owner) = d.owner {
             match self.decls[owner.0 as usize].kind {
                 DeclKind::Struct(s) => names.extend(s.generics.iter().map(|g| g.name.name)),
-                DeclKind::Module(_) => names.push(Name::new("Self")),
+                DeclKind::Module => names.push(Name::new("Self")),
                 DeclKind::Extend(e) => {
                     names.push(Name::new("Self"));
                     for t in &e.targets {

@@ -1,0 +1,19 @@
+macro def helpers -> Code
+  quote do
+    def helped -> Int = 1
+  end
+end
+
+private macro def secret -> Code
+  quote do
+    def hidden -> Int = 2
+  end
+end
+
+# The generated method's body is checked where it lands, and its errors
+# point back here.
+macro def broken -> Code
+  quote do
+    def broken -> Int = missing_helper()
+  end
+end

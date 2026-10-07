@@ -1,0 +1,100 @@
+# Errors in macro calls among declarations and in the code they generate.
+
+# An error in a generated method's body, found when the body is checked,
+# points into the `quote` and at the calls that led there.
+macro def broken_method -> Code
+  quote do
+    def broken -> Int
+      "not a number"
+    end
+  end
+end
+
+macro def wraps_broken -> Code
+  quote do
+    broken_method
+  end
+end
+
+# A struct's layout is fixed before its macros run.
+macro def add_field(name: Symbol) -> Code
+  quote do
+    #{name}: Int = 3
+  end
+end
+
+# Code called among declarations must be declarations.
+macro def statements -> Code
+  quote do
+    count = 1
+    puts count
+  end
+end
+
+# The macro's own code uses `Self`, the type whose body holds the call.
+macro def type_name -> Code
+  name = Self.name
+  quote do
+    def type_name -> String = #{name}
+  end
+end
+
+macro def named(t: Type) -> Code
+  name = t.name
+  quote do
+    def named -> String = #{name}
+  end
+end
+
+# Packages are loaded before any macro runs.
+macro def imports -> Code
+  quote do
+    import "core:fmt"
+  end
+end
+
+macro def nothing -> Code
+  quote do
+  end
+end
+
+macro def member -> Code
+  quote do
+    blue
+  end
+end
+
+def helper -> Int = 1
+
+struct Hero
+  hp: Int
+  wraps_broken
+  add_field :mana
+end
+
+module Named
+  type_name
+  named Self
+end
+
+struct Pool($T)
+  items: [dynamic]T
+  type_name
+end
+
+enum Color
+  red
+  member()
+end
+
+statements
+type_name
+imports
+helper
+undefined_macro :x
+@[inline] nothing
+puts "hi"
+
+def main
+  p Hero.new(hp: 1)
+end
