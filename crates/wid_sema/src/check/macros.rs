@@ -29,11 +29,15 @@
 //!
 //! Generated statements are allocated in `Checker::generated`, an arena
 //! that lives as long as the input syntax, so declarations built from them
-//! can be collected like written ones. Declaration-level calls (in type
-//! bodies and at package level) are the next step: their entry point turns
-//! the built statements into items (a `StmtKind::Item` gives its item, a
-//! call statement an `ItemKind::MacroCall`; [`Splicer`] already does this
-//! for `ItemKind::Splice`) and queues them with the pending `comptime if`s.
+//! can be collected like written ones. Calls among declarations (in type
+//! bodies and at package level) are queued with the pending `comptime if`s
+//! and expanded by `decl_macros.rs`, which turns the built statements into
+//! declarations ([`lines_to_items`], which [`Splicer`] uses too for code
+//! spliced among declarations).
+//!
+//! A macro whose own code uses `Self` ([`Checker::macro_self_use`]) runs as
+//! an instance for the `Self` of each call: the type whose body or method
+//! holds it.
 //!
 //! # Virtual files
 //!
@@ -71,6 +75,7 @@ use wid_syntax::{Name, ast::Ident};
 
 use super::body::Dest;
 use super::comptime::{ComptimeCode, produces_value};
+use super::decl_macros::lines_to_items;
 use super::expr::ArgSource;
 use super::members::{Receiver, expr_as_type, is_type_like};
 use super::{Checker, DeclId, DeclKind, DeclLoc};
@@ -146,6 +151,9 @@ pub(crate) struct MacroState {
     pub too_deep: HashSet<DeclId>,
     /// Whether the build ran out of expansions (E0903), already reported.
     pub too_many: bool,
+    /// For each macro looked at, the first `Self` its own code uses (not
+    /// the code its `quote`s generate), if any.
+    pub self_uses: HashMap<DeclId, Option<Span>>,
 }
 
 /// A call of a macro.
@@ -295,6 +303,81 @@ impl<'a> Checker<'a> {
         ok
     }
 
+    /// Where a macro's own code first uses `Self`, if it does. Its `quote`
+    /// bodies don't count, since generated code resolves `Self` where it
+    /// lands; their splices, which the macro runs, do. A macro that uses
+    /// `Self` runs as an instance for the `Self` of each call.
+    pub(super) fn macro_self_use(&mut self, decl: DeclId) -> Option<Span> {
+        if let Some(found) = self.macros.self_uses.get(&decl) {
+            return *found;
+        }
+        let found = match self.decls[decl.0 as usize].kind {
+            DeclKind::Fn(f) => {
+                let mut find = FindSelf::default();
+                let mut body = f.body.clone();
+                match &mut body {
+                    ast::FnBody::Block(stmts) => find.visit_stmts(stmts),
+                    ast::FnBody::Expr(e) => find.visit_expr(e),
+                }
+                for p in &f.params {
+                    if let Some(default) = &p.default {
+                        find.visit_expr(&mut default.clone());
+                    }
+                }
+                find.found
+            }
+            _ => None,
+        };
+        self.macros.self_uses.insert(decl, found);
+        found
+    }
+
+    /// The function that runs a macro for a call: one shared instance, or
+    /// for a macro that uses `Self`, the instance for the call's `Self`,
+    /// the type whose body or method holds the call. `None` means an error
+    /// was reported.
+    fn macro_instance(&mut self, call: &MacroCall<'_>) -> Option<FnId> {
+        let Some(at) = self.macro_self_use(call.decl) else { return Some(self.fn_instance(call.decl)) };
+        let self_ty = self.body.frames.last().and_then(|f| f.self_ty);
+        match self_ty {
+            Some(t) if matches!(self.types.kind(t), TyKind::Unknown) => None,
+            Some(t) if !self.has_params(t) => {
+                let subst = std::rc::Rc::new(vec![(Name::new("Self"), t)]);
+                Some(self.fn_instance_with(call.decl, subst, call.span))
+            }
+            _ => {
+                self.report_no_self(&call.shown, call.span, at, self_ty.is_some(), true);
+                None
+            }
+        }
+    }
+
+    /// Reports a macro call that needs a `Self` where there is none, or
+    /// where `Self` stands for more than one type (E0209). `at` is the
+    /// `Self` that needs it: in the macro's code, or else in an argument.
+    pub(super) fn report_no_self(&mut self, shown: &str, call: Span, at: Span, many: bool, in_macro: bool) {
+        let label = if in_macro { "the macro's code uses `Self` here" } else { "this argument is `Self`" };
+        let diag = if many {
+            Diagnostic::error(codes::SELF_OUTSIDE_METHOD, format!("`{shown}` needs one `Self`, but here it stands for many types"))
+                .primary(call, format!("`{shown}` expands here, where `Self` has no single type"))
+                .secondary(at, label.to_string())
+                .note("in a `module` or `extend` body, `Self` is each type that includes or is extended by it, and in a generic struct's body it is each instance; a macro runs once for the call, so it can't use all of them")
+        } else {
+            Diagnostic::error(codes::SELF_OUTSIDE_METHOD, format!("`{shown}` needs a `Self`, but this call has none"))
+                .primary(call, format!("`{shown}` expands here, outside any type"))
+                .secondary(at, label.to_string())
+                .note("a macro's `Self` is the type whose body or method holds the call")
+        };
+        let help = if in_macro {
+            format!(
+                "call `{shown}` in the body or a method of a `struct` or `enum`, or give the macro a `Type` parameter and pass the type"
+            )
+        } else {
+            format!("pass a named type instead of `Self`, or call `{shown}` in the body of each type that needs it")
+        };
+        self.report(diag.help(help));
+    }
+
     // ----- `quote` --------------------------------------------------------------------
 
     /// Lowers `quote do … end` in a macro body: evaluates the splices and
@@ -372,9 +455,16 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// Runs a macro for a call and builds the code it generates, allocated
+    /// for as long as the input syntax. `None` means an error was reported.
+    fn expand(&mut self, call: &MacroCall<'_>) -> Option<&'a [ast::Stmt]> {
+        let stmts = self.expand_code(call)?;
+        Some(self.generated.alloc(stmts).as_slice())
+    }
+
     /// Runs a macro for a call and builds the code it generates. `None`
     /// means an error was reported.
-    fn expand(&mut self, call: &MacroCall<'_>) -> Option<&'a [ast::Stmt]> {
+    pub(super) fn expand_code(&mut self, call: &MacroCall<'_>) -> Option<Vec<ast::Stmt>> {
         let errors = self.diags.error_count();
         let parent = self.virtual_file(call.span.file).map(|v| v.expansion as usize);
         let depth = parent.map_or(0, |e| self.macros.expansions[e].depth) + 1;
@@ -421,8 +511,7 @@ impl<'a> Checker<'a> {
         let (result, fragments) = self.run_macro(call, values, code.code.len() as u64)?;
         let expansion = self.macros.expansions.len() as u32;
         self.macros.expansions.push(Expansion { call_site: call.span, name: call.shown.clone(), depth });
-        let stmts = self.build_code(expansion, result, &code, &fragments, call)?;
-        Some(self.generated.alloc(stmts).as_slice())
+        self.build_code(expansion, result, &code, &fragments, call)
     }
 
     /// Converts a call's arguments to the values the macro receives.
@@ -563,7 +652,7 @@ impl<'a> Checker<'a> {
     /// it returned and the fragments it recorded.
     fn run_macro(&mut self, call: &MacroCall<'_>, values: Vec<ir::Expr>, first: u64) -> Option<(u64, Vec<Fragment>)> {
         let code = self.types.code();
-        let func = self.fn_instance(call.decl);
+        let func = self.macro_instance(call)?;
         let mut wrapper = self.new_function_shell(format!("macro {}", call.shown), String::new(), code, call.span);
         let run = ir::Expr::new(ExprKind::Call { func, args: values }, code);
         wrapper.body = Some(ir::Block { stmts: vec![Stmt::Return(Some(run))] });
@@ -956,27 +1045,58 @@ impl Splicer<'_, '_> {
     /// Turns generated statements into declarations, for a splice among
     /// declarations.
     fn push_items(&mut self, stmts: Vec<ast::Stmt>, at: Span, items: &mut Vec<ast::Item>) {
-        for stmt in stmts {
-            match stmt.kind {
-                StmtKind::Item(item) => items.push(*item),
-                StmtKind::Expr(e) if matches!(e.kind, E::Call(_) | E::Ident(_) | E::Member { .. }) => {
-                    items.push(ast::Item {
-                        span: stmt.span,
-                        kind: ItemKind::MacroCall(Box::new(e)),
-                        attrs: stmt.attrs,
-                        private: false,
-                        doc: None,
-                    });
-                }
-                _ => self.mismatch(
-                    at,
-                    "a statement",
-                    "a declaration",
-                    "only declarations go here: `def`, `struct`, constants and the like, or macro calls",
-                ),
-            }
+        let mut statements = Vec::new();
+        items.extend(lines_to_items(stmts, &mut statements));
+        if !statements.is_empty() {
+            self.mismatch(
+                at,
+                "a statement",
+                "a declaration",
+                "only declarations go here: `def`, `struct`, constants and the like, or macro calls",
+            );
         }
     }
+}
+
+/// Finds the first `Self` in a macro's own code: outside its `quote`
+/// bodies, but inside their splices.
+#[derive(Default)]
+struct FindSelf {
+    found: Option<Span>,
+}
+
+impl VisitMut for FindSelf {
+    fn visit_expr(&mut self, e: &mut ast::Expr) {
+        if self.found.is_some() {
+            return;
+        }
+        match &mut e.kind {
+            E::Const(n) if n.as_str() == "Self" => self.found = Some(e.span),
+            E::Quote(q) => self.visit_exprs(&mut q.splices),
+            _ => walk_expr(self, e),
+        }
+    }
+
+    fn visit_type(&mut self, ty: &mut ast::TypeExpr) {
+        if self.found.is_some() {
+            return;
+        }
+        if let TypeKind::Path { segments, .. } = &ty.kind
+            && let [only] = segments.as_slice()
+            && only.as_str() == "Self"
+        {
+            self.found = Some(only.span);
+            return;
+        }
+        walk_type(self, ty);
+    }
+}
+
+/// Where an expression uses `Self`, if it does.
+pub(super) fn self_in(e: &ast::Expr) -> Option<Span> {
+    let mut find = FindSelf::default();
+    find.visit_expr(&mut e.clone());
+    find.found
 }
 
 /// `-x` for a literal, in parentheses so it stays one operand.

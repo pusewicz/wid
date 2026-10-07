@@ -86,15 +86,7 @@ impl<'a> Checker<'a> {
             }
             if let Some(&m) = self.members.get(&decl).and_then(|m| m.get(&f.name.name)) {
                 let mspan = self.decls[m.0 as usize].span;
-                self.report(
-                    Diagnostic::error(
-                        codes::DUPLICATE_DEFINITION,
-                        format!("`{}` is both a field and a method", f.name.as_str()),
-                    )
-                    .primary(mspan, "method declared here")
-                    .secondary(f.name.span, "field declared here")
-                    .help("rename one of them; `@name` reads the field and `name` calls the method"),
-                );
+                self.report_field_clash(f.name, mspan);
             }
             if f.using
                 && !matches!(self.types.kind(fty), TyKind::Struct(_) | TyKind::Unknown)
@@ -177,6 +169,38 @@ impl<'a> Checker<'a> {
         info.align = align;
         info.complete = true;
         self.fill_pending_types();
+    }
+
+    /// Reports a member that has the name of one of its struct's fields.
+    fn report_field_clash(&mut self, field: ast::Ident, member_span: Span) {
+        self.report(
+            Diagnostic::error(
+                codes::DUPLICATE_DEFINITION,
+                format!("`{}` is both a field and a method", field.as_str()),
+            )
+            .primary(member_span, "method declared here")
+            .secondary(field.span, "field declared here")
+            .help("rename one of them; `@name` reads the field and `name` calls the method"),
+        );
+    }
+
+    /// Checks a member collected after its struct's fields were resolved,
+    /// which `fill_struct` no longer sees: one that a `comptime if` or a
+    /// macro adds once the struct's layout is needed.
+    pub(super) fn check_member_after_fields(&mut self, owner: DeclId, name: Name, span: Span) {
+        let DeclKind::Struct(s) = self.decls[owner.0 as usize].kind else { return };
+        let Some(&ty) = self.decl_types.get(&owner) else { return };
+        let filled = matches!(*self.types.kind(ty), TyKind::Struct(sid) if self.types.struct_info(sid).complete);
+        if !filled || !s.generics.is_empty() {
+            return;
+        }
+        let field = s.body.iter().find_map(|i| match &i.kind {
+            ItemKind::Field(f) if f.name.name == name => Some(f.name),
+            _ => None,
+        });
+        if let Some(field) = field {
+            self.report_field_clash(field, span);
+        }
     }
 
     /// Resolves the structs and unions that were only named behind

@@ -1,7 +1,9 @@
 import "./stats"
 
-# A `quote` with a splice in every position it accepts. This checks; the
-# macro calls in `Hero` are E0902 until declaration-level calls expand.
+# A `quote` with a splice in every position it accepts. The macro checks;
+# its call in `Hero` expands to a struct body where `#{extras}` splices
+# symbols, which only go among an enum's members (E0911). The qualified
+# call next to it expands to two methods.
 macro def record(name: Symbol, ty: Type, init: Code, *extras: Symbol) -> Code
   reader = quote do
     @#{name}
@@ -55,5 +57,5 @@ struct Hero
 end
 
 def main
-  p Hero.new
+  p Hero.new, Hero.new.kills + Hero.new.deaths
 end

@@ -5,6 +5,7 @@ mod body;
 mod cimport;
 mod collections;
 mod comptime;
+mod decl_macros;
 mod expr;
 mod flow;
 mod generics;
@@ -66,7 +67,7 @@ pub(crate) enum DeclKind<'a> {
     Struct(&'a ast::StructDecl),
     Enum(&'a ast::EnumDecl),
     Union(&'a ast::UnionDecl),
-    Module(&'a ast::ModuleDecl),
+    Module,
     Overload(&'a ast::OverloadDecl),
     Extend(&'a ast::ExtendDecl),
 }
@@ -87,7 +88,7 @@ impl DeclKind<'_> {
             DeclKind::Struct(_) => "struct",
             DeclKind::Enum(_) => "enum",
             DeclKind::Union(_) => "union",
-            DeclKind::Module(_) => "module",
+            DeclKind::Module => "module",
             DeclKind::Overload(_) => "overload set",
             DeclKind::Extend(_) => "extension",
         }
@@ -162,6 +163,10 @@ pub(crate) struct Checker<'a> {
     pub union_args: HashMap<crate::types::UnionId, (DeclId, generics::Subst)>,
     /// The modules each struct, enum, module or `extend` includes.
     pub includes: HashMap<DeclId, Vec<DeclId>>,
+    /// The `include` declarations of each struct, enum, module or `extend`,
+    /// in the order they were collected: written ones, then those that
+    /// `comptime if` branches and macros add.
+    pub include_items: HashMap<DeclId, Vec<&'a ast::Item>>,
     /// The resolved members of each overload set.
     pub overload_sets: HashMap<DeclId, Vec<DeclId>>,
     /// Every `extend` declaration.
@@ -209,8 +214,9 @@ pub(crate) struct Checker<'a> {
     /// Number of procs lowered so far, for unique C names.
     pub lambda_count: u32,
     /// Generic instances being lowered, outermost first: the instance's
-    /// name, the call that created it and the span of its declaration.
-    pub instance_stack: Vec<(String, Span, Span)>,
+    /// name, the call that created it, the span of its declaration and, for
+    /// a macro that runs for the `Self` of its call, that type as shown.
+    pub instance_stack: Vec<(String, Span, Span, Option<String>)>,
     /// Bindings for the next `call_fn`: the receiver type's generic arguments
     /// for type-level calls and the `Self` of extension methods.
     pub owner_bindings: Vec<(Name, TyId)>,
@@ -233,8 +239,9 @@ pub(crate) struct Checker<'a> {
     /// While lowering a constant's initializer written without `comptime`,
     /// its span: calling a method there needs `comptime`.
     pub const_init: Option<Span>,
-    /// Declaration-level `comptime if`s waiting for their conditions.
-    pub pending_ifs: Vec<comptime::PendingIf<'a>>,
+    /// Declaration-level `comptime if`s and macro calls waiting for every
+    /// declaration outside them to be known.
+    pub pending_decls: Vec<comptime::Pending<'a>>,
     /// Files read by `embed`.
     pub embedded_files: Vec<std::path::PathBuf>,
     /// The global holding each embedded file.
@@ -302,7 +309,8 @@ pub fn check_program(input: &ProgramInput) -> (ir::Program, Diagnostics) {
         comptime_depth: 0,
         capture_kind: Default::default(),
         const_init: None,
-        pending_ifs: Vec::new(),
+        pending_decls: Vec::new(),
+        include_items: HashMap::new(),
         embedded_files: Vec::new(),
         embeds: HashMap::new(),
         file_positions: HashMap::new(),
@@ -367,15 +375,20 @@ impl<'a> Checker<'a> {
         let mut diag = diag;
         let within = |p: Span, outer: Span| p.file == outer.file && p.start >= outer.start && p.end <= outer.end;
         if diag.severity == wid_diagnostics::Severity::Error
-            && let Some((name, site, _)) = self.instance_stack.first().cloned()
+            && let Some((name, site, _, macro_self)) = self.instance_stack.first().cloned()
             && site != Span::default()
             && let Some(primary) = diag.primary_span()
             && !within(primary, site)
-            && self.instance_stack.iter().any(|(_, _, body)| within(primary, *body))
+            && self.instance_stack.iter().any(|(_, _, body, _)| within(primary, *body))
         {
-            diag = diag
-                .secondary(site, format!("`{name}` is checked for these types because of this call"))
-                .note(format!("the error is inside the generic method `{name}`"));
+            diag = match macro_self {
+                Some(shown) => diag
+                    .secondary(site, format!("`{name}` runs with `Self` as `{shown}` for this call"))
+                    .note(format!("the error is inside the macro `{name}`, checked for each `Self` it runs with")),
+                None => diag
+                    .secondary(site, format!("`{name}` is checked for these types because of this call"))
+                    .note(format!("the error is inside the generic method `{name}`")),
+            };
         }
         self.diags.push(diag);
     }
@@ -438,9 +451,12 @@ impl<'a> Checker<'a> {
             let decl = &self.decls[i];
             let check = decl.loc.pkg == PackageId(0) || self.input.options.check_all_packages;
             if check && matches!(decl.kind, DeclKind::Fn(f) if f.is_macro) {
-                // A macro's body is checked even if nothing calls it.
-                if self.check_macro(DeclId(i as u32)) {
-                    self.fn_instance(DeclId(i as u32));
+                // A macro's body is checked even if nothing calls it, except
+                // one that uses `Self`: it is checked at each call, for the
+                // call's `Self`, like a generic method.
+                let id = DeclId(i as u32);
+                if self.check_macro(id) && self.macro_self_use(id).is_none() {
+                    self.fn_instance(id);
                 }
                 continue;
             }
@@ -472,7 +488,7 @@ impl<'a> Checker<'a> {
             }
             let d = &self.decls[i];
             if check
-                && matches!(d.kind, DeclKind::Struct(_) | DeclKind::Enum(_) | DeclKind::Module(_) | DeclKind::Extend(_))
+                && matches!(d.kind, DeclKind::Struct(_) | DeclKind::Enum(_) | DeclKind::Module | DeclKind::Extend(_))
             {
                 self.includes_of(DeclId(i as u32));
             }
@@ -516,7 +532,10 @@ impl<'a> Checker<'a> {
 
     /// Reports an undefined name with suggestions.
     pub fn undefined(&mut self, name: Name, span: Span, candidates: Vec<&'static str>, what: &str) {
-        if let Some(loc) = self.body.frames.last().map(|f| f.loc) {
+        if !self.body.frames.is_empty() {
+            // Where the name resolves: for code a macro generated, the
+            // macro's file.
+            let loc = self.loc_at(span);
             if self.import_failed(loc, name) || self.failed_merges.contains(&loc.pkg) {
                 return;
             }

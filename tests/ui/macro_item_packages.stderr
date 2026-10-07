@@ -1,0 +1,43 @@
+error[E0201]: undefined macro `tools.helper`
+ --> tests/ui/macro_item_packages/main.wid:4:7
+  |
+4 | tools.helper
+  |       ^^^^^^ `tools` has no macro with this name
+  = note: a call among declarations runs a macro, and the declarations it generates take the call's place
+help: a macro with a similar name exists: `helpers`
+  | tools.helpers
+  = see `wid explain E0201`
+
+error[E0205]: `secret` is private to package `tools`
+ --> tests/ui/macro_item_packages/main.wid:5:7
+  |
+5 | tools.secret
+  |       ^^^^^^ not visible from here
+ ::: tests/ui/macro_item_packages/tools/tools.wid:7:19
+  |
+7 | private macro def secret -> Code
+  |                   ------ declared `private` here
+help: use a public method of `tools` instead, or remove `private` from the declaration
+  = see `wid explain E0205`
+
+error[E0201]: undefined package `toolz`
+ --> tests/ui/macro_item_packages/main.wid:6:1
+  |
+6 | toolz.helpers
+  | ^^^^^ not found in this scope
+help: a similar name exists: `tools`
+  | tools.helpers
+  = see `wid explain E0201`
+
+error[E0201]: undefined method `missing_helper`
+  --> tests/ui/macro_item_packages/tools/tools.wid:17:25
+   |
+17 |     def broken -> Int = missing_helper()
+   |                         ^^^^^^^^^^^^^^ not found in this scope
+  ::: tests/ui/macro_item_packages/main.wid:10:3
+   |
+10 |   tools.broken
+   |   ------------ `tools.broken` expands here
+   = see `wid explain E0201`
+
+error: could not compile due to 4 errors

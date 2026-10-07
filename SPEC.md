@@ -480,9 +480,47 @@ end
   - **Where a macro call expands:** in an expression, as a statement, as a
     declaration in a `struct`, `enum`, `module` or `extend` body, or at
     package level. Declaration-level calls expand once every declaration
-    outside them is known, in source order, like `comptime if`. A macro
-    can't add fields, because a struct's layout is fixed before its macros
-    run.
+    outside them is known, in source order, like `comptime if`.
+  - **Among declarations,** a call must name a macro: calling a method
+    there is a statement outside a method (E0108), and an unknown name is
+    an undefined macro (E0201). In an `enum` body a name alone on a line is
+    a member, so a macro without arguments is called `name()` there.
+    - The generated declarations take the call's place and are collected
+      like written ones, before any method body is checked, so code
+      anywhere in the package can use them. Calls written after the call,
+      and the macros they run, see them too; calls before it don't. The
+      calls among generated declarations expand after every call written
+      outside them.
+    - Each line of the generated code must be a declaration: `def`,
+      `macro def`, `struct`, `enum`, `union`, `module`, `extend`,
+      `overload`, `include`, a constant (`NAME = v` or `NAME: T = v`, also
+      with a spliced name, `#{name} = v`), a field (`name: T`), a
+      `comptime if` whose branches follow the same rule, or a macro call (a
+      call or a name alone on a line), which expands in turn and counts
+      against the budgets. Any other statement is E0108. Code spliced
+      among declarations inside a `quote`, like `#{fields}` in a `struct`
+      body, follows the same rule (E0911 for a statement).
+    - What a call may generate follows what may be written where it is
+      (types only at package level, fields only in a struct, and so on),
+      with two exceptions (E0913). A macro can't add fields to the struct
+      whose body holds the call, because its layout is fixed before its
+      macros run (an enum's members are fixed too, and a name alone on a
+      generated line is a macro call). And generated code can't `import`
+      or `cimport`, because packages are loaded before any macro runs; the
+      quote's own code uses the imports of the macro's file instead.
+    - `private` before a call (`private helpers :hp`) makes every
+      declaration it generates private. A call takes no attributes (E0328).
+    - In a generic struct's body a macro runs once, for the declaration,
+      not once per instance. The methods it generates are checked for each
+      instance, like written ones, and `Self` in them is the instance.
+  - **`Self` in a macro:** the macro's own code (outside its `quote`s,
+    their splices included) may use `Self`, the type whose body or method
+    holds the call, so a macro called in a `struct` body can read
+    `Self.fields`. Such a macro runs, and is checked, for each `Self` it is
+    called with, like a generic method. Where a call has no `Self` (at
+    package level, or in a method that isn't a type's) or where `Self`
+    stands for many types (in a `module` or `extend` body, or in a generic
+    struct's body), calling it, or passing `Self` as an argument, is E0209.
   - **In an expression or as a statement,** the generated statements run
     in place of the call, in the caller's block, and the value of the last
     one is the call's value. So the variables a spliced name declares stay

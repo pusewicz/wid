@@ -1,10 +1,11 @@
-error[E0902]: `attr_reader :hp` cannot expand: macro calls among declarations don't run yet
- --> tests/ui/not_yet_available.wid:2:3
+error[E0201]: undefined macro `attr_reader`
+ --> tests/ui/not_yet_available.wid:3:3
   |
-2 |   attr_reader :hp
-  |   ^^^^^^^^^^^^^^^ a macro call inside a type
-  = note: macro calls expand in method bodies; declaration-level expansion is not implemented yet
-help: write the methods out, for example `def hp = @hp` for a reader
-  = see `wid explain E0902`
+3 |   attr_reader :hp
+  |   ^^^^^^^^^^^ no macro with this name is in scope
+  = note: a call among declarations runs a macro, and the declarations it generates take the call's place
+  = note: `core` doesn't define `attr_reader` yet
+help: write the method out, like `def current_hp -> Int = @hp`; a method can't share its field's name
+  = see `wid explain E0201`
 
 error: could not compile due to 1 error

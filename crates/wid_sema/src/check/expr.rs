@@ -26,7 +26,7 @@ pub(crate) fn is_untyped(e: &ast::Expr) -> bool {
 }
 
 /// Builtin functions callable by name anywhere.
-const BUILTINS: &[&str] = &[
+pub(super) const BUILTINS: &[&str] = &[
     "method",
     "puts",
     "print",

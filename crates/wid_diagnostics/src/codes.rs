@@ -135,6 +135,7 @@ codes! {
     QUOTE_OUTSIDE_MACRO = "E0910", "`quote` outside a `macro def`";
     SPLICE_MISMATCH = "E0911", "spliced value doesn't fit its place";
     MACRO_ARGUMENT = "E0912", "macro argument of the wrong kind";
+    MACRO_DECLARATION = "E0913", "declaration a macro can't generate";
 }
 
 /// Looks up a registered code by its text, case-insensitively.

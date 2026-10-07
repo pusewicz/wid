@@ -71,7 +71,7 @@ impl<'a> Checker<'a> {
         for (pkg, cpkg, span) in merges {
             self.merge_cimport(pkg, cpkg, span);
         }
-        self.resolve_comptime_ifs();
+        self.resolve_pending();
     }
 
     /// Collects the declarations of a file, or of a chosen `comptime if`
@@ -111,8 +111,11 @@ impl<'a> Checker<'a> {
             match &item.kind {
                 ItemKind::ComptimeIf(c) => {
                     self.check_item_attributes(item);
-                    self.pending_ifs.push(super::comptime::PendingIf { loc, item: c, owner: None });
+                    let pending = super::comptime::PendingIf { loc, item: c, owner: None };
+                    self.pending_decls.push(super::comptime::Pending::If(pending));
                 }
+                // The loader never saw it: its offsets are in a macro's file.
+                ItemKind::Import(_) | ItemKind::Cimport(_) if self.generated_import(item) => {}
                 ItemKind::Import(import) => {
                     let Some(&target) = file.imports.get(&i) else {
                         let name = match import.alias {
@@ -227,7 +230,7 @@ impl<'a> Checker<'a> {
         self.merged_cimports.entry(pkg).or_default().push(cpkg);
     }
 
-    fn collect_item(&mut self, item: &'a ast::Item, loc: DeclLoc, owner: Option<DeclId>) {
+    pub(super) fn collect_item(&mut self, item: &'a ast::Item, loc: DeclLoc, owner: Option<DeclId>) {
         self.check_item_attributes(item);
         let (name, span, kind) = match &item.kind {
             ItemKind::Def(f) if f.is_macro && owner.is_some() => {
@@ -247,27 +250,13 @@ impl<'a> Checker<'a> {
             ItemKind::Struct(s) => (s.name.name, s.name.span, DeclKind::Struct(s)),
             ItemKind::Enum(e) => (e.name.name, e.name.span, DeclKind::Enum(e)),
             ItemKind::Union(u) => (u.name.name, u.name.span, DeclKind::Union(u)),
-            ItemKind::Module(m) => (m.name.name, m.name.span, DeclKind::Module(m)),
+            ItemKind::Module(m) => (m.name.name, m.name.span, DeclKind::Module),
             ItemKind::Overload(o) => (o.name.name, o.name.span, DeclKind::Overload(o)),
-            ItemKind::MacroCall(expr) => {
-                if owner.is_some() {
-                    let text = self.source_text(expr.span);
-                    self.report(
-                        Diagnostic::error(
-                            codes::MACRO_FAILED,
-                            format!("`{text}` cannot expand: macro calls among declarations don't run yet"),
-                        )
-                        .primary(expr.span, "a macro call inside a type")
-                        .note("macro calls expand in method bodies; declaration-level expansion is not implemented yet")
-                        .help("write the methods out, for example `def hp = @hp` for a reader"),
-                    );
-                } else {
-                    self.report(
-                        Diagnostic::error(codes::TOP_LEVEL_STATEMENT, "statements must be inside a method")
-                            .primary(expr.span, "this call is outside any `def`")
-                            .help("move it into `def main … end`, which runs when the program starts"),
-                    );
-                }
+            // Expanded once every declaration outside it is known.
+            ItemKind::MacroCall(_) => {
+                self.reject_call_attributes(item);
+                let pending = super::decl_macros::PendingMacro { loc, item, owner };
+                self.pending_decls.push(super::comptime::Pending::Macro(pending));
                 return;
             }
             ItemKind::Field(f) => {
@@ -282,7 +271,7 @@ impl<'a> Checker<'a> {
                             )),
                     ),
                     Some(DeclKind::Struct(_)) => {}
-                    Some(DeclKind::Module(_)) => self.report(
+                    Some(DeclKind::Module) => self.report(
                         Diagnostic::error(codes::UNEXPECTED_TOKEN, "modules cannot declare fields")
                             .primary(f.name.span, "a module only holds methods and constants")
                             .help(format!(
@@ -315,15 +304,23 @@ impl<'a> Checker<'a> {
             // collected; the parser reports one anywhere else.
             ItemKind::Splice(_) => return,
             ItemKind::Include(t) => {
-                if owner.is_none() {
-                    self.report(
+                match owner {
+                    None => self.report(
                         Diagnostic::error(
                             codes::TOP_LEVEL_STATEMENT,
                             "`include` belongs inside a `struct`, `enum`, `module` or `extend`",
                         )
                         .primary(t.span, "nothing to include this into")
                         .help("move it into the body of the type that should get the module's methods"),
-                    );
+                    ),
+                    Some(o) => {
+                        self.include_items.entry(o).or_default().push(item);
+                        // Added after the type's includes were resolved, by
+                        // a `comptime if` or a macro.
+                        if self.includes.contains_key(&o) {
+                            self.resolve_include(o, item);
+                        }
+                    }
                 }
                 return;
             }
@@ -352,6 +349,7 @@ impl<'a> Checker<'a> {
                 }
                 return;
             }
+            ItemKind::Import(_) | ItemKind::Cimport(_) if self.generated_import(item) => return,
             ItemKind::Cimport(_) => {
                 self.report(
                     Diagnostic::error(codes::UNEXPECTED_TOKEN, "`cimport` belongs at the top level of a file")
@@ -360,12 +358,13 @@ impl<'a> Checker<'a> {
                 return;
             }
             ItemKind::ComptimeIf(c) => {
-                self.pending_ifs.push(super::comptime::PendingIf { loc, item: c, owner });
+                let pending = super::comptime::PendingIf { loc, item: c, owner };
+                self.pending_decls.push(super::comptime::Pending::If(pending));
                 return;
             }
             ItemKind::Import(_) | ItemKind::Error => return,
         };
-        if let (Some(o), DeclKind::Struct(_) | DeclKind::Enum(_) | DeclKind::Union(_) | DeclKind::Module(_)) =
+        if let (Some(o), DeclKind::Struct(_) | DeclKind::Enum(_) | DeclKind::Union(_) | DeclKind::Module) =
             (owner, &kind)
         {
             let what = self.decls[o.0 as usize].kind.a_describe();
@@ -434,6 +433,9 @@ impl<'a> Checker<'a> {
             return;
         }
         scope.insert(name, id);
+        if let Some(o) = owner {
+            self.check_member_after_fields(o, name, span);
+        }
         let body: &'a [ast::Item] = match &item.kind {
             ItemKind::Struct(s) => &s.body,
             ItemKind::Enum(e) => &e.body,
@@ -503,7 +505,7 @@ impl<'a> Checker<'a> {
                 let span = self.decls[owner.0 as usize].span;
                 Some(self.decl_as_type(owner, span))
             }
-            DeclKind::Extend(_) | DeclKind::Module(_) => Some(self.types.intern(TyKind::Param(Name::new("Self")))),
+            DeclKind::Extend(_) | DeclKind::Module => Some(self.types.intern(TyKind::Param(Name::new("Self")))),
             _ => None,
         }
     }
@@ -729,6 +731,8 @@ impl<'a> Checker<'a> {
             }
             E::Paren(inner) => self.fold_const(inner, loc)?,
             E::Const(name) => {
+                // A macro's own code names constants where the macro is.
+                let loc = self.virtual_file(expr.span.file).map_or(loc, |v| v.loc);
                 let decl = self.lookup_pkg(loc.pkg, *name)?;
                 match self.decls[decl.0 as usize].kind {
                     DeclKind::Const(_) => {
@@ -959,7 +963,7 @@ fn type_suffix(text: &str) -> String {
 
 /// The name an import binds when it has no `as:`: the last path segment,
 /// like `physics` for `"./game/physics"` or `fmt` for `"core:fmt"`.
-fn import_name(path: &str) -> String {
+pub(super) fn import_name(path: &str) -> String {
     let last = path.rsplit(['/', ':']).find(|s| !s.is_empty() && *s != "." && *s != "..").unwrap_or(path);
     let mut name: String = last.chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' }).collect();
     if name.is_empty() || name.starts_with(|c: char| c.is_ascii_digit()) {

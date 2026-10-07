@@ -606,50 +606,54 @@ impl Checker<'_> {
             return m.clone();
         }
         self.includes.insert(decl, Vec::new());
+        let items = self.include_items.get(&decl).cloned().unwrap_or_default();
+        for item in items {
+            self.resolve_include(decl, item);
+        }
+        self.includes.get(&decl).cloned().unwrap_or_default()
+    }
+
+    /// Resolves one `include` of a struct, enum, module or `extend` and adds
+    /// the module to what it includes. The name resolves where the `include`
+    /// is written, which for one a macro generated is the macro's package.
+    pub(super) fn resolve_include(&mut self, decl: DeclId, item: &ast::Item) {
+        let ast::ItemKind::Include(t) = &item.kind else { return };
         let d = self.decls[decl.0 as usize].clone();
-        let body: &[ast::Item] = match d.kind {
-            DeclKind::Struct(s) => &s.body,
-            DeclKind::Enum(e) => &e.body,
-            DeclKind::Module(m) => &m.body,
-            DeclKind::Extend(e) => &e.body,
-            _ => &[],
-        };
-        let mut out = Vec::new();
-        for item in body {
-            let ast::ItemKind::Include(t) = &item.kind else { continue };
+        let loc = self.virtual_file(t.span.file).map_or(d.loc, |v| v.loc);
+        {
             let ast::TypeKind::Path { segments, .. } = &t.kind else {
                 self.report(
                     Diagnostic::error(codes::NOT_A_TYPE, "`include` takes a module name")
                         .primary(t.span, "not a module name")
                         .help("write `include Name`, where `Name` is declared with `module Name … end`"),
                 );
-                continue;
+                return;
             };
             let module = match segments.as_slice() {
-                [only] => self.lookup_pkg(d.loc.pkg, only.name).or_else(|| self.lookup_prelude(only.name)),
-                [pkg, name] => self.lookup_import(d.loc, pkg.name).and_then(|p| self.lookup_pkg(p, name.name)),
+                [only] => self.lookup_pkg(loc.pkg, only.name).or_else(|| self.lookup_prelude(only.name)),
+                [pkg, name] => self.lookup_import(loc, pkg.name).and_then(|p| self.lookup_pkg(p, name.name)),
                 _ => None,
             };
             match module {
-                Some(m) if matches!(self.decls[m.0 as usize].kind, DeclKind::Module(_)) => {
+                Some(m) if matches!(self.decls[m.0 as usize].kind, DeclKind::Module) => {
                     if m == decl {
                         self.report(
                             Diagnostic::error(codes::RECURSIVE_TYPE, "a module cannot include itself")
                                 .primary(t.span, "this is the module being declared")
                                 .help("remove this `include`"),
                         );
-                        continue;
+                        return;
                     }
-                    if out.contains(&m) {
+                    if self.includes.get(&decl).is_some_and(|out| out.contains(&m)) {
                         self.report(
                             Diagnostic::error(codes::DUPLICATE_DEFINITION, "this module is already included")
                                 .primary(t.span, "included again here")
                                 .help("remove the repeated `include`"),
                         );
-                        continue;
+                        return;
                     }
-                    self.check_visible_from(m, d.loc.pkg, t.span);
-                    out.push(m);
+                    self.check_visible_from(m, loc.pkg, t.span);
+                    self.includes.entry(decl).or_default().push(m);
                 }
                 Some(m) => {
                     let what = self.decls[m.0 as usize].kind.a_describe();
@@ -677,13 +681,11 @@ impl Checker<'_> {
                 }
                 None => {
                     let name = segments.last().map_or_else(|| Name::new("?"), |s| s.name);
-                    let candidates = self.package_names(d.loc.pkg);
+                    let candidates = self.package_names(loc.pkg);
                     self.undefined(name, t.span, candidates, "module");
                 }
             }
         }
-        self.includes.insert(decl, out.clone());
-        out
     }
 
     /// Reports calling a `private` method from outside its type. A private

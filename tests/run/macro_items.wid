@@ -1,0 +1,250 @@
+# Macros called among declarations: at package level and in `struct`,
+# `enum`, `module` and `extend` bodies. What they generate is collected
+# like written declarations, before any method body is checked.
+
+def main
+  # Generated at package level, by calls written below.
+  p add_two(40), add_ten(5), ANSWER, LIMIT, SUM
+  hero = Hero.new(hp: 30, name: "Ayla")
+  p hero.get_hp, hero.get_name
+  puts hero.describe
+  p hero.is_alive
+  puts hero.field_names
+  c: Color = :green
+  puts c.describe, Color.count_line
+  puts hero.greet
+  puts 5.shout
+  puts first, second
+  p add(1, 2), add("x", "y")
+  pt = Point.new(x: 1, y: 2)
+  p pt, pt.get_x + pt.get_y
+  puts mode
+  p seven
+  pool = Pool(Int).new
+  pool.items << 4
+  puts pool.self_name, Pool(String).new.self_name
+  p pool.get_items
+end
+
+# ----- package level -----------------------------------------------------------
+
+macro def adder(name: Symbol, amount: Int) -> Code
+  quote do
+    def #{name}(x: Int) -> Int = x + #{amount}
+  end
+end
+
+# A constant whose name and value the call gives, and one computed while the
+# macro runs.
+macro def constant(name: Symbol, value: Int) -> Code
+  quote do
+    #{name} = #{value}
+  end
+end
+
+macro def sum_below(name: Symbol, n: Int) -> Code
+  total = 0
+  for i in 0...n
+    total += i
+  end
+  quote do
+    #{name}: Int = #{total}
+  end
+end
+
+adder :add_two, 2
+adder :add_ten, 10
+constant :ANSWER, 42
+sum_below :SUM, 5
+
+# A `comptime if` among the generated declarations chooses some of them.
+macro def build_mode(debug: Bool) -> Code
+  quote do
+    comptime if #{debug}
+      def mode -> String = "debug"
+    else
+      def mode -> String = "release"
+    end
+    LIMIT = 3
+  end
+end
+
+build_mode false
+
+# ----- in a struct -------------------------------------------------------------
+
+# `Self` is the type whose body holds the call, so the macro reads its
+# fields. The struct's fields are fixed before its macros run.
+macro def def_getters -> Code
+  methods = [dynamic]Code.new
+  for f in Self.fields
+    getter = "get_#{f.name}".to_sym
+    field = f.name.to_sym
+    methods << quote do
+      def #{getter} -> #{f.type} = @#{field}
+    end
+  end
+  quote do
+    #{methods}
+  end
+end
+
+macro def derive_describe -> Code
+  parts = [dynamic]Code.new
+  for f in Self.fields
+    field = f.name.to_sym
+    label = "#{f.name}="
+    parts << quote do
+      text = "#{text} #{#{label}}#{@#{field}}"
+    end
+  end
+  name = Self.name
+  quote do
+    def describe -> String
+      text = #{name}
+      #{parts}
+      text
+    end
+  end
+end
+
+# A helper that the call makes `private`, used by a written method.
+macro def alive_check -> Code
+  quote do
+    def alive? -> Bool = @hp > 0
+  end
+end
+
+struct Hero
+  hp: Int
+  name: String
+  def_getters
+  derive_describe
+  private alive_check
+  include Greeting
+
+  def is_alive -> Bool = alive?
+
+  # In a method, a macro's `Self` is the method's type too.
+  def field_names -> String = field_list
+end
+
+macro def field_list -> Code
+  names = "fields:"
+  for f in Self.fields
+    names = "#{names} #{f.name}"
+  end
+  quote do
+    #{names}
+  end
+end
+
+# ----- in an enum --------------------------------------------------------------
+
+# In an enum body a name alone on a line is a member, so a macro without
+# arguments is called with `()`.
+macro def enum_helpers -> Code
+  name = Self.name
+  count = 0
+  for _f in Self.methods
+    count += 1
+  end
+  quote do
+    def describe -> String = "#{#{name}}.#{self}"
+    def self.count_line -> String = "#{#{name}} had #{#{count}} methods before these"
+  end
+end
+
+enum Color
+  red
+  green
+  def plain -> Bool = true
+  enum_helpers()
+end
+
+# ----- in a module and an `extend` ---------------------------------------------
+
+macro def text_method(name: Symbol, text: String) -> Code
+  quote do
+    def #{name} -> String = #{text}
+  end
+end
+
+module Greeting
+  text_method :greet, "hello from a module"
+end
+
+extend Int
+  text_method :shout, "an Int says hi"
+end
+
+# ----- nested expansions and overloads -----------------------------------------
+
+# The generated code calls macros, which expand among the same declarations.
+macro def both(a: Symbol, b: Symbol) -> Code
+  quote do
+    text_method :#{a}, "the first"
+    text_method :#{b}, "the second"
+  end
+end
+
+both :first, :second
+
+macro def adds -> Code
+  quote do
+    def add_int(a: Int, b: Int) -> Int = a + b
+    def add_str(a: String, b: String) -> String = "#{a}#{b}"
+    overload :add, :add_int, :add_str
+  end
+end
+
+adds
+
+# A whole struct, its fields spliced in, with a macro call in its body.
+macro def record(name: Symbol, *fields: Symbol) -> Code
+  decls = [dynamic]Code.new
+  for f in fields
+    decls << quote do
+      #{f}: Int
+    end
+  end
+  quote do
+    struct #{name}
+      #{decls}
+      def_getters
+    end
+  end
+end
+
+record :Point, :x, :y
+
+# A macro that generates a macro, which a later call runs.
+macro def maker(name: Symbol, value: Int) -> Code
+  quote do
+    macro def #{name}(fn_name: Symbol) -> Code
+      v = #{value}
+      quote do
+        def #{fn_name} -> Int = #{v}
+      end
+    end
+  end
+end
+
+maker :make_seven, 7
+make_seven :seven
+
+# ----- in a generic struct -----------------------------------------------------
+
+# A macro runs once for a generic struct's declaration. The code it
+# generates is checked for each instance, where `Self` is the instance.
+macro def instance_name -> Code
+  quote do
+    def self_name -> String = Self.name
+    def get_items -> [dynamic]T = @items
+  end
+end
+
+struct Pool($T)
+  items: [dynamic]T
+  instance_name
+end
