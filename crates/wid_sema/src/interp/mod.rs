@@ -9,6 +9,7 @@ mod builtins;
 mod convert;
 mod format;
 mod memory;
+mod type_info;
 
 use std::collections::HashMap;
 
@@ -144,6 +145,8 @@ pub(crate) struct Interp<'c> {
     pub output: Vec<u8>,
     global_addrs: HashMap<GlobalId, Addr>,
     temp_blocks: Vec<Addr>,
+    /// The `type_info` table of each type described so far.
+    type_infos: HashMap<TyId, Addr>,
 }
 
 impl<'c> Interp<'c> {
@@ -160,6 +163,7 @@ impl<'c> Interp<'c> {
             output: Vec::new(),
             global_addrs: HashMap::new(),
             temp_blocks: Vec::new(),
+            type_infos: HashMap::new(),
         };
         if let Ok(ctx) = it.mem.alloc(Region::Static, 64, 8) {
             let mut bytes = vec![0u8; 64];

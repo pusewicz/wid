@@ -1,0 +1,106 @@
+-- numbers
+Int: int, size 8, align 8
+I8: int, size 1, align 1
+U16: uint, size 2, align 2
+UInt: uint, size 8, align 8
+U64: uint, size 8, align 8
+F32: float, size 4, align 4
+F64: float, size 8, align 8
+-- primitives
+Bool: bool, size 1, align 1
+Rune: rune, size 4, align 4
+String: string, size 16, align 8
+CString: cstring, size 8, align 8
+RawPtr: rawptr, size 8, align 8
+TypeId: typeid, size 8, align 8
+Any: any, size 16, align 8
+-- constructors
+^Vec3: pointer, size 8, align 8, elem Vec3
+[^]U8: multi_pointer, size 8, align 8, elem U8
+[4]F32: array, size 16, align 4, elem F32, count 4
+[]Int: slice, size 16, align 8, elem Int
+[dynamic]String: dynamic_array, size 40, align 8, elem String
+map[String]Int: map, size 40, align 8, elem Int, key String
+matrix[2, 3]F32: matrix, size 24, align 4, elem F32, count 2, columns 3
+Int?: optional, size 16, align 8, elem Int
+^Vec3?: optional, size 8, align 8, elem ^Vec3
+^(Int?): pointer, size 8, align 8, elem Int?
+Vec3?: optional, size 16, align 4, elem Vec3
+-- procs
+proc(Int, String) -> Bool: proc, size 8, align 8, elem Bool
+  : Int @0
+  : String @0
+proc(): proc, size 8, align 8
+proc(I32) -> I32: proc, size 8, align 8, elem I32
+  : I32 @0
+proc(Int) -> Int: proc, size 8, align 8, elem Int
+  : Int @0
+proc(String) -> (Int, Error): proc, size 8, align 8, elem (Int, Error)
+  : String @0
+-- structs
+Vec3: struct, size 12, align 4
+  x: F32 @0
+  y: F32 @4
+  z: F32 @8
+Player: struct, size 88, align 8
+  base: Entity @0
+  pos: Vec3 @8
+  name: String @24
+  path: [3]Vec3 @40
+  head: ^Node? @80
+Node: struct, size 16, align 8
+  value: I16 @0
+  next: ^Node? @8
+Pool(Vec3, 4): struct, size 56, align 8
+  items: [4]Vec3 @0
+  used: Int @48
+Meters: float, size 8, align 8
+Spot: struct, size 12, align 4
+  x: F32 @0
+  y: F32 @4
+  z: F32 @8
+-- enums and unions
+Dir: enum, size 1, align 1, elem U8
+  :north = 1
+  :east = 2
+  :south = 10
+  :west = 11
+Mood: enum, size 8, align 8, elem Int
+  :calm = 0
+  :angry = 1
+Mask: enum, size 8, align 8, elem U64
+  :none = 0
+  :all = -1
+Error: enum, size 4, align 4, elem U32
+  :not_found = 1
+  :too_big = 2
+Shape: union, size 12, align 4
+  | Circle (struct)
+  | Rect (struct)
+-- values
+Vec3: struct, size 12, align 4
+  x: F32 @0
+  y: F32 @4
+  z: F32 @8
+(Int, Error): struct, size 16, align 8
+  0: Int @0
+  1: Error @8
+F32: float, size 4, align 4
+Error: enum, size 4, align 4, elem U32
+  :not_found = 1
+  :too_big = 2
+Int
+count_calls ran 0 times
+-- identity
+true
+true
+false
+true
+true
+-- compile time
+Node{value: I16, next: ^Node?}
+56
+Int
+true
+angry
+Int

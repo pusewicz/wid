@@ -5,6 +5,7 @@ mod check;
 pub mod input;
 mod interp;
 pub mod ir;
+pub mod type_info;
 pub mod types;
 
 pub use check::{check_program, is_reserved_type_name};

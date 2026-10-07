@@ -1061,9 +1061,10 @@ impl<'a> Parser<'a> {
             if self.at(T::Eof) || self.at_kw(K::End) {
                 break;
             }
-            if self.at(T::Ident) && matches!(self.nth(1).kind, T::Newline | T::Eq | T::Comma | T::Kw(K::End)) {
+            let member_start = self.at(T::Ident) || is_keyword_member(self.kind());
+            if member_start && matches!(self.nth(1).kind, T::Newline | T::Eq | T::Comma | T::Kw(K::End)) {
                 loop {
-                    let member = self.expect_ident("an enum member");
+                    let member = self.expect_enum_member();
                     let value = if self.eat(T::Eq) { Some(self.parse_expr()) } else { None };
                     members.push(EnumMember { name: member, value });
                     if !self.eat(T::Comma) {
@@ -1094,6 +1095,18 @@ impl<'a> Parser<'a> {
         }
         self.expect_end();
         ItemKind::Enum(Box::new(EnumDecl { name, backing, members, body }))
+    }
+
+    /// An enum member's name: an identifier, or `struct`, `enum` or `union`
+    /// standing alone, so an enum can name the kinds of types
+    /// (`TypeKind.struct`).
+    fn expect_enum_member(&mut self) -> Ident {
+        let tok = self.peek();
+        if is_keyword_member(tok.kind) && matches!(self.nth(1).kind, T::Newline | T::Eq | T::Comma | T::Kw(K::End)) {
+            self.bump();
+            return Ident { name: Name::new(self.text_of(tok.span)), span: tok.span };
+        }
+        self.expect_ident("an enum member")
     }
 
     fn parse_union(&mut self) -> ItemKind {
@@ -2805,6 +2818,11 @@ fn is_assignable(expr: &Expr) -> bool {
     }
 }
 
+/// The reserved words that may name an enum member when they stand alone.
+fn is_keyword_member(kind: TokenKind) -> bool {
+    matches!(kind, T::Kw(Keyword::Struct | Keyword::Enum | Keyword::Union))
+}
+
 fn to_snake_case(text: &str) -> String {
     let mut out = String::new();
     let mut prev: Option<char> = None;
@@ -2929,6 +2947,22 @@ end
         let ItemKind::Def(def) = &file.items[0].kind else { panic!() };
         let FnBody::Block(body) = &def.body else { panic!() };
         assert_eq!(body.len(), 3);
+    }
+
+    #[test]
+    fn keywords_name_enum_members_when_alone() {
+        let file =
+            parse_ok("enum Kind\n  int\n  struct\n  enum = 7\n  union, map\n\n  def plain? -> Bool = true\nend\n");
+        let ItemKind::Enum(e) = &file.items[0].kind else { panic!("expected an enum") };
+        let names: Vec<&str> = e.members.iter().map(|m| m.name.as_str()).collect();
+        assert_eq!(names, ["int", "struct", "enum", "union", "map"]);
+        assert!(e.members[2].value.is_some());
+        assert_eq!(e.body.len(), 1);
+
+        // Followed by a name, `struct` still starts a declaration, not a member.
+        let (file, _) = parse_file(FileId(0), "enum Kind\n  a\n  struct Inner\n  end\nend\n");
+        let ItemKind::Enum(e) = &file.items[0].kind else { panic!("expected an enum") };
+        assert_eq!(e.members.len(), 1);
     }
 
     #[test]

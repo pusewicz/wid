@@ -35,6 +35,7 @@ syn match widConstant /\<\u[A-Z0-9_]\+\>/
 syn keyword widBuiltinType Int UInt I8 I16 I32 I64 U8 U16 U32 U64 F32 F64 Bool Rune
 syn keyword widBuiltinType String CString RawPtr TypeId Any Error Never Type Self
 syn keyword widBuiltinType Context Allocator AllocMode Location Logger Os Arch FieldInfo MethodInfo
+syn keyword widBuiltinType TypeInfo TypeKind TypeInfoField TypeInfoMember
 
 " The lexer's reserved words (`Keyword` in crates/wid_syntax/src/token.rs) by
 " highlight group, with extra arguments for the match. A reserved word followed
@@ -59,6 +60,10 @@ for s:entry in s:reserved
 endfor
 unlet s:entry s:reserved
 syn match widPseudoVariable /\<\%(context\|caller_location\)\>[?!]\@!/
+" Inside an enum, `struct`, `enum` or `union` standing alone names a member
+" (the prelude's `TypeKind`) and opens no block. It stays unhighlighted, like
+" other members.
+syn match widEnumMember /\<\%(struct\|enum\|union\)\>\ze\s*\%(=[=~>]\@!\|,\|#\|$\)/
 
 " `x if cond`: after the end of an expression, `if`, `unless`, `while` and
 " `until` are modifiers and open no block. The indent and matchit rules rely on
@@ -80,7 +85,7 @@ syn match widOperatorMethod /\[\]=\=\|<=>\|\*\*\|[=!<>]=\|<<\|>>\|[-+*\/%<>!~&|]
 syn match widDefSelf /\<self\./ contained nextgroup=widFunction,widOperatorMethod
 
 " Built-in procedures, unless the name is being assigned or passed by name.
-syn match widBuiltin /\<\%(puts\|print\|method\|alloc\|embed\|config\|free\|free_all\|size_of\|align_of\|panic\|unreachable\|assert\)\>[?!]\@!\%(\s*\%([-+*\/%&|~<>]\{,2}\)=\%([^=]\|$\)\|:\)\@!/
+syn match widBuiltin /\<\%(puts\|print\|method\|alloc\|embed\|config\|free\|free_all\|size_of\|align_of\|type_info\|panic\|unreachable\|assert\)\>[?!]\@!\%(\s*\%([-+*\/%&|~<>]\{,2}\)=\%([^=]\|$\)\|:\)\@!/
 " `p` is also a common local name, so it only counts when it is called.
 syn match widBuiltin /\<p\>\%((\|\s\+\%(\<in\>\|[-+*\/%=<>!&|^~.?,)\]}#]\)\@!\S\)\@=/
 

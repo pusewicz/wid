@@ -1,0 +1,23 @@
+Point: struct, size 8, align 4
+  x: F32 @0
+  y: F32 @4
+Packet: struct, size 64, align 8
+  tag: U8 @0
+  weight: F64 @8
+  count: I16 @16
+  points: [3]Point @20
+  label: CString? @48
+  vertex_count: I32 @56
+Value: struct, size 16, align 8
+  i: I64 @0
+  d: F64 @0
+  bytes: [12]U8 @0
+Pair: struct, size 8, align 4
+  a: I32 @0
+  b: U8 @4
+^Hidden: pointer, size 8, align 8, elem Hidden
+Hidden: struct, size 0, align 0
+I32: int, size 4, align 4
+UInt: uint, size 8, align 8
+true
+true

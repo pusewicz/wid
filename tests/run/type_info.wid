@@ -1,0 +1,213 @@
+Meters = distinct F64
+MaybeInt = Int?
+MaybeVec = Vec3?
+Callback = proc(Int, String) -> Bool
+Thunk = proc()
+CCallback = @[c] proc(x: I32) -> I32
+
+struct Vec3
+  x: F32
+  y: F32
+  z: F32
+end
+
+struct Entity
+  id: U32
+  alive: Bool
+end
+
+struct Node
+  value: I16
+  next: ^Node?
+end
+
+struct Player
+  using base: Entity
+  pos: Vec3
+  name: String
+  path: [3]Vec3
+  head: ^Node?
+end
+
+struct Pool($T, $N: Int)
+  items: [N]T
+  used: Int
+end
+
+Spot = distinct Vec3
+
+enum Dir : U8
+  north = 1
+  east
+  south = 10
+  west
+end
+
+enum Mood
+  calm
+  angry
+end
+
+enum Mask : U64
+  none
+  all = 0xFFFF_FFFF_FFFF_FFFF
+end
+
+struct Circle
+  radius: F32
+end
+
+struct Rect
+  w: F32
+  h: F32
+end
+
+union Shape = Circle | Rect
+
+def show(t: ^TypeInfo)
+  line = "#{t.name}: #{t.kind}, size #{t.size}, align #{t.align}"
+  if e = t.elem
+    line = "#{line}, elem #{e.name}"
+  end
+  if k = t.key
+    line = "#{line}, key #{k.name}"
+  end
+  line = "#{line}, count #{t.count}" if t.count != 0
+  line = "#{line}, columns #{t.columns}" if t.columns != 0
+  puts line
+  for f in t.fields
+    puts "  #{f.name}: #{f.type.name} @#{f.offset}"
+  end
+  for m in t.members
+    puts "  :#{m.name} = #{m.value}"
+  end
+  for v in t.variants
+    puts "  | #{v.name} (#{v.kind})"
+  end
+end
+
+def check(path: String) -> (Int, Error)
+  return 0, :not_found if path.empty?
+  return 0, :too_big if path.size > 8
+  return path.size, nil
+end
+
+def describe(t: ^TypeInfo) -> String
+  out = "#{t.name}{"
+  for f, i in t.fields
+    sep = i == 0 ? "" : ", "
+    out = "#{out}#{sep}#{f.name}: #{f.type.name}"
+  end
+  "#{out}}"
+end
+
+def deepest(t: ^TypeInfo) -> String
+  at = t
+  while e = at.elem
+    at = e
+  end
+  at.name
+end
+
+def elem_is?(t: ^TypeInfo, other: ^TypeInfo) -> Bool
+  if e = t.elem
+    return e == other
+  end
+  false
+end
+
+def count_calls(n: ^Int) -> Int
+  n^ += 1
+  n^
+end
+
+NODE = comptime describe(type_info(Node))
+POOL_SIZE = comptime type_info(Pool(Vec3, 4)).size
+DEEPEST = comptime deepest(type_info(^^[]Mood))
+SAME = comptime elem_is?(type_info(Node).fields[1].type, type_info(^Node))
+ANGRY = comptime type_info(Mood).members[1].name
+
+def main
+  puts "-- numbers"
+  show(type_info(Int))
+  show(type_info(I8))
+  show(type_info(U16))
+  show(type_info(UInt))
+  show(type_info(U64))
+  show(type_info(F32))
+  show(type_info(F64))
+
+  puts "-- primitives"
+  show(type_info(Bool))
+  show(type_info(Rune))
+  show(type_info(String))
+  show(type_info(CString))
+  show(type_info(RawPtr))
+  show(type_info(TypeId))
+  show(type_info(Any))
+
+  puts "-- constructors"
+  show(type_info(^Vec3))
+  show(type_info([^]U8))
+  show(type_info([4]F32))
+  show(type_info([]Int))
+  show(type_info([dynamic]String))
+  show(type_info(map[String]Int))
+  show(type_info(matrix[2, 3]F32))
+  show(type_info(MaybeInt))
+  show(type_info(^Vec3?))
+  show(type_info(^(Int?)))
+  show(type_info(MaybeVec))
+
+  puts "-- procs"
+  show(type_info(Callback))
+  show(type_info(Thunk))
+  show(type_info(CCallback))
+  double = ->(x: Int) -> Int { x * 2 }
+  show(type_info(double))
+  show(type_info(method(:check)))
+
+  puts "-- structs"
+  show(type_info(Vec3))
+  show(type_info(Player))
+  show(type_info(Node))
+  show(type_info(Pool(Vec3, 4)))
+  show(type_info(Meters))
+  show(type_info(Spot))
+
+  puts "-- enums and unions"
+  show(type_info(Dir))
+  show(type_info(Mood))
+  show(type_info(Mask))
+  show(type_info(Error))
+  show(type_info(Shape))
+
+  puts "-- values"
+  player = Player.new(name: "ada")
+  show(type_info(player.pos))
+  show(type_info(check("x")))
+  pool = Pool(Vec3, 4).new
+  show(type_info(pool.items[0].x))
+  _, err = check("")
+  show(type_info(err))
+  n = 0
+  puts type_info(count_calls(&n)).name
+  puts "count_calls ran #{n} times"
+
+  puts "-- identity"
+  a = 1
+  b = 2
+  puts type_info(a) == type_info(b)
+  puts type_info(a) == type_info(Int)
+  puts type_info(Meters) == type_info(F64)
+  puts elem_is?(type_info(Node).fields[1].type, type_info(^Node))
+  puts type_info(player).fields[0].type == type_info(Entity)
+
+  puts "-- compile time"
+  puts NODE
+  puts POOL_SIZE
+  puts DEEPEST
+  puts SAME
+  puts ANGRY
+  puts deepest(type_info(^^[]Mood))
+end

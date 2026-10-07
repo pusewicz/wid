@@ -87,7 +87,10 @@ end
     is `~`, as in Odin.
   - `&x` takes an address.
   - `{…}` literals must be empty.
-  - Enum members are lowercase.
+  - Enum members are lowercase. Inside an `enum`, `struct`, `enum` or
+    `union` standing alone (followed by a newline, `,` or `= value`) names a
+    member, as in the prelude's `TypeKind`; `TypeKind.struct` and `:struct`
+    select it.
   - `map`, `proc`, `block`, `distinct`, `matrix` and `dynamic` are keywords only
     where a type is expected.
   - A line that ends with an operator or `,`, or a next line that starts with
@@ -440,8 +443,46 @@ end
   written where a `Type` is expected, or used as a value in `comptime` code, is
   a `Type` value; it answers `.name`, `.size`, `.align` and `.fields` and
   compares with `==`. `Type` values exist only while compiling: a method the
-  built program runs can't use them (E0906). At run time, `type_info(x)`
-  describes values. `p x` pretty-prints any value.
+  built program runs can't use them (E0906). `p x` pretty-prints any value.
+- **`type_info(T)`** and **`type_info(x)`** describe a type at run time. For
+  an expression only its static type counts: `x` is checked but not
+  evaluated. Both return a `^TypeInfo` that points at a read-only static
+  table, and the same type always gives the same pointer, so
+  `type_info(a) == type_info(b)` compares types. The prelude declares the
+  records:
+  - `TypeInfo` has `name` (as Wid displays the type: `"[]Vec2"`,
+    `"Pool(Ball, 64)"`), `kind` (a `TypeKind`: `:int`, `:uint`, `:float`,
+    `:bool`, `:rune`, `:string`, `:cstring`, `:rawptr`, `:typeid`, `:any`,
+    `:pointer`, `:multi_pointer`, `:array`, `:slice`, `:dynamic_array`,
+    `:map`, `:matrix`, `:optional`, `:proc`, `:struct`, `:enum` or
+    `:union`), `size`, `align`, `elem`, `key`, `count`, `columns`, `fields`,
+    `members` and `variants`.
+  - `elem` is the pointee, element, map value, optional payload (`^T` for
+    `^T?`), enum backing type or proc return type, and `nil` when there is
+    none; `key` is a map's key type. `count` is `N` of `[N]T` and the rows
+    of a matrix, `columns` its columns.
+  - `fields` lists struct fields in declaration order, including `using`
+    ones, as `TypeInfoField`s (`name`, `type`, `offset`). For a proc they
+    are its parameters, with empty names and offset 0, since a proc type
+    doesn't keep parameter names. A multiple-value type such as
+    `(Int, Error)` is a struct with fields `0`, `1`, ….
+  - `members` lists enum members as `TypeInfoMember`s (`name`, `value: I64`;
+    a `U64`-backed member gives its bit pattern), and `variants` a union's
+    variant types, both in declaration order.
+  - A `distinct` type reports its base type's kind, layout and details under
+    its own name. `Error` is a `U32`-backed enum whose members are the error
+    symbols the program uses. An `opaque` C struct has size 0, alignment 0
+    and no fields. Sizes, alignments and offsets are C's, so they are exact
+    for structs C lays out (a cimported C union's fields all have offset 0).
+  - `Type`, and records that hold one such as `FieldInfo`, exist only while
+    compiling, so `type_info` can't describe them (E0906); `Never` has no
+    values to describe (E0323).
+  - The tables are static data: only types the program passes to
+    `type_info`, and the types those point at, are emitted, and nothing is
+    allocated. Don't write through the pointer; the tables are read-only.
+  - `type_info` works in `comptime` code too. Its result is a pointer, so it
+    can't cross to run time (E0905), but what is read from it can:
+    `comptime type_info(Ball).size`.
 - `embed("font.ttf")` reads a file, relative to the package directory, when the
   program is compiled, and returns its bytes as a `[]U8` stored with C23
   `#embed`. Embedded files are inputs of the build.

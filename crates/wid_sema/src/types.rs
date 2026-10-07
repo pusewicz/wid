@@ -500,6 +500,12 @@ impl TypeTable {
         id
     }
 
+    /// Returns the type with this structure if it was interned, without
+    /// interning it.
+    pub fn lookup(&self, kind: &TyKind) -> Option<TyId> {
+        self.map.get(kind).copied()
+    }
+
     /// Returns the structure of a type.
     pub fn kind(&self, ty: TyId) -> &TyKind {
         &self.kinds[ty.0 as usize]

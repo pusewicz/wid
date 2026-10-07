@@ -1,0 +1,81 @@
+error[E0906]: `type_info` can't describe `Type`, which exists only while compiling
+  --> tests/ui/type_info_errors.wid:14:13
+   |
+14 |   type_info(t).size
+   |             ^ this `Type` value exists only while compiling
+   = note: `type_info` returns a table the program keeps while it runs
+help: to describe the type it holds, read it while compiling with `t.name`, `t.size`, `t.align` and `t.fields`, or pass the type itself, like `type_info(Ball)`
+   = see `wid explain E0906`
+
+error[E0905]: this `^TypeInfo` can't be used at run time: it holds a pointer into compile-time memory
+  --> tests/ui/type_info_errors.wid:17:8
+   |
+17 | LEAK = comptime type_info(Ball)
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^ computed while compiling
+   = note: values made at compile time are copied into the program; memory the compiler used is not
+help: a `type_info` table built while compiling stays in the compiler: call `type_info` in code that runs, or keep only what you need, like `comptime type_info(T).size`
+   = see `wid explain E0905`
+
+error[E0906]: `type_info` can't describe `Type`, which exists only while compiling
+  --> tests/ui/type_info_errors.wid:20:18
+   |
+20 |   puts type_info(Type).size
+   |                  ^^^^ `Type` values exist only while compiling
+   = note: `type_info` returns a table the program keeps while it runs
+help: describe a run-time type instead, like `type_info(Ball)` or `type_info(x)`
+   = see `wid explain E0906`
+
+error[E0906]: `type_info` can't describe `Holder`: it holds a `Type`
+  --> tests/ui/type_info_errors.wid:21:18
+   |
+21 |   puts type_info(Holder).size
+   |                  ^^^^^^ `Holder` has a field `info: ^FieldInfo`, which points at `FieldInfo`, which has a field `type: Type`
+   = note: `Type` values exist only while compiling, but `type_info` returns a table the program keeps while it runs
+help: read `Holder` in `comptime` code instead, where its `Type` values exist
+   = see `wid explain E0906`
+
+error[E0323]: `type_info` has nothing to describe: no value has type `Never`
+  --> tests/ui/type_info_errors.wid:22:18
+   |
+22 |   puts type_info(Never).size
+   |                  ^^^^^ `Never` is the type of code that never finishes
+   = note: `type_info` describes the types of values the program holds
+help: remove the call, or pass a type that has values, like `type_info(Int)`
+   = see `wid explain E0323`
+
+error[E0323]: `type_info` has nothing to describe: no value has type `Never`
+  --> tests/ui/type_info_errors.wid:23:18
+   |
+23 |   puts type_info(fail).size
+   |                  ^^^^ this never finishes, so it never produces a value
+   = note: `type_info` describes the types of values the program holds
+help: remove the call, or pass a type that has values, like `type_info(Int)`
+   = see `wid explain E0323`
+
+error[E0303]: `type_info` takes no named arguments
+  --> tests/ui/type_info_errors.wid:24:18
+   |
+24 |   puts type_info(of: Ball).size
+   |                  ^^ `type_info` has no parameter called `of`
+help: pass the type or value by position
+   |   puts type_info(Ball).size
+   = see `wid explain E0303`
+
+error[E0302]: `type_info` takes one type or value
+  --> tests/ui/type_info_errors.wid:25:5
+   |
+25 |   p type_info()
+   |     ^^^^^^^^^^^ like `type_info(Vec2)` or `type_info(x)`
+   = see `wid explain E0302`
+
+error[E0906]: `main` uses a compile-time-only value
+  --> tests/ui/type_info_errors.wid:26:8
+   |
+26 |   puts Ball.fields.size
+   |        ^^^^^^^^^^^ reads a `Type`, which exists only while compiling
+   = note: `main` runs when the program runs, but `Type` values and reflection exist only while compiling
+help: read the fields while the program runs with `type_info(Ball).fields`
+   |   puts type_info(Ball).fields.size
+   = see `wid explain E0906`
+
+error: could not compile due to 9 errors

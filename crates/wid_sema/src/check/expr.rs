@@ -42,6 +42,7 @@ const BUILTINS: &[&str] = &[
     "caller_location",
     "embed",
     "config",
+    "type_info",
 ];
 
 impl<'a> Checker<'a> {
@@ -1685,6 +1686,7 @@ impl<'a> Checker<'a> {
             "free" => self.builtin_free(args, span),
             "free_all" => self.builtin_free_all(args, span),
             "size_of" => self.builtin_size(args, span, false),
+            "type_info" => self.builtin_type_info(args, span),
             "align_of" => self.builtin_size(args, span, true),
             "context" => {
                 if let Some(a) = args.first() {
