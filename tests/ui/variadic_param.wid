@@ -1,0 +1,23 @@
+def sum(*xs: Int) -> Int
+  total = 0
+  for x in xs
+    total += x
+  end
+  total
+end
+
+macro def tagged(*names: Symbol, tag: String) -> Code
+  quote do
+  end
+end
+
+macro def listed(*names: Symbol = [:hp]) -> Code
+  quote do
+  end
+end
+
+def main
+  puts sum(1, 2, 3)
+  double = ->(*xs: Int) -> Int { xs.size * 2 }
+  puts double.call([1, 2])
+end

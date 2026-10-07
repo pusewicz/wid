@@ -19,6 +19,33 @@ impl Ident {
     pub fn as_str(&self) -> &'static str {
         self.name.as_str()
     }
+
+    /// For a name-position splice, the index of its expression in the
+    /// innermost enclosing [`QuoteExpr::splices`]. See [`splice_name`].
+    pub fn splice_index(&self) -> Option<u32> {
+        splice_index(self.name)
+    }
+}
+
+/// The placeholder name of the splice at `index` in a name position:
+/// `#{index}`. Source text can't spell it, so it never collides with a real
+/// name.
+///
+/// A splice where the grammar expects a name (`def #{name}`, `x.#{name}`,
+/// `@#{name}`, `:#{name}`, `struct #{name}`, parameter, field, local,
+/// block-parameter and loop-variable names, enum members, named arguments
+/// and the callee of `#{name}(args)`) becomes this name in the [`Ident`],
+/// [`ExprKind::IVar`] or [`ExprKind::Symbol`] that would hold the written
+/// one; the node's span covers the whole `#{…}`. Expansion replaces it with
+/// the spliced `Symbol`.
+pub fn splice_name(index: u32) -> Name {
+    Name::new(&format!("#{{{index}}}"))
+}
+
+/// The splice index of a placeholder made by [`splice_name`], or `None` for
+/// any other name.
+pub fn splice_index(name: Name) -> Option<u32> {
+    name.as_str().strip_prefix("#{")?.strip_suffix('}')?.parse().ok()
 }
 
 /// One parsed source file.
@@ -127,10 +154,19 @@ pub enum ItemKind {
     Include(TypeExpr),
     /// A field inside a struct.
     Field(Box<FieldDecl>),
-    /// A macro invocation used as a declaration, like `attr_reader :x`.
+    /// A macro invocation used as a declaration: `attr_reader :x`,
+    /// `attr_reader(:x)`, or qualified by a package, `lib.attr_reader :x`
+    /// and `lib.make`. The expression is an [`ExprKind::Call`], an
+    /// [`ExprKind::Ident`] or an [`ExprKind::Member`].
     MacroCall(Box<Expr>),
     /// `comptime if cond … else … end` choosing declarations.
     ComptimeIf(Box<ComptimeIfItem>),
+    /// A splice standing alone on a line among declarations, like
+    /// `#{methods}` in a `struct` body inside a `quote`; the index is into
+    /// the innermost [`QuoteExpr::splices`]. Expansion replaces it with the
+    /// spliced declarations (`Code` or `[]Code`), or, in an enum body, with
+    /// members (`Symbol` or `[]Symbol`).
+    Splice(u32),
     /// Placeholder left after a parse error.
     Error,
 }
@@ -238,7 +274,12 @@ pub struct Param {
     pub ty: TypeExpr,
     /// The default value.
     pub default: Option<Expr>,
-    /// `*names: T` collects remaining arguments into a slice.
+    /// `*names: T`, a variadic parameter: it collects the remaining
+    /// positional arguments into a `[]T`. Only the last parameter of a
+    /// `macro def` may be one, without a default; the parser reports any
+    /// other (E0112). Outside a macro it recovers as the `names: []T` its
+    /// fix suggests, with no default, keeping the flag so calls passing
+    /// several arguments add no errors.
     pub splat: bool,
     /// The whole parameter.
     pub span: Span,
@@ -418,6 +459,9 @@ pub enum TypeKind {
         cols: Box<Expr>,
         elem: Box<TypeExpr>,
     },
+    /// `#{t}` where a type is expected, inside a `quote`; the index is into
+    /// the innermost [`QuoteExpr::splices`].
+    Splice(u32),
     Error,
 }
 
@@ -470,7 +514,8 @@ pub enum StmtKind {
         err: Option<Ident>,
         else_body: Vec<Stmt>,
     },
-    /// A declaration nested in a `quote`.
+    /// A declaration among statements. In a method it is an error; in a
+    /// `quote` body it is part of the generated code (see [`QuoteExpr`]).
     Item(Box<Item>),
     Error,
 }
@@ -570,9 +615,40 @@ pub enum ExprKind {
     /// compile time is compiled.
     ComptimeIf(Box<IfExpr>),
     /// `quote do … end`.
-    Quote(Vec<Stmt>),
+    Quote(Box<QuoteExpr>),
+    /// `#{expr}` in an expression or statement position, inside a `quote`;
+    /// the index is into the innermost [`QuoteExpr::splices`]. Standing
+    /// alone as a statement, a `[]Code` value inserts several statements.
+    Splice(u32),
     Paren(Box<Expr>),
     Error,
+}
+
+/// `quote do … end`: code that a macro builds and returns.
+///
+/// The body is kept as a [`Stmt`] sequence because the context it expands
+/// in is only known at the macro call. Each line is parsed as a statement,
+/// except lines that can only start a declaration, which become
+/// [`StmtKind::Item`]: `def`, `macro def`, `struct`, `enum`, `union`,
+/// `module`, `extend`, `overload`, `include`, `import`, `cimport` and
+/// `NAME = value` (with any attributes and `private`). A `comptime if` at
+/// the top of the body keeps the same rule in its branches. Expanded as
+/// statements, the body is used as is; expanded as declarations, each
+/// [`StmtKind::Item`] gives its item, and a call or name statement
+/// (`attr_reader :hp`) gives an [`ItemKind::MacroCall`].
+///
+/// Splices are numbered in source order per `quote`: each `#{expr}`
+/// directly inside this quote (not inside a nested `quote`) appends `expr`
+/// to [`QuoteExpr::splices`] and is replaced in the body by
+/// [`ExprKind::Splice`], [`TypeKind::Splice`], [`ItemKind::Splice`] or, in
+/// a name position, an [`Ident`] named by [`splice_name`]. A `quote`
+/// written inside a splice expression has its own list.
+#[derive(Clone, Debug)]
+pub struct QuoteExpr {
+    /// The generated code.
+    pub body: Vec<Stmt>,
+    /// The spliced expressions, which run in the macro.
+    pub splices: Vec<Expr>,
 }
 
 /// A call with arguments and an optional block.

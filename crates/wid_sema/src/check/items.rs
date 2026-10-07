@@ -301,6 +301,9 @@ impl<'a> Checker<'a> {
                 }
                 return;
             }
+            // Splices exist only inside `quote`, whose declarations are never
+            // collected; the parser reports one anywhere else.
+            ItemKind::Splice(_) => return,
             ItemKind::Include(t) => {
                 if owner.is_none() {
                     self.report(

@@ -18,6 +18,7 @@ mod stmt;
 mod structs;
 mod tests;
 mod ty;
+mod type_info;
 
 pub use ty::is_reserved_type_name;
 

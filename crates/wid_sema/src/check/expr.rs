@@ -42,6 +42,7 @@ const BUILTINS: &[&str] = &[
     "caller_location",
     "embed",
     "config",
+    "type_info",
 ];
 
 impl<'a> Checker<'a> {
@@ -155,6 +156,9 @@ impl<'a> Checker<'a> {
                 );
                 ir::Expr::new(ExprKind::Zero, self.types.unknown())
             }
+            // Splices exist only inside `quote`, which is never lowered; the
+            // parser reports one anywhere else.
+            E::Splice(_) => ir::Expr::new(ExprKind::Zero, self.types.unknown()),
         }
     }
 
@@ -1513,6 +1517,12 @@ impl<'a> Checker<'a> {
         let mut positional = 0usize;
         let mut extra = Vec::new();
         let mut unknown_named = false;
+        let d = self.decls[decl.0 as usize].clone();
+        let DeclKind::Fn(f) = d.kind else { unreachable!() };
+        // A `*` parameter outside a macro was reported by the parser (E0112);
+        // it takes the remaining positional arguments, which are not checked,
+        // so its calls add no errors of their own.
+        let splat_at = f.params.iter().position(|p| p.splat);
         for arg in args {
             if arg.splat {
                 let text = self.source_text(arg.value.span);
@@ -1524,6 +1534,7 @@ impl<'a> Checker<'a> {
                 );
             }
             match arg.name {
+                None if splat_at.is_some_and(|at| positional >= at) => {}
                 None => {
                     if positional < params.len() {
                         slots[positional] = ArgSource::Given(&arg.value);
@@ -1568,11 +1579,11 @@ impl<'a> Checker<'a> {
                 },
             }
         }
-        let d = self.decls[decl.0 as usize].clone();
-        let DeclKind::Fn(f) = d.kind else { unreachable!() };
         let mut missing = Vec::new();
         for (i, p) in params.iter().enumerate() {
-            if matches!(slots[i], ArgSource::Missing) {
+            if matches!(slots[i], ArgSource::Missing) && splat_at == Some(i) {
+                slots[i] = ArgSource::Default(ir::Expr::new(ExprKind::Zero, p.ty));
+            } else if matches!(slots[i], ArgSource::Missing) {
                 match f.params.get(i).and_then(|ap| ap.default.as_ref()) {
                     Some(default) => {
                         let v = self.default_value(default, p.ty, d.loc, span);
@@ -1685,6 +1696,7 @@ impl<'a> Checker<'a> {
             "free" => self.builtin_free(args, span),
             "free_all" => self.builtin_free_all(args, span),
             "size_of" => self.builtin_size(args, span, false),
+            "type_info" => self.builtin_type_info(args, span),
             "align_of" => self.builtin_size(args, span, true),
             "context" => {
                 if let Some(a) = args.first() {

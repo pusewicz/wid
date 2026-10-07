@@ -25,7 +25,7 @@ set cpo&vim
 " Text in these groups never opens, closes or continues a statement.
 let s:not_code = '^wid\%(Comment\|Todo\|String\|RawString\|StringDelimiter\|Escape\|RawEscape\|EscapeError\|'
       \ . 'InterpolationDelimiter\|Symbol\|ConditionalModifier\|RepeatModifier\|Member\|EndlessDefine\|'
-      \ . 'Attribute\|AttributeDelimiter\)$'
+      \ . 'Attribute\|AttributeDelimiter\|EnumMember\)$'
 let s:in_string = '^wid\%(String\|RawString\|Escape\|RawEscape\|EscapeError\)$'
 let s:comment = '^wid\%(Comment\|Todo\)$'
 let s:skip = "synIDattr(synID(line('.'), col('.'), 1), 'name') =~# '" . s:not_code . "'"

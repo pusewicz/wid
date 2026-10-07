@@ -35,6 +35,7 @@ syn match widConstant /\<\u[A-Z0-9_]\+\>/
 syn keyword widBuiltinType Int UInt I8 I16 I32 I64 U8 U16 U32 U64 F32 F64 Bool Rune
 syn keyword widBuiltinType String CString RawPtr TypeId Any Error Never Type Self
 syn keyword widBuiltinType Context Allocator AllocMode Location Logger Os Arch FieldInfo MethodInfo
+syn keyword widBuiltinType TypeInfo TypeKind TypeInfoField TypeInfoMember
 
 " The lexer's reserved words (`Keyword` in crates/wid_syntax/src/token.rs) by
 " highlight group, with extra arguments for the match. A reserved word followed
@@ -59,6 +60,10 @@ for s:entry in s:reserved
 endfor
 unlet s:entry s:reserved
 syn match widPseudoVariable /\<\%(context\|caller_location\)\>[?!]\@!/
+" Inside an enum, `struct`, `enum` or `union` standing alone names a member
+" (the prelude's `TypeKind`) and opens no block. It stays unhighlighted, like
+" other members.
+syn match widEnumMember /\<\%(struct\|enum\|union\)\>\ze\s*\%(=[=~>]\@!\|,\|#\|$\)/
 
 " `x if cond`: after the end of an expression, `if`, `unless`, `while` and
 " `until` are modifiers and open no block. The indent and matchit rules rely on
@@ -68,8 +73,9 @@ exe 'syn match widConditionalModifier /' . s:after_expr . '\<\%(if\|unless\)\>[?
 exe 'syn match widRepeatModifier /' . s:after_expr . '\<\%(while\|until\)\>[?!]\@!/'
 unlet s:after_expr
 
-" `def f(x: Int) -> Int = x * 2` has no `end`.
-let s:method_name = '\%(self\.\)\=\%(\h\w*[?!]\=\|\[\]=\=\|<=>\|\*\*\|[=!<>]=\|<<\|>>\|[-+*\/%<>!~&|]\)'
+" `def f(x: Int) -> Int = x * 2` has no `end`. In a `quote`, the name may be
+" a splice, `def #{name} = @#{name}`.
+let s:method_name = '\%(self\.\)\=\%(#{[^}]*}\|\h\w*[?!]\=\|\[\]=\=\|<=>\|\*\*\|[=!<>]=\|<<\|>>\|[-+*\/%<>!~&|]\)'
 let s:params = '\%(([^()]*\%(([^()]*)[^()]*\)*)\)\='
 let s:return_type = '\%(\s*->[^=#]\{-1,}\)\='
 exe 'syn match widEndlessDefine /\<def\>\ze\s\+' . s:method_name . s:params . s:return_type
@@ -80,7 +86,7 @@ syn match widOperatorMethod /\[\]=\=\|<=>\|\*\*\|[=!<>]=\|<<\|>>\|[-+*\/%<>!~&|]
 syn match widDefSelf /\<self\./ contained nextgroup=widFunction,widOperatorMethod
 
 " Built-in procedures, unless the name is being assigned or passed by name.
-syn match widBuiltin /\<\%(puts\|print\|method\|alloc\|embed\|config\|free\|free_all\|size_of\|align_of\|panic\|unreachable\|assert\)\>[?!]\@!\%(\s*\%([-+*\/%&|~<>]\{,2}\)=\%([^=]\|$\)\|:\)\@!/
+syn match widBuiltin /\<\%(puts\|print\|method\|alloc\|embed\|config\|free\|free_all\|size_of\|align_of\|type_info\|panic\|unreachable\|assert\)\>[?!]\@!\%(\s*\%([-+*\/%&|~<>]\{,2}\)=\%([^=]\|$\)\|:\)\@!/
 " `p` is also a common local name, so it only counts when it is called.
 syn match widBuiltin /\<p\>\%((\|\s\+\%(\<in\>\|[-+*\/%=<>!&|^~.?,)\]}#]\)\@!\S\)\@=/
 
@@ -119,7 +125,7 @@ syn cluster widExpr contains=widOperator,widNumber,widFloat,widType,widConstant,
       \widConditional,widConditionalModifier,widRepeat,widRepeatModifier,widControl,widKeyword,
       \widStructure,widInclude,widComptime,widBoolean,widNil,widPseudoVariable,widBuiltin,
       \widTypeKeyword,widMember,widSymbol,widInstanceVariable,widTypeParam,widUninitialized,
-      \widString,widRawString,widNestedBraces
+      \widString,widRawString,widNestedBraces,widSplice
 syn region widInterpolation matchgroup=widInterpolationDelimiter start=/#{/ end=/}/ contained oneline
       \ contains=@widExpr
 syn region widNestedBraces start=/{/ end=/}/ contained oneline transparent contains=@widExpr
@@ -129,8 +135,15 @@ syn region widString matchgroup=widStringDelimiter start=/"/ skip=/\\\\\|\\"/ en
 syn region widRawString matchgroup=widStringDelimiter start=/'/ skip=/\\\\\|\\'/ end=/'/
       \ contains=widRawEscape
 
+" Outside a string, `#{…}` is a macro splice (valid inside `quote`), with
+" `@#{name}` for a field and `:#{name}` for a symbol. It is code, may span
+" lines, and its delimiters highlight like `quote`.
+syn region widSplice matchgroup=widSpliceDelimiter
+      \ start=/\%(@\|\%(\w\|[)\]}"'?!]\)\@1<!:\)\=#{/ end=/}/ contains=@widExpr
+
 syn keyword widTodo TODO FIXME XXX NOTE contained
-syn match widComment /#.*$/ contains=widTodo,@Spell
+" A comment is `#` and anything but `{`, to the end of the line.
+syn match widComment /#{\@!.*$/ contains=widTodo,@Spell
 
 hi def link widOperator Operator
 hi def link widNumber Number
@@ -171,6 +184,7 @@ hi def link widEscape SpecialChar
 hi def link widRawEscape SpecialChar
 hi def link widEscapeError Error
 hi def link widInterpolationDelimiter Delimiter
+hi def link widSpliceDelimiter widComptime
 hi def link widTodo Todo
 hi def link widComment Comment
 

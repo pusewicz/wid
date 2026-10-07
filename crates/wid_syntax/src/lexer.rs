@@ -17,11 +17,18 @@ pub struct Lexed {
     pub diagnostics: Diagnostics,
 }
 
+/// An open `#{`: a string interpolation, or a splice outside a string.
+/// Both end at the `}` that matches it, and newlines inside either are
+/// ignored, so a splice is one expression even when it spans lines.
 struct Interp {
+    /// How many `{` are open inside it.
     depth: u32,
-    quote: u8,
-    /// Where a missing `}` is assumed, for an interpolation that is never
-    /// closed on its line (already reported).
+    /// The quote of the string being interpolated, or `None` for a splice.
+    quote: Option<u8>,
+    /// Where a missing `}` is assumed: for an interpolation that is never
+    /// closed on its line (already reported), or a splice that is never
+    /// closed at all (reported by the parser, which knows whether the
+    /// splice is inside a `quote`).
     virtual_close: Option<usize>,
 }
 
@@ -95,15 +102,19 @@ impl<'a> Lexer<'a> {
         while self.pos < self.src.len() {
             self.lex_one();
         }
-        if !self.interps.is_empty() {
-            let end = self.src.len();
-            self.error(
-                Diagnostic::error(codes::UNTERMINATED_STRING, "unterminated string interpolation")
-                    .primary(self.span(end, end), "expected `}` to close `#{`"),
-            );
-            self.interps.clear();
-        }
         let end = self.src.len();
+        let mut reported = false;
+        while let Some(open) = self.interps.pop() {
+            if open.quote.is_none() {
+                self.push(TokenKind::SpliceEnd, end, end);
+            } else if !reported {
+                reported = true;
+                self.error(
+                    Diagnostic::error(codes::UNTERMINATED_STRING, "unterminated string interpolation")
+                        .primary(self.span(end, end), "expected `}` to close `#{`"),
+                );
+            }
+        }
         self.push(TokenKind::Newline, end, end);
         self.out.tokens.push(Token { kind: TokenKind::Eof, span: self.span(end, end), space_before: true });
     }
@@ -116,7 +127,7 @@ impl<'a> Lexer<'a> {
             while i < self.src.len() && matches!(self.src[i], b' ' | b'\t' | b'\r' | b'\n') {
                 i += 1;
             }
-            if i < self.src.len() && self.src[i] == b'#' {
+            if i < self.src.len() && self.src[i] == b'#' && self.src.get(i + 1) != Some(&b'{') {
                 while i < self.src.len() && self.src[i] != b'\n' {
                     i += 1;
                 }
@@ -131,13 +142,19 @@ impl<'a> Lexer<'a> {
     fn lex_one(&mut self) {
         let start = self.pos;
         if let Some(top) = self.interps.last()
-            && top.depth == 0
+            && (top.depth == 0 || top.quote.is_none())
             && top.virtual_close.is_some_and(|at| start >= at)
         {
-            let quote = top.quote;
+            let (quote, at) = (top.quote, top.virtual_close.unwrap_or(start));
             self.interps.pop();
-            self.push(TokenKind::InterpEnd, start, start);
-            self.continue_string(quote, start, false);
+            match quote {
+                Some(quote) => {
+                    self.push(TokenKind::InterpEnd, start, start);
+                    self.continue_string(quote, start, false);
+                }
+                // A zero-width `SpliceEnd` tells the parser the `}` is missing.
+                None => self.push(TokenKind::SpliceEnd, at, at),
+            }
             return;
         }
         let b = self.peek();
@@ -161,6 +178,7 @@ impl<'a> Lexer<'a> {
                 }
                 self.space_before = true;
             }
+            b'#' if self.peek_at(1) == b'{' => self.begin_splice(),
             b'#' => self.lex_comment(),
             b'"' | b'\'' => self.lex_string(b),
             b'0'..=b'9' => self.lex_number(),
@@ -168,6 +186,9 @@ impl<'a> Lexer<'a> {
                 if self.peek_at(1) == b'[' {
                     self.pos += 2;
                     self.push(TokenKind::AtBracket, start, self.pos);
+                } else if self.peek_at(1) == b'#' && self.peek_at(2) == b'{' {
+                    self.pos += 1;
+                    self.push(TokenKind::AtSplice, start, self.pos);
                 } else if is_ident_start(self.peek_at(1)) {
                     self.pos += 1;
                     self.eat_ident_chars();
@@ -215,6 +236,63 @@ impl<'a> Lexer<'a> {
         );
     }
 
+    /// Lexes the `#{` that starts a splice. The splice ends at the matching
+    /// `}`; when there is none, a zero-width `SpliceEnd` is emitted where the
+    /// `}` most likely belongs instead, so the code after it is still read.
+    fn begin_splice(&mut self) {
+        let start = self.pos;
+        self.pos += 2;
+        self.push(TokenKind::SpliceBegin, start, self.pos);
+        let virtual_close = self.missing_splice_close();
+        self.interps.push(Interp { depth: 0, quote: None, virtual_close });
+        self.space_before = true;
+    }
+
+    /// Looks ahead from just after a splice's `#{` for its closing `}`,
+    /// skipping nested braces, strings and comments (a splice may span
+    /// lines). When there is none, returns where the `}` most likely
+    /// belongs: after the last code on the line the splice starts on.
+    fn missing_splice_close(&self) -> Option<usize> {
+        let mut depth = 0u32;
+        let mut i = self.pos;
+        let mut code_end = self.pos;
+        let mut first_line_end = None;
+        while let Some(&b) = self.src.get(i) {
+            match b {
+                b'\n' => {
+                    first_line_end.get_or_insert(code_end);
+                }
+                b' ' | b'\t' | b'\r' => {}
+                b'#' if self.src.get(i + 1) != Some(&b'{') => {
+                    while self.src.get(i + 1).is_some_and(|c| *c != b'\n') {
+                        i += 1;
+                    }
+                }
+                _ => {
+                    match b {
+                        b'{' => depth += 1,
+                        b'}' if depth == 0 => return None,
+                        b'}' => depth -= 1,
+                        b'"' | b'\'' => {
+                            let mut j = i + 1;
+                            while let Some(&c) = self.src.get(j) {
+                                if c == b {
+                                    break;
+                                }
+                                j += if c == b'\\' { 2 } else { 1 };
+                            }
+                            i = j.min(self.src.len());
+                        }
+                        _ => {}
+                    }
+                    code_end = (i + 1).min(self.src.len());
+                }
+            }
+            i += 1;
+        }
+        Some(first_line_end.unwrap_or(code_end))
+    }
+
     fn lex_comment(&mut self) {
         let start = self.pos;
         while self.pos < self.src.len() && self.src[self.pos] != b'\n' {
@@ -254,8 +332,13 @@ impl<'a> Lexer<'a> {
     fn lex_colon(&mut self) {
         let start = self.pos;
         let prev = if start > 0 { self.src[start - 1] } else { b' ' };
-        let attached = is_ident_char(prev) || matches!(prev, b')' | b']' | b'"' | b'\'' | b'?' | b'!');
+        let attached = is_ident_char(prev) || matches!(prev, b')' | b']' | b'}' | b'"' | b'\'' | b'?' | b'!');
         let next = self.peek_at(1);
+        if !attached && next == b'#' && self.peek_at(2) == b'{' {
+            self.pos += 1;
+            self.push(TokenKind::ColonSplice, start, self.pos);
+            return;
+        }
         if !attached
             && matches!(next, b'"' | b'\'')
             && let Some(len) = self.src[start + 2..].iter().take_while(|b| **b != b'\n').position(|b| *b == next)
@@ -486,7 +569,7 @@ impl<'a> Lexer<'a> {
                             ),
                     );
                 }
-                self.interps.push(Interp { depth: 0, quote, virtual_close });
+                self.interps.push(Interp { depth: 0, quote: Some(quote), virtual_close });
                 self.space_before = true;
                 return;
             }
@@ -663,8 +746,13 @@ impl<'a> Lexer<'a> {
                             if top.depth == 0 {
                                 let quote = top.quote;
                                 self.interps.pop();
-                                self.push(InterpEnd, start, self.pos);
-                                self.continue_string(quote, start, false);
+                                match quote {
+                                    Some(quote) => {
+                                        self.push(InterpEnd, start, self.pos);
+                                        self.continue_string(quote, start, false);
+                                    }
+                                    None => self.push(SpliceEnd, start, self.pos),
+                                }
                                 return;
                             }
                             top.depth -= 1;
@@ -718,6 +806,110 @@ mod tests {
             vec![StrBegin, StrText(0), InterpBegin, Ident, Plus, Int, InterpEnd, StrText(1), StrEnd, Newline, Eof]
         );
         assert_eq!(lexed.strings, vec!["a".to_string(), "c".to_string()]);
+    }
+
+    #[test]
+    fn splices() {
+        use TokenKind::*;
+        assert_eq!(kinds("#{a}"), vec![SpliceBegin, Ident, SpliceEnd, Newline, Eof]);
+        assert_eq!(
+            kinds("def #{name} = 1"),
+            vec![Kw(Keyword::Def), SpliceBegin, Ident, SpliceEnd, Eq, Int, Newline, Eof]
+        );
+        assert_eq!(kinds("@#{f} = 1"), vec![AtSplice, SpliceBegin, Ident, SpliceEnd, Eq, Int, Newline, Eof]);
+        assert_eq!(kinds("x = :#{s}"), vec![Ident, Eq, ColonSplice, SpliceBegin, Ident, SpliceEnd, Newline, Eof]);
+        assert_eq!(
+            kinds("x.#{m}(1)"),
+            vec![Ident, Dot, SpliceBegin, Ident, SpliceEnd, LParen, Int, RParen, Newline, Eof]
+        );
+        // An attached `:` is a type annotation, not a symbol splice.
+        assert_eq!(kinds("x:#{t}"), vec![Ident, Colon, SpliceBegin, Ident, SpliceEnd, Newline, Eof]);
+        assert_eq!(kinds("#{x}:Int"), vec![SpliceBegin, Ident, SpliceEnd, Colon, Const, Newline, Eof]);
+    }
+
+    #[test]
+    fn splice_spans_lines_and_nests_braces() {
+        use TokenKind::*;
+        assert_eq!(
+            kinds("#{f(\n  a,\n  b\n)}\nc"),
+            vec![SpliceBegin, Ident, LParen, Ident, Comma, Ident, RParen, SpliceEnd, Newline, Ident, Newline, Eof]
+        );
+        assert_eq!(
+            kinds("#{xs.map { |x| x }}"),
+            vec![SpliceBegin, Ident, Dot, Ident, LBrace, Pipe, Ident, Pipe, Ident, RBrace, SpliceEnd, Newline, Eof]
+        );
+        assert_eq!(
+            kinds("#{a #{b}}"),
+            vec![SpliceBegin, Ident, SpliceBegin, Ident, SpliceEnd, SpliceEnd, Newline, Eof]
+        );
+        // A line that starts with a splice is code, not a comment, so the
+        // `.c` line continues it rather than the line before.
+        assert_eq!(kinds("a\n#{b}\n.c"), vec![Ident, Newline, SpliceBegin, Ident, SpliceEnd, Dot, Ident, Newline, Eof]);
+    }
+
+    #[test]
+    fn splice_text_in_comments_and_strings() {
+        use TokenKind::*;
+        let lexed = lex(FileId(0), "x = 1 # see #{y}\n");
+        assert_eq!(lexed.tokens.iter().map(|t| t.kind).collect::<Vec<_>>(), vec![Ident, Eq, Int, Newline, Eof]);
+        assert_eq!(lexed.comments[0].text, "see #{y}");
+        // In a string, `#{` is interpolation, inside a `quote` too.
+        assert_eq!(
+            kinds("quote do\n  puts \"v #{x}\"\nend"),
+            vec![
+                Kw(Keyword::Quote),
+                Kw(Keyword::Do),
+                Newline,
+                Ident,
+                StrBegin,
+                StrText(0),
+                InterpBegin,
+                Ident,
+                InterpEnd,
+                StrEnd,
+                Newline,
+                Kw(Keyword::End),
+                Newline,
+                Eof
+            ]
+        );
+        // A splice may hold a string with its own interpolation.
+        assert_eq!(
+            kinds("#{\"a#{b}\"}"),
+            vec![SpliceBegin, StrBegin, StrText(0), InterpBegin, Ident, InterpEnd, StrEnd, SpliceEnd, Newline, Eof]
+        );
+    }
+
+    #[test]
+    fn unclosed_splice_ends_at_its_line() {
+        use TokenKind::*;
+        let lexed = lex(FileId(0), "def #{a # note\n  b\nend");
+        let k: Vec<_> = lexed.tokens.iter().map(|t| t.kind).collect();
+        assert_eq!(
+            k,
+            vec![
+                Kw(Keyword::Def),
+                SpliceBegin,
+                Ident,
+                SpliceEnd,
+                Newline,
+                Ident,
+                Newline,
+                Kw(Keyword::End),
+                Newline,
+                Eof
+            ]
+        );
+        // The missing `}` is a zero-width `SpliceEnd` right after `a`; the
+        // parser reports it.
+        let end = lexed.tokens[3].span;
+        assert_eq!((end.start, end.end), (7, 7));
+        assert!(lexed.diagnostics.is_empty());
+        let at_eof = lex(FileId(0), "#{a");
+        assert_eq!(
+            at_eof.tokens.iter().map(|t| t.kind).collect::<Vec<_>>(),
+            vec![SpliceBegin, Ident, SpliceEnd, Newline, Eof]
+        );
     }
 
     #[test]

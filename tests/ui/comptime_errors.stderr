@@ -110,8 +110,8 @@ error[E0906]: `field_count` works only at compile time
 ...
 58 |   puts field_count(Node)
    |   ^^^^^^^^^^^^^^^^^^^^^^ `main` calls it when the program runs
-   = note: for type information at run time, use `type_info(x)`
 help: call it while compiling instead, like `x = comptime field_count(…)`
+help: to describe `Node` while the program runs, use `type_info(Node)`: a `^TypeInfo` with its `name`, `size`, `align`, `fields` and more
    = see `wid explain E0906`
 
 error[E0327]: `comptime if` can't bind a variable

@@ -1,0 +1,12 @@
+# A method returning 0 for each name, built from one `quote` per name.
+macro def counter(*names: Symbol) -> Code
+  methods = [dynamic]Code.new
+  for name in names
+    methods << quote do
+      def #{name} -> Int = 0
+    end
+  end
+  quote do
+    #{methods}
+  end
+end

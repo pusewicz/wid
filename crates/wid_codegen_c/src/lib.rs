@@ -7,6 +7,7 @@
 mod cconv;
 mod helpers;
 mod statics;
+mod type_info;
 mod types;
 
 use std::collections::{HashMap, HashSet};
@@ -47,6 +48,9 @@ pub fn generate(program: &Program, sources: &SourceMap, opts: &Options) -> Strin
         helper_bodies: String::new(),
         fn_name: String::new(),
         locals: Vec::new(),
+        type_infos: Vec::new(),
+        type_info_index: HashMap::new(),
+        type_info_struct: None,
     };
     g.emit()
 }
@@ -69,6 +73,12 @@ struct Gen<'p> {
     fn_name: String,
     /// C names of the locals of the function being emitted.
     locals: Vec<String>,
+    /// The types `type_info` describes, in table order.
+    type_infos: Vec<TyId>,
+    /// Each described type's index in `type_infos`.
+    type_info_index: HashMap<TyId, usize>,
+    /// The prelude's `TypeInfo`, once a function uses `type_info`.
+    type_info_struct: Option<TyId>,
 }
 
 impl<'p> Gen<'p> {
@@ -113,6 +123,7 @@ impl<'p> Gen<'p> {
             .collect();
         let used = self.used_globals(&emitted);
         let statics = self.static_globals(&used);
+        let type_infos = self.type_info_table();
 
         let mut out = String::new();
         out.push_str(GENERATED_HEADER);
@@ -130,6 +141,7 @@ impl<'p> Gen<'p> {
         out.push_str(&protos);
         out.push('\n');
         out.push_str(&statics);
+        out.push_str(&type_infos);
         out.push_str(&self.helper_bodies);
         out.push_str(&bodies);
         if let (false, Some(runner)) = (self.p.tests.is_empty(), self.p.test_runner) {
@@ -796,7 +808,7 @@ impl<'p> Gen<'p> {
                     _ => format!("({v}).len"),
                 }
             }
-            Builtin::TypeInfo => "nullptr".into(),
+            Builtin::TypeInfo => self.type_info_ref(args[0].ty, ty),
             Builtin::BuilderNew => {
                 let a = self.expr(&args[0]);
                 format!("wid_builder({})", strip_parens(&a))

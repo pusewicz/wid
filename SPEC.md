@@ -50,9 +50,9 @@ end
 
 - Wid keeps Ruby's surface: `def … end`, endless `def f = expr`,
   `if/unless/elsif`, postfix `if`/`unless`, `while/until/loop`, `case/when`,
-  implicit return, `#{}` interpolation, ranges `0..n`/`0...n`, `#` comments and
-  no semicolons. `?` methods must return `Bool`. Source files use the `.wid`
-  extension.
+  implicit return, `#{}` interpolation, ranges `0..n`/`0...n`, `# ` comments
+  and no semicolons (outside a string, `#{` starts a macro splice). `?`
+  methods must return `Bool`. Source files use the `.wid` extension.
 - **Blocks** can be written `do |x| … end` or `{ |x| … }`. A `{` right after a
   call opens a block; anywhere else, `{}` is the zero-value literal.
 - **Declarations.** The first assignment declares a variable: `x = 1`,
@@ -87,7 +87,10 @@ end
     is `~`, as in Odin.
   - `&x` takes an address.
   - `{…}` literals must be empty.
-  - Enum members are lowercase.
+  - Enum members are lowercase. Inside an `enum`, `struct`, `enum` or
+    `union` standing alone (followed by a newline, `,` or `= value`) names a
+    member, as in the prelude's `TypeKind`; `TypeKind.struct` and `:struct`
+    select it.
   - `map`, `proc`, `block`, `distinct`, `matrix` and `dynamic` are keywords only
     where a type is expected.
   - A line that ends with an operator or `,`, or a next line that starts with
@@ -408,40 +411,103 @@ end
     - A `Symbol` parameter receives a symbol literal (`:hp`) as a name.
     - A `Type` parameter receives a type.
     - Any other parameter type receives a value computed like `comptime`.
+    - The last parameter may be written `*names: T`. It collects the
+      remaining positional arguments, zero or more, into a `[]T`, each
+      converted by `T`'s rule, so `*names: Symbol` takes
+      `attr_reader :hp, :mana`. It can't have a default. Only macros take
+      one; other methods take a `[]T` and an array literal (E0112).
     - A macro always returns `Code`. `Code` and `Symbol` values exist only
       while compiling, like `Type`.
+  - **Quotes:** the code in a `quote` may be statements or declarations
+    (`def`, `struct`, constants, other macro calls, …); which it must be
+    depends on where the macro is called.
   - **Splices:** a spliced value is inserted according to its type.
     - `Code` inserts that code.
     - `[]Code` inserts a sequence of statements or declarations.
     - `Symbol` inserts a name, usable as an identifier, a method name
       (`def #{name}`, `x.#{name}`), a field (`@#{name}`) or a parameter
-      name.
+      name. `:#{name}` inserts a symbol literal; its value must be a
+      `Symbol`.
     - `Type` inserts the type.
     - Numbers, `Bool`s and strings insert literals.
   - **Lexing:** `#{` outside a string literal always starts a splice, and a
-    splice is only valid inside `quote`. Comments therefore start with `# `.
-    Inside a string literal in a `quote`, `#{}` is ordinary run-time
-    interpolation of the generated code.
+    splice is only valid inside `quote` (E0111). Comments therefore start
+    with `# `. A splice is one expression and may span lines. Inside a
+    string literal in a `quote`, `#{}` is ordinary run-time interpolation
+    of the generated code.
+  - **Calls:** macros are package members like any def. `pkg.name(…)`, and
+    `pkg.name args` as a statement or declaration, works wherever an
+    unqualified call does, including at declaration level.
+    `private macro def` hides a macro outside its package.
   - **Where a macro call expands:** in an expression, as a statement, as a
     declaration in a `struct`, `enum`, `module` or `extend` body, or at
     package level. Declaration-level calls expand once every declaration
     outside them is known, in source order, like `comptime if`. A macro
     can't add fields, because a struct's layout is fixed before its macros
     run.
+  - **Names** in the quote's own code that aren't locals bound in the
+    quote or members of `self` (reached with `@name` or an implicit-self
+    call), that is methods, types, constants and packages, resolve where
+    the macro is defined, with that package's imports and privacy. So a
+    library macro can call its own helpers without the caller importing
+    them. Names that come from splices, and `Self`, resolve at the call
+    site.
   - **Hygiene:** each expansion renames the locals that the quote's own code
     binds: assignment targets, `for` variables, block parameters, and
     `guard` and `if v =` bindings. Names that come from splices keep their
     spelling, so a macro can deliberately bind a caller's name.
   - **Errors** in generated code point at the line inside the `quote` and
-    at the macro call that expanded it.
+    at each macro call that led to it, innermost first, in the human and
+    JSON output alike.
+  - **Budgets:** each macro run has the `comptime` limits. Expansions may
+    nest at most 64 deep (a macro whose code calls a macro), and one build
+    runs at most 65,536 expansions. Exceeding either is E0903.
 - **Reflection** at compile time: `T.fields` is a `[]FieldInfo` (`name`,
   `type`, `offset`), `T.methods` a `[]MethodInfo` (`name`, `params`, `ret`,
   `static`), and `T.name`, `T.size` and `T.align` describe the type. A type
   written where a `Type` is expected, or used as a value in `comptime` code, is
   a `Type` value; it answers `.name`, `.size`, `.align` and `.fields` and
   compares with `==`. `Type` values exist only while compiling: a method the
-  built program runs can't use them (E0906). At run time, `type_info(x)`
-  describes values. `p x` pretty-prints any value.
+  built program runs can't use them (E0906). `p x` pretty-prints any value.
+- **`type_info(T)`** and **`type_info(x)`** describe a type at run time. For
+  an expression only its static type counts: `x` is checked but not
+  evaluated. Both return a `^TypeInfo` that points at a read-only static
+  table, and the same type always gives the same pointer, so
+  `type_info(a) == type_info(b)` compares types. The prelude declares the
+  records:
+  - `TypeInfo` has `name` (as Wid displays the type: `"[]Vec2"`,
+    `"Pool(Ball, 64)"`), `kind` (a `TypeKind`: `:int`, `:uint`, `:float`,
+    `:bool`, `:rune`, `:string`, `:cstring`, `:rawptr`, `:typeid`, `:any`,
+    `:pointer`, `:multi_pointer`, `:array`, `:slice`, `:dynamic_array`,
+    `:map`, `:matrix`, `:optional`, `:proc`, `:struct`, `:enum` or
+    `:union`), `size`, `align`, `elem`, `key`, `count`, `columns`, `fields`,
+    `members` and `variants`.
+  - `elem` is the pointee, element, map value, optional payload (`^T` for
+    `^T?`), enum backing type or proc return type, and `nil` when there is
+    none; `key` is a map's key type. `count` is `N` of `[N]T` and the rows
+    of a matrix, `columns` its columns.
+  - `fields` lists struct fields in declaration order, including `using`
+    ones, as `TypeInfoField`s (`name`, `type`, `offset`). For a proc they
+    are its parameters, with empty names and offset 0, since a proc type
+    doesn't keep parameter names. A multiple-value type such as
+    `(Int, Error)` is a struct with fields `0`, `1`, ….
+  - `members` lists enum members as `TypeInfoMember`s (`name`, `value: I64`;
+    a `U64`-backed member gives its bit pattern), and `variants` a union's
+    variant types, both in declaration order.
+  - A `distinct` type reports its base type's kind, layout and details under
+    its own name. `Error` is a `U32`-backed enum whose members are the error
+    symbols the program uses. An `opaque` C struct has size 0, alignment 0
+    and no fields. Sizes, alignments and offsets are C's, so they are exact
+    for structs C lays out (a cimported C union's fields all have offset 0).
+  - `Type`, and records that hold one such as `FieldInfo`, exist only while
+    compiling, so `type_info` can't describe them (E0906); `Never` has no
+    values to describe (E0323).
+  - The tables are static data: only types the program passes to
+    `type_info`, and the types those point at, are emitted, and nothing is
+    allocated. Don't write through the pointer; the tables are read-only.
+  - `type_info` works in `comptime` code too. Its result is a pointer, so it
+    can't cross to run time (E0905), but what is read from it can:
+    `comptime type_info(Ball).size`.
 - `embed("font.ttf")` reads a file, relative to the package directory, when the
   program is compiled, and returns its bytes as a `[]U8` stored with C23
   `#embed`. Embedded files are inputs of the build.

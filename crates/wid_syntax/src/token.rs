@@ -155,6 +155,17 @@ pub enum TokenKind {
     InterpBegin,
     InterpEnd,
     StrEnd,
+    /// `#{` outside a string literal: a splice, valid inside `quote`.
+    SpliceBegin,
+    /// The `}` that closes a splice. A zero-width one stands for a `}` that
+    /// is missing (the lexer could not find one).
+    SpliceEnd,
+    /// The `@` of `@#{name}`, a field name splice; a [`TokenKind::SpliceBegin`]
+    /// follows directly.
+    AtSplice,
+    /// The `:` of `:#{name}`, a symbol literal splice; a
+    /// [`TokenKind::SpliceBegin`] follows directly.
+    ColonSplice,
     /// `:name` or `:+`; the text after the colon is the symbol.
     Symbol,
     Ident,
@@ -233,6 +244,10 @@ impl TokenKind {
             InterpBegin => "`#{`",
             InterpEnd => "`}`",
             StrEnd => "end of string",
+            SpliceBegin => "`#{`",
+            SpliceEnd => "`}`",
+            AtSplice => "`@#{`",
+            ColonSplice => "`:#{`",
             Symbol => "symbol",
             Ident => "identifier",
             Const => "constant",

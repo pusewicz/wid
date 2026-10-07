@@ -8,11 +8,19 @@
 # Single-file states run as `check main.wid -file`; multi-file states run as
 # `check .` inside the package directory, and as `build` when a .c file exists.
 #
+# Pages are read as UTF-8 whatever the locale. The C compiler defaults to
+# `clang` (set WID_CC to override) because pages that show C compiler output,
+# like E0702's, are written against clang, so the results don't depend on
+# the machine's `cc`.
+#
 # Usage: ruby scripts/errdocs_drift.rb [-v] [CODE...]
 
 require "fileutils"
 require "open3"
 require "tmpdir"
+
+Encoding.default_external = Encoding::UTF_8
+ENV["WID_CC"] ||= "clang"
 
 ROOT = File.expand_path("..", __dir__)
 WID = ENV.fetch("WID_BIN", "#{ROOT}/target/debug/wid")

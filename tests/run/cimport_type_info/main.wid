@@ -1,0 +1,30 @@
+cimport "shapes.h", as: :sh, strip_prefix: "sh_"
+
+def show(t: ^TypeInfo)
+  line = "#{t.name}: #{t.kind}, size #{t.size}, align #{t.align}"
+  if e = t.elem
+    line = "#{line}, elem #{e.name}"
+  end
+  line = "#{line}, count #{t.count}" if t.count != 0
+  puts line
+  for f in t.fields
+    puts "  #{f.name}: #{f.type.name} @#{f.offset}"
+  end
+end
+
+def main
+  show(type_info(sh.Point))
+  show(type_info(sh.Packet))
+  show(type_info(sh.Value))
+  show(type_info(sh.Pair))
+  hidden = type_info(^sh.Hidden)
+  show(hidden)
+  if h = hidden.elem
+    show(h)
+  end
+  show(type_info(C.int))
+  show(type_info(C.size_t))
+  packet = sh.Packet.new(tag: 1)
+  puts type_info(packet) == type_info(sh.Packet)
+  puts type_info(packet.points[0]) == type_info(sh.Point)
+end

@@ -1,0 +1,57 @@
+# Run-time type descriptions. `type_info(T)` and `type_info(x)` return a
+# `^TypeInfo` that points at a read-only table the compiler emits; the same
+# type always gives the same pointer.
+
+# What kind of type a `TypeInfo` describes.
+enum TypeKind
+  int            # Int, I8…I64
+  uint           # UInt, U8…U64
+  float
+  bool
+  rune
+  string
+  cstring
+  rawptr
+  typeid
+  any
+  pointer        # ^T
+  multi_pointer  # [^]T
+  array          # [N]T
+  slice          # []T
+  dynamic_array  # [dynamic]T
+  map
+  matrix
+  optional       # T? (including ^T?, whose elem is ^T)
+  proc
+  struct
+  enum
+  union
+end
+
+# A type, as the program sees it at run time.
+struct TypeInfo
+  name: String                 # as Wid displays the type: "Int", "[]Vec2", "Pool(Ball, 64)", "Meters"
+  kind: TypeKind
+  size: Int
+  align: Int
+  elem: ^TypeInfo?             # pointee, element, map value, optional payload, enum backing type, proc return type
+  key: ^TypeInfo?              # map key
+  count: Int                   # [N]T: N; matrix[R, C]T: R
+  columns: Int                 # matrix[R, C]T: C
+  fields: []TypeInfoField      # struct fields in declaration order; proc parameters (offset 0)
+  members: []TypeInfoMember    # enum members, in declaration order
+  variants: []^TypeInfo        # union variants, in declaration order
+end
+
+# A struct field or a proc parameter.
+struct TypeInfoField
+  name: String
+  type: ^TypeInfo
+  offset: Int
+end
+
+# An enum member.
+struct TypeInfoMember
+  name: String
+  value: I64                   # a U64-backed member's bit pattern
+end

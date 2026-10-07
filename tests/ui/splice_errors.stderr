@@ -1,0 +1,89 @@
+error[E0111]: `#{` starts a splice outside a `quote`
+ --> tests/ui/splice_errors.wid:2:1
+  |
+2 | #{TODO} split this file
+  | ^^^^^^^ a splice only works inside `quote do … end`
+  = note: outside a string, `#{` always starts a splice; a comment starts with `# `
+help: if this is a comment, add a space after `#`
+  | # {TODO} split this file
+  = see `wid explain E0111`
+
+error[E0111]: `#{` starts a splice outside a `quote`
+ --> tests/ui/splice_errors.wid:5:13
+  |
+5 |   total = 0 #{running total}
+  |             ^^^^^^^^^^^^^^^^ a splice only works inside `quote do … end`
+  = note: outside a string, `#{` always starts a splice; a comment starts with `# `
+help: if this is a comment, add a space after `#`
+  |   total = 0 # {running total}
+  = see `wid explain E0111`
+
+error[E0111]: `#{` starts a splice outside a `quote`
+ --> tests/ui/splice_errors.wid:6:3
+  |
+6 |   #{note} the loop below adds the bonus
+  |   ^^^^^^^ a splice only works inside `quote do … end`
+  = note: outside a string, `#{` always starts a splice; a comment starts with `# `
+help: if this is a comment, add a space after `#`
+  |   # {note} the loop below adds the bonus
+  = see `wid explain E0111`
+
+error[E0111]: `#{` starts a splice outside a `quote`
+  --> tests/ui/splice_errors.wid:10:13
+   |
+10 |   doubled = #{total}
+   |             ^^^^^^^^ a splice only works inside `quote do … end`
+   = note: outside a string, `#{` always starts a splice; a comment starts with `# `
+help: to write the code itself, remove `#{` and `}`
+   |   doubled = total
+   = see `wid explain E0111`
+
+error[E0111]: `#{` starts a splice outside a `quote`
+  --> tests/ui/splice_errors.wid:12:8
+   |
+12 |     1, #{first}
+   |        ^^^^^^^^ a splice only works inside `quote do … end`
+   = note: outside a string, `#{` always starts a splice; a comment starts with `# `
+help: if this is a comment, add a space after `#`
+   |     1, # {first}
+   = see `wid explain E0111`
+
+error[E0111]: `#{` starts a splice outside a `quote`
+  --> tests/ui/splice_errors.wid:19:3
+   |
+19 |   #{name}
+   |   ^^^^^^^ a splice only works inside `quote do … end`
+   = note: outside a string, `#{` always starts a splice; a comment starts with `# `
+help: if this is a comment, add a space after `#`
+   |   # {name}
+help: to build code in a macro, splice values into a `quote do … end` and return it
+   = see `wid explain E0111`
+
+error[E0111]: a splice inside a splice
+  --> tests/ui/splice_errors.wid:24:16
+   |
+24 |     def #{name(#{name})} = 1
+   |                ^^^^^^^ this is already macro code
+   = note: the expression inside `#{…}` runs in the macro, so it uses values directly
+help: remove the inner `#{` and `}`
+   |     def #{name(name)} = 1
+   = see `wid explain E0111`
+
+error[E0105]: empty splice
+  --> tests/ui/splice_errors.wid:25:13
+   |
+25 |     value = #{}
+   |             ^^^ there is nothing to insert here
+help: put the macro value to insert between the braces, like `#{name}`
+   = see `wid explain E0105`
+
+error[E0102]: unterminated splice
+  --> tests/ui/splice_errors.wid:26:9
+   |
+26 |     def #{name
+   |         ^^ this `#{` is never closed
+help: close it with `}`
+   |     def #{name}
+   = see `wid explain E0102`
+
+error: could not compile due to 9 errors

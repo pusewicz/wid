@@ -1,0 +1,30 @@
+# A splice outside a `quote` is most likely a comment without its space.
+#{TODO} split this file
+
+def main
+  total = 0 #{running total}
+  #{note} the loop below adds the bonus
+  for x in [1, 2, 3]
+    total += x
+  end
+  doubled = #{total}
+  values = [
+    1, #{first}
+    2,
+  ]
+  p total, doubled, values
+end
+
+macro def getter(name: Symbol) -> Code
+  #{name}
+end
+
+macro def broken(name: Symbol) -> Code
+  quote do
+    def #{name(#{name})} = 1
+    value = #{}
+    def #{name
+      2
+    end
+  end
+end

@@ -1,0 +1,27 @@
+struct Ball
+  radius: F32
+end
+
+struct Holder
+  info: ^FieldInfo
+end
+
+def fail -> Never
+  panic("no")
+end
+
+def type_size(t: Type) -> Int
+  type_info(t).size
+end
+
+LEAK = comptime type_info(Ball)
+
+def main
+  puts type_info(Type).size
+  puts type_info(Holder).size
+  puts type_info(Never).size
+  puts type_info(fail).size
+  puts type_info(of: Ball).size
+  p type_info()
+  puts Ball.fields.size
+end

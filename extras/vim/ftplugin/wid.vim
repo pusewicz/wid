@@ -12,7 +12,8 @@ let b:did_ftplugin = 1
 let s:cpo_save = &cpo
 set cpo&vim
 
-setlocal comments=:# commentstring=#\ %s
+" A comment leader is `#` and a blank: a line starting with `#{` is a splice.
+setlocal comments=b:# commentstring=#\ %s
 setlocal formatoptions-=t formatoptions+=croql
 setlocal suffixesadd=.wid
 setlocal include=
@@ -34,7 +35,7 @@ let b:match_words =
       \ . ':\<end\>[?!]\@!'
 let b:match_skip = 's:\<wid\%(Comment\|Todo\|String\|RawString\|StringDelimiter\|Escape\|RawEscape\|'
       \ . 'EscapeError\|InterpolationDelimiter\|Symbol\|ConditionalModifier\|RepeatModifier\|Member\|'
-      \ . 'EndlessDefine\|Attribute\|AttributeDelimiter\)$'
+      \ . 'EndlessDefine\|Attribute\|AttributeDelimiter\|EnumMember\)$'
 let b:undo_ftplugin .= ' | unlet! b:match_ignorecase b:match_words b:match_skip'
 
 let &cpo = s:cpo_save

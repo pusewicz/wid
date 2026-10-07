@@ -130,6 +130,25 @@ runs the stages; `wid_cli` is the `wid` binary.
   or call such functions, are marked `comptime_only` and never emitted;
   `check_comptime_only` reports (E0906) where code reachable from `main`,
   tests and exported functions calls one.
+- `type_info(x)` lowers to `Builtin::TypeInfo` whose one argument is a `Zero`
+  of the described type, never evaluated (`check/type_info.rs` checks `x` in
+  a block it then drops). `wid_sema::type_info::describe` says what a table
+  holds, and `type_info::check` rejects types whose tables would reach a
+  `Type` (E0906) or `Never` (E0323). Codegen (`type_info.rs`) emits one
+  `static const` object, `wid_typeinfo`, with arrays `types`, `fields`,
+  `members` and `variants`, after the statics; `type_info(T)` is
+  `((builtin__TypeInfo *)&wid_typeinfo.types[i])`. Entries are numbered in
+  the order emitted functions describe types, then the types they point at.
+  Keeping everything in one object lets entries point at each other without
+  forward declarations (a `static const` object can't be declared before its
+  definition without a tentative definition), and every address is cast to
+  the non-`const` Wid type. Sizes, alignments and offsets are `sizeof`,
+  `alignof` and `offsetof`. The interpreter builds the same tables in its
+  static region from `describe`, once per type per evaluation
+  (`Interp::type_infos`), with Wid's layouts.
+- In an `enum` body, `struct`, `enum` or `union` followed by a newline, `=` or
+  `,` is a member (`is_keyword_member` in the parser), for `TypeKind`. Vim
+  matches them as `widEnumMember`, which opens no block.
 
 ## Done
 
@@ -240,6 +259,17 @@ runs the stages; `wid_cli` is the `wid` binary.
   reflection (`T.fields`, `T.methods`, `T.name`, `Type` values with `.name`,
   `.size`, `.align`, `.fields` and `==`), `embed("file")` through `#embed`, and
   errors E0901 and E0903–E0909.
+- `type_info(T)` and `type_info(x)`: the prelude's `TypeKind`, `TypeInfo`,
+  `TypeInfoField` and `TypeInfoMember` (`core/builtin/type_info.wid`), static
+  tables for every kind of type (including generic instances, `distinct`
+  types, `Error`, cimported and opaque C structs, and recursive types), the
+  same tables in `comptime` code, E0906 for `Type` and records that hold one,
+  E0323 for `Never`, and E0906 help that points at `type_info(T)`.
+- Macro syntax: `quote` bodies holding statements and declarations, with
+  splices in every expression, type, declaration and name position (`#{x}`,
+  `@#{f}`, `:#{s}`), splices outside a `quote` (E0111), variadic
+  `*names: T` macro parameters (E0112), and package-qualified
+  declaration-level macro calls. Expansion is next (item 1).
 - Test suite: `tests/run` (clang and gcc-16, strict flags), `tests/ui`,
   `tests/test` (`wid test` reports) and every `core/` package's `_test.wid`
   files.
@@ -260,29 +290,51 @@ issues. Each item is one PR unless it says otherwise. Items 2–5 depend only on
 macro stack.
 
 1. **Macros and `type_info`** (`wid/macros-*`, about three stacked PRs):
-   - lexer, parser and AST for `quote` and splices;
+   - lexer, parser and AST for `quote` and splices (**landed**);
    - expansion, hygiene and the `attr_*` macros;
-   - `type_info`.
+   - `type_info` (landed separately; see "Done").
 
-   Settle the open questions at the end of this item first and write them
-   into SPEC.md. **Not started; no code has landed.** Today a `quote` and a
-   declaration-level macro call (`attr_reader :hp`) are E0902 ("macros
-   cannot run yet", `tests/ui/not_yet_available`), and `macro def` bodies are
-   parsed but never checked (`check/mod.rs` skips `is_macro`).
    The design below is settled and written into SPEC.md ("Compile-time").
-   - **Lexer** (`wid_syntax/src/lexer.rs`): `#{` outside a string literal
-     emits new `SpliceBegin`/`SpliceEnd` tokens. Generalize `Interp` so a
-     `None` quote marks a splice: `{` and `}` depth tracking ends it, and
-     newlines are suppressed inside it. `@#{` emits an `AtSplice` token
-     before the splice.
-   - **Parser and AST:**
-     - `ExprKind::Quote` carries a `QuoteExpr { body, splices: Vec<Expr> }`,
-       built with a parser stack of splice lists, one per open `quote`.
-     - Splices become `ExprKind::Splice(u32)` and `TypeKind::Splice(u32)`.
-       Name positions (`def #{name}`, `.#{name}`, `@#{name}`, parameter and
-       field names) get an `Ident` placeholder named `#{i}`.
-     - A splice outside a `quote` is a parse error, with a fix that inserts
-       a space after `#` (it was meant to be a comment).
+   Only the syntax has landed: today a `quote` and a declaration-level
+   macro call (`attr_reader :hp`, `lib.attr_reader :hp`) in a type body
+   are E0902 ("macros cannot run yet", `tests/ui/not_yet_available`), a
+   package-level macro call is E0108, and `macro def` bodies are parsed but
+   never checked (`check/mod.rs` skips `is_macro`).
+   - **Syntax (landed):**
+     - Lexer: `#{` outside a string emits `SpliceBegin`, its `}` emits
+       `SpliceEnd` (an `Interp` with `quote: None`; newlines inside are
+       suppressed), and `@#{`/`:#{` emit `AtSplice`/`ColonSplice` first. A
+       splice with no `}` anywhere ends at a zero-width `SpliceEnd` after the
+       last code on its line, which the parser reports (E0102 inside a
+       `quote`; outside one only E0111).
+     - `ExprKind::Quote(Box<QuoteExpr { body: Vec<Stmt>, splices: Vec<Expr> }>)`
+       numbers its splices in source order, one list per `quote` (a `quote`
+       inside a splice has its own). A body line that can only start a
+       declaration (`def`, `struct`, `include`, `NAME = v`, … with
+       attributes and `private`) is a `StmtKind::Item`, also in the branches
+       of a top-level `comptime if`; every other line is a statement. So
+       PR 2 uses the body as is in a method, and in a declaration context
+       takes each `StmtKind::Item`'s item and turns a call or name statement
+       (`attr_reader :hp`) into an `ItemKind::MacroCall`.
+     - A splice is `ExprKind::Splice(i)` in an expression,
+       `TypeKind::Splice(i)` in a type, and `ItemKind::Splice(i)` alone on a
+       line in a type body (in an enum body it may be `Symbol`s, i.e.
+       members). In every name position (method, field, parameter, local,
+       block-parameter, loop-variable, type and enum-member names, `x.#{m}`,
+       `@#{f}`, `:#{s}`, named arguments, `#{name}(args)`) it is an
+       `Ident`, `IVar` or `Symbol` named `#{i}` (`ast::splice_name`,
+       `Ident::splice_index`), spanning the whole `#{…}`. A splice in a
+       generic argument list is a `GenericArg::Expr`.
+     - A splice outside a `quote` is E0111, with a fix that adds a space
+       after `#` (when it reads as a comment, the rest of its line is
+       skipped like that comment) or else one that removes `#{` and `}`; a
+       splice inside a splice is E0111 too.
+     - `*names: T` sets `Param::splat`. E0112 rejects it outside a
+       `macro def` (recovering as `names: []T`, whose calls take any
+       arguments without more errors), before another parameter, or with a
+       default.
+     - A package-qualified call (`lib.name args`, `lib.name(…)`, `lib.name`)
+       parses as `ItemKind::MacroCall` at package level and in type bodies.
    - **Expansion** (new `check/macros.rs`):
      - Each argument is converted to a value: `Code` arguments become
        fragment handles over the call-site AST, `Symbol` arguments become
@@ -301,6 +353,20 @@ macro stack.
        visitor in `wid_syntax`.
      - Generated AST must live for `'a`. Use a `typed-arena` arena created
        in `check_program` (`check/mod.rs:246`).
+     - A `*names: T` parameter collects the remaining positional arguments,
+       each converted by `T`'s rule, into a `[]T`.
+     - Macro calls resolve like other calls, so `lib.name` reaches a
+       package's macro and `private macro def` is enforced. Names in the
+       quote's own code that aren't quote-bound locals or members of
+       `self` resolve in the macro's package (its `DeclLoc`); splice names
+       and `Self` resolve at the call site.
+     - Errors: each expansion gets a virtual `FileId` that aliases the
+       template's file and records the call span and the macro's name;
+       nested expansions form a chain, and a diagnostic in generated code
+       lists the chain innermost first, in the human and JSON renderers.
+       `#line` in `-debug` builds points at the template's real file.
+     - Budgets: each macro run has the `comptime` limits; expansions nest
+       at most 64 deep and a build runs at most 65,536 (E0903).
    - **Where expansions are checked:**
      - Statement-level expansions lower in place with `lower_stmts`.
      - Expression-level expansions lower like `comptime` statements, into a
@@ -313,21 +379,15 @@ macro stack.
      to cover them.
    - **`core:builtin`:** `attr_reader`, `attr_writer` and `attr_accessor`
      macros. They look up the field type through `Self.fields`.
-   - **`type_info(x)` / `type_info(T)`:** a prelude `TypeInfo` record (name,
-     kind, size, align, fields with name/type/offset, enum members, union
-     variants). It is backed by per-type static tables that codegen emits,
-     modelled on the per-type printers in `wid_codegen_c/src/helpers.rs`,
-     and it works for cimported structs. E0906's fix should point at it.
-   - **Still open:**
-     - How errors in generated code name their expansion. The candidates
-       are a per-declaration origin map plus an expansion stack, or one
-       virtual `FileId` per expansion that aliases the template's file.
-       The second is exact but needs `SourceMap` support from the driver.
-     - The syntax for variadic macro parameters (`*names: Symbol`).
-     - Splicing a symbol literal (`:#{name}`).
-     - Whether macros can be called qualified (`pkg.name`).
-     - The expansion budgets (depth and count).
-     - The exact shape of `TypeInfo`.
+   - **`type_info(x)` / `type_info(T)`:** landed separately, ahead of the
+     macros (see "Done" and SPEC "Compile-time").
+   - **Settled (in SPEC.md, "Compile-time"):** errors in generated code
+     point at the `quote` line and every macro call that led to it,
+     innermost first; variadic `*names: T` parameters (macros only, last,
+     no default); symbol splices `:#{name}`; qualified calls `pkg.name`
+     and `private macro def`; definition-site resolution of the quote's own
+     names; budgets (64 deep, 65,536 per build, E0903). The implementation
+     notes are under "Expansion" above.
 2. **`wid doc`** (`wid/doc`). Documentation for packages, types and
    methods, generated from doc comments, including cimported C symbols
    (SPEC "C and C++ interop", "Toolchain and CLI"). It prints text by
@@ -392,6 +452,14 @@ before anyone starts them.
   copied when their address is taken, but a slice into a constant's static
   data is writable). The interpreter runs about 10 million steps a second, so
   very large tables are slow to build.
+- `type_info`: `T?` and `proc(…)` types can't be written as arguments
+  (`type_info(Int?)`, like `size_of(Int?)`, doesn't parse); name them with a
+  constant first (`MaybeInt = Int?`). At compile time the tables use Wid's
+  layouts, which differ from C's for a cimported C union (whose fields all
+  start at 0 in C), and `Error`'s members are the error symbols seen so far.
+  Proc tables don't say whether a proc is `@[c]`. Nothing stops a program
+  from writing through a `^TypeInfo` (the run-time tables are `const`, so it
+  faults; at compile time it succeeds).
 - `vendor:miniaudio` built with GCC on macOS has no CoreAudio backend: GCC
   can't parse the block syntax in Apple's headers (`miniaudio.c` sets
   `MA_NO_COREAUDIO` there).

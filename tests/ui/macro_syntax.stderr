@@ -1,0 +1,17 @@
+error[E0902]: `record :hp, Int, 100` cannot expand: macros cannot run yet
+  --> tests/ui/macro_syntax/main.wid:53:3
+   |
+53 |   record :hp, Int, 100
+   |   ^^^^^^^^^^^^^^^^^^^^ a macro call inside a type
+help: write the methods out, for example `def hp = @hp` for a reader
+   = see `wid explain E0902`
+
+error[E0902]: `stats.counter :kills, :deaths` cannot expand: macros cannot run yet
+  --> tests/ui/macro_syntax/main.wid:54:3
+   |
+54 |   stats.counter :kills, :deaths
+   |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ a macro call inside a type
+help: write the methods out, for example `def hp = @hp` for a reader
+   = see `wid explain E0902`
+
+error: could not compile due to 2 errors

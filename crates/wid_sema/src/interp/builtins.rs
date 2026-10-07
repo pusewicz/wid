@@ -67,9 +67,7 @@ impl<'c> Interp<'c> {
                 };
                 Ok(self.encode(ty, Num::I(n)))
             }
-            B::TypeInfo => {
-                Err(self.fail_at(span, "`type_info` describes values at run time; it can't run at compile time"))
-            }
+            B::TypeInfo => self.type_info(arg(0).ty, ty, span),
             B::BuilderNew => {
                 let a = self.eval(arg(0))?;
                 let mut w = vec![0u8; 48];

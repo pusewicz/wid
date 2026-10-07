@@ -251,7 +251,13 @@ impl<'a> Checker<'a> {
                 if !escape.path.is_empty() {
                     diag = diag.note(format!("the problem is at `value{}`", escape.path));
                 }
-                self.report(diag.help(escape.help));
+                let help = match self.prelude_struct("TypeInfo") {
+                    Some(info) if self.reaches(ty, info, 0) => {
+                        "a `type_info` table built while compiling stays in the compiler: call `type_info` in code that runs, or keep only what you need, like `comptime type_info(T).size`".to_string()
+                    }
+                    _ => escape.help,
+                };
+                self.report(diag.help(help));
                 None
             }
         }
@@ -608,7 +614,8 @@ impl<'a> Checker<'a> {
                 }
                 let type_ty = self.types.type_ty();
                 let t = ir::Expr::new(ExprKind::Int(i128::from(ty.0)), type_ty);
-                Some(self.type_query(Builtin::TypeFields, t, name.span))
+                // The whole `T.fields`, so E0906 can offer `type_info(T).fields`.
+                Some(self.type_query(Builtin::TypeFields, t, span))
             }
             "methods" => Some(self.type_methods(ty, span)),
             _ => None,
@@ -804,7 +811,7 @@ impl<'a> Checker<'a> {
                 continue;
             }
             if let Some((span, why)) = &direct[i] {
-                reports.push((display(self, i), *span, why.clone(), None));
+                reports.push((i, *span, why.clone(), None));
                 continue;
             }
             let Some(Some(f)) = self.functions.get(i) else { continue };
@@ -820,32 +827,94 @@ impl<'a> Checker<'a> {
                 if only[c] {
                     if reported.insert(c) {
                         let why = self.comptime_only_reason(c, &direct, &only);
-                        reports.push((display(self, i), line, display(self, c), Some(why)));
+                        reports.push((i, line, display(self, c), Some((c, why))));
                     }
                 } else {
                     stack.push(c);
                 }
             }
         }
-        for (caller, span, what, why) in reports {
+        const RUN_TIME: &str = "for type information while the program runs, use `type_info(T)`, or `type_info(x)` for the type of a value";
+        for (i, span, what, why) in reports {
+            let caller = display(self, i);
             let diag = match why {
-                None => Diagnostic::error(
-                    codes::COMPTIME_AT_RUNTIME,
-                    format!("`{caller}` uses a compile-time-only value"),
-                )
-                .primary(span, what)
-                .note(format!(
-                    "`{caller}` runs when the program runs, but `Type` values and reflection exist only while compiling"
-                )),
-                Some((reason_span, reason)) => {
-                    Diagnostic::error(codes::COMPTIME_AT_RUNTIME, format!("`{what}` works only at compile time"))
-                        .primary(span, format!("`{caller}` calls it when the program runs"))
-                        .secondary(reason_span, reason)
-                        .help(format!("call it while compiling instead, like `x = comptime {what}(…)`"))
+                None => {
+                    let diag = Diagnostic::error(
+                        codes::COMPTIME_AT_RUNTIME,
+                        format!("`{caller}` uses a compile-time-only value"),
+                    )
+                    .primary(span, what)
+                    .note(format!(
+                        "`{caller}` runs when the program runs, but `Type` values and reflection exist only while compiling"
+                    ));
+                    match self.fields_at_run_time(i) {
+                        Some((at, replacement)) => diag.suggest_replace(
+                            format!("read the fields while the program runs with `{replacement}`"),
+                            at,
+                            replacement,
+                            Applicability::MaybeIncorrect,
+                        ),
+                        None => diag.help(RUN_TIME),
+                    }
+                }
+                Some((c, (reason_span, reason))) => {
+                    let diag =
+                        Diagnostic::error(codes::COMPTIME_AT_RUNTIME, format!("`{what}` works only at compile time"))
+                            .primary(span, format!("`{caller}` calls it when the program runs"))
+                            .secondary(reason_span, reason)
+                            .help(format!("call it while compiling instead, like `x = comptime {what}(…)`"));
+                    match self.type_argument(i, c) {
+                        Some(t) => {
+                            let shown = self.types.display(t);
+                            diag.help(format!(
+                                "to describe `{shown}` while the program runs, use `type_info({shown})`: a `^TypeInfo` with its `name`, `size`, `align`, `fields` and more"
+                            ))
+                        }
+                        None => diag.help(RUN_TIME),
+                    }
                 }
             };
-            self.report(diag.note("for type information at run time, use `type_info(x)`"));
+            self.report(diag);
         }
+    }
+
+    /// Where function `i` reads `T.fields` of a type it names, with the
+    /// `type_info(T).fields` that reads them at run time.
+    fn fields_at_run_time(&self, i: usize) -> Option<(Span, String)> {
+        let body = self.functions.get(i)?.as_ref()?.body.as_ref()?;
+        let mut found = None;
+        visit_block(body, &mut |e| {
+            if found.is_none()
+                && let ExprKind::Builtin { op: Builtin::TypeFields, args, span } = &e.kind
+                && let [ir::Expr { kind: ExprKind::Int(_), .. }] = args.as_slice()
+                && let Some((recv, "fields")) = self.source_text(*span).rsplit_once('.')
+                && !recv.trim().is_empty()
+            {
+                found = Some((*span, format!("type_info({}).fields", recv.trim())));
+            }
+        });
+        found
+    }
+
+    /// A type that function `i` passes as a `Type` argument when it calls
+    /// function `c`, like the `Point` of `field_count(Point)`.
+    fn type_argument(&self, i: usize, c: usize) -> Option<TyId> {
+        let body = self.functions.get(i)?.as_ref()?.body.as_ref()?;
+        let mut found = None;
+        visit_block(body, &mut |e| {
+            if found.is_none()
+                && let ExprKind::Call { func, args } = &e.kind
+                && func.0 as usize == c
+            {
+                found = args.iter().find_map(|a| match a.kind {
+                    ExprKind::Int(v) if matches!(self.types.kind(a.ty), TyKind::Type) => {
+                        u32::try_from(v).ok().map(TyId).filter(|t| (t.0 as usize) < self.types.len())
+                    }
+                    _ => None,
+                });
+            }
+        });
+        found
     }
 
     /// Why a compile-time-only function is one: the use inside it, or the
@@ -891,6 +960,29 @@ impl<'a> Checker<'a> {
         }
         let uses_type = f.locals.iter().any(|l| self.contains_type(l.ty, 0)) || self.contains_type(f.ret, 0);
         uses_type.then(|| (f.span, "uses `Type` values, which exist only while compiling".into()))
+    }
+
+    /// Whether a value of type `ty` is, or holds, a `target`.
+    fn reaches(&self, ty: TyId, target: TyId, depth: u32) -> bool {
+        if ty == target {
+            return true;
+        }
+        if depth > 8 {
+            return false;
+        }
+        match self.types.kind(self.types.base(ty)) {
+            TyKind::Array(t, _)
+            | TyKind::Slice(t)
+            | TyKind::Dynamic(t)
+            | TyKind::Optional(t)
+            | TyKind::Pointer(t)
+            | TyKind::MultiPointer(t) => self.reaches(*t, target, depth + 1),
+            TyKind::Tuple(ts) => ts.iter().any(|t| self.reaches(*t, target, depth + 1)),
+            TyKind::Struct(id) => {
+                self.types.struct_info(*id).fields.iter().any(|f| self.reaches(f.ty, target, depth + 1))
+            }
+            _ => false,
+        }
     }
 
     /// Whether a type holds a `Type` value somewhere.
