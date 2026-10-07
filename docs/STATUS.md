@@ -32,9 +32,9 @@ runs the stages; `wid_cli` is the `wid` binary.
 - Integer arithmetic wraps (`-fwrapv`); `-debug` builds trap on overflow via
   `ckd_*`. Division always checks for zero. `%` truncates toward zero, as in C
   and Odin.
-- `E0001` is reserved and has no uses. Macro calls among declarations,
-  which are not expanded yet, report their own code (E0902) with a
-  workaround until they land.
+- `E0001` and `E0902` are reserved and have no uses: their pages say so and
+  start with `<!-- drift: skip … -->`. Any feature the compiler doesn't
+  implement yet gets its own code with a workaround.
 - Copies of a deferred block share `LocalId`s with the original; each copy is
   emitted as its own C scope, so a local is declared once per copy.
 - `private` is enforced for package members (`pkg.name`) and for methods
@@ -117,9 +117,11 @@ runs the stages; `wid_cli` is the `wid` binary.
   constant initializer without `comptime` sets `const_init`, which makes
   `call_fn` report E0327 with a fix that adds `comptime`. Parameter defaults
   only fold (or run an explicit `comptime`); others are lowered at the call.
-- Declaration-level `comptime if`s are collected as `pending_ifs` and resolved
-  after every unconditional declaration and `cimport` merge, in source order;
-  a chosen branch's items go through the same collection. The loader resolves
+- Declaration-level `comptime if`s and macro calls are queued in
+  `pending_decls` (`comptime::Pending`) and resolved by `resolve_pending`
+  after every unconditional declaration and `cimport` merge, in source order,
+  in rounds: what a round collects may queue more for the next. A chosen
+  branch's items go through the same collection. The loader resolves
   `import`s and `cimport`s inside every branch, keyed by the item's start
   offset (`FileInput::imports`), and holds back their errors in
   `FileInput::deferred` until sema chooses the branch.
@@ -218,6 +220,40 @@ runs the stages; `wid_cli` is the `wid` binary.
   - `check_comptime_only` covers `Code` and `Symbol` (`Only`), pointing at
     the first line that uses one; codegen maps both to `wid_TypeId` but
     never emits them.
+  - `Self` in a macro's own code (`macro_self_use`, a `FindSelf` walk that
+    skips `quote` bodies but not their splices, cached in
+    `MacroState::self_uses`): `macro_instance` runs such a macro as the
+    instance `fn_instance_with(decl, [Self = T])` for the frame's
+    `self_ty`, and reports E0209 when there is none or it has placeholders
+    (`Param(Self)` in a module or `extend`, a generic struct's template).
+    `check_all_roots` doesn't check such a macro's body on its own; each
+    instance is checked when it runs, with the call on `instance_stack`
+    (whose fourth element, the `Self` shown, words the note for a macro).
+  - Declaration-level calls (`check/decl_macros.rs`, whose module docs
+    describe the flow): `collect_item` queues a `PendingMacro` (rejecting
+    attributes, E0328); `expand_item_macro` resolves the name where it is
+    written (`names_at`: a virtual span's `DeclLoc`, else the declaring
+    file), pushes a frame of its own (its `self_ty` the owner's type, made
+    only when the macro or an argument uses `Self`, so a struct's fields
+    aren't resolved early otherwise), runs `expand_code`, turns the
+    statements into items with `lines_to_items` (shared with
+    `Splicer::push_items`), allocates them in `generated` and collects
+    them with `collect_item` under the call's `DeclLoc` and owner. Fields
+    for a struct owner are E0913 there; a generated `import`/`cimport` is
+    E0913 wherever it lands (`generated_import`, called from
+    `collect_items` and `collect_item`, since the loader keyed nothing by
+    a virtual offset), and marks its name failed in the macro's file so
+    uses don't cascade. `private` on the call is copied to every item.
+  - Generated members join their owner like written ones: `members` for
+    lookup, `include_items` (every `include` collected, in order; resolved
+    lazily by `includes_of`, and one collected after that is resolved on
+    the spot by `resolve_include`, by its own span's `DeclLoc`), and
+    `check_member_after_fields` reports a member named like a field when
+    the struct's fields were already resolved (a macro reading
+    `Self.fields` resolves them first). `fold_const` and `undefined` use a
+    virtual span's `DeclLoc`, so a generated constant folds the macro
+    package's constants and failed imports are found where the name
+    resolves.
 
 ## Done
 
@@ -356,7 +392,17 @@ runs the stages; `wid_cli` is the `wid` binary.
   definition-site name resolution, hygiene, nested expansion, budgets,
   errors in generated code with their call chain (human and JSON), `#line`
   and panic locations in the `quote`, and errors E0910–E0912.
-  Declaration-level calls are next (item 1).
+- Macro calls among declarations: at package level and in `struct`, `enum`,
+  `module` and `extend` bodies, qualified ones included, expanded in source
+  order with the pending `comptime if`s; generated methods (`def`,
+  `def self.`), constants, types, `overload` sets, `include`s, `comptime if`s,
+  `macro def`s and further macro calls (nested, within the budgets), all
+  visible to code written before the call; `private` calls; a macro's
+  `Self` (the type whose body or method holds the call, so `Self.fields`
+  drives generated methods); errors in generated declarations and in their
+  bodies with the call chain; E0913 for generated fields and imports, E0108
+  for generated statements, E0209 for `Self` without one type. E0902 is
+  retired. An `include` in a type-level `comptime if` is no longer ignored.
 - Test suite: `tests/run` (clang and gcc-16, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
   `tests/test` (`wid test` reports) and every `core/` package's `_test.wid`
@@ -381,30 +427,25 @@ macro stack.
    - lexer, parser and AST for `quote` and splices (**landed**);
    - expansion, hygiene and errors in expressions and statements
      (**landed**; see "Conventions fixed so far");
-   - declaration-level expansion and the `attr_*` macros (next);
+   - declaration-level expansion (**landed**; see "Conventions fixed so
+     far" and "Done");
+   - the `attr_*` macros: waiting on a decision about accessor semantics
+     (see below);
    - `type_info` (landed separately; see "Done").
 
    The design below is settled and written into SPEC.md ("Compile-time").
-   What remains: a declaration-level macro call (`attr_reader :hp`,
-   `lib.attr_reader :hp`) in a type body is still E0902 ("macro calls
-   among declarations don't run yet", `tests/ui/not_yet_available`), and a
-   package-level macro call is E0108 (`collect_item`, `ItemKind::MacroCall`).
-   - **Declaration-level expansion (next PR):** add an entry point next to
-     `call_macro` that takes an `ItemKind::MacroCall`'s expression (an
-     `ExprKind::Call`, `Ident` or `Member`), resolves the macro with the
-     owner's or the package's `DeclLoc`, and runs `expand` (which already
-     works without a frame: argument conversion only needs one for `Code`
-     values lowered via `comptime_value`). Turn the returned statements into
-     items the way `Splicer::push_items` does (a `StmtKind::Item` gives its
-     item, a call or name statement an `ItemKind::MacroCall`), and queue
-     them with `pending_ifs` so they are collected in source order by
-     `collect_item`/`collect_member_item` (they live in the arena, so
-     `&'a ast::Item` borrows work). Bodies of generated `def`s then resolve
-     names through their spans' virtual files with no extra work, and
-     their parameters are already open to code spliced from the call site
-     (`declare_param`). `Splicer`
-     already turns `ItemKind::Splice` into items and, in an `enum` body,
-     `Symbol`s into members (appended after the written ones).
+   What remains:
+   - **`attr_reader`, `attr_writer` and `attr_accessor`** in `core:builtin`
+     (SPEC: "`core` uses macros for …"). They wait on the user's decision
+     about accessor semantics: today a method can't share a field's name
+     (E0202, "both a field and a method"), so `attr_reader :hp` can't
+     generate `def hp`, and Wid has no setter syntax (`hero.hp = 3` with a
+     method behind it) for `attr_writer`. Until then
+     `tests/ui/not_yet_available` shows `attr_reader :hp` as an undefined
+     macro (E0201) with a note and a workaround (`undefined_macro` in
+     `check/decl_macros.rs`). Once decided, they are ordinary `macro def`s
+     reading the field's type from `Self.fields`; a macro's `Self` is
+     already the type whose body holds the call.
    - **Syntax (landed):**
      - Lexer: `#{` outside a string emits `SpliceBegin`, its `}` emits
        `SpliceEnd` (an `Interp` with `quote: None`; newlines inside are
@@ -483,7 +524,8 @@ macro stack.
      plus `sym.to_s` and `str.to_sym`. Extend `check_comptime_only` (E0906)
      to cover them.
    - **`core:builtin`:** `attr_reader`, `attr_writer` and `attr_accessor`
-     macros. They look up the field type through `Self.fields`.
+     macros, waiting on the accessor-semantics decision above. They look
+     up the field type through `Self.fields`.
    - **`type_info(x)` / `type_info(T)`:** landed separately, ahead of the
      macros (see "Done" and SPEC "Compile-time").
    - **Settled (in SPEC.md, "Compile-time"):** errors in generated code
@@ -581,6 +623,18 @@ before anyone starts them.
   `Code` parameter's default can't be a `quote`. A macro reached through
   an `overload` set expands without the expected type. A macro run is
   repeated for each generic instance that contains the call.
+- Macros among declarations: calls expand strictly in source order, once
+  each, so a call can't use a macro or a declaration that a later call
+  generates (it is undefined), and a macro runs, with the helpers it calls
+  lowered, before the declarations later calls generate exist. When a call
+  fails or names no macro, uses of what it would have generated are
+  reported as undefined too (like #8). In an `enum` body a macro without
+  arguments needs `()`, since a name alone is a member. A generic struct's
+  body can't call a macro that uses `Self` (E0209): its `Self.fields` would
+  hold placeholder types and no layout. `Self.methods` in a type-body macro
+  lists the methods collected so far. Generated declarations whose names
+  come from computed symbols point at the whole call in messages (E0202,
+  E0317).
 - `vendor:miniaudio` built with GCC on macOS has no CoreAudio backend: GCC
   can't parse the block syntax in Apple's headers (`miniaudio.c` sets
   `MA_NO_COREAUDIO` there).
