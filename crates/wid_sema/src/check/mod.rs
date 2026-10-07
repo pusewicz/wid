@@ -530,6 +530,74 @@ impl<'a> Checker<'a> {
         self.pkg_scopes[pkg.0 as usize].keys().map(|n| n.as_str()).collect()
     }
 
+    /// Reports an `import` or `cimport` inside a `struct`, `enum`, `module`
+    /// or `extend` body (E0105), with a fix that moves its line to the top
+    /// of the file: after the file's last import, or else above its first
+    /// declaration and that declaration's comments. The loader never saw
+    /// it, so uses of the name it would bind aren't reported again.
+    pub(super) fn import_in_body(&mut self, item: &ast::Item, loc: DeclLoc) {
+        let file = &self.input.packages[loc.pkg.0 as usize].files[loc.file];
+        let keyword = match &item.kind {
+            ast::ItemKind::Import(import) => {
+                let name = match import.alias {
+                    Some(alias) => alias.name,
+                    None => Name::new(&items::import_name(&import.path)),
+                };
+                self.failed_imports.insert((loc.pkg, loc.file, name));
+                "import"
+            }
+            _ => "cimport",
+        };
+        let text: &str = &file.text;
+        let span = item.span;
+        let line_start = |at: usize| text[..at].rfind('\n').map_or(0, |i| i + 1);
+        let line_end = |at: usize| text[at..].find('\n').map_or(text.len(), |i| at + i + 1);
+        let (start, end) = (span.start as usize, span.end as usize);
+        let (from, to) = (line_start(start), line_end(end));
+        let rest = text.get(end..to).unwrap_or("").trim();
+        // Only a line that holds nothing else moves whole.
+        let whole_line =
+            text.get(from..start).is_some_and(|s| s.trim().is_empty()) && (rest.is_empty() || rest.starts_with('#'));
+        let line = text.get(start..end).unwrap_or("").to_string();
+        let top = &file.ast.items;
+        let last_import = top.iter().rfind(|i| matches!(i.kind, ast::ItemKind::Import(_) | ast::ItemKind::Cimport(_)));
+        let (at, insert) = match (last_import, top.first()) {
+            (Some(i), _) => (line_end(i.span.end as usize), format!("{line}\n")),
+            (None, Some(first)) => {
+                // Above the first declaration's doc comment and attributes.
+                let mut at = line_start(first.span.start as usize);
+                while at > 0 {
+                    let prev = line_start(at - 1);
+                    if !text[prev..at].trim_start().starts_with('#') {
+                        break;
+                    }
+                    at = prev;
+                }
+                (at, format!("{line}\n\n"))
+            }
+            (None, None) => (0, format!("{line}\n")),
+        };
+        let at_end = at == text.len() && !text.ends_with('\n');
+        let insert = if at_end { format!("\n{insert}") } else { insert };
+        let mut diag =
+            Diagnostic::error(codes::UNEXPECTED_TOKEN, format!("`{keyword}` belongs at the top level of a file"))
+                .primary(span, "move it out of this declaration");
+        if whole_line && !line.contains('\n') {
+            let file_id = span.file;
+            let mut edits = vec![
+                wid_diagnostics::Edit { span: Span::new(file_id, at as u32, at as u32), replacement: insert },
+                wid_diagnostics::Edit { span: Span::new(file_id, from as u32, to as u32), replacement: String::new() },
+            ];
+            edits.sort_by_key(|e| e.span.start);
+            diag = diag.suggest(
+                "move it to the top of the file",
+                edits,
+                wid_diagnostics::Applicability::MachineApplicable,
+            );
+        }
+        self.report(diag);
+    }
+
     /// Reports an undefined name with suggestions.
     pub fn undefined(&mut self, name: Name, span: Span, candidates: Vec<&'static str>, what: &str) {
         if !self.body.frames.is_empty() {

@@ -429,6 +429,12 @@ runs the stages; `wid_cli` is the `wid` binary.
   `.to(Int)` fix for a float), a variable is E0315 with its declaration, an
   unknown name is E0201, and a reported argument no longer cascades into
   E0327 at the instance's `[N]T` fields.
+- An `import` inside a `struct`, `enum`, `module` or `extend` body is E0105,
+  like a `cimport` there, instead of being ignored. Both get a
+  machine-applicable fix that moves the line after the file's last import
+  (or above its first declaration), and the names they would bind aren't
+  reported again. Suggestions whose edits are far apart show each place,
+  with `...` between them.
 - Macro syntax: `quote` bodies holding statements and declarations, with
   splices in every expression, type, declaration and name position (`#{x}`,
   `@#{f}`, `:#{s}`), splices outside a `quote` (E0111), variadic

@@ -225,23 +225,55 @@ fn render_edits(out: &mut String, p: &Palette, sources: &SourceMap, edits: &[Edi
     for (file_id, mut edits) in by_file {
         let file = sources.file(file_id);
         edits.sort_by_key(|e| (e.span.start, e.span.end));
-        let first_line = file.line_index(edits[0].span.start);
-        let last_line = edits.iter().map(|e| file.line_index(e.span.end)).max().unwrap_or(first_line);
-        let start = file.line_start(first_line) as usize;
-        let end =
-            if last_line + 1 < file.line_count() { file.line_start(last_line + 1) as usize } else { file.text.len() };
-        let mut text = file.text[start..end].to_string();
-        for edit in edits.iter().rev() {
-            let s = edit.span.start as usize - start;
-            let e = edit.span.end as usize - start;
-            if s <= e && e <= text.len() {
-                text.replace_range(s..e, &edit.replacement);
+        // Edits far apart (like moving a line to the top of the file) show
+        // as separate snippets, with `...` for the lines between them.
+        let mut groups: Vec<Vec<&Edit>> = Vec::new();
+        for edit in edits {
+            let line = file.line_index(edit.span.start);
+            match groups.last_mut() {
+                Some(group) if group.iter().any(|e| file.line_index(e.span.end) + 2 >= line) => group.push(edit),
+                _ => groups.push(vec![edit]),
             }
         }
-        for line in text.trim_end_matches('\n').lines() {
-            let (expanded, _) = expand_line(line);
-            let _ = writeln!(out, "{pad} {} {}", p.gutter("|"), expanded.trim_end());
+        for (i, group) in groups.iter().enumerate() {
+            if i > 0 {
+                let _ = writeln!(out, "{}", p.gutter("..."));
+            }
+            render_edit_group(out, p, file, group, pad, groups.len() > 1);
         }
+    }
+}
+
+/// Renders the lines a group of nearby edits touches, with the edits applied.
+/// With `context`, a group whose first edit starts a line (inserting or
+/// deleting whole lines) also shows the line before it, so the change reads
+/// in place.
+fn render_edit_group(
+    out: &mut String,
+    p: &Palette,
+    file: &crate::source::SourceFile,
+    edits: &[&Edit],
+    pad: &str,
+    context: bool,
+) {
+    let mut first_line = file.line_index(edits[0].span.start);
+    if context && first_line > 0 && edits[0].span.start == file.line_start(first_line) {
+        first_line -= 1;
+    }
+    let last_line = edits.iter().map(|e| file.line_index(e.span.end)).max().unwrap_or(first_line);
+    let start = file.line_start(first_line) as usize;
+    let end = if last_line + 1 < file.line_count() { file.line_start(last_line + 1) as usize } else { file.text.len() };
+    let mut text = file.text[start..end].to_string();
+    for edit in edits.iter().rev() {
+        let s = edit.span.start as usize - start;
+        let e = edit.span.end as usize - start;
+        if s <= e && e <= text.len() {
+            text.replace_range(s..e, &edit.replacement);
+        }
+    }
+    for line in text.trim_end_matches('\n').lines() {
+        let (expanded, _) = expand_line(line);
+        let _ = writeln!(out, "{pad} {} {}", p.gutter("|"), expanded.trim_end());
     }
 }
 

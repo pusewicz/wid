@@ -733,7 +733,10 @@ end
   and `-json-errors` prints the results as JSON. The exit status is 1 when a
   test fails.
 - A package is a directory. Imports look like `import "core:fmt"`,
-  `import "vendor:raylib"` and `import "./physics"`. Wid ships the `core:` and
+  `import "vendor:raylib"` and `import "./physics"`. An `import` or
+  `cimport` is written at the top level of a file (or in a top-level
+  `comptime if`), never in a `struct`, `enum`, `module` or `extend` body
+  (E0105). Wid ships the `core:` and
   `vendor:` collections. `vendor:` holds `raylib` and `sdl3` (the system
   libraries, through pkg-config) and the vendored `stb/image`,
   `stb/image_write`, `stb/truetype`, `stb/rect_pack` and `miniaudio`. `core:` holds
