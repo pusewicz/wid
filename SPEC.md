@@ -81,6 +81,8 @@ end
   - `private def …` hides a declaration outside its package, or outside its
     type for methods: a private method can only be called from methods of the
     same type, including ones mixed in with `include` or added by `extend`.
+    Fields are always public, so `private` can't be written on a field,
+    `using` ones and those in a `quote` included (E0105).
   - `loop do … end` loops forever.
   - `for x in xs`, `for &x in xs` and `for x, i in xs` iterate.
   - `^` only builds pointer types (`^T`) and dereferences (`p^`). Bitwise xor

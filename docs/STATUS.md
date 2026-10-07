@@ -39,7 +39,10 @@ runs the stages; `wid_cli` is the `wid` binary.
   emitted as its own C scope, so a local is declared once per copy.
 - `private` is enforced for package members (`pkg.name`) and for methods
   (callable only when the frame's `self` type is the receiver type or the
-  method's owner).
+  method's owner). Fields are always public: `private` on a field in a
+  struct body (a `using` one, or one inside a `quote`'s struct, too) is
+  E0105 from the parser (`Parser::private_field`), with a fix that removes
+  it; the field is kept, and the item's `private` flag cleared.
 - Overload resolution works on lowered argument values
   (`call_with_values`), so compound assignments and `[]=` reuse it without
   re-evaluating operands. Module and generic-struct members of a set are
@@ -410,6 +413,8 @@ runs the stages; `wid_cli` is the `wid` binary.
   Nested (`puts size_of Int?`), that is one E0109 whose fix puts the `)`
   before the line end; after an argument that failed to parse, the fix is
   only `MaybeIncorrect`.
+- `private` on a struct field is E0105 (fields are always public), once per
+  field, with a machine-applicable fix that removes it (#9).
 - Macro syntax: `quote` bodies holding statements and declarations, with
   splices in every expression, type, declaration and name position (`#{x}`,
   `@#{f}`, `:#{s}`), splices outside a `quote` (E0111), variadic

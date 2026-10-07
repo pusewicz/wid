@@ -1066,7 +1066,12 @@ impl<'a> Parser<'a> {
         let start = self.peek().span;
         let doc = self.doc_before(start.start);
         let attrs = self.parse_attrs();
-        let private = self.eat_kw(K::Private);
+        // `private` and the space after it, for the fix on a field.
+        let private_kw = self.at_kw(K::Private).then(|| {
+            let kw = self.bump().span;
+            (kw, kw.to(self.peek().span.shrink_to_start()))
+        });
+        let mut private = private_kw.is_some();
         let kind = match self.kind() {
             T::Kw(K::Import) => self.parse_import(),
             T::Kw(K::Cimport) => self.parse_cimport(),
@@ -1182,8 +1187,31 @@ impl<'a> Parser<'a> {
                 ItemKind::Error
             }
         };
+        // Fields are always public. Elsewhere a field is already an error.
+        if let (Some((kw, removal)), ItemKind::Field(f), ItemCtx::Struct) = (private_kw, &kind, ctx) {
+            self.private_field(kw, removal, f);
+            private = false;
+        }
         let span = start.to(self.prev_span());
         Some(Item { kind, span, attrs, private, doc })
+    }
+
+    /// Reports `private` written on a struct field (E0105): fields are
+    /// always public. The field is kept, so nothing cascades.
+    fn private_field(&mut self, kw: Span, removal: Span, field: &FieldDecl) {
+        let name = self.text_of(field.name.span);
+        self.report(
+            Diagnostic::error(codes::UNEXPECTED_TOKEN, "a field can't be `private`")
+                .primary(kw, "fields are always public")
+                .note(format!(
+                    "any code can read and write `{name}` directly; `private` applies to methods and other declarations"
+                ))
+                .suggest(
+                    "remove `private`",
+                    vec![Edit { span: removal, replacement: String::new() }],
+                    Applicability::MachineApplicable,
+                ),
+        );
     }
 
     /// The value of a constant after its `=`: an expression, or a type that
@@ -4152,6 +4180,30 @@ end
         assert_eq!(codes_of("def main\n  g = ->(*xs: Int) { 1 }\nend\n"), ["E0112"]);
         assert_eq!(codes_of("macro def m(*a: Symbol, b: Int) -> Code = quote do end\n"), ["E0112"]);
         assert_eq!(codes_of("macro def m(*a: Symbol = [:x]) -> Code = quote do end\n"), ["E0112"]);
+    }
+
+    #[test]
+    fn private_fields() {
+        let src = "struct Hero\n  private hp: Int\n  private using base: Base\n  private def heal = 1\nend\n";
+        let (file, diags) = parse_file(FileId(0), src);
+        let diags: Vec<_> = diags.iter().collect();
+        assert_eq!(diags.iter().map(|d| d.code.as_str()).collect::<Vec<_>>(), ["E0105", "E0105"]);
+        // The fix removes `private ` and nothing else.
+        let edits: Vec<_> = diags[0].helps[0].edits.iter().map(|e| (e.span.start, e.span.end)).collect();
+        assert_eq!(edits, [(14, 22)]);
+        // The fields are kept, as if written without `private`; the method
+        // stays private.
+        let ItemKind::Struct(s) = &file.items[0].kind else { panic!() };
+        assert!(matches!(&s.body[0].kind, ItemKind::Field(f) if f.name.as_str() == "hp") && !s.body[0].private);
+        assert!(matches!(&s.body[1].kind, ItemKind::Field(f) if f.using) && !s.body[1].private);
+        assert!(matches!(s.body[2].kind, ItemKind::Def(_)) && s.body[2].private);
+        // In a struct inside a `quote` too; elsewhere a field is a checker
+        // error already.
+        assert_eq!(
+            codes_of("macro def m -> Code\n  quote do\n    struct S\n      private x: Int\n    end\n  end\nend\n"),
+            ["E0105"]
+        );
+        assert!(codes_of("module M\n  private hp: Int\nend\n").is_empty());
     }
 
     #[test]
