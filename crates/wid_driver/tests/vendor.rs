@@ -141,8 +141,8 @@ fn build_program(root: &Path, dir: &Path, expect: Option<&Path>, ccs: &[String],
         opts.wid_root = Some(root.to_path_buf());
         opts.cc = Some(cc.clone());
         opts.strict_c = true;
-        let exe =
-            std::env::temp_dir().join(format!("wid-vendor-{}-{cc}-{}", name.replace('/', "_"), std::process::id()));
+        let tag = format!("{name}-{cc}").replace(['/', '\\'], "_");
+        let exe = std::env::temp_dir().join(format!("wid-vendor-{tag}-{}", std::process::id()));
         opts.out = Some(exe.clone());
         let built = wid_driver::build(&opts);
         if built.exe.is_none() {

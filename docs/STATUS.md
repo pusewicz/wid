@@ -243,28 +243,23 @@ runs the stages; `wid_cli` is the `wid` binary.
 - Test suite: `tests/run` (clang and gcc-16, strict flags), `tests/ui`,
   `tests/test` (`wid test` reports) and every `core/` package's `_test.wid`
   files.
+- Linux and CI (`.github/workflows/ci.yml`, cached with sccache and
+  rust-cache): `cargo fmt --check`; clippy and the full `cargo test` on
+  Ubuntu 26.04 (clang-22, gcc-15, libclang 22, SDL3) and macOS 26 (Apple
+  clang, gcc-15, SDL3, raylib), failing when libclang or a vendor library is
+  missing instead of skipping; clippy and unit tests on Windows; `cargo check`
+  at the MSRV (1.88). Ubuntu doesn't package raylib, so `vendor:raylib` and
+  `examples/taste` are covered on macOS only. `cimport` keeps doc comments
+  from system headers, which is where Linux installs libraries.
 
 ## Next
 
 Everything before macros is done (see "Done"). This is the work queue for
 the orchestrator (`docs/ORCHESTRATOR.md`). Each item is one PR unless it says
-otherwise. Items 3–6 depend only on `main` and can run in parallel with the
+otherwise. Items 2–5 depend only on `main` and can run in parallel with the
 macro stack.
 
-1. **Linux bring-up and CI** (`wid/linux-ci`). Do this first. The tree has
-   only ever been built on macOS (Homebrew LLVM 23, Apple clang 21, gcc-16).
-   - Make the full gate pass on Linux. Expect trouble in:
-     - runtime libc differences;
-     - `wid_cimport` discovery (`/usr/lib/llvm-*`, no `-isysroot`);
-     - pkg-config package names (`raylib`, `sdl3`);
-     - `core:os` POSIX calls;
-     - the `.cpp` link path.
-   - Add GitHub Actions jobs for Ubuntu and macOS that run
-     `cargo fmt --check`, clippy with `-D warnings`, and `cargo test` with
-     clang ≥ 19 and gcc ≥ 15. Install libclang and pkg-config; raylib and
-     SDL3 are optional.
-   - Cache cargo.
-2. **Macros and `type_info`** (`wid/macros-*`, about three stacked PRs):
+1. **Macros and `type_info`** (`wid/macros-*`, about three stacked PRs):
    - lexer, parser and AST for `quote` and splices;
    - expansion, hygiene and the `attr_*` macros;
    - `type_info`.
@@ -333,36 +328,36 @@ macro stack.
      - Whether macros can be called qualified (`pkg.name`).
      - The expansion budgets (depth and count).
      - The exact shape of `TypeInfo`.
-3. **`wid doc`** (`wid/doc`). Documentation for packages, types and
+2. **`wid doc`** (`wid/doc`). Documentation for packages, types and
    methods, generated from doc comments, including cimported C symbols
    (SPEC "C and C++ interop", "Toolchain and CLI"). It prints text by
    default and JSON with `-json`, and resolves `wid doc rl.draw_circle_v`
    style queries.
-4. **`wid query`** (`wid/query`). The introspection engine in SPEC "Built
+3. **`wid query`** (`wid/query`). The introspection engine in SPEC "Built
    for humans and LLMs": symbols, types, definitions, references and call
    sites, as stable JSON. Factor it as a reusable engine, because the LSP
    shares it, and keep the compiler stages pure so queries can rerun them.
-5. **`wid fmt`** (`wid/fmt`). A canonical formatter. It must be
+4. **`wid fmt`** (`wid/fmt`). A canonical formatter. It must be
    idempotent, and parse → format → parse must give the same AST for every
    file in `tests/`, `core/`, `vendor/` and `examples/`. It keeps comments
    and supports `-check`.
-6. **`wid lsp`** (`crates/wid_lsp`, `wid/lsp`, stacked on 4 and 5).
+5. **`wid lsp`** (`crates/wid_lsp`, `wid/lsp`, stacked on 3 and 4).
    Diagnostics, hover, go-to-definition, completion, formatting and rename,
    all on top of the query engine.
-7. `vendor:cimgui`: vendor cimgui with the Dear ImGui sources, compiled as
+6. `vendor:cimgui`: vendor cimgui with the Dear ImGui sources, compiled as
    C++ package files (the driver already builds `.cpp` files and links with
    the C++ compiler), plus a raylib or SDL3 backend. Needs a decision on
    shipping the C++ sources versus requiring a system cimgui.
-8. **Cross-target builds** (`wid/targets`). Lift E0709. Make
+7. **Cross-target builds** (`wid/targets`). Lift E0709. Make
    `-target:os_arch` build through clang `--target` with a sysroot. Port
    `core:os`/`core:c` to Windows (LLP64) and make C type sizes
    target-driven.
-9. **SPEC conformance audit** (one agent, a report and no code). List every
+8. **SPEC conformance audit** (one agent, a report and no code). List every
    SPEC.md claim that is unimplemented or behaves differently: CLI flags such
    as `-vet`, `-sanitize:address`, the `-o:` levels and `-collection:`;
    `#line` in `-debug`; the prelude list; and so on. Queue each item here.
-10. **Known gaps** below: one small PR each, in any order.
-11. **Bug hunt after every large feature.** One agent probes with
+9. **Known gaps** below: one small PR each, in any order.
+10. **Bug hunt after every large feature.** One agent probes with
     `scripts/probe.rb` and `scripts/errdocs_drift.rb` and logs bad
     diagnostics and crashes. Another agent fixes them. The first hunt found
     46 real bugs.
@@ -377,7 +372,8 @@ before anyone starts them.
   a binary operator or from an overload set's parameters (`xf * [1.0, 0.0]`
   needs a typed `Vec2`); `[1.0, 1.0] * m` likewise needs a typed vector.
 - `core:c` sizes assume 64-bit Unix (LP64); `core:os` uses POSIX `stat` and
-  `mkdir`. Windows support comes with `-target:`.
+  `mkdir`. Windows support comes with `-target:`; until then Windows CI runs
+  only clippy and the unit tests.
 - The tracking allocator and the temp arena are not thread-safe.
 - `cimport`: `types:` mappings don't apply inside callback signatures (they
   keep the C struct); taking `method(:f)` of an imported function whose

@@ -251,7 +251,7 @@ fn run_case(case: &Case, root: &Path, ccs: &[String], bless: bool) -> Vec<String
                 apply_flags(&mut opts, &PathBuf::from(format!("{}.flags", expect_base.display())));
                 let out_dir = std::env::temp_dir().join(format!("wid-suite-{}", std::process::id()));
                 std::fs::create_dir_all(&out_dir).expect("temp dir");
-                let exe = out_dir.join(format!("{}-{cc}", name.replace('/', "_")));
+                let exe = out_dir.join(format!("{name}-{cc}").replace(['/', '\\'], "_"));
                 opts.out = Some(exe.clone());
                 let built = wid_driver::build(&opts);
                 if built.exe.is_none() {
