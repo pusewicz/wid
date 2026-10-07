@@ -2118,6 +2118,7 @@ impl<'a> Parser<'a> {
 
     fn parse_block_body(&mut self) -> Vec<Stmt> {
         let mut stmts = Vec::new();
+        let (start, errors) = (self.peek().span, self.diags.len());
         loop {
             self.skip_newlines();
             if matches!(
@@ -2132,6 +2133,11 @@ impl<'a> Parser<'a> {
             if self.pos == before {
                 self.bump();
             }
+        }
+        // A body whose only lines were reported and skipped (like a stray
+        // splice) keeps a placeholder, so it doesn't also read as empty.
+        if stmts.is_empty() && self.diags.len() > errors {
+            stmts.push(Stmt { kind: StmtKind::Error, span: start, attrs: Vec::new() });
         }
         stmts
     }

@@ -446,7 +446,10 @@ impl<'a> Checker<'a> {
                         .help("end the method with `panic`, an endless `loop`, or a call to another `-> Never` method"),
                     );
                     self.emit(Stmt::Unreachable);
-                } else if wants_value && !self.current_block_diverges() {
+                } else if wants_value
+                    && !self.current_block_diverges()
+                    && !matches!(stmts.last(), Some(ast::Stmt { kind: ast::StmtKind::Error, .. }))
+                {
                     let ret_name = self.types.display(ret);
                     let span = match stmts.last() {
                         Some(s) => s.span,
