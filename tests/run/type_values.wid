@@ -1,0 +1,55 @@
+# A type written where a `Type` is expected is a `Type` value, whatever
+# its form: a name, a constructor, a generic instance or a package's type.
+import "core:c", as: :C
+
+struct Node
+  value: Int
+  next: ^Node?
+end
+
+struct Pool($T, $N: Int)
+  items: [N]T
+end
+
+def type_name(t: Type) -> String = t.name
+
+def same?(a: Type, b: Type) -> Bool = a == b
+
+def describe(t: Type) -> String = "#{t.name}: #{t.size} bytes"
+
+NAMES = comptime [
+  type_name(Int),
+  type_name([]Int),
+  type_name([4]F32),
+  type_name(Int?),
+  type_name(^Node),
+  type_name(^Node?),
+  type_name([^]U8),
+  type_name([dynamic]Int),
+  type_name(map[String]Int),
+  type_name(proc(Int) -> Int),
+  type_name((proc(Int) -> Int)?),
+  type_name(matrix[2, 2]F32),
+  type_name(Pool(Int, 4)),
+  type_name(Pool(Int?, 2)),
+  type_name(C.int),
+]
+SAME = comptime same?([4]F32, [4]F32)
+DIFFERENT = comptime same?([]Int, []U8)
+NODE = comptime describe(Node?)
+ARRAY = comptime do
+  t = [3]Int
+  describe(t)
+end
+WITHOUT_PARENS = comptime type_name Int?
+
+def main
+  for name in NAMES
+    puts name
+  end
+  p SAME
+  p DIFFERENT
+  puts NODE
+  puts ARRAY
+  puts WITHOUT_PARENS
+end

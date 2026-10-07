@@ -1,0 +1,20 @@
+Int
+[]Int
+[4]F32
+Int?
+^Node
+^Node?
+[^]U8
+[dynamic]Int
+map[String]Int
+proc(Int) -> Int
+(proc(Int) -> Int)?
+matrix[2, 2]F32
+Pool(Int, 4)
+Pool(Int?, 2)
+I32
+true
+false
+Node?: 24 bytes
+[3]Int: 24 bytes
+Int?

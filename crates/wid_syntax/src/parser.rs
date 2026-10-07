@@ -3300,7 +3300,8 @@ impl<'a> Parser<'a> {
                 let (question, arrow) = self.scan_arg();
                 question || (arrow && text == "proc")
             }
-            T::LParen => types,
+            // `(proc(Int) -> Int)?`: no expression ends in a `?` of its own.
+            T::LParen => types || self.scan_arg().0,
             _ => false,
         };
         if !candidate {

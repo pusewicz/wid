@@ -104,7 +104,8 @@ end
     `,` or `)` follows it (in a call without parentheses, also the end of
     the statement or an `if`/`unless` modifier, as in `n = size_of Int?`):
     a type that ends in its own `?` (`Int?`, `rl.Color?`,
-    `Pool(Ball, 64)?`, unlike the name `empty?`), or a `proc(…) -> R` or
+    `Pool(Ball, 64)?`, `(proc(Int) -> Int)?`, unlike the name `empty?`), or
+    a `proc(…) -> R` or
     `@[c] proc(…)` type. `size_of(T)` and `align_of(T)`
     (a type's size and alignment in bytes) and `type_info(T)` expect a
     type, so there `proc`, `block` and `distinct` start one too (unless a
@@ -574,8 +575,10 @@ end
   `type`, `offset`), `T.methods` a `[]MethodInfo` (`name`, `params`, `ret`,
   `static`), and `T.name`, `T.size` and `T.align` describe the type. A type
   written where a `Type` is expected, or used as a value in `comptime` code, is
-  a `Type` value; it answers `.name`, `.size`, `.align` and `.fields` and
-  compares with `==`. `Type` values exist only while compiling: a method the
+  a `Type` value, whatever its form (`name_of([]Int)`, `name_of(Int?)`,
+  `name_of(Pool(Ball, 64))`, `name_of(C.int)`); it answers `.name`, `.size`,
+  `.align` and `.fields` and compares with `==`. Elsewhere a type is not a
+  value (E0323). `Type` values exist only while compiling: a method the
   built program runs can't use them (E0906). `p x` pretty-prints any value.
 - **`type_info(T)`** and **`type_info(x)`** describe a type at run time. `T`
   is any type, written in place (`type_info(Int?)`,

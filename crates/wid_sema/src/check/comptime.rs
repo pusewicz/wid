@@ -819,6 +819,8 @@ impl<'a> Checker<'a> {
                 let ctx = self.body_ctx();
                 self.resolve_type(t, &ctx)
             }
+            // `Pool(Ball, 64)`, `C.int`, `rl.Color`.
+            ast::ExprKind::Call(_) | ast::ExprKind::Member { .. } => self.named_type(e)?,
             _ => return None,
         };
         let type_ty = self.types.type_ty();

@@ -1,0 +1,17 @@
+# A type written where a value goes: the help says how to make a value of
+# that type, with `.new` only for the containers that have it.
+def total(xs: []Int) -> Int = xs.size
+
+def twice(f: proc(Int) -> Int) -> Int = f.call(2)
+
+def main
+  grid = [4]F32
+  items = [dynamic]Int
+  counts = map[String]Int
+  ptr = ^Int
+  bytes = [^]U8
+  p grid, items, counts, ptr, bytes
+  p total([]Int)
+  p twice(proc(Int) -> Int)
+  p total(Int?)
+end
