@@ -423,7 +423,9 @@ impl<'a> Checker<'a> {
                     Some(_) => self.expr(target, None),
                     None => {
                         let candidates = self.visible_var_names();
-                        self.undefined(*name, target.span, candidates, "variable");
+                        if !self.declared_by_failed_macro(true, false) {
+                            self.undefined(*name, target.span, candidates, "variable");
+                        }
                         ir::Expr::new(ExprKind::Zero, self.types.unknown())
                     }
                 }

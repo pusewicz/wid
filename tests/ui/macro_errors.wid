@@ -75,11 +75,11 @@ end
 
 def main
   p outer
+  p half(hp)
   define Int
   as_value puts(1)
   statements_as_value
   p field(:x, :Point)
-  p half(hp)
   p half(:hp)
   repeat 0, puts("never")
   repeat 1, puts("once")

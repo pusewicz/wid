@@ -254,6 +254,24 @@ runs the stages; `wid_cli` is the `wid` binary.
     virtual span's `DeclLoc`, so a generated constant folds the macro
     package's constants and failed imports are found where the name
     resolves.
+  - Failed expansions don't cascade. A call in a method body that fails
+    (`call_macro` gets no code) runs `failed_expansion`: the variables
+    visible at the call are marked read, and the innermost scope gets
+    `Scope::failed_macro`, so `declared_by_failed_macro` skips E0201 for
+    a local (`ident`, `place`) while that scope is open. A call among
+    declarations that fails or names no macro runs
+    `failed_among_declarations`: at package level the package joins
+    `MacroState::failed_packages`, which `pkg_incomplete` treats like a
+    failed `cimport` merge (undefined names and types), and in a body
+    the owner joins `failed_owners`, so `members_incomplete` skips E0204
+    on its type (also through an included module or an `extend`) and
+    `declared_by_failed_macro` skips E0201 for implicit-self calls and
+    constants in its methods. An undefined macro among declarations is
+    still reported after an earlier failure.
+  - `enum_type` reports a member without a value whose name is a macro
+    visible in the enum's body (`member_names_macro`, E0914, fixed by
+    adding `()`), keeps the member, and adds the enum to `failed_owners`
+    so the methods the macro would generate aren't reported missing.
 
 ## Done
 
@@ -415,6 +433,12 @@ runs the stages; `wid_cli` is the `wid` binary.
   bodies with the call chain; E0913 for generated fields and imports, E0108
   for generated statements, E0209 for `Self` without one type. E0902 is
   retired. An `include` in a type-level `comptime if` is no longer ignored.
+- Fewer cascades after errors: a local whose value or type is an error (a
+  parse error, a type used as a value, an unknown type) is not reported as
+  unused (#6); a macro call that fails to expand or names no macro hides
+  the undefined names, missing members and unread variables that its code
+  might have declared or read (#8); an enum member written as a name alone
+  that a macro also has is E0914, with a fix that calls the macro (#16).
 - Test suite: `tests/run` (clang and gcc-16, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
   `tests/test` (`wid test` reports) and every `core/` package's `_test.wid`
@@ -623,10 +647,8 @@ before anyone starts them.
   without parentheses can't take `Int?` as its last argument.
 - Macros: a `quote` inside a splice must fit on one line, because newlines
   are suppressed inside splices (`#{if a then quote do x end else quote do
-  end end}` works; a multi-line `quote` there doesn't). When a statement
-  macro fails (E0901, E0911, E0912), names its code would have declared
-  are reported as undefined where they are used. Code spliced from the
-  call site into a `comptime` inside a `quote` resolves names where the
+  end end}` works; a multi-line `quote` there doesn't). Code spliced from
+  the call site into a `comptime` inside a `quote` resolves names where the
   macro is defined, not at the call site. A name spliced from a computed
   `Symbol` (not a symbol argument) points at the whole macro call, which
   is where a "did you mean" fix would apply. "Did you mean" suggestions in
@@ -638,15 +660,13 @@ before anyone starts them.
 - Macros among declarations: calls expand strictly in source order, once
   each, so a call can't use a macro or a declaration that a later call
   generates (it is undefined), and a macro runs, with the helpers it calls
-  lowered, before the declarations later calls generate exist. When a call
-  fails or names no macro, uses of what it would have generated are
-  reported as undefined too (like #8). In an `enum` body a macro without
-  arguments needs `()`, since a name alone is a member. A generic struct's
-  body can't call a macro that uses `Self` (E0209): its `Self.fields` would
-  hold placeholder types and no layout. `Self.methods` in a type-body macro
-  lists the methods collected so far. Generated declarations whose names
-  come from computed symbols point at the whole call in messages (E0202,
-  E0317).
+  lowered, before the declarations later calls generate exist. In an
+  `enum` body a macro without arguments needs `()`, since a name alone is
+  a member (one that a macro also has is E0914). A generic struct's body can't call a macro that uses `Self`
+  (E0209): its `Self.fields` would hold placeholder types and no layout.
+  `Self.methods` in a type-body macro lists the methods collected so far.
+  Generated declarations whose names come from computed symbols point at
+  the whole call in messages (E0202, E0317).
 - `vendor:miniaudio` built with GCC on macOS has no CoreAudio backend: GCC
   can't parse the block syntax in Apple's headers (`miniaudio.c` sets
   `MA_NO_COREAUDIO` there).

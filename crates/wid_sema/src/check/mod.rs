@@ -536,7 +536,7 @@ impl<'a> Checker<'a> {
             // Where the name resolves: for code a macro generated, the
             // macro's file.
             let loc = self.loc_at(span);
-            if self.import_failed(loc, name) || self.failed_merges.contains(&loc.pkg) {
+            if self.import_failed(loc, name) || self.pkg_incomplete(loc.pkg) {
                 return;
             }
             if self.merged_cimports.contains_key(&loc.pkg) && self.report_not_imported(loc.pkg, name, span) {
@@ -561,6 +561,14 @@ impl<'a> Checker<'a> {
     /// uses were already explained by the import error.
     pub fn import_failed(&self, loc: DeclLoc, name: Name) -> bool {
         self.failed_imports.contains(&(loc.pkg, loc.file, name))
+    }
+
+    /// Whether names a package's code doesn't find may be ones that failed
+    /// to join it: from a `cimport` without `as:` that failed, or from a
+    /// macro call at package level that failed to expand. They aren't
+    /// reported as undefined, since that failure already explains them.
+    pub fn pkg_incomplete(&self, pkg: PackageId) -> bool {
+        self.failed_merges.contains(&pkg) || self.macros.failed_packages.contains(&pkg)
     }
 
     /// Creates the display/C name prefix for a package.

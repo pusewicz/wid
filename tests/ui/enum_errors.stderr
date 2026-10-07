@@ -14,15 +14,6 @@ error[E0204]: `Color` has no member `purple`
    = note: members: :red, :green, :blue
    = see `wid explain E0204`
 
-error[E0203]: `x` is assigned but never read
-  --> tests/ui/enum_errors.wid:17:3
-   |
-17 |   x = :red
-   |   ^ this value is never used
-help: if this is intentional, prefix the name with an underscore
-   |   _x = :red
-   = see `wid explain E0203`
-
 error[E0304]: cannot infer which enum this symbol belongs to
   --> tests/ui/enum_errors.wid:17:7
    |
@@ -31,4 +22,4 @@ error[E0304]: cannot infer which enum this symbol belongs to
 help: declare the variable's type, like `dir: Dir = :north`
    = see `wid explain E0304`
 
-error: could not compile due to 4 errors
+error: could not compile due to 3 errors

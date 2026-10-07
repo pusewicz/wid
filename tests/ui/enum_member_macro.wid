@@ -1,0 +1,23 @@
+macro def helpers -> Code
+  quote do
+    def describe -> String = "x"
+  end
+end
+
+enum Color
+  red
+  helpers
+end
+
+# A member with a value is never a macro call.
+enum Tool
+  hammer
+  helpers = 1
+end
+
+def main
+  c: Color = :red
+  puts c.describe
+  t: Tool = :helpers
+  p t
+end

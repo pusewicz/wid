@@ -498,7 +498,7 @@ impl<'a> Checker<'a> {
             }
             return self.decl_as_type(decl, name.span);
         }
-        if self.failed_merges.contains(&pkg)
+        if self.pkg_incomplete(pkg)
             || ((segments.len() == 2 || self.merged_cimports.contains_key(&pkg))
                 && self.report_not_imported(pkg, name.name, name.span))
         {
