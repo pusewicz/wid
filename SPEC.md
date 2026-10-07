@@ -93,13 +93,17 @@ end
     select it.
   - `map`, `proc`, `block`, `distinct`, `matrix` and `dynamic` are keywords only
     where a type is expected.
+  - Parentheses group a type, as in `(proc(Int) -> Int)?`, an optional proc
+    (`proc(Int) -> Int?` returns an optional).
   - A line that ends with an operator or `,`, or a next line that starts with
     `.method`, continues the statement.
   - `x ? a : b` needs spaces around `?`, because `x?` is a predicate name.
   - A call argument is a type when no expression reads the same way and
-    `,` or `)` follows it: a type that ends in its own `?` (`Int?`,
-    `rl.Color?`, `Pool(Ball, 64)?`, unlike the name `empty?`), or a
-    `proc(…) -> R` or `@[c] proc(…)` type. `size_of(T)` and `align_of(T)`
+    `,` or `)` follows it (in a call without parentheses, also the end of
+    the statement or an `if`/`unless` modifier, as in `n = size_of Int?`):
+    a type that ends in its own `?` (`Int?`, `rl.Color?`,
+    `Pool(Ball, 64)?`, unlike the name `empty?`), or a `proc(…) -> R` or
+    `@[c] proc(…)` type. `size_of(T)` and `align_of(T)`
     (a type's size and alignment in bytes) and `type_info(T)` expect a
     type, so there `proc`, `block` and `distinct` start one too (unless a
     local has that name), as do `$T` and a tuple type `(A, B)`: any type

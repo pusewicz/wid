@@ -1,0 +1,16 @@
+true
+false
+42
+-1
+true
+false
+8
+nil
+2
+2
+"two"
+9
+7
+(proc(Int) -> Int)?
+proc(Int) -> Int?
+(Int, String)

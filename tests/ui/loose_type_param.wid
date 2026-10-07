@@ -1,0 +1,25 @@
+# A `$T` written as a parameter of its own is one error, and the rest of
+# the file is checked as if its fix were applied.
+def first($T, xs: []T) -> T = xs[0]
+
+def pick(xs: []T, $T: typeid) -> T = xs[0]
+
+def same($T, a: $T, b: T) -> T = a
+
+def zero($T: Type) -> T
+  {}
+end
+
+macro def make($T) -> Code
+  quote do
+    1
+  end
+end
+
+def main
+  f = ->($T, x: Int) -> Int { x }
+  p first([1])
+  p pick([2])
+  p same(3, 4)
+  p f.call(5)
+end

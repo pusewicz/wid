@@ -1,0 +1,31 @@
+error[E0109]: `size_of` is called without parentheses inside another expression
+ --> tests/ui/nested_type_arg.wid:4:8
+  |
+4 |   puts size_of Int?
+  |        ^^^^^^^^^^^^ this nested call needs parentheses
+  = note: only the outermost call of a statement may omit parentheses
+help: add parentheses
+  |   puts size_of(Int?)
+  = see `wid explain E0109`
+
+error[E0109]: `align_of` is called without parentheses inside another expression
+ --> tests/ui/nested_type_arg.wid:5:5
+  |
+5 |   p(align_of Int?)
+  |     ^^^^^^^^^^^^^ this nested call needs parentheses
+  = note: only the outermost call of a statement may omit parentheses
+help: add parentheses
+  |   p(align_of(Int?))
+  = see `wid explain E0109`
+
+error[E0109]: `size_of` is called without parentheses inside another expression
+ --> tests/ui/nested_type_arg.wid:6:8
+  |
+6 |   puts size_of Int? if true
+  |        ^^^^^^^^^^^^ this nested call needs parentheses
+  = note: only the outermost call of a statement may omit parentheses
+help: add parentheses
+  |   puts size_of(Int?) if true
+  = see `wid explain E0109`
+
+error: could not compile due to 3 errors

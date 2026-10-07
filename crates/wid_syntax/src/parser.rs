@@ -59,6 +59,20 @@ struct Opener {
     span: Span,
 }
 
+/// A `$T` written as a parameter of its own (`$T, xs: []T`, or Odin's
+/// `$T: typeid`), skipped by the parameter list and reported after it.
+struct LooseTypeParam {
+    /// `T`, without the `$`.
+    name: Name,
+    /// The `$T` token.
+    tok: Span,
+    /// Its token index, and the index of the `,`, `)` or line end after it.
+    first: usize,
+    after: usize,
+    /// Whether a `: type` followed, as in Odin.
+    typed: bool,
+}
+
 /// A block that was closed by an `end`, kept to diagnose misplaced `end`s.
 struct Closed {
     keyword: &'static str,
@@ -100,6 +114,10 @@ struct Parser<'a> {
     /// Whether the position is inside a `macro def` (for the advice about a
     /// splice outside a `quote`).
     in_macro: bool,
+    /// The names of the loose `$T` parameters (see [`LooseTypeParam`]) of
+    /// the last parameter list whose fix found no type to introduce them
+    /// in; `parse_def` drops their uses in the return type.
+    uninferred: Vec<Name>,
 }
 
 /// Binding powers for infix operators.
@@ -202,6 +220,7 @@ impl<'a> Parser<'a> {
             quotes: Vec::new(),
             splice_depth: 0,
             in_macro: false,
+            uninferred: Vec::new(),
         }
     }
 
@@ -398,17 +417,23 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses a constant's value as a type when the whole value is one that
-    /// only reads as a type, like `RawPtr?`, `^Node?` or `C.int`. Restores the
-    /// position and returns `None` otherwise.
+    /// only reads as a type, like `RawPtr?`, `^Node?`, `C.int` or a
+    /// parenthesized type (`(proc(Int) -> Int)?`, `(Int, Int)`). A
+    /// parenthesized name (`(Vec2)`) or splice (`(#{v})`) reads as an
+    /// expression the same way, and an expression like `(1 + 2) * 3`
+    /// doesn't parse as a type.
+    /// Restores the position and returns `None` otherwise.
     fn try_type_alias(&mut self) -> Option<TypeExpr> {
-        if !matches!(self.peek().kind, T::Const | T::Ident | T::Caret | T::LBracket) {
+        let paren = self.at(T::LParen);
+        if !paren && !matches!(self.peek().kind, T::Const | T::Ident | T::Caret | T::LBracket) {
             return None;
         }
         let save = self.pos;
-        let diags = self.diags.len();
         let splices = self.splice_mark();
-        let texpr = self.parse_type();
+        let texpr = self.try_parse_type()?;
         let only_type = match &texpr.kind {
+            TypeKind::Path { .. } | TypeKind::Splice(_) if paren => false,
+            _ if paren => true,
             TypeKind::Optional(_) | TypeKind::Pointer(_) | TypeKind::MultiPointer(_) => true,
             TypeKind::Path { segments, args } => {
                 args.is_empty()
@@ -417,11 +442,10 @@ impl<'a> Parser<'a> {
             }
             _ => false,
         };
-        if only_type && self.diags.len() == diags && self.at_stmt_end() {
+        if only_type && self.at_stmt_end() {
             return Some(texpr);
         }
         self.pos = save;
-        self.diags.truncate(diags);
         self.rewind_splices(splices);
         None
     }
@@ -1163,7 +1187,8 @@ impl<'a> Parser<'a> {
     }
 
     /// The value of a constant after its `=`: an expression, or a type that
-    /// only reads as one (`distinct F64`, `proc(Int)`, `^Node?`, `C.int`).
+    /// only reads as one (`distinct F64`, `proc(Int)`, `^Node?`, `C.int`,
+    /// `(proc(Int) -> Int)?`).
     fn parse_const_value(&mut self) -> Expr {
         let type_start = self.at(T::AtBracket)
             || (self.at(T::Ident) && matches!(self.text_of(self.peek().span), "distinct" | "proc"));
@@ -1389,7 +1414,17 @@ impl<'a> Parser<'a> {
         let owner = if is_macro { ParamsOf::Macro } else { ParamsOf::Def(name.name) };
         let (params, block, c_variadic) =
             if self.at(T::LParen) { self.parse_params(owner) } else { (Vec::new(), None, None) };
-        let ret = if self.eat(T::Arrow) { Some(self.parse_type()) } else { None };
+        let uninferred = std::mem::take(&mut self.uninferred);
+        let mut ret = if self.eat(T::Arrow) { Some(self.parse_type()) } else { None };
+        // A loose `$T` that no parameter could introduce was reported; its
+        // uses in the return type would only repeat that as unknown types.
+        if let Some(ret) = &mut ret {
+            for name in uninferred {
+                while let Some(ty) = find_type(ret, &|k| is_plain_name(k, name)) {
+                    ty.kind = TypeKind::Error;
+                }
+            }
+        }
         let sig_span = def_tok.span.to(self.prev_span());
         let body = if self.eat(T::Eq) {
             self.skip_newlines();
@@ -1412,10 +1447,19 @@ impl<'a> Parser<'a> {
         let mut stars = Vec::new();
         let mut block = None;
         let mut variadic = None;
+        let mut loose = Vec::new();
         loop {
             self.skip_newlines();
             if self.at(T::RParen) || self.at(T::Eof) {
                 break;
+            }
+            if self.at(T::TypeParam) {
+                loose.push(self.skip_loose_type_param());
+                self.skip_newlines();
+                if !self.eat(T::Comma) {
+                    break;
+                }
+                continue;
             }
             if self.at(T::DotDotDot) {
                 let dots = self.bump();
@@ -1487,7 +1531,110 @@ impl<'a> Parser<'a> {
         for (index, star) in stars {
             self.check_variadic_param(owner, &mut params, index, star);
         }
+        for tp in &loose {
+            self.report_loose_type_param(owner, &mut params, tp);
+        }
         (params, block, variadic)
+    }
+
+    /// Skips a `$T` written as a parameter of its own, with any `: type`
+    /// after it, up to the `,`, `)` or line end that ends it.
+    fn skip_loose_type_param(&mut self) -> LooseTypeParam {
+        let first = self.pos;
+        let tok = self.bump();
+        let typed = self.at(T::Colon);
+        let mut depth = 0i32;
+        loop {
+            match self.kind() {
+                T::Eof => break,
+                T::Comma | T::RParen | T::Newline if depth <= 0 => break,
+                T::LParen | T::LBracket | T::LBrace => depth += 1,
+                T::RParen | T::RBracket | T::RBrace => depth -= 1,
+                _ => {}
+            }
+            self.bump();
+        }
+        let name = Name::new(&self.text_of(tok.span)[1..]);
+        LooseTypeParam { name, tok: tok.span, first, after: self.pos, typed }
+    }
+
+    /// Reports a `$T` written as a parameter of its own (E0105). In a
+    /// method, the fix removes it and introduces `$T` where a parameter's
+    /// type first uses `T`, and the parameters recover as that fix.
+    fn report_loose_type_param(&mut self, owner: ParamsOf, params: &mut [Param], tp: &LooseTypeParam) {
+        let name = tp.name;
+        let label = match owner {
+            ParamsOf::Def(_) => "a type parameter is introduced inside a parameter's type",
+            ParamsOf::Macro => "a macro takes no type parameters",
+            ParamsOf::Proc => "a proc takes no type parameters",
+        };
+        let mut diag = Diagnostic::error(codes::UNEXPECTED_TOKEN, format!("`${name}` can't be a parameter on its own"))
+            .primary(tp.tok, label);
+        if tp.typed && owner != ParamsOf::Macro {
+            diag = diag.note(format!(
+                "unlike Odin's `${name}: typeid`, a type parameter is never passed: it is inferred from the arguments"
+            ));
+        }
+        let example = format!("like `def first(xs: []${name}) -> {name}`");
+        match owner {
+            ParamsOf::Macro => {
+                diag = diag.help("a macro receives a type through a `Type` parameter, like `t: Type`");
+            }
+            ParamsOf::Proc => {
+                diag = diag.help(format!("give its parameters concrete types; a method can be generic, {example}"));
+            }
+            ParamsOf::Def(_) => {
+                let removal = Edit { span: self.loose_param_removal(tp), replacement: String::new() };
+                let introduced = |k: &TypeKind| matches!(k, TypeKind::Param(id) if id.name == name);
+                if let Some(param) = params.iter_mut().find_map(|p| find_type(&mut p.ty, &introduced).map(|_| p.name)) {
+                    diag = diag.suggest(
+                        format!("remove it: the type of `{}` already introduces `${name}`", param.as_str()),
+                        vec![removal],
+                        Applicability::MachineApplicable,
+                    );
+                } else if let Some((param, ty)) = params
+                    .iter_mut()
+                    .find_map(|p| find_type(&mut p.ty, &|k| is_plain_name(k, name)).map(|ty| (p.name, ty)))
+                {
+                    let span = ty.span;
+                    ty.kind = TypeKind::Param(Ident { name, span });
+                    diag = diag.suggest(
+                        format!(
+                            "introduce `${name}` in the type of `{}`, which `{name}` is inferred from",
+                            param.as_str()
+                        ),
+                        vec![removal, Edit { span, replacement: format!("${name}") }],
+                        Applicability::MachineApplicable,
+                    );
+                } else {
+                    diag = diag.help(format!(
+                        "write `${name}` inside the type of the parameter `{name}` is inferred from, {example}"
+                    ));
+                    self.uninferred.push(name);
+                }
+            }
+        }
+        self.report(diag);
+    }
+
+    /// The text to delete for a loose `$T` parameter: `$T, ` up to the
+    /// next parameter, or `, $T` after the previous one when it is last.
+    fn loose_param_removal(&self, tp: &LooseTypeParam) -> Span {
+        let tokens = &self.tokens;
+        let end = tokens[tp.after.saturating_sub(1)].span.end;
+        if tokens[tp.after].kind == T::Comma
+            && let Some(next) = tokens[tp.after + 1..].iter().find(|t| t.kind != T::Newline)
+            && next.kind != T::RParen
+        {
+            return Span::new(self.file, tp.tok.start, next.span.start);
+        }
+        let before = tokens[..tp.first].iter().rposition(|t| t.kind != T::Newline);
+        if let Some(comma) = before.filter(|&i| tokens[i].kind == T::Comma)
+            && let Some(prev) = tokens[..comma].iter().rev().find(|t| t.kind != T::Newline)
+        {
+            return Span::new(self.file, prev.span.end, end);
+        }
+        Span::new(self.file, tp.tok.start, end)
     }
 
     /// Reports a `*` parameter anywhere but last in a `macro def`, or with
@@ -3054,7 +3201,7 @@ impl<'a> Parser<'a> {
             if self.at(T::RParen) || self.at(T::Eof) {
                 break;
             }
-            args.push(self.parse_arg(types));
+            args.push(self.parse_arg(types, true));
             self.skip_newlines();
             if !self.eat(T::Comma) {
                 break;
@@ -3066,33 +3213,36 @@ impl<'a> Parser<'a> {
         args
     }
 
-    fn parse_arg(&mut self, types: bool) -> Arg {
+    /// Parses one call argument. `parens` is false for a call without
+    /// parentheses, whose last argument ends with the statement.
+    fn parse_arg(&mut self, types: bool, parens: bool) -> Arg {
         if let Some(len) = self.name_len(0)
             && self.nth(len).kind == T::Colon
         {
             let name = self.parse_name("an argument name");
             self.bump();
             self.skip_newlines();
-            let value = self.parse_arg_value(types);
+            let value = self.parse_arg_value(types, parens);
             return Arg { name: Some(name), value, splat: false };
         }
         if self.at(T::Star) {
             self.bump();
             return Arg { name: None, value: self.parse_expr(), splat: true };
         }
-        Arg { name: None, value: self.parse_arg_value(types), splat: false }
+        Arg { name: None, value: self.parse_arg_value(types, parens), splat: false }
     }
 
     /// An argument's value: an expression, or a type written in place.
-    fn parse_arg_value(&mut self, types: bool) -> Expr {
-        match self.parse_type_arg(types) {
+    fn parse_arg_value(&mut self, types: bool, parens: bool) -> Expr {
+        match self.parse_type_arg(types, parens) {
             Some(ty) => Expr { span: ty.span, kind: ExprKind::Type(Box::new(ty)) },
             None => self.parse_expr(),
         }
     }
 
     /// Parses a call argument as a type when it is a type that no
-    /// expression spells, followed by `,` or `)`:
+    /// expression spells, followed by `,` or `)` (or, without `parens`, the
+    /// end of the statement or an `if`/`unless` modifier):
     ///
     /// - in any call, a type ending in a `?` of its own (`Int?`,
     ///   `rl.Color?`, `Pool(Ball, 64)?`; in `empty?` the `?` belongs to the
@@ -3107,7 +3257,7 @@ impl<'a> Parser<'a> {
     /// `Pool(Ball, 64)`) stay expressions, which the checker resolves as
     /// types, and `[`, `^`, `map[` and `matrix[` start types in any
     /// expression. Returns `None`, with nothing consumed, for anything else.
-    fn parse_type_arg(&mut self, types: bool) -> Option<TypeExpr> {
+    fn parse_type_arg(&mut self, types: bool, parens: bool) -> Option<TypeExpr> {
         let tok = self.peek();
         let text = self.text_of(tok.span);
         let local = tok.kind == T::Ident && self.is_local(Name::new(text));
@@ -3132,7 +3282,7 @@ impl<'a> Parser<'a> {
         let saved_splices = self.splice_mark();
         let ty = self.try_parse_type()?;
         let tuple = types && matches!(ty.kind, TypeKind::Tuple(_));
-        if self.at_arg_end() && (tuple || self.only_type(&ty)) {
+        if self.at_arg_end(parens) && (tuple || self.only_type(&ty)) {
             return Some(ty);
         }
         self.pos = saved_pos;
@@ -3141,9 +3291,10 @@ impl<'a> Parser<'a> {
     }
 
     /// Reads the tokens of the argument that starts here, up to the `,`,
-    /// `)` or line end that closes it (outside brackets): whether its last
-    /// token is a `?` written right after the token before, and whether a
-    /// `->` appears outside brackets. Consumes nothing.
+    /// `)`, line end or `if`/`unless` modifier that closes it (outside
+    /// brackets): whether its last token is a `?` written right after the
+    /// token before, and whether a `->` appears outside brackets. Consumes
+    /// nothing.
     fn scan_arg(&self) -> (bool, bool) {
         let mut depth = 0usize;
         let mut arrow = false;
@@ -3152,6 +3303,7 @@ impl<'a> Parser<'a> {
             match tok.kind {
                 T::LParen | T::LBracket | T::LBrace | T::AtBracket | T::StrBegin | T::SpliceBegin => depth += 1,
                 T::Comma | T::RParen | T::RBracket | T::RBrace | T::Newline | T::Eof if depth == 0 => break,
+                T::Kw(K::If | K::Unless) if depth == 0 && last.is_some() => break,
                 T::RParen | T::RBracket | T::RBrace | T::StrEnd | T::SpliceEnd => {
                     depth = depth.saturating_sub(1);
                 }
@@ -3163,9 +3315,14 @@ impl<'a> Parser<'a> {
         (last.is_some_and(|t| t.kind == T::Question && !t.space_before), arrow)
     }
 
-    /// Whether the position, after any newlines, is the `,` or `)` that
-    /// ends an argument.
-    fn at_arg_end(&self) -> bool {
+    /// Whether the position is the `,` or `)` that ends an argument, after
+    /// any newlines. Without `parens`, the arguments of a call without
+    /// parentheses also end where the statement does, or at an `if` or
+    /// `unless` modifier.
+    fn at_arg_end(&self, parens: bool) -> bool {
+        if !parens {
+            return self.at(T::Comma) || self.at_stmt_end() || self.at_modifier();
+        }
         let next = self.tokens[self.pos..].iter().find(|t| t.kind != T::Newline);
         next.is_some_and(|t| matches!(t.kind, T::Comma | T::RParen))
     }
@@ -3203,10 +3360,10 @@ impl<'a> Parser<'a> {
 
     fn parse_command_call(&mut self, callee: Callee, start: Span) -> Expr {
         let types = self.takes_type_args(&callee);
-        let mut args = vec![self.parse_arg(types)];
+        let mut args = vec![self.parse_arg(types, false)];
         while self.eat(T::Comma) {
             self.skip_newlines();
-            args.push(self.parse_arg(types));
+            args.push(self.parse_arg(types, false));
         }
         let block = if self.at_kw(K::Do) && !self.no_do { self.parse_block_arg() } else { None };
         Expr {
@@ -3220,12 +3377,17 @@ impl<'a> Parser<'a> {
     fn parse_nested_command_call(&mut self, callee: Callee, start: Span, name_span: Span) -> Expr {
         let first = self.peek().span;
         let types = self.takes_type_args(&callee);
-        let mut args = vec![self.parse_arg(types)];
+        let errors = self.diags.len();
+        let mut args = vec![self.parse_arg(types, false)];
         while self.at(T::Comma) && self.can_start_expr(self.nth(1)) {
             self.bump();
-            args.push(self.parse_arg(types));
+            args.push(self.parse_arg(types, false));
         }
-        let last = self.prev_span();
+        // An argument that failed to parse may have gone past the line end;
+        // the `)` goes after its last token, before the newline.
+        let last = self.tokens[..self.pos].iter().rev().find(|t| t.kind != T::Newline).map_or(first, |t| t.span);
+        let applicability =
+            if self.diags.len() > errors { Applicability::MaybeIncorrect } else { Applicability::MachineApplicable };
         let name = self.text_of(name_span).to_string();
         let gap = Span::new(self.file, name_span.end, first.start);
         self.report(
@@ -3241,7 +3403,7 @@ impl<'a> Parser<'a> {
                     Edit { span: gap, replacement: "(".into() },
                     Edit { span: last.shrink_to_end(), replacement: ")".into() },
                 ],
-                Applicability::MachineApplicable,
+                applicability,
             ),
         );
         Expr { kind: ExprKind::Call(Box::new(Call { callee, args, block: None, parens: false })), span: start.to(last) }
@@ -3588,6 +3750,41 @@ impl<'a> Parser<'a> {
         self.pop_def_scope();
         Expr { kind: ExprKind::Lambda(Box::new(Lambda { params, ret, body })), span: arrow.span.to(self.prev_span()) }
     }
+}
+
+/// The first type, in source order, within `ty` (itself included) whose
+/// kind satisfies `pred`. Array lengths and other expressions inside it
+/// are not searched.
+fn find_type<'t>(ty: &'t mut TypeExpr, pred: &dyn Fn(&TypeKind) -> bool) -> Option<&'t mut TypeExpr> {
+    if pred(&ty.kind) {
+        return Some(ty);
+    }
+    let in_list = |list: &'t mut Vec<TypeExpr>| list.iter_mut().find_map(|t| find_type(t, pred));
+    match &mut ty.kind {
+        TypeKind::Path { args, .. } => args.iter_mut().find_map(|arg| match arg {
+            GenericArg::Type(t) => find_type(t, pred),
+            GenericArg::Expr(_) => None,
+        }),
+        TypeKind::Pointer(t)
+        | TypeKind::MultiPointer(t)
+        | TypeKind::Array(_, t)
+        | TypeKind::Slice(t)
+        | TypeKind::Dynamic(t)
+        | TypeKind::Optional(t)
+        | TypeKind::Distinct(t)
+        | TypeKind::Matrix { elem: t, .. } => find_type(t, pred),
+        TypeKind::Map(key, value) => find_type(key, pred).or_else(|| find_type(value, pred)),
+        TypeKind::Proc { params, ret, .. } | TypeKind::Block { params, ret } => {
+            in_list(params).or_else(|| ret.as_deref_mut().and_then(|t| find_type(t, pred)))
+        }
+        TypeKind::Tuple(elems) => in_list(elems),
+        TypeKind::Param(_) | TypeKind::Splice(_) | TypeKind::Spliced(_) | TypeKind::Error => None,
+    }
+}
+
+/// Whether a type is the bare name `name`, like the `T` of `[]T`.
+fn is_plain_name(kind: &TypeKind, name: Name) -> bool {
+    matches!(kind, TypeKind::Path { segments, args } if args.is_empty() && segments.len() == 1 && segments[0].name == name)
 }
 
 fn is_assignable(expr: &Expr) -> bool {
@@ -3958,6 +4155,31 @@ end
     }
 
     #[test]
+    fn loose_type_parameters() {
+        let src = "def first($T, xs: []T) -> T = xs[0]\n\ndef main\n  p first([1])\nend\n";
+        let (file, diags) = parse_file(FileId(0), src);
+        let diags: Vec<_> = diags.iter().collect();
+        assert_eq!(diags.iter().map(|d| d.code.as_str()).collect::<Vec<_>>(), ["E0105"]);
+        assert_eq!(diags[0].primary_span().map(|s| (s.start, s.end)), Some((10, 12)));
+        // The fix removes `$T, ` and introduces `$T` in `[]T`, and the
+        // parameters recover as that fix.
+        let edits: Vec<_> = diags[0].helps[0].edits.iter().map(|e| (e.span.start, e.replacement.as_str())).collect();
+        assert_eq!(edits, [(10, ""), (20, "$T")]);
+        let ItemKind::Def(def) = &file.items[0].kind else { panic!() };
+        assert_eq!(def.params.len(), 1);
+        let TypeKind::Slice(elem) = &def.params[0].ty.kind else { panic!("{:?}", def.params[0].ty) };
+        assert!(matches!(&elem.kind, TypeKind::Param(id) if id.as_str() == "T"));
+        assert!(matches!(&file.items[1].kind, ItemKind::Def(def) if def.name.as_str() == "main"));
+        // Odin's `$T: typeid`, a last parameter, and lists of methods,
+        // macros and procs report one error each.
+        assert_eq!(codes_of("def pick(xs: []T, $T: typeid) -> T = xs[0]\n"), ["E0105"]);
+        assert_eq!(codes_of("def zero($T: Type) -> T\n  {}\nend\n"), ["E0105"]);
+        assert_eq!(codes_of("def both($K, $V, m: map[K]V) -> Int = 0\n"), ["E0105", "E0105"]);
+        assert_eq!(codes_of("macro def m($T) -> Code = quote do end\n"), ["E0105"]);
+        assert_eq!(codes_of("def main\n  f = ->($T, x: Int) -> Int { x }\nend\n"), ["E0105"]);
+    }
+
+    #[test]
     fn qualified_macro_calls_are_declarations() {
         let file = parse_ok(
             "lib.setup :a, :b\n\
@@ -4031,6 +4253,57 @@ end
         let (_, diags) = parse_file(FileId(0), "macro def m(a: Symbol) -> Code\n  #{a}\nend\n");
         assert_eq!(diags.iter().map(|d| d.code.as_str()).collect::<Vec<_>>(), ["E0111"]);
         assert_eq!(diags.iter().next().expect("one").helps.len(), 2, "advice about `quote` in a macro");
+    }
+
+    #[test]
+    fn parenthesized_types_as_constant_values() {
+        let file = parse_ok(
+            "MaybeCb = (proc(Int) -> Int)?\n\
+             Cb = (proc(Int) -> Int)\n\
+             Pair = (Int, String)\n\
+             Same = (Vec2)\n\
+             NINE = (1 + 2) * 3\n\
+             SEVEN = (NINE - 2)\n",
+        );
+        let values: Vec<_> = file
+            .items
+            .iter()
+            .map(|item| match &item.kind {
+                ItemKind::Const(c) => &c.value.kind,
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        let ExprKind::Type(ty) = values[0] else { panic!("{:?}", values[0]) };
+        let TypeKind::Optional(inner) = &ty.kind else { panic!("{ty:?}") };
+        assert!(matches!(inner.kind, TypeKind::Proc { ret: Some(_), .. }));
+        assert!(matches!(values[1], ExprKind::Type(t) if matches!(t.kind, TypeKind::Proc { .. })));
+        assert!(matches!(values[2], ExprKind::Type(t) if matches!(t.kind, TypeKind::Tuple(_))));
+        // These read as expressions.
+        assert!(matches!(values[3], ExprKind::Paren(_)));
+        assert!(matches!(values[4], ExprKind::Binary { .. }));
+        assert!(matches!(values[5], ExprKind::Paren(_)));
+        // In a `quote`, a parenthesized splice may be any code.
+        let file = parse_ok(
+            "macro def m(v: Code, t: Type) -> Code\n\
+             \x20 quote do\n\
+             \x20   A = (#{v})\n\
+             \x20   B = (#{v}) * 2\n\
+             \x20   C = (#{t})?\n\
+             \x20 end\n\
+             end\n",
+        );
+        let q = first_quote(&file);
+        let value = |stmt: &Stmt| match &stmt.kind {
+            StmtKind::Item(item) => match &item.kind {
+                ItemKind::Const(c) => c.value.kind.clone(),
+                other => panic!("{other:?}"),
+            },
+            other => panic!("{other:?}"),
+        };
+        assert!(matches!(value(&q.body[0]), ExprKind::Paren(_)));
+        assert!(matches!(value(&q.body[1]), ExprKind::Binary { .. }));
+        assert!(matches!(value(&q.body[2]), ExprKind::Type(t) if matches!(t.kind, TypeKind::Optional(_))));
+        assert_eq!(q.splices.len(), 3);
     }
 
     #[test]
@@ -4192,6 +4465,35 @@ end
         // Anything else stays an unfinished conditional.
         assert_eq!(codes_of("def main\n  f(x ?)\nend\n"), ["E0105"]);
         assert!(parse_file(FileId(0), "def main\n  f(x ?)\nend\n").1.iter().all(|d| d.helps.is_empty()));
+    }
+
+    #[test]
+    fn types_written_in_place_in_calls_without_parentheses() {
+        // The arguments of a call without parentheses end with the line or
+        // at a modifier.
+        let args = first_args("  size_of Int?\n  g proc(Int) -> Int\n");
+        assert!(matches!(written_type(&args[0]), TypeKind::Optional(_)));
+        assert!(matches!(written_type(&args[1]), TypeKind::Proc { .. }));
+        assert!(codes_of("def main\n  n = size_of Int?\n  p n\n  f Int? if x\nend\n").is_empty());
+        // Nested, it is one E0109 whose `)` goes before the line end.
+        let src = "def main\n  puts size_of Int?\nend\n";
+        let (_, diags) = parse_file(FileId(0), src);
+        let diags: Vec<_> = diags.iter().collect();
+        assert_eq!(diags.iter().map(|d| d.code.as_str()).collect::<Vec<_>>(), ["E0109"]);
+        let help = &diags[0].helps[0];
+        let mut fixed = src.to_string();
+        for edit in help.edits.iter().rev() {
+            fixed.replace_range(edit.span.start as usize..edit.span.end as usize, &edit.replacement);
+        }
+        assert_eq!(fixed, "def main\n  puts size_of(Int?)\nend\n");
+        assert_eq!(help.applicability, Applicability::MachineApplicable);
+        assert!(codes_of(&fixed).is_empty());
+        // After an argument that failed to parse, the `)` still goes before
+        // the line end, and the fix may be wrong.
+        let (_, diags) = parse_file(FileId(0), "def main\n  puts double 4 +\nend\n");
+        let fix = diags.iter().find(|d| d.code.as_str() == "E0109").map(|d| &d.helps[0]).expect("E0109");
+        assert_eq!(fix.edits[1].span.start, 26);
+        assert_eq!(fix.applicability, Applicability::MaybeIncorrect);
     }
 
     #[test]

@@ -1,0 +1,53 @@
+# Parentheses group a type: `(proc(Int) -> Int)?` is an optional proc,
+# unlike `proc(Int) -> Int?`, a proc that returns an optional.
+MaybeCb = (proc(Int) -> Int)?
+Cb = (proc(Int) -> Int)
+ReturnsMaybe = proc(Int) -> Int?
+Pair = (Int, String)
+# A value in parentheses is still an expression.
+NINE = (1 + 2) * 3
+SEVEN = (NINE - 2) + 0
+
+def double(x: Int) -> Int = x * 2
+
+def half(x: Int) -> Int?
+  return nil if x % 2 != 0
+  x / 2
+end
+
+def run(cb: MaybeCb, x: Int) -> Int
+  if g = cb
+    return g.call(x)
+  end
+  -1
+end
+
+def two -> Pair
+  return 2, "two"
+end
+
+def main
+  f: MaybeCb = nil
+  p f.nil?
+  f = method(:double)
+  p f.nil?
+  p run(f, 21)
+  p run(nil, 21)
+  local: (proc(Int) -> Int)? = nil
+  p local.nil?
+  local = method(:double)
+  p local.nil?
+  c: Cb = method(:double)
+  p c.call(4)
+  h: ReturnsMaybe = method(:half)
+  p h.call(3)
+  p h.call(4)
+  n, s = two
+  p n
+  p s
+  p NINE
+  p SEVEN
+  puts type_info(MaybeCb).name
+  puts type_info(ReturnsMaybe).name
+  puts type_info(Pair).name
+end

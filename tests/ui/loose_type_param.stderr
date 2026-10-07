@@ -1,0 +1,54 @@
+error[E0105]: `$T` can't be a parameter on its own
+ --> tests/ui/loose_type_param.wid:3:11
+  |
+3 | def first($T, xs: []T) -> T = xs[0]
+  |           ^^ a type parameter is introduced inside a parameter's type
+help: introduce `$T` in the type of `xs`, which `T` is inferred from
+  | def first(xs: []$T) -> T = xs[0]
+  = see `wid explain E0105`
+
+error[E0105]: `$T` can't be a parameter on its own
+ --> tests/ui/loose_type_param.wid:5:19
+  |
+5 | def pick(xs: []T, $T: typeid) -> T = xs[0]
+  |                   ^^ a type parameter is introduced inside a parameter's type
+  = note: unlike Odin's `$T: typeid`, a type parameter is never passed: it is inferred from the arguments
+help: introduce `$T` in the type of `xs`, which `T` is inferred from
+  | def pick(xs: []$T) -> T = xs[0]
+  = see `wid explain E0105`
+
+error[E0105]: `$T` can't be a parameter on its own
+ --> tests/ui/loose_type_param.wid:7:10
+  |
+7 | def same($T, a: $T, b: T) -> T = a
+  |          ^^ a type parameter is introduced inside a parameter's type
+help: remove it: the type of `a` already introduces `$T`
+  | def same(a: $T, b: T) -> T = a
+  = see `wid explain E0105`
+
+error[E0105]: `$T` can't be a parameter on its own
+ --> tests/ui/loose_type_param.wid:9:10
+  |
+9 | def zero($T: Type) -> T
+  |          ^^ a type parameter is introduced inside a parameter's type
+  = note: unlike Odin's `$T: typeid`, a type parameter is never passed: it is inferred from the arguments
+help: write `$T` inside the type of the parameter `T` is inferred from, like `def first(xs: []$T) -> T`
+  = see `wid explain E0105`
+
+error[E0105]: `$T` can't be a parameter on its own
+  --> tests/ui/loose_type_param.wid:13:16
+   |
+13 | macro def make($T) -> Code
+   |                ^^ a macro takes no type parameters
+help: a macro receives a type through a `Type` parameter, like `t: Type`
+   = see `wid explain E0105`
+
+error[E0105]: `$T` can't be a parameter on its own
+  --> tests/ui/loose_type_param.wid:20:10
+   |
+20 |   f = ->($T, x: Int) -> Int { x }
+   |          ^^ a proc takes no type parameters
+help: give its parameters concrete types; a method can be generic, like `def first(xs: []$T) -> T`
+   = see `wid explain E0105`
+
+error: could not compile due to 6 errors

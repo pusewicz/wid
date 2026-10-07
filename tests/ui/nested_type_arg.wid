@@ -1,0 +1,7 @@
+# A nested call without parentheses whose argument is a type written in
+# place is one E0109, and its fix puts the `)` before the line end.
+def main
+  puts size_of Int?
+  p(align_of Int?)
+  puts size_of Int? if true
+end
