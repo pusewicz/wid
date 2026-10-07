@@ -387,6 +387,11 @@ runs the stages; `wid_cli` is the `wid` binary.
 - Parenthesized types as constant values: `MaybeCb = (proc(Int) -> Int)?`,
   `Pair = (Int, String)` (`Parser::try_type_alias`). A value in parentheses
   that parses as an expression (`(1 + 2) * 3`, `(Vec2)`) stays one.
+- Types written in place in calls without parentheses: their arguments end
+  with the statement or at an `if`/`unless` modifier (`n = size_of Int?`).
+  Nested (`puts size_of Int?`), that is one E0109 whose fix puts the `)`
+  before the line end; after an argument that failed to parse, the fix is
+  only `MaybeIncorrect`.
 - Macro syntax: `quote` bodies holding statements and declarations, with
   splices in every expression, type, declaration and name position (`#{x}`,
   `@#{f}`, `:#{s}`), splices outside a `quote` (E0111), variadic

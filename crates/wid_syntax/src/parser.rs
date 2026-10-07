@@ -3201,7 +3201,7 @@ impl<'a> Parser<'a> {
             if self.at(T::RParen) || self.at(T::Eof) {
                 break;
             }
-            args.push(self.parse_arg(types));
+            args.push(self.parse_arg(types, true));
             self.skip_newlines();
             if !self.eat(T::Comma) {
                 break;
@@ -3213,33 +3213,36 @@ impl<'a> Parser<'a> {
         args
     }
 
-    fn parse_arg(&mut self, types: bool) -> Arg {
+    /// Parses one call argument. `parens` is false for a call without
+    /// parentheses, whose last argument ends with the statement.
+    fn parse_arg(&mut self, types: bool, parens: bool) -> Arg {
         if let Some(len) = self.name_len(0)
             && self.nth(len).kind == T::Colon
         {
             let name = self.parse_name("an argument name");
             self.bump();
             self.skip_newlines();
-            let value = self.parse_arg_value(types);
+            let value = self.parse_arg_value(types, parens);
             return Arg { name: Some(name), value, splat: false };
         }
         if self.at(T::Star) {
             self.bump();
             return Arg { name: None, value: self.parse_expr(), splat: true };
         }
-        Arg { name: None, value: self.parse_arg_value(types), splat: false }
+        Arg { name: None, value: self.parse_arg_value(types, parens), splat: false }
     }
 
     /// An argument's value: an expression, or a type written in place.
-    fn parse_arg_value(&mut self, types: bool) -> Expr {
-        match self.parse_type_arg(types) {
+    fn parse_arg_value(&mut self, types: bool, parens: bool) -> Expr {
+        match self.parse_type_arg(types, parens) {
             Some(ty) => Expr { span: ty.span, kind: ExprKind::Type(Box::new(ty)) },
             None => self.parse_expr(),
         }
     }
 
     /// Parses a call argument as a type when it is a type that no
-    /// expression spells, followed by `,` or `)`:
+    /// expression spells, followed by `,` or `)` (or, without `parens`, the
+    /// end of the statement or an `if`/`unless` modifier):
     ///
     /// - in any call, a type ending in a `?` of its own (`Int?`,
     ///   `rl.Color?`, `Pool(Ball, 64)?`; in `empty?` the `?` belongs to the
@@ -3254,7 +3257,7 @@ impl<'a> Parser<'a> {
     /// `Pool(Ball, 64)`) stay expressions, which the checker resolves as
     /// types, and `[`, `^`, `map[` and `matrix[` start types in any
     /// expression. Returns `None`, with nothing consumed, for anything else.
-    fn parse_type_arg(&mut self, types: bool) -> Option<TypeExpr> {
+    fn parse_type_arg(&mut self, types: bool, parens: bool) -> Option<TypeExpr> {
         let tok = self.peek();
         let text = self.text_of(tok.span);
         let local = tok.kind == T::Ident && self.is_local(Name::new(text));
@@ -3279,7 +3282,7 @@ impl<'a> Parser<'a> {
         let saved_splices = self.splice_mark();
         let ty = self.try_parse_type()?;
         let tuple = types && matches!(ty.kind, TypeKind::Tuple(_));
-        if self.at_arg_end() && (tuple || self.only_type(&ty)) {
+        if self.at_arg_end(parens) && (tuple || self.only_type(&ty)) {
             return Some(ty);
         }
         self.pos = saved_pos;
@@ -3288,9 +3291,10 @@ impl<'a> Parser<'a> {
     }
 
     /// Reads the tokens of the argument that starts here, up to the `,`,
-    /// `)` or line end that closes it (outside brackets): whether its last
-    /// token is a `?` written right after the token before, and whether a
-    /// `->` appears outside brackets. Consumes nothing.
+    /// `)`, line end or `if`/`unless` modifier that closes it (outside
+    /// brackets): whether its last token is a `?` written right after the
+    /// token before, and whether a `->` appears outside brackets. Consumes
+    /// nothing.
     fn scan_arg(&self) -> (bool, bool) {
         let mut depth = 0usize;
         let mut arrow = false;
@@ -3299,6 +3303,7 @@ impl<'a> Parser<'a> {
             match tok.kind {
                 T::LParen | T::LBracket | T::LBrace | T::AtBracket | T::StrBegin | T::SpliceBegin => depth += 1,
                 T::Comma | T::RParen | T::RBracket | T::RBrace | T::Newline | T::Eof if depth == 0 => break,
+                T::Kw(K::If | K::Unless) if depth == 0 && last.is_some() => break,
                 T::RParen | T::RBracket | T::RBrace | T::StrEnd | T::SpliceEnd => {
                     depth = depth.saturating_sub(1);
                 }
@@ -3310,9 +3315,14 @@ impl<'a> Parser<'a> {
         (last.is_some_and(|t| t.kind == T::Question && !t.space_before), arrow)
     }
 
-    /// Whether the position, after any newlines, is the `,` or `)` that
-    /// ends an argument.
-    fn at_arg_end(&self) -> bool {
+    /// Whether the position is the `,` or `)` that ends an argument, after
+    /// any newlines. Without `parens`, the arguments of a call without
+    /// parentheses also end where the statement does, or at an `if` or
+    /// `unless` modifier.
+    fn at_arg_end(&self, parens: bool) -> bool {
+        if !parens {
+            return self.at(T::Comma) || self.at_stmt_end() || self.at_modifier();
+        }
         let next = self.tokens[self.pos..].iter().find(|t| t.kind != T::Newline);
         next.is_some_and(|t| matches!(t.kind, T::Comma | T::RParen))
     }
@@ -3350,10 +3360,10 @@ impl<'a> Parser<'a> {
 
     fn parse_command_call(&mut self, callee: Callee, start: Span) -> Expr {
         let types = self.takes_type_args(&callee);
-        let mut args = vec![self.parse_arg(types)];
+        let mut args = vec![self.parse_arg(types, false)];
         while self.eat(T::Comma) {
             self.skip_newlines();
-            args.push(self.parse_arg(types));
+            args.push(self.parse_arg(types, false));
         }
         let block = if self.at_kw(K::Do) && !self.no_do { self.parse_block_arg() } else { None };
         Expr {
@@ -3367,12 +3377,17 @@ impl<'a> Parser<'a> {
     fn parse_nested_command_call(&mut self, callee: Callee, start: Span, name_span: Span) -> Expr {
         let first = self.peek().span;
         let types = self.takes_type_args(&callee);
-        let mut args = vec![self.parse_arg(types)];
+        let errors = self.diags.len();
+        let mut args = vec![self.parse_arg(types, false)];
         while self.at(T::Comma) && self.can_start_expr(self.nth(1)) {
             self.bump();
-            args.push(self.parse_arg(types));
+            args.push(self.parse_arg(types, false));
         }
-        let last = self.prev_span();
+        // An argument that failed to parse may have gone past the line end;
+        // the `)` goes after its last token, before the newline.
+        let last = self.tokens[..self.pos].iter().rev().find(|t| t.kind != T::Newline).map_or(first, |t| t.span);
+        let applicability =
+            if self.diags.len() > errors { Applicability::MaybeIncorrect } else { Applicability::MachineApplicable };
         let name = self.text_of(name_span).to_string();
         let gap = Span::new(self.file, name_span.end, first.start);
         self.report(
@@ -3388,7 +3403,7 @@ impl<'a> Parser<'a> {
                     Edit { span: gap, replacement: "(".into() },
                     Edit { span: last.shrink_to_end(), replacement: ")".into() },
                 ],
-                Applicability::MachineApplicable,
+                applicability,
             ),
         );
         Expr { kind: ExprKind::Call(Box::new(Call { callee, args, block: None, parens: false })), span: start.to(last) }
@@ -4450,6 +4465,35 @@ end
         // Anything else stays an unfinished conditional.
         assert_eq!(codes_of("def main\n  f(x ?)\nend\n"), ["E0105"]);
         assert!(parse_file(FileId(0), "def main\n  f(x ?)\nend\n").1.iter().all(|d| d.helps.is_empty()));
+    }
+
+    #[test]
+    fn types_written_in_place_in_calls_without_parentheses() {
+        // The arguments of a call without parentheses end with the line or
+        // at a modifier.
+        let args = first_args("  size_of Int?\n  g proc(Int) -> Int\n");
+        assert!(matches!(written_type(&args[0]), TypeKind::Optional(_)));
+        assert!(matches!(written_type(&args[1]), TypeKind::Proc { .. }));
+        assert!(codes_of("def main\n  n = size_of Int?\n  p n\n  f Int? if x\nend\n").is_empty());
+        // Nested, it is one E0109 whose `)` goes before the line end.
+        let src = "def main\n  puts size_of Int?\nend\n";
+        let (_, diags) = parse_file(FileId(0), src);
+        let diags: Vec<_> = diags.iter().collect();
+        assert_eq!(diags.iter().map(|d| d.code.as_str()).collect::<Vec<_>>(), ["E0109"]);
+        let help = &diags[0].helps[0];
+        let mut fixed = src.to_string();
+        for edit in help.edits.iter().rev() {
+            fixed.replace_range(edit.span.start as usize..edit.span.end as usize, &edit.replacement);
+        }
+        assert_eq!(fixed, "def main\n  puts size_of(Int?)\nend\n");
+        assert_eq!(help.applicability, Applicability::MachineApplicable);
+        assert!(codes_of(&fixed).is_empty());
+        // After an argument that failed to parse, the `)` still goes before
+        // the line end, and the fix may be wrong.
+        let (_, diags) = parse_file(FileId(0), "def main\n  puts double 4 +\nend\n");
+        let fix = diags.iter().find(|d| d.code.as_str() == "E0109").map(|d| &d.helps[0]).expect("E0109");
+        assert_eq!(fix.edits[1].span.start, 26);
+        assert_eq!(fix.applicability, Applicability::MaybeIncorrect);
     }
 
     #[test]
