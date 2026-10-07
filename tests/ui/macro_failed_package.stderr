@@ -1,0 +1,9 @@
+error[E0201]: undefined macro `make_helpers`
+ --> tests/ui/macro_failed_package.wid:4:1
+  |
+4 | make_helpers :hp
+  | ^^^^^^^^^^^^ no macro with this name is in scope
+  = note: a call among declarations runs a macro, and the declarations it generates take the call's place
+  = see `wid explain E0201`
+
+error: could not compile due to 1 error

@@ -1,0 +1,19 @@
+# A macro call that fails to expand might have read the variables declared
+# before it, so they aren't reported as never read too.
+macro def getter(name: Symbol) -> Code
+  quote do
+    #{name}
+  end
+end
+
+def main
+  hp = 3
+  puts getter(hp)
+end
+
+# A variable declared after the call still is.
+def later
+  hp = 3
+  puts getter(hp)
+  mana = 7
+end

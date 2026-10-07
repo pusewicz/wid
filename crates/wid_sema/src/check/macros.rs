@@ -154,6 +154,16 @@ pub(crate) struct MacroState {
     /// For each macro looked at, the first `Self` its own code uses (not
     /// the code its `quote`s generate), if any.
     pub self_uses: HashMap<DeclId, Option<Span>>,
+    /// Packages where a macro call at package level failed to expand or
+    /// named no macro: a name missing there may be one it would have
+    /// declared, so it isn't reported (like a failed `cimport` merge; see
+    /// [`Checker::pkg_incomplete`]).
+    pub failed_packages: HashSet<PackageId>,
+    /// Structs, enums, modules and `extend`s in whose body a macro call
+    /// failed to expand or named no macro: a member missing on their types
+    /// may be one it would have generated (see
+    /// [`Checker::members_incomplete`]).
+    pub failed_owners: HashSet<DeclId>,
 }
 
 /// A call of a macro.
@@ -451,8 +461,31 @@ impl<'a> Checker<'a> {
     pub fn call_macro(&mut self, call: MacroCall<'_>, expected: Option<TyId>) -> ir::Expr {
         match self.expand(&call) {
             Some(code) => self.lower_generated(code, expected),
-            None => ir::Expr::new(ExprKind::Zero, self.types.unknown()),
+            None => {
+                // What the code would have read and declared is unknown.
+                self.failed_expansion(call.span);
+                ir::Expr::new(ExprKind::Zero, self.types.unknown())
+            }
         }
+    }
+
+    /// Whether a name the code being lowered doesn't find may be one that a
+    /// macro call which failed to expand would have declared, so that
+    /// failure already explains it: a local, after a failed call in a scope
+    /// around the code (`local`), or a member of the type whose method is
+    /// being lowered, after a failed call among its declarations
+    /// (`member`).
+    pub fn declared_by_failed_macro(&mut self, local: bool, member: bool) -> bool {
+        if local && self.after_failed_expansion() {
+            return true;
+        }
+        if !member || self.macros.failed_owners.is_empty() {
+            return false;
+        }
+        let Some(frame) = self.body.frames.last() else { return false };
+        let self_ty = frame.self_ty;
+        let owner = frame.decl.and_then(|d| self.decls[d.0 as usize].owner);
+        owner.is_some_and(|o| self.owner_failed(o)) || self_ty.is_some_and(|t| self.members_incomplete(t))
     }
 
     /// Runs a macro for a call and builds the code it generates, allocated

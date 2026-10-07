@@ -1,0 +1,56 @@
+error[E0307]: `+` is not defined for `String`
+  --> tests/ui/macro_failed_members.wid:8:14
+   |
+ 8 |       def #{("get_" + f.name).to_sym} = @#{f.name.to_sym}
+   |              ^^^^^^^^^^^^^^^ both sides are `String`
+...
+19 |   def_getters
+   |   ----------- `def_getters` runs with `Self` as `Hero` for this call
+   = note: the error is inside the macro `def_getters`, checked for each `Self` it runs with
+help: build strings with interpolation: `"#{a}#{b}"`
+   = see `wid explain E0307`
+
+error[E0201]: undefined macro `mana_getters`
+  --> tests/ui/macro_failed_members.wid:24:3
+   |
+24 |   mana_getters
+   |   ^^^^^^^^^^^^ no macro with this name is in scope
+   = note: a call among declarations runs a macro, and the declarations it generates take the call's place
+help: a macro with a similar name exists: `def_getters`
+   |   def_getters
+   = see `wid explain E0201`
+
+error[E0201]: undefined macro `spell_methods`
+  --> tests/ui/macro_failed_members.wid:29:3
+   |
+29 |   spell_methods()
+   |   ^^^^^^^^^^^^^ no macro with this name is in scope
+   = note: a call among declarations runs a macro, and the declarations it generates take the call's place
+   = see `wid explain E0201`
+
+error[E0201]: undefined macro `color_helpers`
+  --> tests/ui/macro_failed_members.wid:38:3
+   |
+38 |   color_helpers()
+   |   ^^^^^^^^^^^^^ no macro with this name is in scope
+   = note: a call among declarations runs a macro, and the declarations it generates take the call's place
+   = see `wid explain E0201`
+
+error[E0201]: undefined macro `int_helpers`
+  --> tests/ui/macro_failed_members.wid:42:3
+   |
+42 |   int_helpers()
+   |   ^^^^^^^^^^^ no macro with this name is in scope
+   = note: a call among declarations runs a macro, and the declarations it generates take the call's place
+   = see `wid explain E0201`
+
+error[E0204]: `Plain` has no field or method `sped`
+  --> tests/ui/macro_failed_members.wid:60:18
+   |
+60 |   puts Plain.new.sped
+   |                  ^^^^ not found on `Plain`
+help: did you mean `speed`?
+   |   puts Plain.new.speed
+   = see `wid explain E0204`
+
+error: could not compile due to 6 errors

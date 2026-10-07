@@ -1,0 +1,36 @@
+error[E0912]: the macro `getter` takes a symbol for `name`
+  --> tests/ui/macro_failed_reads.wid:11:15
+   |
+ 3 | macro def getter(name: Symbol) -> Code
+   |                  ------------ `name` is a `Symbol` parameter
+...
+11 |   puts getter(hp)
+   |               ^^ this is not a symbol literal
+   = note: a `Symbol` parameter receives a name written as a symbol literal, like `:hp`, not the value of an expression
+help: pass the name `hp` as a symbol
+   |   puts getter(:hp)
+   = see `wid explain E0912`
+
+error[E0912]: the macro `getter` takes a symbol for `name`
+  --> tests/ui/macro_failed_reads.wid:17:15
+   |
+ 3 | macro def getter(name: Symbol) -> Code
+   |                  ------------ `name` is a `Symbol` parameter
+...
+17 |   puts getter(hp)
+   |               ^^ this is not a symbol literal
+   = note: a `Symbol` parameter receives a name written as a symbol literal, like `:hp`, not the value of an expression
+help: pass the name `hp` as a symbol
+   |   puts getter(:hp)
+   = see `wid explain E0912`
+
+error[E0203]: `mana` is assigned but never read
+  --> tests/ui/macro_failed_reads.wid:18:3
+   |
+18 |   mana = 7
+   |   ^^^^ this value is never used
+help: if this is intentional, prefix the name with an underscore
+   |   _mana = 7
+   = see `wid explain E0203`
+
+error: could not compile due to 3 errors

@@ -1,0 +1,41 @@
+error[E0912]: the macro `counter` takes a symbol for `name`
+  --> tests/ui/macro_failed_declares.wid:10:11
+   |
+ 3 | macro def counter(name: Symbol) -> Code
+   |                   ------------ `name` is a `Symbol` parameter
+...
+10 |   counter hits
+   |           ^^^^ this is not a symbol literal
+   = note: a `Symbol` parameter receives a name written as a symbol literal, like `:hp`, not the value of an expression
+help: pass the name `hits` as a symbol
+   |   counter :hits
+   = see `wid explain E0912`
+
+error[E0201]: undefined variable `before`
+  --> tests/ui/macro_failed_declares.wid:16:3
+   |
+16 |   before += 1
+   |   ^^^^^^ not found in this scope
+   = see `wid explain E0201`
+
+error[E0912]: the macro `counter` takes a symbol for `name`
+  --> tests/ui/macro_failed_declares.wid:18:13
+   |
+ 3 | macro def counter(name: Symbol) -> Code
+   |                   ------------ `name` is a `Symbol` parameter
+...
+18 |     counter misses
+   |             ^^^^^^ this is not a symbol literal
+   = note: a `Symbol` parameter receives a name written as a symbol literal, like `:hp`, not the value of an expression
+help: pass the name `misses` as a symbol
+   |     counter :misses
+   = see `wid explain E0912`
+
+error[E0201]: undefined variable `misses`
+  --> tests/ui/macro_failed_declares.wid:22:3
+   |
+22 |   misses += 1
+   |   ^^^^^^ not found in this scope
+   = see `wid explain E0201`
+
+error: could not compile due to 4 errors

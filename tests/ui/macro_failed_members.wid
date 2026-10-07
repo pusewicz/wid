@@ -1,0 +1,61 @@
+# A macro call in a type's body that fails to expand, or names no macro,
+# might have generated the members its uses call, so they aren't reported
+# as missing too.
+macro def def_getters -> Code
+  out = [dynamic]Code.new
+  for f in Self.fields
+    out << quote do
+      def #{("get_" + f.name).to_sym} = @#{f.name.to_sym}
+    end
+  end
+  quote do
+    #{out}
+  end
+end
+
+struct Hero
+  hp: Int
+  mana: Int
+  def_getters
+end
+
+struct Mage
+  mana: Int
+  mana_getters
+  def total -> Int = get_mana + 1
+end
+
+module Spells
+  spell_methods()
+end
+
+struct Witch
+  include Spells
+end
+
+enum Color
+  red
+  color_helpers()
+end
+
+extend Int
+  int_helpers()
+end
+
+struct Plain
+  speed: Int
+end
+
+def main
+  h = Hero.new(hp: 3, mana: 7)
+  puts h.get_hp + h.get_mana
+  m = Mage.new(mana: 2)
+  puts m.get_mana + m.total
+  puts Witch.new.fireball
+  c: Color = :red
+  puts c.describe
+  puts Color.random
+  puts 3.double
+  # Other types are still checked.
+  puts Plain.new.sped
+end

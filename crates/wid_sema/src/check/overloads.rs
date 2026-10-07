@@ -592,7 +592,7 @@ impl Checker<'_> {
     }
 
     /// The declaration of a struct or enum type.
-    fn type_decl(&self, ty: TyId) -> Option<DeclId> {
+    pub(super) fn type_decl(&self, ty: TyId) -> Option<DeclId> {
         match self.types.kind(ty) {
             TyKind::Struct(id) => self.struct_decls.get(id).copied(),
             TyKind::Enum(id) => self.enum_decls.get(id).copied(),

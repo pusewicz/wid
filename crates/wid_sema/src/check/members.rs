@@ -252,7 +252,7 @@ impl<'a> Checker<'a> {
         expected: Option<TyId>,
     ) -> ir::Expr {
         let Some(decl) = self.lookup_pkg(pkg, name.name) else {
-            if self.failed_merges.contains(&pkg) || self.report_not_imported(pkg, name.name, name.span) {
+            if self.pkg_incomplete(pkg) || self.report_not_imported(pkg, name.name, name.span) {
                 return ir::Expr::new(ExprKind::Zero, self.types.unknown());
             }
             let candidates = self.package_names(pkg);
@@ -360,6 +360,9 @@ impl<'a> Checker<'a> {
             && args.is_empty()
             && self.find_method(ty, name.name).is_none()
         {
+            if !enum_has(self) && self.members_incomplete(ty) {
+                return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+            }
             return self.enum_member(ty, name.name, name.span);
         }
         if let Some(decl) = self.find_method(ty, name.name) {
@@ -856,6 +859,12 @@ impl<'a> Checker<'a> {
     /// Reports a missing field or method with suggestions.
     pub fn no_member(&mut self, ty: TyId, name: Name, span: Span, is_ivar: bool) {
         if self.report_skipped_field(ty, name, span) {
+            return;
+        }
+        // A macro that failed among the type's declarations may have been
+        // meant to generate it; that failure is already reported. Fields
+        // are never generated.
+        if !is_ivar && self.members_incomplete(ty) {
             return;
         }
         let shown = self.types.display(ty);

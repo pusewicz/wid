@@ -428,7 +428,9 @@ impl<'a> Checker<'a> {
         {
             var.read = true;
         }
-        self.undefined(name, span, candidates, "name");
+        if !self.declared_by_failed_macro(true, true) {
+            self.undefined(name, span, candidates, "name");
+        }
         ir::Expr::new(ExprKind::Zero, self.types.unknown())
     }
 
@@ -544,7 +546,9 @@ impl<'a> Checker<'a> {
             .into_iter()
             .filter(|n| n.chars().next().is_some_and(char::is_uppercase))
             .collect();
-        self.undefined(name, span, candidates, "constant");
+        if !self.declared_by_failed_macro(false, true) {
+            self.undefined(name, span, candidates, "constant");
+        }
         ir::Expr::new(ExprKind::Zero, self.types.unknown())
     }
 
@@ -1239,7 +1243,9 @@ impl<'a> Checker<'a> {
                 }
                 let mut candidates = self.package_names(loc.pkg);
                 candidates.extend(BUILTINS.iter().copied());
-                self.undefined(name.name, name.span, candidates, "method");
+                if !self.declared_by_failed_macro(false, true) {
+                    self.undefined(name.name, name.span, candidates, "method");
+                }
                 for arg in &call.args {
                     self.expr(&arg.value, None);
                 }

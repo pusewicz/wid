@@ -467,7 +467,7 @@ impl<'a> Checker<'a> {
     // ----- extensions -----------------------------------------------------------
 
     /// The receiver patterns of an `extend` declaration, resolved once.
-    fn extend_targets(&mut self, decl: DeclId) -> Vec<TyId> {
+    pub(super) fn extend_targets(&mut self, decl: DeclId) -> Vec<TyId> {
         if let Some(t) = self.extend_patterns.get(&decl) {
             return t.clone();
         }

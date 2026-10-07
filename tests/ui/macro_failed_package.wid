@@ -1,0 +1,11 @@
+# A macro call at package level that names no macro, or fails to expand,
+# might have declared the names the package uses, so they aren't reported
+# as undefined too.
+make_helpers :hp
+
+def main
+  puts helper_hp
+  puts MAX_HP
+  stats: Stats = {}
+  puts stats
+end

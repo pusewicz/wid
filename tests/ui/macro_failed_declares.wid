@@ -1,0 +1,23 @@
+# A statement macro that fails to expand might have declared the names the
+# code after it uses, so they aren't reported as undefined too.
+macro def counter(name: Symbol) -> Code
+  quote do
+    #{name} = 0
+  end
+end
+
+def main
+  counter hits
+  hits += 1
+end
+
+# Names used before the call, or after the scope that holds it, still are.
+def scoped
+  before += 1
+  if true
+    counter misses
+    misses += 1
+    puts misses
+  end
+  misses += 1
+end

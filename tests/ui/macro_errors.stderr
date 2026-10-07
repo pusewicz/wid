@@ -8,10 +8,17 @@ error[E0901]: the macro `repeat` failed: repeat needs a positive count
    |   ----------------------- while `repeat` ran for this call
    = see `wid explain E0901`
 
-error[E0911]: the macro `define` splices a `Type` where a name goes
-  --> tests/ui/macro_errors.wid:78:3
+error[E0201]: undefined name `hp`
+  --> tests/ui/macro_errors.wid:78:10
    |
-78 |   define Int
+78 |   p half(hp)
+   |          ^^ not found in this scope
+   = see `wid explain E0201`
+
+error[E0911]: the macro `define` splices a `Type` where a name goes
+  --> tests/ui/macro_errors.wid:79:3
+   |
+79 |   define Int
    |   ^^^^^^^^^^ `define` expands here
   ::: tests/ui/macro_errors.wid:21:9
    |
@@ -21,9 +28,9 @@ help: splice a `Symbol` where a name goes; `"text".to_sym` makes one from a stri
    = see `wid explain E0911`
 
 error[E0911]: the macro `as_value` splices a `[]Code` where one expression goes
-  --> tests/ui/macro_errors.wid:79:3
+  --> tests/ui/macro_errors.wid:80:3
    |
-79 |   as_value puts(1)
+80 |   as_value puts(1)
    |   ^^^^^^^^^^^^^^^^ `as_value` expands here
   ::: tests/ui/macro_errors.wid:28:18
    |
@@ -33,9 +40,9 @@ help: a list splices only where a list goes: alone on a line, or among call argu
    = see `wid explain E0911`
 
 error[E0911]: the macro `statements_as_value` splices several statements where an expression goes
-  --> tests/ui/macro_errors.wid:80:3
+  --> tests/ui/macro_errors.wid:81:3
    |
-80 |   statements_as_value
+81 |   statements_as_value
    |   ^^^^^^^^^^^^^^^^^^^ `statements_as_value` expands here
   ::: tests/ui/macro_errors.wid:39:7
    |
@@ -45,18 +52,11 @@ help: splice statements alone on a line; where a value goes, splice code that is
    = see `wid explain E0911`
 
 error[E0314]: unknown type `Point`
-  --> tests/ui/macro_errors.wid:81:16
+  --> tests/ui/macro_errors.wid:82:16
    |
-81 |   p field(:x, :Point)
+82 |   p field(:x, :Point)
    |                ^^^^^ no type with this name is in scope
    = see `wid explain E0314`
-
-error[E0201]: undefined name `hp`
-  --> tests/ui/macro_errors.wid:82:10
-   |
-82 |   p half(hp)
-   |          ^^ not found in this scope
-   = see `wid explain E0201`
 
 warning[E0909]: the macro `repeat` printed output
   --> tests/ui/macro_errors.wid:85:3

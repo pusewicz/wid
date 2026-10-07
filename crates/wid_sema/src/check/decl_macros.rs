@@ -187,7 +187,10 @@ impl<'a> Checker<'a> {
     pub(super) fn expand_item_macro(&mut self, p: PendingMacro<'a>) {
         let ItemKind::MacroCall(expr) = &p.item.kind else { return };
         let Some(call) = self.resolve_item_macro(expr, p) else { return };
-        let Some(code) = self.expand_among_declarations(&call, p) else { return };
+        let Some(code) = self.expand_among_declarations(&call, p) else {
+            self.failed_among_declarations(p);
+            return;
+        };
         let items = self.declarations_from(code, &call.shown, p);
         let stmts: Vec<ast::Stmt> = items
             .into_iter()
@@ -199,6 +202,62 @@ impl<'a> Checker<'a> {
                 self.collect_item(item, p.loc, p.owner);
             }
         }
+    }
+
+    /// Records that a macro call among declarations failed to expand or
+    /// named no macro. What it would have generated is unknown, so names
+    /// and members missing because of it aren't reported: anywhere in the
+    /// package for a call at package level, and on the type (or the types
+    /// including the module, or extended) for a call in a body.
+    fn failed_among_declarations(&mut self, p: PendingMacro<'a>) {
+        match p.owner {
+            Some(owner) => self.macros.failed_owners.insert(owner),
+            None => self.macros.failed_packages.insert(p.loc.pkg),
+        };
+    }
+
+    /// Whether a macro call failed among declarations that add members to
+    /// `ty` (see [`Checker::failed_among_declarations`]): in the body of its
+    /// struct or enum, of a module it includes, or of an `extend` of it. A
+    /// member missing on `ty` may be one the call would have generated.
+    pub(super) fn members_incomplete(&mut self, ty: TyId) -> bool {
+        if self.macros.failed_owners.is_empty() {
+            return false;
+        }
+        if let Some(decl) = self.type_decl(ty)
+            && self.owner_failed(decl)
+        {
+            return true;
+        }
+        let extends = self.extends.clone();
+        for ext in extends {
+            if !self.owner_failed(ext) {
+                continue;
+            }
+            for pattern in self.extend_targets(ext) {
+                let mut bindings = vec![(Name::new("Self"), ty)];
+                if self.unify(pattern, ty, &mut bindings) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Whether a macro call failed in the body of `owner` or of a module it
+    /// includes, directly or through other modules.
+    pub(super) fn owner_failed(&mut self, owner: DeclId) -> bool {
+        let mut pending = vec![owner];
+        let mut seen = Vec::new();
+        while let Some(d) = pending.pop() {
+            if self.macros.failed_owners.contains(&d) {
+                return true;
+            }
+            seen.push(d);
+            let modules = self.includes_of(d);
+            pending.extend(modules.into_iter().filter(|m| !seen.contains(m)));
+        }
+        false
     }
 
     /// Where the names of code written at `span` resolve: the macro's file
@@ -230,6 +289,7 @@ impl<'a> Checker<'a> {
                             .unwrap_or_default();
                         self.undefined_here(pkg.name, pkg.span, imports, "package");
                     }
+                    self.failed_among_declarations(p);
                     return None;
                 };
                 let shown = format!("{}.{}", pkg.name, parts.name.name);
@@ -251,16 +311,18 @@ impl<'a> Checker<'a> {
                 None
             }
             None => {
-                if scope.is_none() && self.failed_merges.contains(&loc.pkg) {
-                    return None;
+                // A call that failed before this one isn't taken to explain
+                // it: generating a macro for later calls is rare, and an
+                // undefined macro is itself the error to fix.
+                let explained = match scope {
+                    None => self.failed_merges.contains(&loc.pkg),
+                    Some(target) => self.report_not_imported(target, parts.name.name, parts.name.span),
+                };
+                if !explained {
+                    let bare = matches!(expr.kind, E::Ident(_));
+                    self.undefined_macro(&parts, &shown, scope.unwrap_or(loc.pkg), scope.is_none(), bare, p.owner);
                 }
-                if let Some(target) = scope
-                    && self.report_not_imported(target, parts.name.name, parts.name.span)
-                {
-                    return None;
-                }
-                let bare = matches!(expr.kind, E::Ident(_));
-                self.undefined_macro(&parts, &shown, scope.unwrap_or(loc.pkg), scope.is_none(), bare, p.owner);
+                self.failed_among_declarations(p);
                 None
             }
         }
