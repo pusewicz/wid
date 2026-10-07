@@ -1,7 +1,7 @@
 import "./stats"
 
-# A `quote` with a splice in every position it accepts. This parses; the
-# macro calls in `Hero` are E0902 until macros can run.
+# A `quote` with a splice in every position it accepts. This checks; the
+# macro calls in `Hero` are E0902 until declaration-level calls expand.
 macro def record(name: Symbol, ty: Type, init: Code, *extras: Symbol) -> Code
   reader = quote do
     @#{name}

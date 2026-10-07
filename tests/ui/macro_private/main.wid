@@ -1,0 +1,8 @@
+# A `private macro def` is hidden outside its package, like any private
+# method; its package's public macros can still use it.
+import "./tools"
+
+def main
+  p tools.doubled(2)
+  p tools.twice(2)
+end

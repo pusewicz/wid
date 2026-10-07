@@ -1,0 +1,18 @@
+# `Code` and `Symbol` values exist only while compiling: a method the
+# program runs can't use them (E0906).
+
+def describe(s: Symbol) -> String = s.to_s
+
+def keep(c: Code) -> Code = c
+
+def label -> Int
+  name = "mana".to_sym
+  p name
+  1
+end
+
+def main
+  puts describe(:hp)
+  keep({})
+  p label
+end

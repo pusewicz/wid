@@ -462,6 +462,9 @@ pub enum TypeKind {
     /// `#{t}` where a type is expected, inside a `quote`; the index is into
     /// the innermost [`QuoteExpr::splices`].
     Splice(u32),
+    /// A type a macro expansion spliced in, already resolved: the number is
+    /// the checker's id for the type. The parser never produces it.
+    Spliced(u32),
     Error,
 }
 

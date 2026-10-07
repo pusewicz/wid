@@ -95,6 +95,8 @@ impl<'a> Checker<'a> {
     /// Lowers one statement whose value, if any, is discarded.
     pub fn lower_stmt(&mut self, stmt: &ast::Stmt) {
         self.emit(Stmt::Line(stmt.span));
+        let site = self.enter_site(stmt.span);
+        let line = std::mem::replace(&mut self.macros.line, stmt.span);
         let no_bounds = self.check_statement_attributes(&stmt.attrs);
         let saved_bounds = self.no_bounds_check;
         if no_bounds {
@@ -102,6 +104,8 @@ impl<'a> Checker<'a> {
         }
         self.lower_stmt_inner(stmt);
         self.no_bounds_check = saved_bounds;
+        self.macros.line = line;
+        self.leave_site(site);
     }
 
     fn lower_stmt_inner(&mut self, stmt: &ast::Stmt) {
@@ -198,7 +202,7 @@ impl<'a> Checker<'a> {
 
     /// Reports a typed declaration of a name that already exists.
     fn check_redeclare(&mut self, name: &ast::Ident) -> bool {
-        let existing = self.find_var(name.name).map(|v| v.span);
+        let existing = self.find_var_at(name.name, name.span).map(|v| v.span);
         if let Some(prev) = existing {
             self.report(
                 Diagnostic::error(codes::DUPLICATE_DEFINITION, format!("`{}` is already declared", name.as_str()))
@@ -247,7 +251,7 @@ impl<'a> Checker<'a> {
             return;
         }
         if let E::Ident(name) = target.kind {
-            let existing = self.find_var(name).map(|v| (v.local, v.ty, v.indirect));
+            let existing = self.find_var_at(name, target.span).map(|v| (v.local, v.ty, v.indirect));
             match existing {
                 Some((local, ty, true)) => {
                     let v = self.expr_coerced(value, ty);
@@ -272,7 +276,7 @@ impl<'a> Checker<'a> {
                     let local = self.declare_var(name, ty, target.span, false);
                     if matches!(value.kind, E::Call(_) | E::Member { .. }) && self.types.is_nilable(ty) {
                         let origin = self.source_text(value.span);
-                        if let Some(var) = self.find_var(name) {
+                        if let Some(var) = self.find_var_at(name, target.span) {
                             var.origin = Some(origin);
                             var.decl_stmt = Some(span);
                         }
@@ -335,7 +339,7 @@ impl<'a> Checker<'a> {
         }
         let mut local = None;
         let place = match target.kind {
-            E::Ident(name) => match self.find_var(name).map(|v| {
+            E::Ident(name) => match self.find_var_at(name, target.span).map(|v| {
                 v.read = true;
                 (v.local, v.ty, v.indirect)
             }) {
@@ -411,7 +415,7 @@ impl<'a> Checker<'a> {
     pub fn place(&mut self, target: &ast::Expr) -> ir::Expr {
         match &target.kind {
             E::Ident(name) => {
-                let found = self.find_var(*name).map(|v| {
+                let found = self.find_var_at(*name, target.span).map(|v| {
                     v.read = true;
                     (v.local, v.ty)
                 });

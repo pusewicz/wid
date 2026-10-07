@@ -5,6 +5,7 @@ use wid_diagnostics::{Applicability, Diagnostic, Span, codes, did_you_mean};
 use wid_syntax::Name;
 use wid_syntax::ast::{self, ExprKind as E, Ident};
 
+use super::macros::MacroCall;
 use super::{Checker, DeclId, DeclKind};
 use crate::input::PackageId;
 use crate::ir::{self, ExprKind};
@@ -129,10 +130,12 @@ impl<'a> Checker<'a> {
     /// Classifies the left side of a member access without lowering values.
     pub fn classify_receiver(&mut self, recv: &ast::Expr) -> Receiver {
         match &recv.kind {
-            E::Ident(n) if self.find_var(*n).is_none() => match self.lookup_import(self.loc(), *n) {
-                Some(p) => Receiver::Package(p),
-                None => Receiver::Value,
-            },
+            E::Ident(n) if self.find_var_at(*n, recv.span).is_none() => {
+                match self.lookup_import(self.loc_at(recv.span), *n) {
+                    Some(p) => Receiver::Package(p),
+                    None => Receiver::Value,
+                }
+            }
             E::Const(n) => {
                 if n.as_str() == "Self"
                     && let Some(t) = self.body.frames.last().and_then(|f| f.self_ty)
@@ -142,7 +145,7 @@ impl<'a> Checker<'a> {
                 if let Some(t) = self.body.frames.last().and_then(|f| super::generics::lookup(&f.subst, *n)) {
                     return Receiver::Type(t);
                 }
-                let loc = self.loc();
+                let loc = self.loc_at(recv.span);
                 if let Some(decl) = self.lookup_pkg(loc.pkg, *n).or_else(|| self.lookup_prelude(*n)) {
                     return match self.decls[decl.0 as usize].kind {
                         DeclKind::Struct(s) if !s.generics.is_empty() => {
@@ -179,7 +182,7 @@ impl<'a> Checker<'a> {
                 if !n.as_str().starts_with(char::is_uppercase) {
                     return Receiver::Value;
                 }
-                let loc = self.loc();
+                let loc = self.loc_at(recv.span);
                 let Some(decl) = self.lookup_pkg(loc.pkg, n.name).or_else(|| self.lookup_prelude(n.name)) else {
                     return Receiver::Value;
                 };
@@ -226,7 +229,9 @@ impl<'a> Checker<'a> {
             return self.safe_member(recv, name, args, span);
         }
         match self.classify_receiver(recv) {
-            Receiver::Package(pkg) => self.package_member(pkg, name, args.unwrap_or(&[]), block, span, expected),
+            Receiver::Package(pkg) => {
+                self.package_member(pkg, recv.span, name, args.unwrap_or(&[]), block, span, expected)
+            }
             Receiver::Type(ty) => self.type_member(ty, name, args.unwrap_or(&[]), block, span, recv.span),
             Receiver::Value => {
                 let v = if name.as_str() == "nil?" { self.nilable_operand(recv) } else { self.expr(recv, None) };
@@ -235,9 +240,11 @@ impl<'a> Checker<'a> {
         }
     }
 
+    #[expect(clippy::too_many_arguments, reason = "mirrors the parts of a call expression")]
     fn package_member(
         &mut self,
         pkg: PackageId,
+        pkg_span: Span,
         name: Ident,
         args: &[ast::Arg],
         block: Option<&ast::BlockArg>,
@@ -255,6 +262,11 @@ impl<'a> Checker<'a> {
         };
         self.check_visible(decl, name.span);
         match self.decls[decl.0 as usize].kind {
+            DeclKind::Fn(f) if f.is_macro => {
+                let shown = format!("{}.{}", self.source_text(pkg_span), name.as_str());
+                let call = MacroCall { decl, shown, args, block, name_span: name.span, span };
+                self.call_macro(call, expected)
+            }
             DeclKind::Fn(_) => self.call_fn(decl, None, args, block, name.span, span),
             DeclKind::Const(_) => self.const_ref_decl(decl, span, expected),
             DeclKind::Overload(_) => self.call_overloaded(decl, None, None, args, name.span, span),
@@ -275,7 +287,7 @@ impl<'a> Checker<'a> {
         if !d.private || d.owner.is_some() {
             return;
         }
-        let from = self.loc().pkg;
+        let from = self.loc_at(span).pkg;
         self.check_visible_from(decl, from, span);
     }
 
@@ -648,6 +660,11 @@ impl<'a> Checker<'a> {
                     ExprKind::Binary { op: ir::BinaryOp::Eq, lhs: Box::new(len), rhs: Box::new(zero), span },
                     bool_ty,
                 )
+            }
+            ("to_sym", TyKind::String) => {
+                self.no_args(args, name);
+                let symbol = self.types.symbol();
+                ir::Expr::new(ExprKind::Builtin { op: ir::Builtin::ToSymbol, args: vec![v.clone()], span }, symbol)
             }
             ("to_cstr", TyKind::String) => {
                 self.no_args(args, name);

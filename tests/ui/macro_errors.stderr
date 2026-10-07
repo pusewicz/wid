@@ -1,0 +1,142 @@
+error[E0901]: the macro `repeat` failed: repeat needs a positive count
+  --> tests/ui/macro_errors.wid:58:3
+   |
+58 |   assert n > 0, "repeat needs a positive count"
+   |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ failed here
+...
+84 |   repeat 0, puts("never")
+   |   ----------------------- while `repeat` ran for this call
+   = see `wid explain E0901`
+
+error[E0911]: the macro `define` splices a `Type` where a name goes
+  --> tests/ui/macro_errors.wid:78:3
+   |
+78 |   define Int
+   |   ^^^^^^^^^^ `define` expands here
+  ::: tests/ui/macro_errors.wid:21:9
+   |
+21 |     def #{t} = 2
+   |         ---- this splice is a `Type`
+help: splice a `Symbol` where a name goes; `"text".to_sym` makes one from a string
+   = see `wid explain E0911`
+
+error[E0911]: the macro `as_value` splices a `[]Code` where one expression goes
+  --> tests/ui/macro_errors.wid:79:3
+   |
+79 |   as_value puts(1)
+   |   ^^^^^^^^^^^^^^^^ `as_value` expands here
+  ::: tests/ui/macro_errors.wid:28:18
+   |
+28 |     result = 1 + #{steps}
+   |                  -------- this splice is a `[]Code`
+help: a list splices only where a list goes: alone on a line, or among call arguments or array elements
+   = see `wid explain E0911`
+
+error[E0911]: the macro `statements_as_value` splices several statements where an expression goes
+  --> tests/ui/macro_errors.wid:80:3
+   |
+80 |   statements_as_value
+   |   ^^^^^^^^^^^^^^^^^^^ `statements_as_value` expands here
+  ::: tests/ui/macro_errors.wid:39:7
+   |
+39 |     p #{body}
+   |       ------- this splice is several statements
+help: splice statements alone on a line; where a value goes, splice code that is one expression
+   = see `wid explain E0911`
+
+error[E0314]: unknown type `Point`
+  --> tests/ui/macro_errors.wid:81:16
+   |
+81 |   p field(:x, :Point)
+   |                ^^^^^ no type with this name is in scope
+   = see `wid explain E0314`
+
+error[E0201]: undefined name `hp`
+  --> tests/ui/macro_errors.wid:82:10
+   |
+82 |   p half(hp)
+   |          ^^ not found in this scope
+   = see `wid explain E0201`
+
+warning[E0909]: the macro `repeat` printed output
+  --> tests/ui/macro_errors.wid:85:3
+   |
+85 |   repeat 1, puts("once")
+   |   ^^^^^^^^^^^^^^^^^^^^^^ this ran while compiling
+   = note: it printed:
+           repeating 1 times
+help: remove the printing once you are done debugging; compile-time output is not part of the program
+
+error[E0912]: the macro `zero` takes a type for `t`
+  --> tests/ui/macro_errors.wid:86:10
+   |
+69 | macro def zero(t: Type) -> Code
+   |                ------- `t` is a `Type` parameter
+...
+86 |   p zero(42)
+   |          ^^ this is not a type
+help: pass a type, like `Int`, `Vec2` or `[]String`
+   = see `wid explain E0912`
+
+error[E0302]: `zero` takes 1 argument, but 2 were given
+  --> tests/ui/macro_errors.wid:87:15
+   |
+69 | macro def zero(t: Type) -> Code
+   |           ---- defined as `zero(t: Type)`
+...
+87 |   p zero(Int, 1)
+   |               ^ unexpected argument
+   = see `wid explain E0302`
+
+error[E0323]: the macro `outer` cannot be used as a proc
+  --> tests/ui/macro_errors.wid:88:14
+   |
+12 | macro def outer -> Code
+   |           ----- declared as a `macro def` here
+...
+88 |   f = method(:outer)
+   |              ^^^^^^ a macro runs while compiling and leaves code behind
+   = note: a proc is a method the program calls while it runs; a macro has no such method
+help: call `outer` where its code should go, or write a `def` that a proc can name
+   = see `wid explain E0323`
+
+error[E0319]: the macro `half` does not take a block
+  --> tests/ui/macro_errors.wid:90:11
+   |
+90 |   half(1) do
+   |           ^^ this block is never used
+help: pass the code as an argument instead; a `Code` parameter receives it unevaluated
+   = see `wid explain E0319`
+
+error[E0301]: expected `Int`, found `String`
+  --> tests/ui/macro_errors.wid:7:18
+   |
+ 7 |     count: Int = "zero"
+   |                  ^^^^^^ this has type `String`
+  ::: tests/ui/macro_errors.wid:14:5
+   |
+14 |     declare_count
+   |     ------------- `declare_count` expands here
+  ::: tests/ui/macro_errors.wid:77:5
+   |
+77 |   p outer
+   |     ----- `outer` expands here
+   = see `wid explain E0301`
+
+error[E0307]: cannot apply `/` to `Symbol` and `Int`
+  --> tests/ui/macro_errors.wid:52:5
+   |
+52 |     #{e} / 2
+   |     ^^^^^^^^ `Symbol` / `Int`
+   |            - `Int`
+  ::: tests/ui/macro_errors.wid:83:10
+   |
+83 |   p half(:hp)
+   |          --- `Symbol`
+  ::: tests/ui/macro_errors.wid:83:5
+   |
+83 |   p half(:hp)
+   |     --------- `half` expands here
+   = see `wid explain E0307`
+
+error: could not compile due to 12 errors and 1 warning

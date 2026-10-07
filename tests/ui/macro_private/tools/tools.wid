@@ -1,0 +1,11 @@
+private macro def twice(e: Code) -> Code
+  quote do
+    #{e} * 2
+  end
+end
+
+macro def doubled(e: Code) -> Code
+  quote do
+    twice(#{e})
+  end
+end

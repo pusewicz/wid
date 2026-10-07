@@ -594,6 +594,6 @@ pub(crate) fn collect_params(t: &ast::TypeExpr, out: &mut Vec<Name>) {
             }
         }
         K::Matrix { elem, .. } => collect_params(elem, out),
-        K::Error | K::Splice(_) => {}
+        K::Error | K::Splice(_) | K::Spliced(_) => {}
     }
 }

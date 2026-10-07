@@ -1,0 +1,52 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0301",
+      "column": 18,
+      "expansions": [
+        {
+          "column": 5,
+          "end": 263,
+          "end_column": 18,
+          "end_line": 12,
+          "file": "tests/ui/macro_json.wid",
+          "line": 12,
+          "macro": "declare_count",
+          "start": 250
+        },
+        {
+          "column": 5,
+          "end": 293,
+          "end_column": 10,
+          "end_line": 17,
+          "file": "tests/ui/macro_json.wid",
+          "line": 17,
+          "macro": "outer",
+          "start": 288
+        }
+      ],
+      "explain": "wid explain E0301",
+      "file": "tests/ui/macro_json.wid",
+      "helps": [],
+      "labels": [
+        {
+          "column": 18,
+          "end": 189,
+          "end_column": 24,
+          "end_line": 5,
+          "file": "tests/ui/macro_json.wid",
+          "line": 5,
+          "message": "this has type `String`",
+          "primary": true,
+          "start": 183
+        }
+      ],
+      "line": 5,
+      "message": "expected `Int`, found `String`",
+      "notes": [],
+      "severity": "error"
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}

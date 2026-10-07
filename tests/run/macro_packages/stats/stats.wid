@@ -1,0 +1,32 @@
+import "core:fmt"
+
+private def scale(x: Int) -> Int = x * 10
+
+# `scale` is this package's private helper: the caller needn't see it.
+macro def scaled(e: Code) -> Code
+  quote do
+    scale(#{e})
+  end
+end
+
+# A private macro, used by the code of a public one.
+private macro def add(name: Symbol, amount: Int) -> Code
+  quote do
+    #{name} += #{amount}
+  end
+end
+
+# The name passes through `add` and still names the caller's variable.
+macro def add_twice(name: Symbol, amount: Int) -> Code
+  quote do
+    add :#{name}, #{amount}
+    add :#{name}, #{amount}
+  end
+end
+
+# `fmt` is imported here, not where `report` is called.
+macro def report(name: Symbol) -> Code
+  quote do
+    puts "#{#{name.to_s}} = #{fmt.int(#{name}, base: 16)}"
+  end
+end

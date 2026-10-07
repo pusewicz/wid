@@ -1,0 +1,35 @@
+# What a `macro def` itself declares.
+
+macro def no_type
+  quote do
+  end
+end
+
+macro def wrong_type -> Int
+  1
+end
+
+macro def generic(x: $T) -> Code
+  quote do
+  end
+end
+
+macro def with_block(&body: block()) -> Code
+  quote do
+  end
+end
+
+struct Hero
+  hp: Int
+
+  macro def inside -> Code
+    quote do
+    end
+  end
+end
+
+def main
+  no_type
+  wrong_type
+  p Hero.new
+end

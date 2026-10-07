@@ -9,6 +9,7 @@ mod builtins;
 mod convert;
 mod format;
 mod memory;
+mod quote;
 mod type_info;
 
 use std::collections::HashMap;
@@ -71,6 +72,39 @@ pub(crate) struct Failure {
 
 /// Resolves a span to a file name, line and column for `caller_location`.
 pub(crate) type Positions<'c> = dyn Fn(Span) -> (String, u32, u32) + 'c;
+
+/// A value spliced into a `quote`, read when the `quote` ran.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum SpliceValue {
+    /// A `Code` value: a fragment number plus one, or zero for no code.
+    Code(u64),
+    /// A `[]Code`, `[dynamic]Code` or `[N]Code`.
+    Codes(Vec<u64>),
+    /// A `Symbol`.
+    Symbol(Name),
+    /// A `[]Symbol`, `[dynamic]Symbol` or `[N]Symbol`.
+    Symbols(Vec<Name>),
+    /// A `Type`.
+    Type(TyId),
+    /// An integer.
+    Int(i128),
+    /// A float.
+    Float(f64),
+    /// A `Bool`.
+    Bool(bool),
+    /// A `String`.
+    Str(String),
+}
+
+/// A `quote` that ran in a macro: which `quote` (the checker's template
+/// number) and the values of its splices, in order.
+#[derive(Clone, Debug)]
+pub(crate) struct Fragment {
+    /// The template, numbered by the checker.
+    pub template: u32,
+    /// The splice values.
+    pub values: Vec<SpliceValue>,
+}
 
 /// The parts of the checked program the interpreter reads.
 pub(crate) struct Program<'c> {
@@ -147,6 +181,12 @@ pub(crate) struct Interp<'c> {
     temp_blocks: Vec<Addr>,
     /// The `type_info` table of each type described so far.
     type_infos: HashMap<TyId, Addr>,
+    /// The `quote`s run so far. The `Code` value of `fragments[i]` is
+    /// `first_fragment + i + 1`.
+    pub fragments: Vec<Fragment>,
+    /// How many `Code` values exist before the run: a macro's `Code`
+    /// arguments, numbered from one.
+    pub first_fragment: u64,
 }
 
 impl<'c> Interp<'c> {
@@ -164,6 +204,8 @@ impl<'c> Interp<'c> {
             global_addrs: HashMap::new(),
             temp_blocks: Vec::new(),
             type_infos: HashMap::new(),
+            fragments: Vec::new(),
+            first_fragment: 0,
         };
         if let Ok(ctx) = it.mem.alloc(Region::Static, 64, 8) {
             let mut bytes = vec![0u8; 64];
@@ -296,7 +338,7 @@ impl<'c> Interp<'c> {
             TyKind::Enum(id) => Scalar::Int(types.enum_info(*id).backing),
             TyKind::Rune => Scalar::Int(IntTy::I32),
             TyKind::Error => Scalar::Int(IntTy::U32),
-            TyKind::TypeId | TyKind::Type => Scalar::Int(IntTy::U64),
+            TyKind::TypeId | TyKind::Type | TyKind::Code | TyKind::Symbol => Scalar::Int(IntTy::U64),
             TyKind::Float(f) => Scalar::Float(*f),
             TyKind::Bool => Scalar::Bool,
             TyKind::Pointer(_) | TyKind::MultiPointer(_) | TyKind::RawPtr | TyKind::CString | TyKind::Proc(_) => {

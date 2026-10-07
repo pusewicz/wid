@@ -1,0 +1,15 @@
+# `quote` builds code only inside a `macro def`.
+
+def double(x: Int) -> Int
+  quote do
+    x * 2
+  end
+end
+
+def main
+  code = quote do
+    puts 1
+    puts 2
+  end
+  p double(2), code
+end

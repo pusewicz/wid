@@ -53,7 +53,14 @@ impl Interp<'_> {
             }
             TyKind::Pointer(_) | TyKind::MultiPointer(_) | TyKind::RawPtr => push_ptr(Self::ptr(v), out),
             TyKind::Optional(_) if types.optional_is_pointer(base) => push_ptr(Self::ptr(v), out),
-            TyKind::Unknown | TyKind::Void | TyKind::Never | TyKind::Nil | TyKind::Symbol | TyKind::TypeValue(_) => {}
+            TyKind::Unknown | TyKind::Void | TyKind::Never | TyKind::Nil | TyKind::TypeValue(_) => {}
+            TyKind::Symbol => {
+                let name = u32::try_from(u64::from_le_bytes(word(v))).ok().and_then(wid_syntax::Name::from_index);
+                if inspect {
+                    out.push(b':');
+                }
+                out.extend_from_slice(name.map_or("?", |n| n.as_str()).as_bytes());
+            }
             TyKind::Struct(id) => {
                 let info = types.struct_info(*id);
                 out.extend_from_slice(info.name.as_bytes());

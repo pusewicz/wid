@@ -486,6 +486,7 @@ impl<'a> Checker<'a> {
             no_bounds: false,
             is_proc: false,
             decl: None,
+            site: None,
         });
         let v = self.expr_coerced(e, ty);
         self.body.frames.pop();

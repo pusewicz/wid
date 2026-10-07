@@ -1,0 +1,93 @@
+# Errors in code macros generate, and in calling macros.
+
+# An error inside generated code points into the `quote` and lists the
+# calls that led there, innermost first.
+macro def declare_count -> Code
+  quote do
+    count: Int = "zero"
+    count
+  end
+end
+
+macro def outer -> Code
+  quote do
+    declare_count
+  end
+end
+
+# A splice whose value doesn't fit where it is.
+macro def define(t: Type) -> Code
+  quote do
+    def #{t} = 2
+  end
+end
+
+macro def as_value(body: Code) -> Code
+  steps = [body, body]
+  quote do
+    result = 1 + #{steps}
+    p result
+  end
+end
+
+macro def statements_as_value -> Code
+  body = quote do
+    x = 1
+    x += 1
+  end
+  quote do
+    p #{body}
+  end
+end
+
+macro def field(name: Symbol, t: Symbol) -> Code
+  quote do
+    value: #{t} = {}
+    value.#{name}
+  end
+end
+
+macro def half(e: Code) -> Code
+  quote do
+    #{e} / 2
+  end
+end
+
+# Macros check their arguments while they run.
+macro def repeat(n: Int, body: Code) -> Code
+  assert n > 0, "repeat needs a positive count"
+  puts "repeating #{n} times"
+  steps = [dynamic]Code.new
+  for _i in 0...n
+    steps << body
+  end
+  quote do
+    #{steps}
+  end
+end
+
+macro def zero(t: Type) -> Code
+  quote do
+    x: #{t} = {}
+    x
+  end
+end
+
+def main
+  p outer
+  define Int
+  as_value puts(1)
+  statements_as_value
+  p field(:x, :Point)
+  p half(hp)
+  p half(:hp)
+  repeat 0, puts("never")
+  repeat 1, puts("once")
+  p zero(42)
+  p zero(Int, 1)
+  f = method(:outer)
+  f.call
+  half(1) do
+    puts "a block"
+  end
+end

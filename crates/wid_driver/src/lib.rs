@@ -204,12 +204,14 @@ pub struct Checked {
 
 /// Loads, parses and checks a program.
 pub fn check(opts: &Options) -> Checked {
-    let (sources, input, mut diags) = load_program(opts);
+    let (mut sources, input, mut diags) = load_program(opts);
     let Some(input) = input else {
         diags.sort();
         return Checked { sources, diags, input: None, program: None };
     };
-    let (program, sema_diags) = wid_sema::check_program(&input);
+    let (mut program, sema_diags) = wid_sema::check_program(&input);
+    // Spans in code macros generated name these expansions.
+    sources.set_expansions(std::mem::take(&mut program.expansions));
     diags.extend(sema_diags);
     diags.sort();
     let program = if diags.has_errors() { None } else { Some(program) };

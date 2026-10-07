@@ -4,8 +4,5 @@ struct Hero
 end
 
 def main
-  code = quote do
-    puts 1
-  end
-  p code
+  p Hero.new
 end

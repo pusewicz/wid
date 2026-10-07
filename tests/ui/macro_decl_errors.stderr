@@ -1,0 +1,47 @@
+error[E0310]: a macro returns `Code`
+ --> tests/ui/macro_decl_errors.wid:3:7
+  |
+3 | macro def no_type
+  |       ^^^^^^^^^^^ this macro declares no return type
+  = note: a macro returns the code a `quote do … end` builds, which replaces the call
+help: declare that it returns `Code`
+  | macro def no_type -> Code
+  = see `wid explain E0310`
+
+error[E0310]: a macro returns `Code`
+ --> tests/ui/macro_decl_errors.wid:8:25
+  |
+8 | macro def wrong_type -> Int
+  |                         ^^^ this says it returns `Int`
+  = note: a macro returns the code a `quote do … end` builds, which replaces the call
+help: make it return `Code`
+  | macro def wrong_type -> Code
+  = see `wid explain E0310`
+
+error[E0315]: a macro can't have type parameters
+  --> tests/ui/macro_decl_errors.wid:12:22
+   |
+12 | macro def generic(x: $T) -> Code
+   |                      ^^ a `$` type parameter
+   = note: a macro runs once per call, while compiling; it receives types as values
+help: take the type as a `Type` parameter, like `t: Type`, and splice it where a type goes with `#{t}`; take the value as `Code`
+   = see `wid explain E0315`
+
+error[E0319]: a macro can't take a block
+  --> tests/ui/macro_decl_errors.wid:17:22
+   |
+17 | macro def with_block(&body: block()) -> Code
+   |                      ^^^^^^^^^^^^^^ a `&block` parameter
+help: take the code as a parameter instead, like `body: Code`, and pass it as an argument
+   = see `wid explain E0319`
+
+error[E0105]: a `macro def` belongs at the top level of a file
+  --> tests/ui/macro_decl_errors.wid:25:13
+   |
+25 |   macro def inside -> Code
+   |             ^^^^^^ a macro inside a type
+   = note: macros are package members, called like `name(…)` or `pkg.name(…)`
+help: move the `macro def` out of this declaration
+   = see `wid explain E0105`
+
+error: could not compile due to 5 errors

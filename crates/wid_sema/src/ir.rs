@@ -59,6 +59,12 @@ pub struct Program {
     pub checks: Checks,
     /// Whether this is a debug build.
     pub debug: bool,
+    /// The files of the macro expansions in the program: entry `i` is
+    /// [`wid_diagnostics::FileId::expansion`]`(i)`, which spans in generated
+    /// code use. The driver registers them in its source map
+    /// ([`wid_diagnostics::SourceMap::set_expansions`]) before rendering
+    /// diagnostics or generating C.
+    pub expansions: Vec<wid_diagnostics::Expansion>,
 }
 
 /// One `@[test]` method.
@@ -355,6 +361,13 @@ pub enum Builtin {
     /// The fields of a struct `Type`: `(type)` returning `[]FieldInfo`.
     /// Compile time only.
     TypeFields,
+    /// `quote do … end` in a macro: records the `quote` numbered `template`
+    /// with the values of its splices (the arguments, in order) and returns
+    /// the new fragment as a `Code` value. Compile time only.
+    Quote { template: u32 },
+    /// `str.to_sym`: the `Symbol` naming a string's text: `(string)`.
+    /// Compile time only.
+    ToSymbol,
 }
 
 /// The shapes of expressions.

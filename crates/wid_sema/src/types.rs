@@ -163,10 +163,16 @@ pub enum TyKind {
     /// A type as a compile-time value (`T` in `comptime T.fields`). It
     /// exists only while the compiler runs code.
     Type,
+    /// Code a macro receives or builds with `quote`, as a compile-time
+    /// value: the number of a fragment the interpreter recorded, plus one
+    /// (zero is no code). It exists only while the compiler runs code.
+    Code,
     Any,
     /// The builtin error set.
     Error,
-    /// A compile-time name like `:north` that did not resolve to an enum.
+    /// A name like `:hp` that is not an enum member: the interner's number
+    /// for it ([`wid_syntax::Name::index`]). Macros take and splice names
+    /// as `Symbol` values, which exist only while the compiler runs code.
     Symbol,
     /// The type of `nil` before it meets an expected type.
     Nil,
@@ -360,6 +366,7 @@ well_known! {
     rawptr => TyKind::RawPtr;
     typeid => TyKind::TypeId;
     type_ty => TyKind::Type;
+    code => TyKind::Code;
     any => TyKind::Any;
     error => TyKind::Error;
     symbol => TyKind::Symbol;
@@ -639,7 +646,6 @@ impl TypeTable {
             | TyKind::Void
             | TyKind::Never
             | TyKind::Nil
-            | TyKind::Symbol
             | TyKind::TypeValue(_)
             | TyKind::Param(_)
             | TyKind::ConstValue(_) => (0, 1),
@@ -649,7 +655,7 @@ impl TypeTable {
             TyKind::Rune | TyKind::Error => (4, 4),
             TyKind::String | TyKind::Slice(_) => (16, 8),
             TyKind::CString | TyKind::RawPtr | TyKind::Pointer(_) | TyKind::MultiPointer(_) | TyKind::Proc(_) => (8, 8),
-            TyKind::TypeId | TyKind::Type => (8, 8),
+            TyKind::TypeId | TyKind::Type | TyKind::Code | TyKind::Symbol => (8, 8),
             TyKind::Any => (16, 8),
             TyKind::Array(elem, n) => {
                 let (s, a) = self.layout(*elem);
@@ -719,6 +725,7 @@ impl TypeTable {
             TyKind::Any => "Any".into(),
             TyKind::Error => "Error".into(),
             TyKind::Symbol => "Symbol".into(),
+            TyKind::Code => "Code".into(),
             TyKind::Nil => "nil".into(),
             TyKind::TypeValue(t) => format!("type {}", self.display(*t)),
             TyKind::Pointer(t) | TyKind::MultiPointer(t) => {

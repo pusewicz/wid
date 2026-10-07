@@ -6,6 +6,7 @@ use wid_syntax::ast::{self, ExprKind as E};
 
 use super::body::Dest;
 use super::items::{ConstValue, conversion_help};
+use super::macros::MacroCall;
 use super::{Checker, DeclKind};
 use crate::ir::{self, Builtin, ExprKind, Stmt};
 use crate::types::{TyId, TyKind};
@@ -55,6 +56,14 @@ impl<'a> Checker<'a> {
     /// Checks and lowers an expression. `expected` guides literal typing but
     /// is not enforced; use [`Checker::coerce`] for that.
     pub fn expr(&mut self, e: &ast::Expr, expected: Option<TyId>) -> ir::Expr {
+        // Code a macro generated resolves names by whose code it is.
+        let site = self.enter_site(e.span);
+        let v = self.expr_here(e, expected);
+        self.leave_site(site);
+        v
+    }
+
+    fn expr_here(&mut self, e: &ast::Expr, expected: Option<TyId>) -> ir::Expr {
         match &e.kind {
             E::Int(v) => self.int_literal(*v, expected, e.span),
             E::Float(v) => self.float_literal(*v, expected, e.span),
@@ -148,16 +157,9 @@ impl<'a> Checker<'a> {
             }
             E::Comptime(body) => self.comptime_expr(body, expected, e.span),
             E::ComptimeIf(if_expr) => self.comptime_if_value(if_expr, expected),
-            E::Quote(_) => {
-                self.report(
-                    Diagnostic::error(codes::MACRO_FAILED, "`quote` only works inside a `macro def`")
-                        .primary(e.span, "this is not inside a macro")
-                        .help("write the code directly; `quote do … end` builds code for a macro to return"),
-                );
-                ir::Expr::new(ExprKind::Zero, self.types.unknown())
-            }
-            // Splices exist only inside `quote`, which is never lowered; the
-            // parser reports one anywhere else.
+            E::Quote(quote) => self.lower_quote(quote, e.span),
+            // Expansion replaces every splice of a `quote`; the parser
+            // reports one anywhere else.
             E::Splice(_) => ir::Expr::new(ExprKind::Zero, self.types.unknown()),
         }
     }
@@ -263,6 +265,15 @@ impl<'a> Checker<'a> {
                 self.types.unknown()
             }
             TyKind::Never => self.types.unknown(),
+            // Compile-time code keeps names as `Symbol` values, and a
+            // `Symbol` that is not a literal is E0906's to report.
+            TyKind::Symbol
+                if self.comptime_depth > 0
+                    || self.macros.in_macro
+                    || !self.source_text(span).trim_start().starts_with(':') =>
+            {
+                ty
+            }
             TyKind::Symbol => {
                 self.report(
                     Diagnostic::error(codes::CANNOT_INFER, "cannot infer which enum this symbol belongs to")
@@ -347,7 +358,8 @@ impl<'a> Checker<'a> {
 
     // ----- names ---------------------------------------------------------
 
-    /// Lowers `:name`, which selects an enum member when one is expected.
+    /// Lowers `:name`, which selects an enum member when one is expected,
+    /// and is otherwise a `Symbol` value (an error at run time).
     fn symbol(&mut self, name: Name, span: Span, expected: Option<TyId>) -> ir::Expr {
         if let Some(ty) = expected {
             let base = self.types.base(ty);
@@ -360,11 +372,11 @@ impl<'a> Checker<'a> {
                 _ => {}
             }
         }
-        ir::Expr::new(ExprKind::Zero, self.types.symbol())
+        ir::Expr::new(ExprKind::Int(i128::from(name.index())), self.types.symbol())
     }
 
     fn ident(&mut self, name: Name, span: Span, expected: Option<TyId>) -> ir::Expr {
-        if let Some(var) = self.find_var(name) {
+        if let Some(var) = self.find_var_at(name, span) {
             var.read = true;
             let (local, ty, indirect) = (var.local, var.ty, var.indirect);
             let read = self.var_place(local, ty, indirect);
@@ -382,10 +394,15 @@ impl<'a> Checker<'a> {
         if let Some(v) = self.implicit_self_call(name, &[], None, span, span) {
             return v;
         }
-        let loc = self.loc();
+        let loc = self.loc_at(span);
         if let Some(decl) = self.lookup_pkg(loc.pkg, name).or_else(|| self.lookup_prelude(name))
             && let DeclKind::Fn(_) = self.decls[decl.0 as usize].kind
         {
+            if self.is_macro(decl) {
+                self.check_visible(decl, span);
+                let call = MacroCall { decl, shown: name.to_string(), args: &[], block: None, name_span: span, span };
+                return self.call_macro(call, expected);
+            }
             return self.call_fn(decl, None, &[], None, span, span);
         }
         if BUILTINS.contains(&name.as_str()) {
@@ -1014,7 +1031,8 @@ impl<'a> Checker<'a> {
             | TyKind::MultiPointer(_)
             | TyKind::RawPtr
             | TyKind::TypeId
-            | TyKind::Type => true,
+            | TyKind::Type
+            | TyKind::Symbol => true,
             TyKind::Struct(id) => self.types.struct_info(*id).fields.iter().all(|f| self.is_comparable(f.ty)),
             TyKind::Array(elem, _) | TyKind::Matrix(elem, _, _) => self.is_comparable(*elem),
             TyKind::Tuple(elems) => elems.iter().all(|e| self.is_comparable(*e)),
@@ -1085,11 +1103,11 @@ impl<'a> Checker<'a> {
     /// read as the optional itself, not as its unwrapped value.
     pub fn nilable_operand(&mut self, e: &ast::Expr) -> ir::Expr {
         if let E::Ident(n) = e.kind
-            && let Some(var) = self.find_var(n)
+            && let Some(var) = self.find_var_at(n, e.span)
         {
             let (local, ty, indirect) = (var.local, var.ty, var.indirect);
             if self.types.is_nilable(ty) {
-                if let Some(var) = self.find_var(n) {
+                if let Some(var) = self.find_var_at(n, e.span) {
                     var.read = true;
                 }
                 return self.var_place(local, ty, indirect);
@@ -1101,7 +1119,7 @@ impl<'a> Checker<'a> {
     /// Lowers `&expr`: a pointer to a variable, field or element.
     fn address_of_expr(&mut self, inner: &ast::Expr, span: Span) -> ir::Expr {
         if let E::Ident(name) = inner.kind
-            && let Some(var) = self.find_var(name)
+            && let Some(var) = self.find_var_at(name, inner.span)
         {
             var.address_taken = true;
             var.read = true;
@@ -1159,7 +1177,7 @@ impl<'a> Checker<'a> {
         let block = call.block.as_ref();
         match &call.callee {
             ast::Callee::Name(name) => {
-                if self.find_var(name.name).is_some() {
+                if self.find_var_at(name.name, name.span).is_some() {
                     let callee = self.ident(name.name, name.span, None);
                     if let Some(b) = block {
                         self.reject_block(b, &format!("procs like `{}` cannot take a block", name.as_str()));
@@ -1169,8 +1187,15 @@ impl<'a> Checker<'a> {
                 if let Some(v) = self.implicit_self_call(name.name, &call.args, block, name.span, span) {
                     return v;
                 }
-                let loc = self.loc();
+                let loc = self.loc_at(name.span);
                 if let Some(decl) = self.lookup_pkg(loc.pkg, name.name).or_else(|| self.lookup_prelude(name.name)) {
+                    if self.is_macro(decl) {
+                        self.check_visible(decl, name.span);
+                        let shown = name.as_str().to_string();
+                        let (name_span, args) = (name.span, &call.args);
+                        let call = MacroCall { decl, shown, args, block, name_span, span };
+                        return self.call_macro(call, expected);
+                    }
                     if let DeclKind::Overload(_) = self.decls[decl.0 as usize].kind {
                         if let Some(b) = block {
                             self.reject_block(b, "overloaded methods do not take blocks");
@@ -1246,9 +1271,13 @@ impl<'a> Checker<'a> {
         name_span: Span,
         span: Span,
     ) -> ir::Expr {
-        let sig = self.fn_sig(decl);
         let fname = self.decls[decl.0 as usize].name;
         self.check_visible(decl, name_span);
+        if self.is_macro(decl) {
+            let call = MacroCall { decl, shown: fname.to_string(), args, block, name_span, span };
+            return self.call_macro(call, None);
+        }
+        let sig = self.fn_sig(decl);
         if let Some(init) = self.const_init {
             self.report(
                 Diagnostic::error(codes::COMPTIME_ONLY, format!("a constant can't call `{fname}` without `comptime`"))

@@ -1,0 +1,46 @@
+error[E0903]: macro expansions nest more than 64 deep
+  --> tests/ui/macro_budgets.wid:6:5
+   |
+ 6 |     forever(#{n + 1})
+   |     ^^^^^^^^^^^^^^^^^ `forever` would expand here, 65 expansions deep
+  ::: tests/ui/macro_budgets.wid:6:5
+   |
+ 6 |     forever(#{n + 1})
+   |     ----------------- `forever` expands here (63 nested calls)
+  ::: tests/ui/macro_budgets.wid:23:3
+   |
+23 |   forever(0)
+   |   ---------- `forever` expands here
+   = note: the code a macro generates may call macros, but no deeper than this
+help: look for a macro whose code calls a macro, maybe itself, with nothing to stop it
+   = see `wid explain E0903`
+
+error[E0903]: this build expands more than 65,536 macro calls
+  --> tests/ui/macro_budgets.wid:18:21
+   |
+18 |     fan(#{n - 1}) + fan(#{n - 1})
+   |                     ^^^^^^^^^^^^^ `fan` would expand here
+  ::: tests/ui/macro_budgets.wid:18:21
+   |
+18 |     fan(#{n - 1}) + fan(#{n - 1})
+   |                     ------------- `fan` expands here (4 nested calls)
+  ::: tests/ui/macro_budgets.wid:18:5
+   |
+18 |     fan(#{n - 1}) + fan(#{n - 1})
+   |     ------------- `fan` expands here
+  ::: tests/ui/macro_budgets.wid:18:21
+   |
+18 |     fan(#{n - 1}) + fan(#{n - 1})
+   |                     ------------- `fan` expands here (9 nested calls)
+  ::: tests/ui/macro_budgets.wid:18:5
+   |
+18 |     fan(#{n - 1}) + fan(#{n - 1})
+   |     ------------- `fan` expands here
+  ::: tests/ui/macro_budgets.wid:24:5
+   |
+24 |   p fan(16)
+   |     ------- `fan` expands here
+help: look for a macro whose code calls macros several times each, which multiplies
+   = see `wid explain E0903`
+
+error: could not compile due to 2 errors

@@ -32,8 +32,9 @@ runs the stages; `wid_cli` is the `wid` binary.
 - Integer arithmetic wraps (`-fwrapv`); `-debug` builds trap on overflow via
   `ckd_*`. Division always checks for zero. `%` truncates toward zero, as in C
   and Odin.
-- `E0001` is reserved and has no uses. Macros, which belong to a later phase,
-  report their own code (E0902) with a workaround until they land.
+- `E0001` is reserved and has no uses. Macro calls among declarations,
+  which are not expanded yet, report their own code (E0902) with a
+  workaround until they land.
 - Copies of a deferred block share `LocalId`s with the original; each copy is
   emitted as its own C scope, so a local is declared once per copy.
 - `private` is enforced for package members (`pkg.name`) and for methods
@@ -149,6 +150,74 @@ runs the stages; `wid_cli` is the `wid` binary.
 - In an `enum` body, `struct`, `enum` or `union` followed by a newline, `=` or
   `,` is a member (`is_keyword_member` in the parser), for `TypeKind`. Vim
   matches them as `widEnumMember`, which opens no block.
+- Macro expansion (`check/macros.rs`, whose module docs describe the core):
+  - A call resolves like any call; `call`, `ident` and `package_member`
+    hand a macro to `Checker::call_macro` with the expected type, and
+    `call_fn` does for any other path. `expand` converts the arguments
+    (`Code` → an *argument fragment*: the call-site syntax, numbered from
+    one; `Symbol` → `Name::index`; `Type` → `TyId`; others →
+    `comptime_value`; a `*names: T` → a static `[]T`, `fn_sig` typing the
+    splat as `[]T` for macros), runs a wrapper that calls the macro through
+    `lower_needed` and `interpret` (shared with `comptime`), builds the
+    returned `Code` value into statements, and allocates them in
+    `Checker::generated` (a `typed_arena::Arena<Vec<ast::Stmt>>` created in
+    `check_program`, so generated syntax lives for `'a`).
+    `lower_generated` lowers them in place: all but the last with
+    `lower_stmts`, the last as the value (with the expected type), then
+    re-emits the caller's `Line`.
+  - `Code` values are numbers: 0 is no code, `1..=n` the argument
+    fragments, then the fragments the macro's `quote`s recorded, in order.
+    `Builtin::Quote { template }` (lowered by `lower_quote`; `template`
+    indexes `MacroState::templates`, keyed by the quote's span) evaluates
+    its splices and records an `interp::Fragment` of `SpliceValue`s read
+    from interpreter memory (`interp/quote.rs`). `Symbol` values are
+    `Name::index`es (`TyKind::Symbol`, 8 bytes); `str.to_sym` is
+    `Builtin::ToSymbol`, `sym.to_s` is ordinary printing.
+  - `Expander` builds a fragment: it clones the template, moves its spans
+    into the expansion's virtual file (`Respan`), and `Splicer` (a
+    `wid_syntax::visit::VisitMut`) replaces each splice by its value:
+    sequences in `visit_stmts`, `visit_items`, `visit_args` and
+    `visit_exprs`; names in `visit_ident` and the `IVar`/`Symbol`/`Ident`
+    placeholders; types in `visit_type` (a `Type` becomes
+    `ast::TypeKind::Spliced(TyId)`, resolved by `resolve_type`, also inside
+    `ExprKind::Type` where a value goes). A nested `quote` is left alone. A
+    name from a `Symbol` gets the span of the matching symbol argument
+    (past its colon), or of the call. Splices that don't fit are E0911 at
+    the call, and the code is then not lowered.
+  - Virtual files: `FileId::expansion(i)` (ids from `1 << 31`) is
+    `MacroState::files[i]`, one per (expansion, template file); it records
+    the template file, the expansion (call span, name as called, depth)
+    and the `DeclLoc` its own names resolve in. Their text is registered
+    in `source_texts`/`file_positions`. `ir::Program::expansions` carries
+    them to the driver, which calls `SourceMap::set_expansions`;
+    `SourceMap::file` resolves an expansion id to the template's real file,
+    so `#line`, panic locations and every renderer work unchanged, and
+    `expansion_chain` gives the calls behind a span, which both renderers
+    print (`expansions` in JSON).
+  - Sites and hygiene: `Frame::site` is the virtual file of the code being
+    lowered, set by `expr` and `lower_stmt` from each node's span
+    (`enter_site`/`leave_site`). `loc()` is the site's `DeclLoc`, else the
+    frame's; `loc_at(span)` does the same for one name's span (used by
+    `call`, `ident`, `classify_receiver`, `check_visible`), and
+    `resolve_path_type` and array lengths use a virtual span's `DeclLoc`.
+    Each `Var` has a `mark` (the expansion of the span that declared it);
+    `find_var` matches the site's mark and `find_var_at(name, span)` the
+    span's, so the quote's own locals and the caller's never see each
+    other, while spliced code and names (call-site spans) do. Lambdas
+    inherit the site. Parameters of a generated method (`declare_param`,
+    and inlined block methods) are `open`: also visible to code with the
+    mark of the expansion's call site.
+  - Budgets: depth comes from the call span's virtual file (parent depth +
+    1, at most 64); at most 65,536 expansions per build; each E0903 is
+    reported once (per macro for depth). A macro whose reachable functions
+    had errors (`MacroState::failed`, filled by `lower_pending`) doesn't
+    run. `check_macro` validates a `macro def` once (`-> Code`, no `$T`, no
+    block); `check_all_roots` checks root-package macro bodies like other
+    methods. `MacroState::in_macro` (set by `lower_function`) allows
+    `quote`.
+  - `check_comptime_only` covers `Code` and `Symbol` (`Only`), pointing at
+    the first line that uses one; codegen maps both to `wid_TypeId` but
+    never emits them.
 
 ## Done
 
@@ -269,8 +338,17 @@ runs the stages; `wid_cli` is the `wid` binary.
   splices in every expression, type, declaration and name position (`#{x}`,
   `@#{f}`, `:#{s}`), splices outside a `quote` (E0111), variadic
   `*names: T` macro parameters (E0112), and package-qualified
-  declaration-level macro calls. Expansion is next (item 1).
-- Test suite: `tests/run` (clang and gcc-16, strict flags), `tests/ui`,
+  declaration-level macro calls.
+- Macro expansion in expressions and statements: `macro def` bodies checked
+  and run at each call (`Code`, `Symbol`, `Type`, computed and `*names: T`
+  parameters), `quote` with every kind of splice, `Code` and `Symbol`
+  values (`sym.to_s`, `str.to_sym`, `==`), qualified and private macros,
+  definition-site name resolution, hygiene, nested expansion, budgets,
+  errors in generated code with their call chain (human and JSON), `#line`
+  and panic locations in the `quote`, and errors E0910–E0912.
+  Declaration-level calls are next (item 1).
+- Test suite: `tests/run` (clang and gcc-16, strict flags), `tests/ui`
+  (human output, or the JSON document with `-json-errors` in `NAME.flags`),
   `tests/test` (`wid test` reports) and every `core/` package's `_test.wid`
   files.
 - Linux and CI (`.github/workflows/ci.yml`, cached with sccache and
@@ -291,15 +369,32 @@ macro stack.
 
 1. **Macros and `type_info`** (`wid/macros-*`, about three stacked PRs):
    - lexer, parser and AST for `quote` and splices (**landed**);
-   - expansion, hygiene and the `attr_*` macros;
+   - expansion, hygiene and errors in expressions and statements
+     (**landed**; see "Conventions fixed so far");
+   - declaration-level expansion and the `attr_*` macros (next);
    - `type_info` (landed separately; see "Done").
 
    The design below is settled and written into SPEC.md ("Compile-time").
-   Only the syntax has landed: today a `quote` and a declaration-level
-   macro call (`attr_reader :hp`, `lib.attr_reader :hp`) in a type body
-   are E0902 ("macros cannot run yet", `tests/ui/not_yet_available`), a
-   package-level macro call is E0108, and `macro def` bodies are parsed but
-   never checked (`check/mod.rs` skips `is_macro`).
+   What remains: a declaration-level macro call (`attr_reader :hp`,
+   `lib.attr_reader :hp`) in a type body is still E0902 ("macro calls
+   among declarations don't run yet", `tests/ui/not_yet_available`), and a
+   package-level macro call is E0108 (`collect_item`, `ItemKind::MacroCall`).
+   - **Declaration-level expansion (next PR):** add an entry point next to
+     `call_macro` that takes an `ItemKind::MacroCall`'s expression (an
+     `ExprKind::Call`, `Ident` or `Member`), resolves the macro with the
+     owner's or the package's `DeclLoc`, and runs `expand` (which already
+     works without a frame: argument conversion only needs one for `Code`
+     values lowered via `comptime_value`). Turn the returned statements into
+     items the way `Splicer::push_items` does (a `StmtKind::Item` gives its
+     item, a call or name statement an `ItemKind::MacroCall`), and queue
+     them with `pending_ifs` so they are collected in source order by
+     `collect_item`/`collect_member_item` (they live in the arena, so
+     `&'a ast::Item` borrows work). Bodies of generated `def`s then resolve
+     names through their spans' virtual files with no extra work, and
+     their parameters are already open to code spliced from the call site
+     (`declare_param`). `Splicer`
+     already turns `ItemKind::Splice` into items and, in an `enum` body,
+     `Symbol`s into members (appended after the written ones).
    - **Syntax (landed):**
      - Lexer: `#{` outside a string emits `SpliceBegin`, its `}` emits
        `SpliceEnd` (an `Interp` with `quote: None`; newlines inside are
@@ -460,6 +555,20 @@ before anyone starts them.
   Proc tables don't say whether a proc is `@[c]`. Nothing stops a program
   from writing through a `^TypeInfo` (the run-time tables are `const`, so it
   faults; at compile time it succeeds).
+- Macros: a `quote` inside a splice must fit on one line, because newlines
+  are suppressed inside splices (`#{if a then quote do x end else quote do
+  end end}` works; a multi-line `quote` there doesn't). When a statement
+  macro fails (E0901, E0911, E0912), names its code would have declared
+  are reported as undefined where they are used. Code spliced from the
+  call site into a `comptime` inside a `quote` resolves names where the
+  macro is defined, not at the call site. A name spliced from a computed
+  `Symbol` (not a symbol argument) points at the whole macro call, which
+  is where a "did you mean" fix would apply. "Did you mean" suggestions in
+  generated code can name the caller's locals, which the code can't see.
+  E0304 tells a symbol literal from a `Symbol` value by its source text. A
+  `Code` parameter's default can't be a `quote`. A macro reached through
+  an `overload` set expands without the expected type. A macro run is
+  repeated for each generic instance that contains the call.
 - `vendor:miniaudio` built with GCC on macOS has no CoreAudio backend: GCC
   can't parse the block syntax in Apple's headers (`miniaudio.c` sets
   `MA_NO_COREAUDIO` there).

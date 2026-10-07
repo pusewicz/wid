@@ -78,9 +78,7 @@ impl Gen<'_> {
     pub(crate) fn c_type(&mut self, ty: TyId) -> String {
         let kind = self.p.types.kind(ty).clone();
         match kind {
-            TyKind::Unknown | TyKind::Void | TyKind::Never | TyKind::Nil | TyKind::Symbol | TyKind::TypeValue(_) => {
-                "void".into()
-            }
+            TyKind::Unknown | TyKind::Void | TyKind::Never | TyKind::Nil | TyKind::TypeValue(_) => "void".into(),
             TyKind::Bool => "bool".into(),
             TyKind::Int(i) => int_c_type(i).into(),
             TyKind::Float(FloatTy::F32) => "float".into(),
@@ -89,7 +87,7 @@ impl Gen<'_> {
             TyKind::String => "wid_String".into(),
             TyKind::CString => "char *".into(),
             TyKind::RawPtr => "void *".into(),
-            TyKind::TypeId | TyKind::Type => "wid_TypeId".into(),
+            TyKind::TypeId | TyKind::Type | TyKind::Code | TyKind::Symbol => "wid_TypeId".into(),
             TyKind::Error => "wid_Error".into(),
             TyKind::Foreign(name) => name.as_str().to_string(),
             TyKind::Pointer(inner) | TyKind::MultiPointer(inner) => {

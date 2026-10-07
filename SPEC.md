@@ -407,58 +407,105 @@ end
   returns code built with `quote do … end`, using `#{}` to splice values in.
   `core` uses macros for `attr_reader`, `attr_writer` and `attr_accessor`.
   - **Parameters:**
-    - A `Code` parameter receives the argument's code, unevaluated.
+    - A `Code` parameter receives the argument's code, unevaluated. The
+      code runs where the `quote` splices it, as often as it is spliced.
     - A `Symbol` parameter receives a symbol literal (`:hp`) as a name.
     - A `Type` parameter receives a type.
     - Any other parameter type receives a value computed like `comptime`.
+    - An argument of the wrong kind for its parameter, like an expression
+      for a `Symbol` or a value for a `Type`, is E0912.
     - The last parameter may be written `*names: T`. It collects the
       remaining positional arguments, zero or more, into a `[]T`, each
       converted by `T`'s rule, so `*names: Symbol` takes
       `attr_reader :hp, :mana`. It can't have a default. Only macros take
       one; other methods take a `[]T` and an array literal (E0112).
-    - A macro always returns `Code`. `Code` and `Symbol` values exist only
-      while compiling, like `Type`.
+    - A macro always returns `Code` and says so (`-> Code`, E0310). It
+      takes no `$T` parameters (E0315, take a `Type`) and no block (E0319,
+      take a `Code`).
+  - **`Code` and `Symbol`** values exist only while compiling, like `Type`;
+    a method the program runs can't use them (E0906). A macro body can keep
+    them in variables and collections (`[dynamic]Code`, `[]Symbol`),
+    compare symbols with `==`, and convert with `sym.to_s` and
+    `str.to_sym`. In compile-time code a symbol literal where no enum is
+    expected is a `Symbol`. A zero `Code` (`{}`) is no code.
   - **Quotes:** the code in a `quote` may be statements or declarations
     (`def`, `struct`, constants, other macro calls, …); which it must be
-    depends on where the macro is called.
-  - **Splices:** a spliced value is inserted according to its type.
-    - `Code` inserts that code.
-    - `[]Code` inserts a sequence of statements or declarations.
+    depends on where the macro is called. `quote` works only in a
+    `macro def`, the procs inside it included (E0910).
+  - **Splices:** a spliced value is inserted according to its type, and must
+    fit where the splice is (E0911, reported at the call):
+    - `Code` inserts that code: one expression where a value goes, and any
+      statements or declarations when the splice stands alone on a line.
+      Code of several statements can't stand where a value goes.
+    - `[]Code` (or `[dynamic]Code`, `[N]Code`) inserts a sequence: of
+      statements or declarations when the splice stands alone on a line,
+      and of elements when it is one of a comma-separated list (call
+      arguments, array elements, returned values, …), one per element.
+      Nowhere else.
     - `Symbol` inserts a name, usable as an identifier, a method name
       (`def #{name}`, `x.#{name}`), a field (`@#{name}`) or a parameter
-      name. `:#{name}` inserts a symbol literal; its value must be a
-      `Symbol`.
-    - `Type` inserts the type.
-    - Numbers, `Bool`s and strings insert literals.
+      name. In an expression it is that identifier (a constant's, if
+      capitalized), and where a type goes, the type of that name.
+      `:#{name}` inserts a symbol literal; its value must be a `Symbol`.
+      In a list, a `[]Symbol` inserts one identifier (or, written
+      `:#{names}`, one symbol literal) per name.
+    - `Type` inserts the type where a type goes, and the type as a value
+      elsewhere, so `#{t}.new(…)`, `x.to(#{t})` and `size_of(#{t})` work.
+    - Numbers, `Bool`s and strings insert literals; a negative number is
+      parenthesized, and a float that is not finite can't be spliced.
+    - A `quote` splices only these types; splicing another is E0911 in the
+      macro.
   - **Lexing:** `#{` outside a string literal always starts a splice, and a
     splice is only valid inside `quote` (E0111). Comments therefore start
     with `# `. A splice is one expression and may span lines. Inside a
     string literal in a `quote`, `#{}` is ordinary run-time interpolation
     of the generated code.
-  - **Calls:** macros are package members like any def. `pkg.name(…)`, and
+  - **Calls:** macros are package members like any def, declared at the top
+    level of a file (E0105 inside a type). `pkg.name(…)`, and
     `pkg.name args` as a statement or declaration, works wherever an
     unqualified call does, including at declaration level.
-    `private macro def` hides a macro outside its package.
+    `private macro def` hides a macro outside its package (E0205). A
+    macro is not a method the program can call, so it can't be a proc
+    (`method(:name)`, E0323), and it takes no block.
   - **Where a macro call expands:** in an expression, as a statement, as a
     declaration in a `struct`, `enum`, `module` or `extend` body, or at
     package level. Declaration-level calls expand once every declaration
     outside them is known, in source order, like `comptime if`. A macro
     can't add fields, because a struct's layout is fixed before its macros
     run.
+  - **In an expression or as a statement,** the generated statements run
+    in place of the call, in the caller's block, and the value of the last
+    one is the call's value. So the variables a spliced name declares stay
+    visible after the call, a generated `defer` runs when the caller's
+    block ends, and `return`, `break` and `next` act on the caller.
   - **Names** in the quote's own code that aren't locals bound in the
     quote or members of `self` (reached with `@name` or an implicit-self
     call), that is methods, types, constants and packages, resolve where
     the macro is defined, with that package's imports and privacy. So a
     library macro can call its own helpers without the caller importing
     them. Names that come from splices, and `Self`, resolve at the call
-    site.
-  - **Hygiene:** each expansion renames the locals that the quote's own code
-    binds: assignment targets, `for` variables, block parameters, and
-    `guard` and `if v =` bindings. Names that come from splices keep their
-    spelling, so a macro can deliberately bind a caller's name.
+    site. A name spliced from a `Symbol` argument resolves where that
+    argument was written, even after passing through further macros
+    (`inner :#{name}`).
+  - **Hygiene:** each expansion keeps the locals that the quote's own code
+    binds (assignment targets, `for` variables, block and proc parameters,
+    and `guard` and `if v =` bindings) apart from the caller's, as if it
+    renamed them: code spliced in from the call site can't see them, and
+    the quote's own code can't see the caller's locals. Messages still show
+    the names as written. The parameters of a generated `def` are part of
+    its interface (named arguments use them), so code spliced into its
+    body from the call site sees them too. Names that come from splices
+    keep their spelling and belong to the caller, so a macro can
+    deliberately bind a caller's name.
   - **Errors** in generated code point at the line inside the `quote` and
     at each macro call that led to it, innermost first, in the human and
-    JSON output alike.
+    JSON output alike: the human output adds a `:::` snippet per call
+    (`` `m` expands here ``, with nested calls of a macro from one place
+    counted), and each JSON diagnostic has an `expansions` list (the
+    `macro` name and the call's position). Code spliced from the call site
+    keeps its own position. Panic locations and `-debug` `#line`
+    directives in generated code name the `quote`'s file and line. A macro
+    that fails while it runs is E0901, at the call.
   - **Budgets:** each macro run has the `comptime` limits. Expansions may
     nest at most 64 deep (a macro whose code calls a macro), and one build
     runs at most 65,536 expansions. Exceeding either is E0903.
