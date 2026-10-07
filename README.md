@@ -17,3 +17,5 @@ wid run .
 ```
 
 Status: design phase. See [SPEC.md](SPEC.md).
+
+Editor support: [Vim](extras/vim).
