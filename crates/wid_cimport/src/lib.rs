@@ -204,8 +204,14 @@ fn include_line(request: &ImportRequest) -> Result<String, ImportError> {
 }
 
 /// The clang command line for a request.
+///
+/// Doc comments are kept from system headers too, since a library installed
+/// under `/usr/include` is one.
 fn clang_args(request: &ImportRequest, resource_dir: Option<&Path>) -> Vec<String> {
-    let mut args: Vec<String> = ["-x", "c", "-std=c23", "-ferror-limit=0"].into_iter().map(String::from).collect();
+    let mut args: Vec<String> = ["-x", "c", "-std=c23", "-ferror-limit=0", "-fretain-comments-from-system-headers"]
+        .into_iter()
+        .map(String::from)
+        .collect();
     let has_resource_dir = request.clang_args.iter().any(|arg| arg.starts_with("-resource-dir"));
     if let (Some(dir), false) = (resource_dir, has_resource_dir) {
         args.push("-resource-dir".to_string());

@@ -129,12 +129,12 @@ Agents should commit in their worktree. You push and open the PR.
 ## Environment
 
 Wid was developed on macOS (Apple Silicon) with Homebrew LLVM 23, Apple clang
-21, gcc-16, and raylib 6 and SDL3 from Homebrew. It has **never been built on
-Linux.** The first task in the queue makes it build there and adds CI.
+21, gcc-16, and raylib 6 and SDL3 from Homebrew. CI (`.github/workflows/ci.yml`)
+also builds and tests it on Ubuntu 26.04 with clang-22 and gcc-15.
 
 It needs:
 
-- stable Rust, 1.85 or later (edition 2024);
+- stable Rust, 1.88 or later (edition 2024);
 - clang ≥ 19 and gcc ≥ 15, because C23 `#embed` and `<stdckdint.h>` are
   required;
 - libclang, set through `LIBCLANG_PATH` if discovery fails;

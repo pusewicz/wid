@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  fmt:
+    name: Format
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  msrv:
+    name: MSRV
+    runs-on: ubuntu-26.04
+    env:
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Read rust-version
+        id: msrv
+        run: echo "version=$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+      - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo check --workspace --all-targets --locked
+
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Pinned rather than ubuntu-latest: the generated C needs clang >= 19
+          # and gcc >= 15, which ubuntu-24.04 lacks. Ubuntu has no raylib
+          # package, so only macOS covers vendor:raylib.
+          - name: Linux
+            os: ubuntu-26.04
+            cc: clang-22,gcc-15
+            libs: sdl3
+            suite: true
+          - name: macOS
+            os: macos-26
+            cc: clang,gcc-15
+            libs: sdl3 raylib
+            suite: true
+          # The runtime and core:os are POSIX-only and core:c assumes LP64
+          # (docs/STATUS.md, "Known gaps"), so Windows runs clippy and the unit
+          # tests but not the language suite.
+          - name: Windows
+            os: windows-2025
+            suite: false
+    env:
+      # rust-cache keeps the registry and compiled dependencies; sccache also
+      # serves the workspace crates, which cargo rebuilds after every checkout.
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install libclang and SDL3
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libclang-22-dev libsdl3-dev
+      - name: Install SDL3 and raylib
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+          HOMEBREW_NO_INSTALL_CLEANUP: 1
+        run: brew install sdl3 raylib
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-on-failure: true
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # The tests skip what needs libclang or a missing library; fail instead.
+      - name: Check that libclang and the vendor libraries are found
+        if: matrix.suite
+        run: |
+          cargo run --locked -p wid_cli -- cimport --dump stdio.h > /dev/null
+          pkg-config --modversion ${{ matrix.libs }}
+      - name: Test
+        if: matrix.suite
+        env:
+          WID_TEST_CC: ${{ matrix.cc }}
+        run: cargo test --workspace --locked
+      - name: Unit tests
+        if: ${{ !matrix.suite }}
+        run: cargo test --workspace --lib --bins --locked
