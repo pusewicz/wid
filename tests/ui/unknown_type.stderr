@@ -1,0 +1,16 @@
+error[E0314]: unknown type `Integer`
+ --> tests/ui/unknown_type.wid:2:6
+  |
+2 |   x: Integer = 1
+  |      ^^^^^^^ no type with this name is in scope
+help: Wid's default integer type is `Int`
+  = see `wid explain E0314`
+
+error[E0314]: unknown type `Flaot`
+ --> tests/ui/unknown_type.wid:3:6
+  |
+3 |   y: Flaot = 2.0
+  |      ^^^^^ no type with this name is in scope
+  = see `wid explain E0314`
+
+error: could not compile due to 2 errors

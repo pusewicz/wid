@@ -1,0 +1,30 @@
+error[E0801]: test `takes_nothing` has the wrong signature
+ --> tests/ui/test_signature.wid:4:1
+  |
+4 | def takes_nothing
+  | ^^^^^^^^^^^^^^^^^ a test takes `^testing.T` and returns nothing
+  = note: `wid test` calls each `@[test]` method with a `^testing.T` that records failures
+help: use the test signature
+  | def takes_nothing(t: ^testing.T)
+  = see `wid explain E0801`
+
+error[E0801]: test `returns_a_value` has the wrong signature
+ --> tests/ui/test_signature.wid:8:1
+  |
+8 | def returns_a_value(t: ^testing.T) -> Int
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ a test takes `^testing.T` and returns nothing
+  = note: `wid test` calls each `@[test]` method with a `^testing.T` that records failures
+help: use the test signature
+  | def returns_a_value(t: ^testing.T)
+  = see `wid explain E0801`
+
+error[E0801]: test `inside_a_type` has the wrong signature
+  --> tests/ui/test_signature.wid:14:3
+   |
+14 |   def inside_a_type(t: ^testing.T)
+   |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ a test must be a package-level method
+   = note: `wid test` calls each `@[test]` method with a `^testing.T` that records failures
+help: move the test out of the type: tests are package-level methods
+   = see `wid explain E0801`
+
+error: could not compile due to 3 errors

@@ -1,0 +1,18 @@
+def scale(x: Int) -> Int
+  x * 2
+end
+
+def scale(x: F32) -> F32
+  x * 2.0
+end
+
+struct Vec2
+  x: F32
+  y: F32
+
+  def *(k: F32) -> Vec2 = Vec2.new(@x * k, @y * k)
+  def *(o: Vec2) -> Vec2 = Vec2.new(@x * o.x, @y * o.y)
+end
+
+def main
+end

@@ -1,0 +1,33 @@
+struct Settings
+  name: String?
+  verbose: Bool
+end
+
+def compute -> Int
+  puts "computed"
+  5
+end
+
+def main
+  ready = false
+  ready ||= true
+  puts ready
+  ready &&= false
+  puts ready
+  cached: Int? = nil
+  cached ||= compute
+  puts cached + 1
+  cached ||= compute
+  puts cached
+  s = Settings.new
+  s.name ||= "anonymous"
+  p s.name
+  s.verbose ||= true
+  puts s.verbose
+  counts = map[String]Int.new
+  defer free(counts)
+  counts["a"] ||= 1
+  counts["a"] ||= 2
+  counts["b"] &&= 3
+  p counts["a"], counts["b"]
+end

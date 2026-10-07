@@ -1,0 +1,13 @@
+# stb_image 2.30 (https://github.com/nothings/stb): decodes PNG, JPEG, BMP,
+# TGA, GIF, PSD, HDR and PIC images from files or memory. Vendored and public
+# domain or MIT (see ../LICENSE), so nothing needs installing.
+#
+#   import "vendor:stb/image", as: :stbi
+#
+#   w, h, n: C.int
+#   pixels = stbi.load("ship.png", &w, &h, &n, 4)   # [^]U8?, RGBA
+#   defer stbi.image_free(pixels)
+#
+# Names drop the `stbi_` prefix: `stbi_load_from_memory` is
+# `stbi.load_from_memory`. `stbi.failure_reason` explains a nil result.
+cimport "stb_image.h", strip_prefix: "stbi_", implement: "STB_IMAGE_IMPLEMENTATION"

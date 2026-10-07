@@ -1,0 +1,23 @@
+struct Node
+  value: Int
+end
+
+def first(a: $T, b: T) -> T = a
+
+def main
+  raw = alloc(Node).to(RawPtr)
+  node = raw.to(^Node)
+  p node
+  c = "text".to(CString)
+  p c
+  bytes = alloc([]U8, 4)
+  q = (&bytes[0]).to([^]U8)
+  p q + "one"
+  free(bytes)
+  f = method(:first)
+  g: proc(Int) -> Int = method(:first)
+  p f, g
+  count = 3
+  count ||= 4
+  p count
+end

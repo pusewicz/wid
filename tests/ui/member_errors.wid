@@ -1,0 +1,31 @@
+struct S
+  w: Int
+  def area -> Int = 1
+  def bad -> Int = @area
+  def worse -> Int = @wdth
+end
+
+struct V
+  x: Int
+end
+
+enum Dir
+  north
+end
+
+def main
+  a = V.new(x: 1)
+  b = V.new(x: 2)
+  puts a < b
+  puts "x", sep: 1
+  x: U8 = 300
+  s = "abc"
+  for &c in s
+    puts c
+  end
+  bonus = 1
+  puts bonsu
+  pirnt "x"
+  d = Dir(1)
+  puts x, d
+end

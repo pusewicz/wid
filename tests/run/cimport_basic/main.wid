@@ -1,0 +1,54 @@
+cimport "geo.h", as: :geo, strip_prefix: "geo_", types: {geo_Point: Vec2}
+
+Vec2 = [2]F32
+
+@[c]
+def area(shape: ^geo.Shape?) -> F32
+  return 0.0 if shape.nil?
+  s = shape.size
+  case shape.kind
+  when geo.KIND_CIRCLE then 3.0 * s * s
+  else s * s
+  end
+end
+
+def main
+  puts geo.VERSION
+  puts geo.MAX_SHAPES
+  puts geo.SCALE
+  puts geo.square(7)
+
+  origin: Vec2 = geo.ORIGIN
+  p = geo.point_add([1.0, 2.0], [3.0, 4.0])
+  p += origin
+  geo.point_scale(&p, 2.0)
+  puts p
+
+  guard world = geo.world_new else
+    panic "out of memory"
+  end
+  defer geo.world_free(world)
+  circle = geo.Shape.new(kind: geo.KIND_CIRCLE, center: [1.0, 1.0], size: 2.0, name: "ring", tags: [1, 2, 3, 4])
+  geo.world_add(world, circle)
+  geo.world_add(world, geo.Shape.new(kind: geo.KIND_SQUARE, size: 3.0, name: "box"))
+  puts geo.world_count(world)
+  puts geo.world_total(world, method(:area))
+  measure = geo.default_measure
+  puts geo.world_total(world, measure)
+  puts measure.call(&circle)
+  puts circle.center
+  puts circle.tags[2]
+  if name = circle.name
+    puts name.to(String)
+  end
+  puts (geo.kind_name(geo.KIND_SQUARE) || "?").to(String)
+
+  buf: [32]U8
+  out = (&buf[0]).to(CString)
+  n = geo.format(out, 32, "%d-%s-%.1f", 42, "x", 1.5)
+  puts n
+  puts out.to(String)
+
+  v = geo.Value.new(d: 0.25)
+  puts geo.value_sum(v, 0)
+end

@@ -1,0 +1,20 @@
+error[E0321]: `|&x|` needs a variable, field or element
+  --> tests/ui/block_by_ref_temp.wid:2:9
+   |
+ 2 |   yield 1 + 2
+   |         ^^^^^ this yields a temporary value
+...
+12 |   numbers { |&x| puts x }
+   |               - bound by reference here
+help: bind it by value instead
+   |   numbers { |x| puts x }
+   = see `wid explain E0321`
+
+error[E0323]: loops do not produce a value
+ --> tests/ui/block_by_ref_temp.wid:7:3
+  |
+7 |   while false
+  |   ^^^^^^^^^^^ used as a value here
+  = see `wid explain E0323`
+
+error: could not compile due to 2 errors

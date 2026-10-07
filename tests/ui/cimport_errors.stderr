@@ -1,0 +1,99 @@
+error[E0706]: `[3]F32` can't stand in for the C type `lib_Pair`
+ --> tests/ui/cimport_errors/main.wid:1:68
+  |
+1 | cimport "lib.h", as: :lib, strip_prefix: "lib_", types: {lib_Pair: [3]F32, lib_Pare: [2]F32}
+  |                                                                    ^^^^^^ `[3]F32` is 12 bytes, aligned to 4
+  |                                                          -------- `lib_Pair` is 8 bytes, aligned to 4
+  = note: a mapped type is copied byte for byte, so both must have the same size and alignment
+help: map `lib_Pair` to a Wid type with the same fields, or remove it from `types:`
+  = see `wid explain E0706`
+
+error[E0703]: `lib_Pare` is not a struct or union in `lib.h`
+ --> tests/ui/cimport_errors/main.wid:1:76
+  |
+1 | cimport "lib.h", as: :lib, strip_prefix: "lib_", types: {lib_Pair: [3]F32, lib_Pare: [2]F32}
+  |                                                                            ^^^^^^^^ `types:` maps C records to Wid types
+help: did you mean `lib_Pair`?
+  | cimport "lib.h", as: :lib, strip_prefix: "lib_", types: {lib_Pair: [3]F32, lib_Pair: [2]F32}
+  = see `wid explain E0703`
+
+error[E0701]: header `missing.h` not found
+ --> tests/ui/cimport_errors/main.wid:2:9
+  |
+2 | cimport "missing.h", as: :gone
+  |         ^^^^^^^^^^^ not next to the package's files or on the include path
+help: write the path relative to the package directory, add its directory with `include_dirs:`, or name the library with `pkg_config:`
+  = see `wid explain E0701`
+
+error[E0703]: `cimport` has no option `strip:`
+ --> tests/ui/cimport_errors/main.wid:3:30
+  |
+3 | cimport "lib.h", as: :again, strip: "lib_", rename: :camel
+  |                              ^^^^^ unknown option
+  = note: options: as, strip_prefix, rename, names, types, define, implement, link, pkg_config, include_dirs
+  = see `wid explain E0703`
+
+error[E0703]: `rename:` takes `:snake_case` (the default) or `:keep`
+ --> tests/ui/cimport_errors/main.wid:3:53
+  |
+3 | cimport "lib.h", as: :again, strip: "lib_", rename: :camel
+  |                                                     ^^^^^^ not accepted here
+  = note: `:snake_case` turns `InitWindow` into `init_window`; `:keep` only lowercases the first letter of functions
+  = see `wid explain E0703`
+
+error[E0708]: only `@[extern]` methods take C variadic arguments
+ --> tests/ui/cimport_errors/main.wid:5:25
+  |
+5 | def local(fmt: CString, ...)
+  |                         ^^^ `...` passes extra arguments the C way, which only C code can read
+help: take the extra values as a slice with a `*rest: T` parameter instead
+  = see `wid explain E0708`
+
+error[E0705]: `LIB_TWICE` from `lib.h` was not imported
+ --> tests/ui/cimport_errors/main.wid:9:12
+  |
+9 |   puts lib.TWICE(2)
+  |            ^^^^^ `LIB_TWICE` is a function-like macro
+  = note: C declares it at lib.h:4
+help: write a small C function in a `.c` file of the package that calls the macro, and declare it with `@[extern]`
+  = see `wid explain E0705`
+
+error[E0704]: `log` is ambiguous: `lib_Log` and `lib_log` both become `log` in Wid
+  --> tests/ui/cimport_errors/main.wid:10:7
+   |
+10 |   lib.log(1.0)
+   |       ^^^ cimport left both out
+   = note: cimport turns C names into Wid names with fixed rules, and these end up the same
+help: give the others their own names, so `log` means `lib_Log`
+   | cimport "lib.h", as: :lib, strip_prefix: "lib_", types: {lib_Pair: [3]F32, lib_Pare: [2]F32}, names: {lib_log: :log_2}
+   = see `wid explain E0704`
+
+error[E0707]: `Handle` is opaque, so it can only be used through a pointer
+  --> tests/ui/cimport_errors/main.wid:11:11
+   |
+11 |   handle: lib.Handle
+   |           ^^^^^^^^^^ this needs a whole `Handle`
+   = note: C hides the fields and size of an opaque struct; only the library that defines it can create one
+help: point at it instead
+   |   handle: ^lib.Handle
+   = see `wid explain E0707`
+
+error[E0708]: `String` can't be passed through C's `...`
+  --> tests/ui/cimport_errors/main.wid:12:21
+   |
+12 |   lib.print("%s\n", "text".to_s)
+   |                     ^^^^^^^^^^^ this is `String`
+   = note: C variadic arguments take numbers, pointers, C strings and C structs
+help: pass a C string
+   |   lib.print("%s\n", "text".to_s.to_cstr)
+   = see `wid explain E0708`
+
+error[E0705]: field `on` of `Flags` was not imported
+  --> tests/ui/cimport_errors/main.wid:15:22
+   |
+15 |   p handle, h, flags.on
+   |                      ^^ `on` is a 1-bit bit-field, which Wid can't address
+help: read or write it with a small C function in a `.c` file of the package, declared with `@[extern]`
+   = see `wid explain E0705`
+
+error: could not compile due to 11 errors

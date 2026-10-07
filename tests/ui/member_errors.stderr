@@ -1,0 +1,80 @@
+error[E0204]: `@area` reads a field, but `area` is a method
+ --> tests/ui/member_errors.wid:4:20
+  |
+4 |   def bad -> Int = @area
+  |                    ^^^^^ `S` has no field `area`
+  = note: `@name` reads a field of `self`; methods are called by name
+help: call the method: `area`
+  |   def bad -> Int = area
+  = see `wid explain E0204`
+
+error[E0204]: `S` has no field `@wdth`
+ --> tests/ui/member_errors.wid:5:22
+  |
+5 |   def worse -> Int = @wdth
+  |                      ^^^^^ not found on `S`
+  = note: available: w
+  = see `wid explain E0204`
+
+error[E0307]: `<` is not defined for `V`
+  --> tests/ui/member_errors.wid:19:8
+   |
+19 |   puts a < b
+   |        ^^^^^ both sides are `V`
+help: define the operator on `V`: `def <(other: V) -> Bool`
+   = see `wid explain E0307`
+
+error[E0303]: `puts` takes no named arguments
+  --> tests/ui/member_errors.wid:20:13
+   |
+20 |   puts "x", sep: 1
+   |             ^^^ `puts` has no parameter called `sep`
+help: pass the value by position
+   |   puts "x", 1
+   = see `wid explain E0303`
+
+error[E0311]: `300` does not fit in `U8`
+  --> tests/ui/member_errors.wid:21:11
+   |
+21 |   x: U8 = 300
+   |           ^^^ `U8` holds values from 0 to 255
+help: use a wider type like `U16`, or a value in range
+   = see `wid explain E0311`
+
+error[E0321]: string characters cannot be bound by reference
+  --> tests/ui/member_errors.wid:23:8
+   |
+23 |   for &c in s
+   |        ^ strings are immutable
+help: bind each character by value
+   |   for c in s
+   = see `wid explain E0321`
+
+error[E0201]: undefined name `bonsu`
+  --> tests/ui/member_errors.wid:27:8
+   |
+27 |   puts bonsu
+   |        ^^^^^ not found in this scope
+help: a similar name exists: `bonus`
+   |   puts bonus
+   = see `wid explain E0201`
+
+error[E0201]: undefined method `pirnt`
+  --> tests/ui/member_errors.wid:28:3
+   |
+28 |   pirnt "x"
+   |   ^^^^^ not found in this scope
+help: a similar name exists: `print`
+   |   print "x"
+   = see `wid explain E0201`
+
+error[E0305]: `Dir` is an enum, not a method
+  --> tests/ui/member_errors.wid:29:7
+   |
+29 |   d = Dir(1)
+   |       ^^^ cannot be called
+help: convert a number to the enum with `.to`
+   |   d = 1.to(Dir)
+   = see `wid explain E0305`
+
+error: could not compile due to 9 errors

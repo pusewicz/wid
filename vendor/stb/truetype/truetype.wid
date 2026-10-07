@@ -1,0 +1,13 @@
+# stb_truetype 1.26 (https://github.com/nothings/stb): parses TrueType fonts
+# and rasterizes glyphs, single characters or whole baked atlases. Vendored
+# and public domain or MIT (see ../LICENSE).
+#
+#   import "vendor:stb/truetype", as: :stbtt
+#
+#   info: stbtt.Fontinfo
+#   stbtt.init_font(&info, font_bytes, 0)
+#   scale = stbtt.scale_for_pixel_height(&info, 32.0)
+#
+# Names drop the `stbtt_` prefix: `stbtt_GetCodepointBitmap` is
+# `stbtt.get_codepoint_bitmap`.
+cimport "stb_truetype.h", strip_prefix: "stbtt_", implement: "STB_TRUETYPE_IMPLEMENTATION"

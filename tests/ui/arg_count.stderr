@@ -1,0 +1,29 @@
+error[E0302]: missing argument `h` in call to `area`
+ --> tests/ui/arg_count.wid:6:8
+  |
+1 | def area(w: Int, h: Int) -> Int
+  |     ---- defined as `area(w: Int, h: Int)`
+...
+6 |   puts area(3)
+  |        ^^^^^^^ needs `h`
+  = see `wid explain E0302`
+
+error[E0302]: `area` takes 2 arguments, but 3 were given
+ --> tests/ui/arg_count.wid:7:19
+  |
+1 | def area(w: Int, h: Int) -> Int
+  |     ---- defined as `area(w: Int, h: Int)`
+...
+7 |   puts area(1, 2, 3)
+  |                   ^ unexpected argument
+  = see `wid explain E0302`
+
+error[E0303]: `area` has no parameter named `height`
+ --> tests/ui/arg_count.wid:8:19
+  |
+8 |   puts area(w: 1, height: 2)
+  |                   ^^^^^^ unknown parameter
+  = note: parameters: w, h
+  = see `wid explain E0303`
+
+error: could not compile due to 3 errors

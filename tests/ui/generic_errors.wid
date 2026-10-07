@@ -1,0 +1,38 @@
+struct Box($T)
+  value: T
+end
+
+struct Node($T)
+  value: T
+  next: Node(T)
+end
+
+struct Opaque
+  id: Int
+end
+
+def make_default -> $T
+  {}
+end
+
+def pair(a: $T, b: T) -> T = a
+
+def bad(x: $T) -> $U
+  x
+end
+
+def main
+  b = Box.new(1)
+  c: Box(Int, Int) = {}
+  n: Node(Int) = {}
+  d = make_default
+  e = pair(1, "two")
+  xs = [Opaque.new(1), Opaque.new(2)]
+  puts xs.include?(Opaque.new(1))
+  puts xs.sum.id
+  p b
+  p c
+  p n
+  p d
+  p e
+end

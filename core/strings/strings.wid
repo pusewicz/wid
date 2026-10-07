@@ -1,0 +1,279 @@
+# core:strings: string building, searching, splitting and parsing.
+#
+# Strings are immutable byte views. Methods that return a view (`strip`,
+# `delete_prefix`, `each_line`, …) never allocate. Methods that build new text
+# or slices take `allocator:`, which defaults to `context.temp_allocator`, the
+# same allocator string interpolation uses: the result lives until the next
+# `free_all(context.temp_allocator)`. Pass another allocator to keep it.
+
+import "core:mem"
+
+extend String
+  # The string without leading and trailing whitespace.
+  def strip -> String = self.lstrip.rstrip
+
+  # The string without leading whitespace.
+  def lstrip -> String
+    i = 0
+    while i < self.size && space?(self[i])
+      i += 1
+    end
+    self[i...self.size]
+  end
+
+  # The string without trailing whitespace.
+  def rstrip -> String
+    n = self.size
+    while n > 0 && space?(self[n - 1])
+      n -= 1
+    end
+    self[0...n]
+  end
+
+  # The string without `prefix`, when it starts with it.
+  def delete_prefix(prefix: String) -> String
+    self.starts_with?(prefix) ? self[prefix.size...self.size] : self
+  end
+
+  # The string without `suffix`, when it ends with it.
+  def delete_suffix(suffix: String) -> String
+    self.ends_with?(suffix) ? self[0...self.size - suffix.size] : self
+  end
+
+  # The byte offset of the last occurrence of `needle`, or nil.
+  def rindex(needle: String) -> Int?
+    i = self.size - needle.size
+    while i >= 0
+      return i if self[i...i + needle.size] == needle
+      i -= 1
+    end
+    nil
+  end
+
+  # How many times `needle` occurs, without overlaps.
+  def count(needle: String) -> Int
+    return 0 if needle.empty?
+    n = 0
+    i = 0
+    while i + needle.size <= self.size
+      if self[i...i + needle.size] == needle
+        n += 1
+        i += needle.size
+      else
+        i += 1
+      end
+    end
+    n
+  end
+
+  # Yields the pieces between occurrences of `sep`. An empty `sep` yields
+  # the whole string.
+  def each_split(sep: String, &blk: block(String))
+    if sep.empty?
+      yield self
+      return
+    end
+    start = 0
+    i = 0
+    while i + sep.size <= self.size
+      if self[i...i + sep.size] == sep
+        yield self[start...i]
+        i += sep.size
+        start = i
+      else
+        i += 1
+      end
+    end
+    yield self[start...self.size]
+  end
+
+  # Yields each line without its `\n` or `\r\n`. A final line ending does not
+  # start another line.
+  def each_line(&blk: block(String))
+    start = 0
+    for i in 0...self.size
+      if self[i] == 10
+        stop = i > start && self[i - 1] == 13 ? i - 1 : i
+        yield self[start...stop]
+        start = i + 1
+      end
+    end
+    yield self[start...self.size] if start < self.size
+  end
+
+  # The pieces between occurrences of `sep`, in a slice from `allocator`.
+  # The pieces themselves point into the string.
+  def split(sep: String, allocator: Allocator = context.temp_allocator) -> []String
+    parts = alloc([]String, self.count(sep) + 1, allocator: allocator)
+    n = 0
+    self.each_split(sep) do |part|
+      parts[n] = part
+      n += 1
+    end
+    parts
+  end
+
+  # The string with every `old` replaced by `new_text`.
+  def replace(old: String, new_text: String, allocator: Allocator = context.temp_allocator) -> String
+    return self.clone(allocator: allocator) if old.empty?
+    b = Builder.create(allocator: allocator)
+    i = 0
+    start = 0
+    while i + old.size <= self.size
+      if self[i...i + old.size] == old
+        b.write(self[start...i])
+        b.write(new_text)
+        i += old.size
+        start = i
+      else
+        i += 1
+      end
+    end
+    b.write(self[start...self.size])
+    b.string
+  end
+
+  # The string with ASCII letters made uppercase.
+  def upcase(allocator: Allocator = context.temp_allocator) -> String
+    out = alloc([]U8, self.size, allocator: allocator)
+    for i in 0...self.size
+      c = self[i]
+      out[i] = c >= 97 && c <= 122 ? c - 32 : c
+    end
+    out.to(String)
+  end
+
+  # The string with ASCII letters made lowercase.
+  def downcase(allocator: Allocator = context.temp_allocator) -> String
+    out = alloc([]U8, self.size, allocator: allocator)
+    for i in 0...self.size
+      c = self[i]
+      out[i] = c >= 65 && c <= 90 ? c + 32 : c
+    end
+    out.to(String)
+  end
+
+  # The string repeated `n` times.
+  def repeat(n: Int, allocator: Allocator = context.temp_allocator) -> String
+    return "" if n <= 0 || self.empty?
+    out = alloc([]U8, self.size * n, allocator: allocator)
+    bytes = self.to([]U8)
+    for k in 0...n
+      mem.copy(&out[k * self.size], &bytes[0], self.size)
+    end
+    out.to(String)
+  end
+
+  # A copy of the string in memory from `allocator`.
+  def clone(allocator: Allocator = context.allocator) -> String
+    return "" if self.empty?
+    out = alloc([]U8, self.size, allocator: allocator)
+    bytes = self.to([]U8)
+    mem.copy(&out[0], &bytes[0], self.size)
+    out.to(String)
+  end
+
+  # The string padded on the right with `fill` to at least `width` runes.
+  def ljust(width: Int, fill: Rune = ' ', allocator: Allocator = context.temp_allocator) -> String
+    pad(width - self.rune_count, 0, fill, allocator)
+  end
+
+  # The string padded on the left with `fill` to at least `width` runes.
+  def rjust(width: Int, fill: Rune = ' ', allocator: Allocator = context.temp_allocator) -> String
+    pad(0, width - self.rune_count, fill, allocator)
+  end
+
+  # The string centered between `fill` runes, `width` runes wide.
+  def center(width: Int, fill: Rune = ' ', allocator: Allocator = context.temp_allocator) -> String
+    total = width - self.rune_count
+    left = total / 2
+    pad(total - left, left, fill, allocator)
+  end
+
+  # The number of runes (UTF-8 code points) in the string.
+  def rune_count -> Int
+    n = 0
+    for _r in self
+      n += 1
+    end
+    n
+  end
+
+  # Parses a whole string as an integer in `base` (2 to 36), with an optional
+  # sign and single `_` separators between digits.
+  def parse_int(base: Int = 10) -> (Int, Error)
+    return 0, :invalid_number if base < 2 || base > 36
+    s = self
+    negative = s.starts_with?("-")
+    s = s[1...s.size] if negative || s.starts_with?("+")
+    return 0, :invalid_number if s.empty? || s[0] == 95 || s[s.size - 1] == 95
+    limit: UInt = negative ? 9223372036854775808 : 9223372036854775807
+    b = base.to(UInt)
+    value: UInt = 0
+    for i in 0...s.size
+      c = s[i]
+      if c == 95
+        return 0, :invalid_number if s[i + 1] == 95
+        next
+      end
+      d = digit_value(c)
+      return 0, :invalid_number if d < 0 || d >= base
+      digit = d.to(UInt)
+      return 0, :out_of_range if value > (limit - digit) / b
+      value = value * b + digit
+    end
+    return 0 - (value - 1).to(Int) - 1, nil if negative && value > 0
+    return value.to(Int), nil
+  end
+
+  # Parses a whole string as a float, like `3.5`, `-2e10` or `inf`.
+  def parse_float -> (F64, Error)
+    out = 0.0
+    return out, nil if parse_float_raw(self, &out)
+    return 0.0, :invalid_number
+  end
+
+  # Parses `true` or `false`.
+  def parse_bool -> (Bool, Error)
+    return true, nil if self == "true"
+    return false, nil if self == "false"
+    return false, :invalid_bool
+  end
+
+  private def pad(right: Int, left: Int, fill: Rune, allocator: Allocator) -> String
+    b = Builder.create(allocator: allocator)
+    for _i in 0...left
+      b.write_rune(fill)
+    end
+    b.write(self)
+    for _i in 0...right
+      b.write_rune(fill)
+    end
+    b.string
+  end
+end
+
+extend []String
+  # The strings joined with `sep` between them.
+  def join(sep: String = "", allocator: Allocator = context.temp_allocator) -> String
+    b = Builder.create(allocator: allocator)
+    for s, i in self
+      b.write(sep) if i > 0
+      b.write(s)
+    end
+    b.string
+  end
+end
+
+private def space?(c: U8) -> Bool = c == 32 || (c >= 9 && c <= 13)
+
+private def digit_value(c: U8) -> Int
+  return (c - 48).to(Int) if c >= 48 && c <= 57
+  return (c - 97).to(Int) + 10 if c >= 97 && c <= 122
+  return (c - 65).to(Int) + 10 if c >= 65 && c <= 90
+  -1
+end
+
+@[extern("wid_parse_float")]
+private def parse_float_raw(s: String, out: ^F64) -> Bool
+end

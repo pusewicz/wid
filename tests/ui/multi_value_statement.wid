@@ -1,0 +1,8 @@
+def pair -> (Int, Int)
+  1, 2
+end
+
+def main
+  a, b = pair
+  puts a + b
+end

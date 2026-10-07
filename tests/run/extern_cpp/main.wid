@@ -1,0 +1,7 @@
+@[extern("sum_sorted")]
+def sum_sorted(a: I32, b: I32, c: I32) -> I32
+end
+
+def main
+  puts sum_sorted(3, 1, 2)
+end

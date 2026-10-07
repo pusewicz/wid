@@ -1,0 +1,11 @@
+cimport "opts.h", as: :opts, include_dirs: ["include"], strip_prefix: "opts_", rename: :keep,
+  names: {opts_getFps: :half_fps}, link: ["m"]
+
+def main
+  puts opts.getFPS
+  puts opts.half_fps
+  settings = opts.Settings.new(frameRate: 60, volumeLevel: 0.5)
+  puts settings.volumeLevel
+  puts opts.applyVolume(settings, 3.0)
+  puts opts.VERSION
+end

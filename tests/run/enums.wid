@@ -1,0 +1,61 @@
+enum Dir : U8
+  north
+  east
+  south
+  west
+
+  def opposite -> Dir
+    case self
+    when :north then :south
+    when :south then :north
+    when :east then :west
+    when :west then :east
+    end
+  end
+
+  def vertical? -> Bool
+    case self
+    when :north, :south then true
+    else false
+    end
+  end
+end
+
+enum Status
+  ok = 200
+  not_found = 404
+end
+
+def describe(n: Int) -> String
+  case n
+  when 0 then "zero"
+  when 1..9 then "digit"
+  when 10, 20, 30 then "round"
+  else "other"
+  end
+end
+
+def main
+  d: Dir = :east
+  p d
+  puts d
+  puts d.opposite
+  puts d.vertical?
+  puts Dir.north.vertical?
+  puts d == :east
+  puts d.to_i
+  s = Status.not_found
+  puts s.to_i
+  puts describe(0)
+  puts describe(7)
+  puts describe(20)
+  puts describe(99)
+  case d
+  when :north
+    puts "up"
+  when :east, :west
+    puts "sideways"
+  when :south
+    puts "down"
+  end
+end

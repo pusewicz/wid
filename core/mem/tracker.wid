@@ -1,0 +1,72 @@
+# Tracker: wraps another allocator and records every live block together with
+# the place that allocated it. Freeing a block twice, or with the wrong
+# allocator, panics with both locations. `-debug` builds run the whole program
+# on one, and `wid test` runs each test on a fresh one.
+
+struct Tracker
+  handle: RawPtr
+
+  # A tracker that forwards to `backing`.
+  def self.create(backing: Allocator = context.allocator) -> Tracker
+    Tracker.new(handle: tracker_new(backing))
+  end
+
+  # The allocator that records blocks in this tracker.
+  def allocator -> Allocator = tracker_allocator(@handle)
+
+  # Bytes currently allocated through the tracker.
+  def bytes -> Int = tracker_bytes(@handle)
+
+  # How many blocks are still allocated.
+  def leak_count -> Int = tracker_leaks(@handle)
+
+  # Yields the size and allocation site of every block still allocated, in
+  # source order.
+  def each_leak(&blk: block(Int, Location))
+    n = tracker_leaks(@handle)
+    for i in 0...n
+      yield tracker_leak_size(@handle, i), tracker_leak_location(@handle, i)
+    end
+  end
+
+  # Prints the blocks still allocated to stderr and returns how many there are.
+  def report -> Int = tracker_report(@handle)
+
+  # Releases the tracker's own tables. Blocks it still tracks stay allocated.
+  def destroy
+    tracker_delete(@handle)
+    @handle = nil
+  end
+end
+
+@[extern("wid_tracker_new")]
+private def tracker_new(backing: Allocator) -> RawPtr
+end
+
+@[extern("wid_tracker_delete")]
+private def tracker_delete(tracker: RawPtr)
+end
+
+@[extern("wid_tracker_allocator")]
+private def tracker_allocator(tracker: RawPtr) -> Allocator
+end
+
+@[extern("wid_tracker_bytes")]
+private def tracker_bytes(tracker: RawPtr) -> Int
+end
+
+@[extern("wid_tracker_leaks")]
+private def tracker_leaks(tracker: RawPtr) -> Int
+end
+
+@[extern("wid_tracker_leak_size")]
+private def tracker_leak_size(tracker: RawPtr, i: Int) -> Int
+end
+
+@[extern("wid_tracker_leak_location")]
+private def tracker_leak_location(tracker: RawPtr, i: Int) -> Location
+end
+
+@[extern("wid_tracker_report")]
+private def tracker_report(tracker: RawPtr) -> Int
+end

@@ -1,0 +1,14 @@
+Level(name: "intro", lives: 3)
+nil
+:not_a_number
+true
+true
+bad number
+5
+check passed
+2
+1
+0
+2
+failed
+:negative

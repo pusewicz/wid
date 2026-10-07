@@ -1,0 +1,6 @@
+cimport "tiny.h", as: :tiny, strip_prefix: "tiny_", define: ["TINY_SCALE=3"], implement: "TINY_IMPLEMENTATION"
+
+def main
+  puts tiny.FACTOR
+  puts tiny.scaled(14)
+end

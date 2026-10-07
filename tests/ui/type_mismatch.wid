@@ -1,0 +1,10 @@
+def half(x: F32) -> F32
+  x / 2.0
+end
+
+def main
+  n = 10
+  puts half(n)
+  s: String = 5
+  puts s
+end

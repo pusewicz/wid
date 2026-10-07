@@ -1,0 +1,84 @@
+error[E0310]: this method returns `(Int, Int)`, but 3 values are returned
+ --> tests/ui/flow_errors.wid:2:3
+  |
+2 |   return 1, 2, 3
+  |   ^^^^^^^^^^^^^^ expected 2 values
+help: return exactly 2 values, or change the declared return type
+  = see `wid explain E0310`
+
+error[E0313]: this `case` is used as a value but has no `else`
+ --> tests/ui/flow_errors.wid:6:3
+  |
+6 |   case x
+  |   ^^^^^^ when no branch matches there is no value
+help: add an `else` branch with the value to use
+  |   else
+  |     …
+  |   end
+  = see `wid explain E0313`
+
+error[E0324]: this `if` is used as a value but has no `else`
+  --> tests/ui/flow_errors.wid:12:7
+   |
+12 |   s = if x > 1
+   |       ^^^^^^^^ when the condition is false there is no value
+help: add an `else` branch with the value to use
+   |   else
+   |     …
+   |   end
+   = see `wid explain E0324`
+
+error[E0403]: `guard` needs a value that can fail, found `Int`
+  --> tests/ui/flow_errors.wid:27:13
+   |
+27 |   guard d = five else
+   |             ^^^^ this always succeeds
+   = note: guard works on optionals (`T?`), results ending in an `Error`, and `Bool` conditions
+help: assign the value directly, like `name = value`, and drop the `else` branch
+   = see `wid explain E0403`
+
+error[E0403]: `if e = …` needs an optional, found `Int`
+  --> tests/ui/flow_errors.wid:30:10
+   |
+30 |   if e = five
+   |          ^^^^ this always has a value
+help: to test a condition, compare with `==`; to assign, do it on its own line
+   = see `wid explain E0403`
+
+error[E0302]: 3 names but 2 values
+  --> tests/ui/flow_errors.wid:33:13
+   |
+33 |   a, b, c = pair
+   |             ^^^^ this produces `(Int, Int)`
+help: remove the extra names
+   = see `wid explain E0302`
+
+error[E0304]: cannot infer the type of an empty array
+  --> tests/ui/flow_errors.wid:35:14
+   |
+35 |   puts first([])
+   |              ^^ no elements to infer from
+help: give it a type, like `xs: [0]Int = []`, or use `[dynamic]Int.new`
+   = see `wid explain E0304`
+
+error[E0306]: `!` needs a `Bool`, found `Int`
+  --> tests/ui/flow_errors.wid:37:11
+   |
+37 |   flag = !count
+   |           ^^^^^ this has type `Int`
+   = note: only `nil` and `false` are falsy, so a number would always be true
+help: compare it explicitly
+   |   flag = count == 0
+   = see `wid explain E0306`
+
+error[E0306]: condition must be a `Bool`, found `Int`
+  --> tests/ui/flow_errors.wid:40:9
+   |
+40 |   until n
+   |         ^ this has type `Int`
+   = note: only `nil` and `false` are falsy, so a number would always be true
+help: compare it explicitly
+   |   until n != 0
+   = see `wid explain E0306`
+
+error: could not compile due to 9 errors

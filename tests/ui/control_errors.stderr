@@ -1,0 +1,33 @@
+error[E0405]: `return` cannot leave a `defer` body
+ --> tests/ui/control_errors.wid:3:5
+  |
+3 |     return if count == 0
+  |     ^^^^^^ deferred code must run to completion
+  = note: `defer` runs while the scope is already exiting, so it cannot jump elsewhere
+help: instead of `return`, wrap the rest of the deferred code in an `if`
+  = see `wid explain E0405`
+
+error[E0405]: `next` cannot leave a `defer` body
+ --> tests/ui/control_errors.wid:8:7
+  |
+8 |       next if i == 0
+  |       ^^^^ deferred code must run to completion
+  = note: `defer` runs while the scope is already exiting, so it cannot jump elsewhere
+help: instead of `next`, wrap the rest of the deferred code in an `if`
+  = see `wid explain E0405`
+
+warning[E0326]: unreachable code
+  --> tests/ui/control_errors.wid:15:3
+   |
+15 |   puts "never"
+   |   ^^^^^^^^^^^^ this never runs because the code above always leaves
+help: remove it, or move it before the statement that leaves
+
+warning[E0326]: unreachable code
+  --> tests/ui/control_errors.wid:23:5
+   |
+23 |     puts "after break"
+   |     ^^^^^^^^^^^^^^^^^^ this never runs because the code above always leaves
+help: remove it, or move it before the statement that leaves
+
+error: could not compile due to 2 errors and 2 warnings

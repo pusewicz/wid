@@ -1,0 +1,24 @@
+def make -> ^Int
+  p = alloc(Int)
+  p^ = 7
+  p
+end
+
+def main
+  x = make
+  puts x^
+  free(x)
+  if true
+    context.allocator = context.temp_allocator
+    y = make
+    puts y^
+  end
+  z = make
+  puts z^
+  free(z)
+  nums = alloc([]Int, 4)
+  nums[2] = 9
+  p nums
+  free(nums)
+  free_all(context.temp_allocator)
+end

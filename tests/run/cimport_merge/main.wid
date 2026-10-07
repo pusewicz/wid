@@ -1,0 +1,10 @@
+import "./counter", as: :ct
+
+def main
+  c = ct.fresh
+  puts ct.COUNTER_LIMIT
+  puts ct.counter_step(&c)
+  puts ct.run(&c, 5)
+  other: ct.Counter = ct.fresh
+  puts other.limit
+end

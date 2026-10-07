@@ -1,0 +1,32 @@
+error[E0908]: `-define:level=high` is not an integer
+ --> tests/ui/comptime_define.wid:1:9
+  |
+1 | LEVEL = config(:level, 1)
+  |         ^^^^^^^^^^^^^^^^^ `level` is read here, with a default of an integer
+help: pass an integer, like `-define:level=1`, or drop the flag to use the default
+  = see `wid explain E0908`
+
+error[E0908]: `-define:verbose=maybe` is not `true` or `false`
+ --> tests/ui/comptime_define.wid:2:11
+  |
+2 | VERBOSE = config(:verbose, false)
+  |           ^^^^^^^^^^^^^^^^^^^^^^^ `verbose` is read here, with a default of `true` or `false`
+help: pass `true` or `false`, like `-define:verbose=false`, or drop the flag to use the default
+  = see `wid explain E0908`
+
+error[E0908]: `-define:speed=fast` is not a number
+ --> tests/ui/comptime_define.wid:3:9
+  |
+3 | SPEED = config(:speed, 1.0)
+  |         ^^^^^^^^^^^^^^^^^^^ `speed` is read here, with a default of a number
+help: pass a number, like `-define:speed=1.0`, or drop the flag to use the default
+  = see `wid explain E0908`
+
+error[E0302]: `config` takes a name and a default value
+ --> tests/ui/comptime_define.wid:7:8
+  |
+7 |   puts config(:level)
+  |        ^^^^^^^^^^^^^^ like `config(:debug_draw, false)`
+  = see `wid explain E0302`
+
+error: could not compile due to 4 errors

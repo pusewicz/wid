@@ -1,0 +1,52 @@
+error[E0308]: a `RawPtr` may be nil, but `^Node` cannot be
+ --> tests/ui/conversion_errors.wid:9:10
+  |
+9 |   node = raw.to(^Node)
+  |          ^^^^^^^^^^^^^ converting to `^Node` would hide a nil pointer
+help: convert to `^Node?` and unwrap it, for example with `guard p = x.to(^Node?) else … end`
+  = see `wid explain E0308`
+
+error[E0308]: a `String` is not NUL-terminated
+  --> tests/ui/conversion_errors.wid:11:7
+   |
+11 |   c = "text".to(CString)
+   |       ^^^^^^^^^^^^^^^^^^ cannot reinterpret it as a `CString`
+help: `s.to_cstr` copies it into a NUL-terminated string on `context.temp_allocator`
+   = see `wid explain E0308`
+
+error[E0307]: cannot apply `+` to `[^]U8` and `String`
+  --> tests/ui/conversion_errors.wid:15:5
+   |
+15 |   p q + "one"
+   |     ^^^^^^^^^ unsupported pointer arithmetic
+   = note: a `[^]T` moves by whole elements with `p + n` and `p - n`, and `p - q` counts the elements between two of them
+   = see `wid explain E0307`
+
+error[E0304]: cannot tell which `first` to use as a proc
+  --> tests/ui/conversion_errors.wid:17:14
+   |
+17 |   f = method(:first)
+   |              ^^^^^^ `first` is generic: (T, T)
+   = note: a generic method has one instance per set of type arguments; the proc type picks one
+help: use it where a proc type is expected, for example `f: proc(Int, Int) -> Int = method(:first)`
+   = see `wid explain E0304`
+
+error[E0301]: `first` does not fit `proc(Int) -> Int`
+  --> tests/ui/conversion_errors.wid:18:32
+   |
+18 |   g: proc(Int) -> Int = method(:first)
+   |                                ^^^^^^ `first` takes (T, T)
+help: change the proc type to match the method's parameters
+   = see `wid explain E0301`
+
+error[E0307]: `||=` needs a `Bool` or an optional, but this is `Int`
+  --> tests/ui/conversion_errors.wid:21:3
+   |
+21 |   count ||= 4
+   |   ^^^^^ this has type `Int`
+   = note: `a ||= b` assigns `b` only when `a` is false or nil
+   = note: `||` itself only works on `Bool` and optional values
+help: for other types, write the condition out: `count = 4 if …`
+   = see `wid explain E0307`
+
+error: could not compile due to 6 errors

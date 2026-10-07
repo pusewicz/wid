@@ -1,0 +1,16 @@
+# raylib 6 (https://www.raylib.com): windows, input, 2D and 3D drawing,
+# textures, fonts and audio. Uses the system raylib through pkg-config
+# (`brew install raylib`, `apt install libraylib-dev`).
+#
+#   import "vendor:raylib", as: :rl
+#
+#   rl.init_window(800, 450, "hello")
+#   defer rl.close_window
+#
+# The `cimport` has no `as:`, so raylib's names are this package's names:
+# `InitWindow` is `rl.init_window`, `Color` stays `rl.Color`, and colors keep
+# their spelling (`rl.RED`). `Vector2`, `Vector3` and `Vector4` (and
+# `Quaternion`) are `[2]F32`, `[3]F32` and `[4]F32`, so Wid's array math and
+# swizzles work on them directly.
+cimport "raylib.h", pkg_config: "raylib",
+  types: {Vector2: [2]F32, Vector3: [3]F32, Vector4: [4]F32}

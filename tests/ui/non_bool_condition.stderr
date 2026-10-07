@@ -1,0 +1,11 @@
+error[E0306]: condition must be a `Bool`, found `Int`
+ --> tests/ui/non_bool_condition.wid:3:6
+  |
+3 |   if count
+  |      ^^^^^ this has type `Int`
+  = note: only `nil` and `false` are falsy, so a number would always be true
+help: compare it explicitly
+  |   if count != 0
+  = see `wid explain E0306`
+
+error: could not compile due to 1 error

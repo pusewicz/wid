@@ -1,0 +1,86 @@
+def show_int(n: Int) -> String = "int"
+def show_text(s: String) -> String = "text"
+overload :show, :show_int, :show_text
+
+def pick_i32(x: I32) -> I32 = x
+def pick_i64(x: I64) -> I64 = x
+overload :pick, :pick_i32, :pick_i64
+
+LIMIT = 3
+def first_of(xs: []$T) -> T = xs[0]
+def twice(n: Int) -> Int = n * 2
+def double(n: Int) -> Int = n + n
+overload :broken, :show_itn, :LIMIT, :first_of, :twice, :twice, :double
+
+struct Entity
+  id: Int
+  hp: Int
+
+  private def secret -> Int = 42
+end
+
+struct Badge
+  id: Int
+end
+
+struct Player
+  using entity: Entity
+  using badge: Badge
+end
+
+module Greeting
+  greeting: String
+
+  def greet -> String = "hi"
+end
+
+struct Robot
+  include Entity
+  include Greting
+end
+
+def main
+  puts show(1.5)
+  puts show(n: 1)
+  p pick(5)
+  e = Entity.new(1, 10)
+  p e.secret
+  pl = Player.new(Entity.new(1, 10), Badge.new(2))
+  p pl.id
+end
+
+enum Mode
+  on
+  off
+
+  level: Int
+end
+
+module Secretive
+  private def hidden -> Int = 1
+end
+
+struct Vault
+  include Secretive
+end
+
+def peek
+  v = Vault.new
+  p v.hidden
+end
+
+struct Lookup
+  def [](i: Int) -> Int = i
+end
+
+struct Sink
+  def []=(i: Int, v: Int)
+  end
+end
+
+def stores
+  l = Lookup.new
+  l[0] = 1
+  s = Sink.new
+  s[0] += 1
+end

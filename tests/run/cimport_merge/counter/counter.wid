@@ -1,0 +1,15 @@
+# A small C library: `cimport` without `as:` adds its names to this
+# package, next to the Wid helpers below.
+cimport "counter.h"
+
+def fresh -> Counter
+  c = Counter.new
+  counter_reset(&c)
+  c
+end
+
+def run(c: ^Counter, steps: Int) -> Int
+  last: C.int = 0
+  steps.times { last = counter_step(c) }
+  last.to(Int)
+end

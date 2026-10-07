@@ -1,0 +1,13 @@
+error[E0208]: this package has no `def main`
+ --> tests/ui/no_main.wid:1:1
+  |
+1 | def helper
+  | ^ the program starts at `def main`
+help: add an entry point
+  | 
+  | def main
+  |   puts "hello"
+  | end
+  = see `wid explain E0208`
+
+error: could not compile due to 1 error

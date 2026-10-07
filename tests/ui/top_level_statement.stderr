@@ -1,0 +1,17 @@
+error[E0108]: statements must be inside a method
+ --> tests/ui/top_level_statement.wid:1:1
+  |
+1 | puts "hello"
+  | ^^^^^^^^^^^^ this call is outside any `def`
+help: move it into `def main … end`, which runs when the program starts
+  = see `wid explain E0108`
+
+error[E0108]: statements must be inside a method
+ --> tests/ui/top_level_statement.wid:2:1
+  |
+2 | x = 1
+  | ^^^^^ this statement is outside any `def`
+help: move it into `def main … end`, which runs when the program starts
+  = see `wid explain E0108`
+
+error: could not compile due to 2 errors

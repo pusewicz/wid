@@ -1,0 +1,64 @@
+error[E0312]: constant `A` depends on itself
+ --> tests/ui/const_errors.wid:1:1
+  |
+1 | A = A + 1
+  | ^ its value refers back to it
+  = note: a constant's value is computed at compile time, so it cannot be defined in terms of itself
+help: give one of the constants a literal value
+  = see `wid explain E0312`
+
+error[E0312]: constant `B` depends on itself
+ --> tests/ui/const_errors.wid:2:1
+  |
+2 | B = C
+  | ^ its value needs `C`, which needs `B`
+3 | C = B
+  | - `C` is part of the cycle
+  = note: a constant's value is computed at compile time, so it cannot be defined in terms of itself
+help: give one of the constants a literal value
+  = see `wid explain E0312`
+
+error[E0327]: array length must be a compile-time integer
+ --> tests/ui/const_errors.wid:9:10
+  |
+8 |   n = 8
+  |   - `n` is a variable, so its value is only known at run time
+9 |   grid: [n]F32
+  |          ^ not a constant integer
+help: declare a package-level constant like `N = …` and write `[N]`, or allocate at run time with `alloc([]F32, n)`
+  = see `wid explain E0327`
+
+error[E0322]: `n` is a variable, not a type
+  --> tests/ui/const_errors.wid:10:6
+   |
+ 8 |   n = 8
+   |   - `n` is declared here
+...
+10 |   k: n = 4
+   |      ^ expected a type here
+help: to declare another `Int`, write its type
+   |   k: Int = 4
+   = see `wid explain E0322`
+
+error[E0322]: `distinct` types need a name
+  --> tests/ui/const_errors.wid:11:6
+   |
+11 |   x: distinct F64 = 1.0
+   |      ^^^^^^^^^^^^ a `distinct` type is declared once, as a constant
+   = note: each `distinct` declaration creates a new type, so an unnamed one could never match another
+help: declare it at package level, like `Meters = distinct F64`, then use `Meters`
+   = see `wid explain E0322`
+
+error[E0307]: cannot apply `+` to `Meters` and `F64`
+  --> tests/ui/const_errors.wid:14:7
+   |
+14 |   y = m + f
+   |       ^^^^^ `Meters` + `F64`
+   |       - `Meters`
+   |           - `F64`
+   = note: both sides of an arithmetic operator must have the same type
+help: convert it explicitly with `.to(Meters)`
+   |   y = m + f.to(Meters)
+   = see `wid explain E0307`
+
+error: could not compile due to 6 errors

@@ -1,0 +1,17 @@
+# miniaudio 0.11.25 (https://miniaud.io): audio playback and capture,
+# decoding (WAV, FLAC, MP3), mixing, effects and a high-level sound engine.
+# Vendored and public domain or MIT-0 (see LICENSE). On macOS it loads
+# CoreAudio at run time, so no frameworks need linking. `miniaudio.c` holds
+# the implementation.
+#
+#   import "vendor:miniaudio", as: :ma
+#
+#   engine: ma.Engine
+#   return unless ma.engine_init(nil, &engine) == ma.SUCCESS
+#   defer ma.engine_uninit(&engine)
+#   ma.engine_play_sound(&engine, "jump.wav", nil)
+#
+# Names drop the `ma_` prefix: `ma_sound_init_from_file` is
+# `ma.sound_init_from_file`, `ma_engine` is `ma.Engine` and `MA_SUCCESS` is
+# `ma.SUCCESS`.
+cimport "miniaudio.h", strip_prefix: "ma_", link: ["pthread", "m", "dl"]

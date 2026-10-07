@@ -1,0 +1,24 @@
+import "core:testing"
+
+@[test]
+def takes_nothing
+end
+
+@[test]
+def returns_a_value(t: ^testing.T) -> Int
+  1
+end
+
+struct Suite
+  @[test]
+  def inside_a_type(t: ^testing.T)
+  end
+end
+
+@[test]
+def fine(t: ^testing.T)
+  t.expect(true)
+end
+
+def main
+end

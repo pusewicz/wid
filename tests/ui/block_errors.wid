@@ -1,0 +1,20 @@
+def each(&blk: block(Int))
+  yield 1
+end
+
+def plain(x: Int) -> Int = x
+
+def recurse(&blk: block)
+  recurse { }
+  yield
+end
+
+def main
+  each
+  plain(1) { puts "x" }
+  n = 5
+  f = ->(x: Int) -> Int { x + n }
+  puts f(1)
+  each { |a, b| puts a + b }
+  yield 2
+end

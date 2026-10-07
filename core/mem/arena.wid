@@ -1,0 +1,142 @@
+# Growing arena: allocations bump a pointer through blocks taken from a
+# backing allocator. Single frees are ignored; `free_all` resets the arena.
+
+# The header in front of every arena block's storage.
+private struct ArenaBlock
+  prev: ^ArenaBlock?
+  cap: Int
+  used: Int
+end
+
+# Bytes reserved in front of a block's storage for its `ArenaBlock` header.
+private ARENA_HEADER = 32
+
+struct Arena
+  backing: Allocator
+  block_size: Int = 64 * 1024
+  current: ^ArenaBlock?
+  last: UInt
+  last_size: Int
+
+  # An empty arena that takes blocks of at least `block_size` bytes from
+  # `backing`.
+  def self.create(backing: Allocator = context.allocator, block_size: Int = 64 * 1024) -> Arena
+    Arena.new(backing: backing, block_size: block_size)
+  end
+
+  # The allocator that hands out memory from this arena.
+  def allocator -> Allocator
+    Allocator.new(proc: method(:arena_proc), data: &self)
+  end
+
+  # Returns zeroed memory, or nil when the backing allocator is out of memory.
+  def push(size: Int, align: Int, loc: Location) -> RawPtr
+    a = align < 1 ? 1 : align
+    if block = @current
+      base = block.to(UInt) + ARENA_HEADER.to(UInt)
+      start = align_forward(base + block.used.to(UInt), a)
+      if start + size.to(UInt) <= base + block.cap.to(UInt)
+        block.used = (start - base).to(Int) + size
+        return take(start, size)
+      end
+    end
+    cap = @block_size
+    while cap < size + a
+      cap *= 2
+    end
+    raw = @backing.proc(@backing.data, :alloc, ARENA_HEADER + cap, 16, nil, 0, loc)
+    guard fresh = raw.to(^ArenaBlock?) else
+      return nil
+    end
+    fresh.prev = @current
+    fresh.cap = cap
+    @current = fresh
+    base = fresh.to(UInt) + ARENA_HEADER.to(UInt)
+    start = align_forward(base, a)
+    fresh.used = (start - base).to(Int) + size
+    take(start, size)
+  end
+
+  # Grows or shrinks the newest allocation in place when it can, otherwise
+  # copies `old` into a fresh allocation.
+  def resize(old: RawPtr, old_size: Int, size: Int, align: Int, loc: Location) -> RawPtr
+    if old != nil && old.to(UInt) == @last
+      if block = @current
+        base = block.to(UInt) + ARENA_HEADER.to(UInt)
+        start = old.to(UInt)
+        if start + size.to(UInt) <= base + block.cap.to(UInt)
+          block.used = (start - base).to(Int) + size
+          zero((start + old_size.to(UInt)).to(RawPtr), size - old_size) if size > old_size
+          @last_size = size
+          return old
+        end
+      end
+    end
+    fresh = push(size, align, loc)
+    if fresh != nil && old != nil
+      copy(fresh, old, old_size < size ? old_size : size)
+    end
+    fresh
+  end
+
+  # Releases every allocation but keeps the newest block for reuse.
+  def free_all(loc: Location = caller_location)
+    guard block = @current else
+      return
+    end
+    loop do
+      guard prev = block.prev else
+        break
+      end
+      block.prev = prev.prev
+      @backing.proc(@backing.data, :free, 0, 0, prev, ARENA_HEADER + prev.cap, loc)
+    end
+    block.used = 0
+    @last = 0
+    @last_size = 0
+  end
+
+  # Returns every block to the backing allocator.
+  def destroy(loc: Location = caller_location)
+    loop do
+      guard block = @current else
+        break
+      end
+      @current = block.prev
+      @backing.proc(@backing.data, :free, 0, 0, block, ARENA_HEADER + block.cap, loc)
+    end
+    @last = 0
+    @last_size = 0
+  end
+
+  # Bytes in use in the newest block.
+  def used -> Int
+    guard block = @current else
+      return 0
+    end
+    block.used
+  end
+
+  private def take(start: UInt, size: Int) -> RawPtr
+    p = start.to(RawPtr)
+    zero(p, size)
+    @last = start
+    @last_size = size
+    p
+  end
+end
+
+@[c]
+private def arena_proc(data: RawPtr, mode: AllocMode, size: Int, align: Int, old: RawPtr, old_size: Int, loc: Location) -> RawPtr
+  guard arena = data.to(^Arena?) else
+    return nil
+  end
+  case mode
+  when :alloc then arena.push(size, align, loc)
+  when :free then nil
+  when :free_all
+    arena.free_all(loc)
+    nil
+  when :resize then arena.resize(old, old_size, size, align, loc)
+  end
+end

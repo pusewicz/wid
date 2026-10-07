@@ -1,0 +1,11 @@
+error[E0324]: `sign` must return `Int`
+ --> tests/ui/missing_return.wid:2:3
+  |
+1 | def sign(n: Int) -> Int
+  | ----------------------- declared to return `Int` here
+2 |   if n > 0
+  |   ^^^^^^^^ the method can reach its end without a value
+help: make the last expression the value to return, or add an explicit `return`
+  = see `wid explain E0324`
+
+error: could not compile due to 1 error

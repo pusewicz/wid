@@ -1,0 +1,16 @@
+enum Dir
+  north
+end
+
+def main
+  a = 1.5f
+  b: Int = 0b102
+  c: Int = 0x
+  puts "\q"
+  d: Dir = :"north"
+  hp = 3
+  puts "hp: #{hp"
+  puts "unclosed
+  e = 2 ` 3
+  puts a, b, c, d, e
+end

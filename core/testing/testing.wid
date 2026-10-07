@@ -1,0 +1,112 @@
+# core:testing: what `@[test]` methods receive.
+#
+#   import "core:testing"
+#
+#   @[test]
+#   def adds_up(t: ^testing.T)
+#     t.expect_eq(2 + 2, 4)
+#   end
+#
+# `wid test` builds the package with its `_test.wid` files and runs each test
+# in its own process on a fresh tracking allocator. A failed expectation
+# records the failure and the test keeps going; a panic ends the test; memory
+# a test allocates with `context.allocator` and never frees fails it, with the
+# place each leaked block was allocated.
+
+struct T
+  name: String
+  failures: Int
+
+  # Records a failure unless `ok`.
+  def expect(ok: Bool, message: String = "expectation failed", loc: Location = caller_location)
+    fail(message, loc: loc) unless ok
+  end
+
+  # Records a failure unless `got == want`, showing both values.
+  def expect_eq(got: $V, want: V, loc: Location = caller_location)
+    fail("expected #{want.inspect}, got #{got.inspect}", loc: loc) unless got == want
+  end
+
+  # Records a failure when `got == unwanted`.
+  def expect_ne(got: $V, unwanted: V, loc: Location = caller_location)
+    fail("expected anything but #{unwanted.inspect}", loc: loc) if got == unwanted
+  end
+
+  # Records a failure unless `got` is nil.
+  def expect_nil(got: $V, loc: Location = caller_location)
+    fail("expected nil, got #{got.inspect}", loc: loc) unless got.nil?
+  end
+
+  # Records a failure at `loc` and keeps running the test.
+  def fail(message: String, loc: Location = caller_location)
+    @failures += 1
+    report("failure", loc, message)
+  end
+
+  # Returns true once a failure was recorded.
+  def failed? -> Bool = @failures > 0
+
+  # Prints a message that `wid test` shows with the test's output.
+  def log(message: String, loc: Location = caller_location)
+    report("log", loc, message)
+  end
+end
+
+# Runs one test on a fresh tracking allocator, reports every block it leaked
+# as a failure, and returns true when the test passed. The `main` of a test
+# build calls this for the test `wid test` asks for.
+def run_test(name: String, body: proc(^T)) -> Bool
+  tracker = tracker_new(context.allocator)
+  t = T.new(name: name)
+  run_with(&t, body, tracker_allocator(tracker))
+  leaks = tracker_leaks(tracker)
+  for i in 0...leaks
+    size = tracker_leak_size(tracker, i)
+    t.fail("leaked #{size} bytes allocated here", loc: tracker_leak_location(tracker, i))
+  end
+  tracker_delete(tracker)
+  !t.failed?
+end
+
+private def run_with(t: ^T, body: proc(^T), allocator: Allocator)
+  context.allocator = allocator
+  body(t)
+end
+
+# Writes one record for `wid test` to standard error:
+# `wid-test <kind> <file>:<line>:<column> <length>` and the message.
+private def report(kind: String, loc: Location, message: String)
+  write_stderr("\nwid-test #{kind} #{loc.file.to(String)}:#{loc.line}:#{loc.column} #{message.size}\n#{message}\n")
+end
+
+@[extern("wid_os_write_stderr")]
+private def write_stderr(s: String)
+end
+
+# The tracking allocator lives in the runtime; `core:mem` wraps the same
+# functions as `mem.Tracker`. Using them directly keeps `core:testing` free of
+# imports, so every core package can be tested with it.
+
+@[extern("wid_tracker_new")]
+private def tracker_new(backing: Allocator) -> RawPtr
+end
+
+@[extern("wid_tracker_delete")]
+private def tracker_delete(tracker: RawPtr)
+end
+
+@[extern("wid_tracker_allocator")]
+private def tracker_allocator(tracker: RawPtr) -> Allocator
+end
+
+@[extern("wid_tracker_leaks")]
+private def tracker_leaks(tracker: RawPtr) -> Int
+end
+
+@[extern("wid_tracker_leak_size")]
+private def tracker_leak_size(tracker: RawPtr, i: Int) -> Int
+end
+
+@[extern("wid_tracker_leak_location")]
+private def tracker_leak_location(tracker: RawPtr, i: Int) -> Location
+end

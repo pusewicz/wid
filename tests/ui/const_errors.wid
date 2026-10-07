@@ -1,0 +1,16 @@
+A = A + 1
+B = C
+C = B
+
+Meters = distinct F64
+
+def main
+  n = 8
+  grid: [n]F32
+  k: n = 4
+  x: distinct F64 = 1.0
+  m: Meters = 1.5
+  f: F64 = 2.0
+  y = m + f
+  puts grid[0], k, x, y
+end

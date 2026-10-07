@@ -1,0 +1,42 @@
+error[E0315]: `Pool` takes a type for `T`, but `64` is a value
+ --> tests/ui/generic_kinds.wid:8:11
+  |
+1 | struct Pool($T, $N: Int)
+  |             -- `T` is a type parameter
+...
+8 |   a: Pool(64, 8) = {}
+  |           ^^ expected a type like `F32` or `Vec2`
+  = see `wid explain E0315`
+
+error[E0315]: `Pool` takes a constant `Int` for `N`, but `F32` is a type
+ --> tests/ui/generic_kinds.wid:9:16
+  |
+1 | struct Pool($T, $N: Int)
+  |                 ------- `N` is a value parameter
+...
+9 |   b: Pool(F32, F32) = {}
+  |                ^^^ expected a constant `Int`, like `4`
+  = see `wid explain E0315`
+
+error[E0315]: `Pool` takes 2 generic arguments, but 1 was given
+  --> tests/ui/generic_kinds.wid:10:6
+   |
+ 1 | struct Pool($T, $N: Int)
+   |        ---- `Pool` is declared here
+...
+10 |   c: Pool(F32) = {}
+   |      ^^^^^^^^^ write it like `Pool(T, N)`
+   = note: `N` is a constant `Int`
+   = see `wid explain E0315`
+
+error[E0315]: `Maybe` takes 1 generic argument, but 2 were given
+  --> tests/ui/generic_kinds.wid:11:6
+   |
+ 5 | union Maybe($T) = T | Int
+   |       ----- `Maybe` is declared here
+...
+11 |   d: Maybe(F32, F32) = nil
+   |      ^^^^^^^^^^^^^^^ write it like `Maybe(T)`
+   = see `wid explain E0315`
+
+error: could not compile due to 4 errors

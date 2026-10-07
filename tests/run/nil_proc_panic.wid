@@ -1,0 +1,4 @@
+def main
+  f: proc(Int) -> Int = nil
+  puts f(1)
+end

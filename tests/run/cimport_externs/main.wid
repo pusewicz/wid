@@ -1,0 +1,14 @@
+cimport "stdio.h", as: :cio
+
+@[extern("puts")]
+def c_puts(s: CString) -> C.int end
+
+@[extern("strlen")]
+def c_strlen(s: CString) -> C.size_t end
+
+def main
+  c_puts("hello from puts")
+  cio.printf("%s %d %.2f\n", "printf", 7, 0.5)
+  cio.fflush(nil)
+  puts c_strlen("four")
+end

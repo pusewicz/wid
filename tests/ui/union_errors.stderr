@@ -1,0 +1,19 @@
+error[E0313]: `case` does not handle B
+  --> tests/ui/union_errors.wid:12:8
+   |
+12 |   case v
+   |        ^ `AB` has 2 variants
+help: add `when B` or an `else` branch
+   = see `wid explain E0313`
+
+error[E0328]: unknown attribute `@[expotr]`
+  --> tests/ui/union_errors.wid:17:3
+   |
+17 | @[expotr]
+   |   ^^^^^^ not an attribute Wid knows
+   = note: method attributes: c, export, extern, no_bounds_check, test
+help: did you mean `export`?
+   | @[export]
+   = see `wid explain E0328`
+
+error: could not compile due to 2 errors

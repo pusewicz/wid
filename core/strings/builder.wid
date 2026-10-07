@@ -1,0 +1,60 @@
+# Builder: a growable byte buffer for building strings piece by piece.
+
+struct Builder
+  buf: [dynamic]U8
+
+  # An empty builder whose buffer grows with `allocator`.
+  def self.create(allocator: Allocator = context.allocator) -> Builder
+    Builder.new(buf: [dynamic]U8.new(allocator: allocator))
+  end
+
+  # Appends a string.
+  def write(s: String)
+    @buf.concat(s.to([]U8))
+  end
+
+  # Appends one byte.
+  def write_byte(b: U8)
+    @buf << b
+  end
+
+  # Appends a rune, encoded as UTF-8.
+  def write_rune(r: Rune)
+    c = r.to(Int)
+    if c < 0x80
+      @buf << c.to(U8)
+    elsif c < 0x800
+      @buf << (0xC0 | (c >> 6)).to(U8)
+      @buf << (0x80 | (c & 0x3F)).to(U8)
+    elsif c < 0x10000
+      @buf << (0xE0 | (c >> 12)).to(U8)
+      @buf << (0x80 | ((c >> 6) & 0x3F)).to(U8)
+      @buf << (0x80 | (c & 0x3F)).to(U8)
+    else
+      @buf << (0xF0 | (c >> 18)).to(U8)
+      @buf << (0x80 | ((c >> 12) & 0x3F)).to(U8)
+      @buf << (0x80 | ((c >> 6) & 0x3F)).to(U8)
+      @buf << (0x80 | (c & 0x3F)).to(U8)
+    end
+  end
+
+  # The text built so far. It points into the builder, so it changes when
+  # the builder grows; copy it with `clone` to keep it.
+  def string -> String = @buf.to(String)
+
+  # The number of bytes written.
+  def size -> Int = @buf.size
+
+  # Returns true when nothing has been written.
+  def empty? -> Bool = @buf.empty?
+
+  # Forgets the text but keeps the buffer.
+  def clear
+    @buf.clear
+  end
+
+  # Releases the buffer.
+  def destroy
+    free(@buf)
+  end
+end

@@ -1,0 +1,233 @@
+struct Vec2
+  x: F32
+  y: F32
+
+  def +(o: Vec2) -> Vec2 = Vec2.new(@x + o.x, @y + o.y)
+  def -(o: Vec2) -> Vec2 = Vec2.new(@x - o.x, @y - o.y)
+  def - -> Vec2 = Vec2.new(-@x, -@y)
+  def scaled(k: F32) -> Vec2 = Vec2.new(@x * k, @y * k)
+  def dot(o: Vec2) -> F32 = @x * o.x + @y * o.y
+
+  def times_vec(o: Vec2) -> Vec2 = Vec2.new(@x * o.x, @y * o.y)
+  overload :*, :scaled, :times_vec
+end
+
+struct Transform
+  origin: Vec2
+  scale: F32 = 1.0
+
+  def apply(p: Vec2) -> Vec2 = p * @scale + @origin
+  def compose(t: Transform) -> Transform = Transform.new(apply(t.origin), @scale * t.scale)
+  overload :*, :apply, :compose
+end
+
+def scale_transform(s: F32, t: Transform) -> Transform = Transform.new(t.origin * s, t.scale * s)
+def scale_vec(s: F32, v: Vec2) -> Vec2 = v * s
+overload :*, :scale_transform, :scale_vec
+
+overload :clamp, :clamp_int, :clamp_f32
+def clamp_int(x: Int) -> Int = x.clamp(0, 10)
+def clamp_f32(x: F32) -> F32 = x.clamp(0.0, 1.0)
+
+def describe(n: Int) -> String = "int #{n}"
+def describe_text(s: String) -> String = "text #{s}"
+def describe_vec(v: Vec2) -> String = "vec #{v.x},#{v.y}"
+overload :show, :describe, :describe_text, :describe_vec
+
+struct Cell($T)
+  value: T
+
+  def put(v: T) -> T
+    @value = v
+    v
+  end
+  def put_text(s: String) -> String = "#{s}!"
+  overload :set, :put, :put_text
+end
+
+struct Entity
+  pos: Vec2
+  hp: Int = 10
+
+  def hurt(n: Int)
+    @hp -= n
+  end
+
+  def heal(n: Int)
+    @hp += n
+    self.cap_hp
+  end
+
+  def alive? -> Bool = @hp > 0
+
+  private def cap_hp
+    @hp = 10 if @hp > 10
+  end
+end
+
+struct Named
+  name: String
+
+  def greet -> String = "I am #{@name}"
+end
+
+struct Player
+  using entity: Entity
+  using tag: ^Named
+  score: Int
+
+  def move(d: Vec2)
+    @pos = @pos + d
+  end
+
+  def summary -> String = "#{greet} at #{@pos.x},#{@pos.y} with #{@hp} hp"
+end
+
+module Counting
+  def bump(by: Int = 1)
+    @count += by
+    log("bumped to #{@count}")
+  end
+
+  def doubled -> Int = @count * 2
+
+  private def log(msg: String)
+    puts "[#{self_name}] #{msg}"
+  end
+end
+
+module Labeled
+  include Counting
+
+  def self_name -> String = @label
+end
+
+struct Clicker
+  label: String
+  count: Int
+
+  include Labeled
+
+  def click
+    bump
+    bump(2)
+  end
+end
+
+enum Dir
+  north
+  south
+
+  include Flipping
+end
+
+module Flipping
+  def flipped -> Self = self == Self.north ? Self.south : Self.north
+end
+
+struct Grid
+  cells: [4]Int
+  reads: Int
+
+  def [](i: Int) -> Int
+    @reads += 1
+    @cells[i]
+  end
+
+  def []=(i: Int, v: Int)
+    @cells[i] = v
+  end
+end
+
+def pick(n: Int) -> Int
+  puts "pick #{n}"
+  n
+end
+
+module Zeroed
+  def self.blank -> Self = Self.new
+end
+
+struct Mask
+  bits: U8
+  include Zeroed
+
+  def ~ -> Mask = Mask.new(~@bits)
+end
+
+module Framed
+  def framed -> String = "<#{self}>"
+end
+
+extend Int, String
+  include Framed
+end
+
+def main
+  a = Vec2.new(1.0, 2.0)
+  b = Vec2.new(3.0, 4.0)
+  p a * 2.0
+  p a * b
+  p -a
+  p 2.0 * a
+  p (a + b).dot(b)
+
+  t = Transform.new(Vec2.new(10.0, 0.0), 2.0)
+  p t * a
+  p (t * t).origin
+  u = 0.5 * t
+  p u.scale
+  s: F32 = 3.0
+  p (s * t).scale
+
+  p clamp(42)
+  p clamp(2.5)
+  p clamp(-3)
+  puts show(7)
+  puts show("hi")
+  puts show(a)
+
+  cell = Cell(F32).new(1.0)
+  p cell.set(2.5)
+  puts cell.set("hey")
+  p cell.value
+
+  named = Named.new("Ada")
+  pl = Player.new(Entity.new(Vec2.new(1.0, 1.0)), &named, 0)
+  pl.hurt(3)
+  pl.move(Vec2.new(1.0, 0.5))
+  puts pl.summary
+  puts pl.alive?
+  pl.hp = 1
+  pl.name = "Grace"
+  puts pl.greet
+  puts named.name
+  p pl.entity.hp
+  pl.heal(20)
+  p pl.hp
+
+  c = Clicker.new("button", 0)
+  c.click
+  c.bump
+  p c.doubled
+  p Dir.north.flipped
+  p Dir.south.flipped
+  puts 5.framed
+  puts "x".framed
+
+  v = Vec2.new(1.0, 2.0)
+  v += Vec2.new(1.0, 1.0)
+  v *= 2.0
+  v *= Vec2.new(0.5, 1.0)
+  p v
+  g = Grid.new
+  g[1] = 5
+  g[pick(1)] += 10
+  g[2] -= 1
+  p g[1]
+  p g
+  gp = &g
+  gp[3] = 9
+  p g.cells
+  p ~Mask.blank
+end

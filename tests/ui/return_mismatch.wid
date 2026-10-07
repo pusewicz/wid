@@ -1,0 +1,13 @@
+def log(msg: String)
+  puts msg
+  return 1
+end
+
+def count -> Int
+  return
+end
+
+def main
+  log("x")
+  puts count
+end

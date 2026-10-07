@@ -1,0 +1,9 @@
+import "."
+import "./phyiscs"
+import "./physics"
+
+def main
+  s: physics.Secret = physics.make
+  puts s.v + physics.SECRET + physics.hidden
+  puts phyiscs.gravity
+end

@@ -1,0 +1,57 @@
+error[E0107]: cannot assign to this expression
+  --> tests/ui/assign_errors.wid:12:3
+   |
+12 |   width * height = 12
+   |   ^^^^^^^^^^^^^^ not a variable, field or index
+   |                  - assignment here
+   = note: only variables, fields (`a.b`), indexes (`a[i]`) and dereferences (`p^`) can be assigned
+   = see `wid explain E0107`
+
+error[E0107]: cannot assign to this expression
+  --> tests/ui/assign_errors.wid:13:3
+   |
+13 |   size() = 4
+   |   ^^^^^^ this is a method call
+   |          - assignment here
+   = note: a call returns a temporary value, so there is nothing to store into
+   = see `wid explain E0107`
+
+error[E0107]: cannot assign to this expression
+  --> tests/ui/assign_errors.wid:14:3
+   |
+14 |   LIMIT = 5
+   |   ^^^^^ this is a constant
+   |         - assignment here
+   = note: constants get their value once, where they are declared
+help: use a variable instead, like `limit`
+   |   limit = 5
+   = see `wid explain E0107`
+
+error[E0107]: cannot assign to this expression
+  --> tests/ui/assign_errors.wid:16:3
+   |
+16 |   p&.x = 3
+   |   ^^^^ `&.` reads a field only when the value is not nil
+   |        - assignment here
+help: unwrap the optional first, like `if v = opt` … `v.field = value` … `end`
+   = see `wid explain E0107`
+
+error[E0107]: `+=` updates one target at a time
+  --> tests/ui/assign_errors.wid:19:3
+   |
+19 |   a, b += 1
+   |   ^^^^^^^^^ 2 targets
+help: write `a += 1` and `b += 1` as separate statements
+   = see `wid explain E0107`
+
+error[E0107]: `=` assigns; a condition compares with `==`
+  --> tests/ui/assign_errors.wid:20:12
+   |
+20 |   if a + 1 = 2
+   |            ^ this is an assignment
+   = note: `if name = value` binds a name to an optional's value, but the left side here is not a name
+help: compare with `==`
+   |   if a + 1 == 2
+   = see `wid explain E0107`
+
+error: could not compile due to 6 errors

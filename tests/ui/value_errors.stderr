@@ -1,0 +1,60 @@
+error[E0323]: `---` is not a value
+ --> tests/ui/value_errors.wid:6:7
+  |
+6 |   x = ---
+  |       ^^^ only allowed as the initial value of a declaration
+help: declare the variable with its type and opt out of zeroing: `buf: [256]U8 = ---`
+  = see `wid explain E0323`
+
+error[E0323]: `[4]F32` is a type, not a value
+ --> tests/ui/value_errors.wid:7:7
+  |
+7 |   t = [4]F32
+  |       ^^^^^^ a type cannot be used as a value here
+help: make a value of it with `{}` where `[4]F32` is expected, or `[4]F32.new` for containers
+  = see `wid explain E0323`
+
+error[E0302]: Wid has no argument spreading
+ --> tests/ui/value_errors.wid:9:12
+  |
+9 |   p total(*nums)
+  |            ^^^^ `*` cannot spread a collection into arguments
+  = note: every method takes a fixed number of arguments
+help: pass `nums` as one argument to a parameter of type `[]T`, or pass the elements one by one
+  = see `wid explain E0302`
+
+error[E0301]: a range loop binds one variable
+  --> tests/ui/value_errors.wid:10:7
+   |
+10 |   for i, j in 0...3
+   |       ^^^^ the number is the only value a range gives
+help: write `for i in a...b`; `for x, i in xs` gives indexes for arrays and slices
+   = see `wid explain E0301`
+
+error[E0321]: a range has no elements to bind by reference
+  --> tests/ui/value_errors.wid:13:8
+   |
+13 |   for &k in 0...3
+   |        ^ each number is a fresh value
+help: bind the number by value
+   |   for k in 0...3
+   = see `wid explain E0321`
+
+error[E0107]: cannot assign to this expression
+  --> tests/ui/value_errors.wid:16:3
+   |
+16 |   total(nums) = 3
+   |   ^^^^^^^^^^^ this is a method call
+   |               - assignment here
+   = note: a call returns a temporary value, so there is nothing to store into
+   = see `wid explain E0107`
+
+error[E0105]: `until` cannot bind a value
+  --> tests/ui/value_errors.wid:18:9
+   |
+18 |   until line = next_line
+   |         ^^^^^^^^^^^^^^^^ this binding would only exist when the value is nil
+help: loop with `while v = maybe … end` instead
+   = see `wid explain E0105`
+
+error: could not compile due to 7 errors

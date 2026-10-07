@@ -1,0 +1,52 @@
+error[E0325]: `recurse` takes a block and calls itself
+ --> tests/ui/block_errors.wid:8:3
+  |
+8 |   recurse { }
+  |   ^^^^^^^ methods with blocks are inlined at each call, so they cannot recurse
+help: move the recursion into a helper method without a block, or loop instead
+  = see `wid explain E0325`
+
+error[E0319]: `each` needs a block
+  --> tests/ui/block_errors.wid:13:3
+   |
+13 |   each
+   |   ^^^^ it yields Int
+help: pass a block
+   |   each do |x|
+   |     # …
+   |   end
+   = see `wid explain E0319`
+
+error[E0319]: `plain` does not take a block
+  --> tests/ui/block_errors.wid:14:12
+   |
+14 |   plain(1) { puts "x" }
+   |            ^^^^^^^^^^^^ this block is never called
+help: methods receive blocks by declaring `&blk: block(…)` and calling `yield`
+   = see `wid explain E0319`
+
+error[E0318]: this proc uses `n` from the code around it
+  --> tests/ui/block_errors.wid:16:31
+   |
+16 |   f = ->(x: Int) -> Int { x + n }
+   |                               ^ procs cannot capture local variables
+   = note: a proc is a plain function pointer; it has nowhere to keep `n` alive
+help: pass the value as a parameter, use a block (`do |x| … end`) when the callee yields, or store it in a struct the proc receives
+   = see `wid explain E0318`
+
+error[E0319]: block parameter `b` receives nothing
+  --> tests/ui/block_errors.wid:18:14
+   |
+18 |   each { |a, b| puts a + b }
+   |              ^ the method yields 1 value
+   = see `wid explain E0319`
+
+error[E0320]: `main` has no block parameter to `yield` to
+  --> tests/ui/block_errors.wid:19:3
+   |
+19 |   yield 2
+   |   ^^^^^^^ nothing to yield to
+help: `main` takes no block; call a method that takes a block, or loop here instead
+   = see `wid explain E0320`
+
+error: could not compile due to 6 errors

@@ -1,0 +1,6 @@
+png: true, [80, 78, 71]
+2x2, 4 channels, pixel 1: 64 80 96 112
+rect 1: packed true at 0,34
+rect 2: packed true at 40,34
+rect 3: packed true at 0,0
+all packed: true

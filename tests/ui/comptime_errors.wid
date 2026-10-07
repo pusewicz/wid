@@ -1,0 +1,62 @@
+struct Node
+  value: Int
+end
+
+def pick(n: Int) -> Int
+  xs = [1, 2, 3]
+  xs[n]
+end
+
+def shout(msg: String) -> Int
+  panic("bad #{msg}")
+end
+
+def deep(n: Int) -> Int = deep(n + 1)
+
+def leak -> ^Node
+  alloc(Node)
+end
+
+def names -> [dynamic]String
+  [dynamic]String.new
+end
+
+def double(x: Int) -> Int = x * 2
+
+@[extern("c_cosine")]
+def cosine(x: F64) -> F64
+end
+
+def wave -> F64 = cosine(0.5)
+
+def field_count(t: Type) -> Int
+  t.fields.size
+end
+
+OUT_OF_BOUNDS = comptime pick(7)
+PANICS = comptime shout("news")
+TOO_DEEP = comptime deep(0)
+POINTER = comptime leak
+DYNAMIC = comptime names
+NEEDS_COMPTIME = double(4)
+CALLS_C = comptime wave
+MISSING = embed("zzz_nothing.bin")
+
+comptime if double(1)
+  def never -> Int = 1
+end
+
+def main
+  y = 5
+  z = comptime y + 1
+  puts z
+  traced = comptime do
+    puts "tracing"
+    3
+  end
+  puts traced
+  puts field_count(Node)
+  comptime if v = OUT_OF_BOUNDS
+    puts v
+  end
+end

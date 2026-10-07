@@ -1,0 +1,13 @@
+# SDL 3 (https://libsdl.org): windows, input, gamepads, audio, 2D rendering
+# and the GPU API. Uses the system SDL3 through pkg-config
+# (`brew install sdl3`, `apt install libsdl3-dev`).
+#
+#   import "vendor:sdl3", as: :sdl
+#
+#   return unless sdl.init(sdl.INIT_VIDEO)
+#   defer sdl.quit
+#   window = sdl.create_window("hello", 800, 450, 0)
+#
+# Names drop the `SDL_` prefix: `SDL_CreateWindow` is `sdl.create_window`,
+# `SDL_Event` is `sdl.Event` and `SDL_INIT_VIDEO` is `sdl.INIT_VIDEO`.
+cimport "SDL3/SDL.h", strip_prefix: "SDL_", pkg_config: "sdl3"

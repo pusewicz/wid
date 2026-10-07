@@ -1,0 +1,48 @@
+# core:mem: allocators and raw memory.
+#
+# Every allocator here is a plain `Allocator` value (a C-ABI procedure plus a
+# data pointer), so it can go anywhere one is expected: `alloc(T, allocator:)`,
+# `[dynamic]T.new(allocator:)` or `context.allocator = arena.allocator`. The
+# struct behind an allocator must stay where it is while the allocator is in
+# use: `allocator` captures its address.
+
+# The process-wide heap allocator, backed by malloc.
+@[extern("wid_heap_allocator")]
+def heap_allocator -> Allocator
+end
+
+# The calling thread's temporary arena; `free_all` it once per frame.
+@[extern("wid_temp_allocator")]
+def temp_allocator -> Allocator
+end
+
+# Copies `n` bytes from `src` to `dst`. The ranges may overlap.
+@[extern("wid_mem_copy")]
+def copy(dst: RawPtr, src: RawPtr, n: Int)
+end
+
+# Sets `n` bytes at `dst` to `byte`.
+@[extern("wid_mem_set")]
+def set(dst: RawPtr, byte: U8, n: Int)
+end
+
+# Compares `n` bytes: negative, zero or positive, like C's `memcmp`.
+@[extern("wid_mem_compare")]
+def compare(a: RawPtr, b: RawPtr, n: Int) -> Int
+end
+
+# Sets `n` bytes at `dst` to zero.
+def zero(dst: RawPtr, n: Int)
+  set(dst, 0, n)
+end
+
+# Rounds `address` up to a multiple of `align`, which must be a power of two.
+def align_forward(address: UInt, align: Int) -> UInt
+  a = align.to(UInt)
+  (address + a - 1) & ~(a - 1)
+end
+
+# Kilobytes, megabytes and gigabytes, for sizing arenas: `4 * mem.MEGABYTE`.
+KILOBYTE = 1024
+MEGABYTE = 1024 * 1024
+GIGABYTE = 1024 * 1024 * 1024

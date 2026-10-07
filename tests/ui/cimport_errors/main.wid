@@ -1,0 +1,16 @@
+cimport "lib.h", as: :lib, strip_prefix: "lib_", types: {lib_Pair: [3]F32, lib_Pare: [2]F32}
+cimport "missing.h", as: :gone
+cimport "lib.h", as: :again, strip: "lib_", rename: :camel
+
+def local(fmt: CString, ...)
+end
+
+def main
+  puts lib.TWICE(2)
+  lib.log(1.0)
+  handle: lib.Handle
+  lib.print("%s\n", "text".to_s)
+  h = lib.open
+  flags = lib.Flags.new(count: 1)
+  p handle, h, flags.on
+end

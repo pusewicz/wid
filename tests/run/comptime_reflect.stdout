@@ -1,0 +1,6 @@
+Ball (16 bytes, align 4): pos: [2]F32 @0 radius: F32 @8 alive: Bool @12
+area() -> F32; grow(F32, Int) -> Void; self.unit() -> Ball; 
+loud?() -> Bool; 
+1
+Ball
+16

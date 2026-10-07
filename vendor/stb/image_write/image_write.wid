@@ -1,0 +1,11 @@
+# stb_image_write 1.16 (https://github.com/nothings/stb): encodes PNG, BMP,
+# TGA, JPEG and HDR images to files or through a callback. Vendored and
+# public domain or MIT (see ../LICENSE).
+#
+#   import "vendor:stb/image_write", as: :stbiw
+#
+#   stbiw.write_png("out.png", w, h, 4, pixels, w * 4)
+#
+# Names drop the `stbi_` prefix: `stbi_write_png_to_func` is
+# `stbiw.write_png_to_func`, which takes an `@[c]` proc.
+cimport "stb_image_write.h", strip_prefix: "stbi_", implement: "STB_IMAGE_WRITE_IMPLEMENTATION"

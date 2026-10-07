@@ -1,0 +1,12 @@
+[package]
+name = "wid_cimport"
+description = "libclang-based C header importer for the Wid compiler"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+clang-sys = { version = "1.9.1", features = ["runtime", "clang_20_0"] }
+
+[lints]
+workspace = true

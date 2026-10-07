@@ -1,0 +1,52 @@
+def classify(n: Int) -> String
+  if n < 0
+    "negative"
+  elsif n == 0
+    "zero"
+  else
+    "positive"
+  end
+end
+
+def main
+  puts classify(-5)
+  puts classify(0)
+  puts classify(42)
+
+  i = 0
+  while i < 3
+    print i
+    i += 1
+  end
+  puts
+
+  until i == 0
+    i -= 1
+  end
+  puts i
+
+  for j in 0...5
+    next if j == 1
+    break if j == 4
+    print j
+  end
+  puts
+
+  for k in 1..3
+    print k
+  end
+  puts
+
+  n = 0
+  loop do
+    n += 1
+    break if n == 10
+  end
+  puts n
+
+  label = n > 5 ? "big" : "small"
+  puts label
+  puts "unless works" unless n == 0
+  value = if n > 100 then 1 else 2 end
+  puts value
+end

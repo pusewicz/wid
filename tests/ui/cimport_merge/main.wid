@@ -1,0 +1,9 @@
+cimport "tally.h"
+
+def tally_fresh -> Int = 0
+
+def main
+  t = Tally.new(total: 1)
+  puts t.total
+  puts tally_twice(4)
+end

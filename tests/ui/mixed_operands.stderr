@@ -1,0 +1,21 @@
+error[E0307]: cannot apply `+` to `F32` and `Int`
+ --> tests/ui/mixed_operands.wid:4:8
+  |
+4 |   puts a + b
+  |        ^^^^^ `F32` + `Int`
+  |        - `F32`
+  |            - `Int`
+  = note: both sides of an arithmetic operator must have the same type
+help: convert it explicitly with `.to(F32)`
+  |   puts a + b.to(F32)
+  = see `wid explain E0307`
+
+error[E0307]: `+` is not defined for `String`
+ --> tests/ui/mixed_operands.wid:6:8
+  |
+6 |   puts s + s
+  |        ^^^^^ both sides are `String`
+help: build strings with interpolation: `"#{a}#{b}"`
+  = see `wid explain E0307`
+
+error: could not compile due to 2 errors

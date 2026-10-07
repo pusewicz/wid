@@ -1,0 +1,12 @@
+[package]
+name = "wid_syntax"
+description = "Lexer, AST and parser for the Wid language"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+wid_diagnostics.workspace = true
+
+[lints]
+workspace = true

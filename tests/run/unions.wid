@@ -1,0 +1,44 @@
+struct Circle
+  radius: F64
+end
+
+struct Rect
+  w: F64
+  h: F64
+end
+
+union Shape = Circle | Rect
+
+def area(s: Shape) -> F64
+  case s
+  when Circle then 3.0 * s.radius * s.radius
+  when Rect then s.w * s.h
+  end
+end
+
+def describe(s: Shape) -> String
+  case s
+  when Circle
+    "circle"
+  when nil
+    "nothing"
+  else
+    "something else"
+  end
+end
+
+def main
+  shapes: Shape = Circle.new(2.0)
+  puts area(shapes)
+  r: Shape = Rect.new(w: 3.0, h: 4.0)
+  puts area(r)
+  p r
+  puts describe(shapes)
+  puts describe(r)
+  empty: Shape = nil
+  puts describe(empty)
+  puts empty.nil?
+  if r
+    puts "r has a value"
+  end
+end

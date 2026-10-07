@@ -1,0 +1,6 @@
+def main
+  if true
+    puts "yes"
+
+  puts "after"
+end

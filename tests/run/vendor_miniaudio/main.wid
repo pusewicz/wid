@@ -1,0 +1,16 @@
+import "vendor:miniaudio", as: :ma
+
+# Generates a square wave without an audio device: 1 kHz at 48 kHz is 24
+# samples high, then 24 low.
+def main
+  config = ma.waveform_config_init(ma.FORMAT_F32, 1, 48000, ma.WAVEFORM_TYPE_SQUARE, 0.5, 1000.0)
+  wave: ma.Waveform
+  puts "init: #{ma.waveform_init(&config, &wave) == ma.SUCCESS}"
+  defer ma.waveform_uninit(&wave)
+
+  frames: [48]F32
+  read: U64 = 0
+  ma.waveform_read_pcm_frames(&wave, &frames[0], 48, &read)
+  puts "read #{read} frames"
+  puts "#{frames[0]} #{frames[23]} #{frames[24]} #{frames[47]}"
+end

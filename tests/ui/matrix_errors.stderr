@@ -1,0 +1,48 @@
+error[E0301]: expected 4 elements for `matrix[2, 2]F32`, found 3
+ --> tests/ui/matrix_errors.wid:2:24
+  |
+2 |   a: matrix[2, 2]F32 = [1.0, 2.0, 3.0]
+  |                        ^^^^^^^^^^^^^^^ this literal has 3 elements
+  = note: write the 2 rows of 2 elements one after another
+  = see `wid explain E0301`
+
+error[E0301]: a matrix needs 1 to 16 rows, not 0
+ --> tests/ui/matrix_errors.wid:3:13
+  |
+3 |   b: matrix[0, 2]F32
+  |             ^ out of range
+  = see `wid explain E0301`
+
+error[E0301]: matrix elements must be numbers, not `String`
+ --> tests/ui/matrix_errors.wid:4:18
+  |
+4 |   c: matrix[2, 2]String
+  |                  ^^^^^^ not a number type
+help: use an integer or float type, like `matrix[2, 2]F32`
+  = see `wid explain E0301`
+
+error[E0307]: cannot multiply `matrix[2, 3]F32` by `matrix[2, 3]F32`
+ --> tests/ui/matrix_errors.wid:7:5
+  |
+7 |   p d * e
+  |     ^^^^^ the shapes do not line up
+  = note: in `a * b` the columns of `a` must match the rows of `b`; a vector on the right is a column, on the left a row
+help: check the order of the operands, or transpose one with `.transpose`
+  = see `wid explain E0307`
+
+error[E0302]: a `matrix[2, 3]F32` is indexed by row and column
+ --> tests/ui/matrix_errors.wid:8:5
+  |
+8 |   p d[1]
+  |     ^^^^ found one index
+help: write `m[row, col]`; `m.row(i)` and `m.column(j)` copy out a whole row or column
+  = see `wid explain E0302`
+
+error[E0204]: `matrix[2, 3]F32` has no identity
+ --> tests/ui/matrix_errors.wid:9:5
+  |
+9 |   p matrix[2, 3]F32.identity
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^ only square matrices have one
+  = see `wid explain E0204`
+
+error: could not compile due to 6 errors

@@ -1,0 +1,11 @@
+struct Hero
+  attr_reader :hp
+  hp: Int
+end
+
+def main
+  code = quote do
+    puts 1
+  end
+  p code
+end

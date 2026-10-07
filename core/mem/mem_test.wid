@@ -1,0 +1,91 @@
+import "core:testing"
+
+struct Pair
+  a: Int
+  b: Int
+end
+
+@[test]
+def arena_hands_out_zeroed_aligned_memory(t: ^testing.T)
+  arena = Arena.create(block_size: 128)
+  defer arena.destroy
+  a = arena.allocator
+  for i in 0...40
+    p = alloc(Pair, allocator: a)
+    t.expect_eq(p.a + p.b, 0)
+    t.expect_eq(p.to(UInt) % 8, 0)
+    p.a = i
+  end
+  big = alloc([]U8, 1000, allocator: a)
+  t.expect_eq(big.size, 1000)
+  t.expect(arena.used > 0)
+  arena.free_all
+  t.expect_eq(arena.used, 0)
+end
+
+@[test]
+def arena_grows_the_newest_block_in_place(t: ^testing.T)
+  arena = Arena.create
+  defer arena.destroy
+  xs = [dynamic]Int.new(allocator: arena.allocator)
+  for i in 0...100
+    xs << i
+  end
+  t.expect_eq(xs.size, 100)
+  t.expect_eq(xs[99], 99)
+end
+
+@[test]
+def pool_recycles_chunks(t: ^testing.T)
+  pool = Pool.create(Pair.size, chunks_per_block: 2)
+  defer pool.destroy
+  a = pool.allocator
+  first = alloc(Pair, allocator: a)
+  first.a = 7
+  second = alloc(Pair, allocator: a)
+  third = alloc(Pair, allocator: a)
+  free(first, allocator: a)
+  again = alloc(Pair, allocator: a)
+  t.expect_eq(again.to(RawPtr), first.to(RawPtr))
+  t.expect_eq(again.a, 0)
+  free(second, allocator: a)
+  free(third, allocator: a)
+  free(again, allocator: a)
+  t.expect_eq(pool.chunk_size, 16)
+end
+
+@[test]
+def tracker_reports_live_blocks(t: ^testing.T)
+  tracker = Tracker.create
+  defer tracker.destroy
+  a = tracker.allocator
+  kept = alloc(Int, allocator: a)
+  freed = alloc([]U8, 32, allocator: a)
+  free(freed, allocator: a)
+  t.expect_eq(tracker.leak_count, 1)
+  t.expect_eq(tracker.bytes, 8)
+  lines = 0
+  tracker.each_leak do |size, loc|
+    t.expect_eq(size, 8)
+    lines = loc.line.to(Int)
+  end
+  t.expect(lines > 0, "the leak has its allocation line")
+  free(kept, allocator: a)
+  t.expect_eq(tracker.leak_count, 0)
+end
+
+@[test]
+def raw_memory_helpers(t: ^testing.T)
+  a: [4]U8 = [1, 2, 3, 4]
+  b: [4]U8
+  copy(&b, &a, 4)
+  t.expect_eq(b, a)
+  t.expect_eq(compare(&a, &b, 4), 0)
+  set(&b, 9, 2)
+  t.expect_eq(b, [9, 9, 3, 4])
+  zero(&b, 4)
+  t.expect_eq(b, [0, 0, 0, 0])
+  t.expect_eq(align_forward(13, 8), 16)
+  t.expect_eq(align_forward(16, 8), 16)
+  t.expect_eq(2 * MEGABYTE, 2097152)
+end

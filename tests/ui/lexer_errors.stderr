@@ -1,0 +1,73 @@
+error[E0103]: number literal with suffix `f`
+ --> tests/ui/lexer_errors.wid:6:10
+  |
+6 |   a = 1.5f
+  |          ^ unexpected suffix
+  = note: Wid number literals have no suffixes; the type comes from context, like `x: F32 = 1.5`
+help: remove the suffix
+  |   a = 1.5
+  = see `wid explain E0103`
+
+error[E0103]: `2` is not a binary digit
+ --> tests/ui/lexer_errors.wid:7:12
+  |
+7 |   b: Int = 0b102
+  |            ^^^^^ invalid digit in this literal
+help: binary literals use the digits 0 and 1
+  = see `wid explain E0103`
+
+error[E0103]: hexadecimal literal without digits
+ --> tests/ui/lexer_errors.wid:8:12
+  |
+8 |   c: Int = 0x
+  |            ^^ digits must follow the prefix
+help: hexadecimal literals use the digits 0-9 and a-f
+  = see `wid explain E0103`
+
+error[E0104]: `\q` is not an escape sequence
+  --> tests/ui/lexer_errors.wid:9:9
+   |
+ 9 |   puts "\q"
+   |         ^^ not a valid escape
+   = note: escapes: \n \t \r \0 \e \a \b \\ \" \' \# \xHH \u{XXXX}, and \ at the end of a line joins it with the next
+help: for a literal backslash, write `\\`
+   |   puts "\\q"
+   = see `wid explain E0104`
+
+error[E0110]: symbols are written without quotes
+  --> tests/ui/lexer_errors.wid:10:12
+   |
+10 |   d: Dir = :"north"
+   |            ^^^^^^^^ a quoted symbol
+help: remove the quotes
+   |   d: Dir = :north
+   = see `wid explain E0110`
+
+error[E0102]: unterminated string interpolation
+  --> tests/ui/lexer_errors.wid:12:13
+   |
+12 |   puts "hp: #{hp"
+   |             ^^ this `#{` is never closed
+help: close it with `}`
+   |   puts "hp: #{hp}"
+   = see `wid explain E0102`
+
+error[E0102]: unterminated string literal
+  --> tests/ui/lexer_errors.wid:13:8
+   |
+13 |   puts "unclosed
+   |        ^ string starts here
+help: add a closing `"`
+   |   puts "unclosed"
+   = see `wid explain E0102`
+
+error[E0101]: unexpected backtick
+  --> tests/ui/lexer_errors.wid:14:9
+   |
+14 |   e = 2 ` 3
+   |         ^ this character is not part of Wid's syntax
+help: remove it
+   |   e = 2  3
+   = see `wid explain E0101`
+
+error: could not compile due to 8 errors

@@ -1,0 +1,14 @@
+error[E0701]: `broken.h` has C errors
+ --> tests/ui/cimport_broken/main.wid:1:9
+  |
+1 | cimport "broken.h", as: :broken
+  |         ^^^^^^^^^^ clang reports 2 errors in this header
+ ::: tests/ui/cimport_broken/broken.h:6:1
+  |
+6 | struct unfinished {
+  | - expected ')'
+  = note: expected function body after function declarator
+help: fix the header, or set the macros it expects with `define:`
+  = see `wid explain E0701`
+
+error: could not compile due to 1 error

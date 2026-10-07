@@ -1,0 +1,11 @@
+def scaled(x: $T, factor: T = 2) -> T = x * factor
+
+def described(x: $T, label: String = "value") -> String = "#{label}: #{x}"
+
+def main
+  puts scaled(3)
+  puts scaled(1.5)
+  puts scaled(2.0, 4.0)
+  puts described(10)
+  puts described(1.5, label: "f")
+end

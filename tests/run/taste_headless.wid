@@ -1,0 +1,29 @@
+Vec2 = [2]F32
+
+struct Ball
+  pos: Vec2
+  vel: Vec2 = [120.0, 80.0]
+  radius: F32 = 8.0
+
+  def update(dt: F32)
+    @pos += @vel * dt
+    @vel.y = -@vel.y unless @pos.y.between?(0.0, 450.0)
+  end
+end
+
+def main
+  balls = [dynamic]Ball.new
+  defer free(balls)
+  balls << Ball.new(pos: [400.0, 225.0])
+  balls << Ball.new(pos: [10.0, 440.0])
+  frames = 0
+  until frames == 3
+    balls.each { |&b| b.update(0.1) }
+    for b in balls
+      print b.pos.x, ",", b.pos.y, " "
+    end
+    puts
+    frames += 1
+    free_all(context.temp_allocator)
+  end
+end

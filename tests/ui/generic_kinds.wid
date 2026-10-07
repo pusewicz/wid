@@ -1,0 +1,13 @@
+struct Pool($T, $N: Int)
+  items: [N]T
+end
+
+union Maybe($T) = T | Int
+
+def main
+  a: Pool(64, 8) = {}
+  b: Pool(F32, F32) = {}
+  c: Pool(F32) = {}
+  d: Maybe(F32, F32) = nil
+  p a, b, c, d
+end

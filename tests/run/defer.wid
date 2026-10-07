@@ -1,0 +1,21 @@
+def work(fail: Bool) -> Int
+  defer puts "cleanup 1"
+  defer do
+    puts "cleanup 2"
+  end
+  if fail
+    return -1
+  end
+  puts "working"
+  0
+end
+
+def main
+  puts work(false)
+  puts work(true)
+  for i in 0...3
+    defer puts "end of iteration"
+    next if i == 1
+    puts i
+  end
+end

@@ -1,0 +1,23 @@
+error[E0207]: `spawn` may be nil here
+  --> tests/ui/maybe_nil.wid:19:16
+   |
+19 |   player.pos = spawn
+   |                ^^^^^ `data.find_spawn` returns `Vec2?`
+help: unwrap it and handle the nil case
+   |   guard spawn = data.find_spawn else
+   |     return {}
+   |   end
+   = see `wid explain E0207`
+
+error[E0207]: `count` may be nil here
+  --> tests/ui/maybe_nil.wid:26:8
+   |
+26 |   puts count.x
+   |        ^^^^^ `Data.new.find_spawn` returns `Vec2?`
+help: unwrap it and handle the nil case
+   |   guard count = Data.new.find_spawn else
+   |     return
+   |   end
+   = see `wid explain E0207`
+
+error: could not compile due to 2 errors

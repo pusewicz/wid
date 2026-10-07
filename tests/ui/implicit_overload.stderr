@@ -1,0 +1,24 @@
+error[E0317]: `scale` is defined twice
+ --> tests/ui/implicit_overload.wid:5:5
+  |
+1 | def scale(x: Int) -> Int
+  |     ----- first definition
+...
+5 | def scale(x: F32) -> F32
+  |     ^^^^^ second definition
+  = note: Wid has no implicit overloading: every definition needs its own name
+help: rename them (for example `scale_int` and `scale_f32`) and group them with `overload :scale, :scale_int, :scale_f32`
+  = see `wid explain E0317`
+
+error[E0317]: `*` is defined twice
+  --> tests/ui/implicit_overload.wid:14:7
+   |
+13 |   def *(k: F32) -> Vec2 = Vec2.new(@x * k, @y * k)
+   |       - first definition
+14 |   def *(o: Vec2) -> Vec2 = Vec2.new(@x * o.x, @y * o.y)
+   |       ^ second definition
+   = note: Wid has no implicit overloading: every definition needs its own name
+help: rename them (for example `mul_f32` and `mul_vec2`) and group them with `overload :*, :mul_f32, :mul_vec2`
+   = see `wid explain E0317`
+
+error: could not compile due to 2 errors

@@ -1,0 +1,276 @@
+# core:math: constants, the C math library for `F32` and `F64`, interpolation
+# helpers, and 2D/3D vector and rectangle helpers for games.
+
+PI = 3.141592653589793
+TAU = 6.283185307179586
+E = 2.718281828459045
+SQRT2 = 1.4142135623730951
+LN2 = 0.6931471805599453
+LN10 = 2.302585092994046
+F32_EPSILON = 1.1920929e-07
+F64_EPSILON = 2.220446049250313e-16
+
+# Radians in one degree, and degrees in one radian.
+RAD_PER_DEG = 0.017453292519943295
+DEG_PER_RAD = 57.29577951308232
+
+overload :sqrt, :sqrt_f64, :sqrt_f32
+overload :cbrt, :cbrt_f64, :cbrt_f32
+overload :sin, :sin_f64, :sin_f32
+overload :cos, :cos_f64, :cos_f32
+overload :tan, :tan_f64, :tan_f32
+overload :asin, :asin_f64, :asin_f32
+overload :acos, :acos_f64, :acos_f32
+overload :atan, :atan_f64, :atan_f32
+overload :atan2, :atan2_f64, :atan2_f32
+overload :sinh, :sinh_f64, :sinh_f32
+overload :cosh, :cosh_f64, :cosh_f32
+overload :tanh, :tanh_f64, :tanh_f32
+overload :exp, :exp_f64, :exp_f32
+overload :exp2, :exp2_f64, :exp2_f32
+overload :log, :log_f64, :log_f32
+overload :log2, :log2_f64, :log2_f32
+overload :log10, :log10_f64, :log10_f32
+overload :pow, :pow_f64, :pow_f32
+overload :floor, :floor_f64, :floor_f32
+overload :ceil, :ceil_f64, :ceil_f32
+overload :round, :round_f64, :round_f32
+overload :trunc, :trunc_f64, :trunc_f32
+overload :hypot, :hypot_f64, :hypot_f32
+overload :fmod, :fmod_f64, :fmod_f32
+
+# `a` when `t` is 0, `b` when `t` is 1, and in between (or beyond) otherwise.
+def lerp(a: $T, b: T, t: T) -> T = a + (b - a) * t
+
+# Where `v` lies between `a` and `b`: 0 at `a`, 1 at `b`.
+def inverse_lerp(a: $T, b: T, v: T) -> T = (v - a) / (b - a)
+
+# Maps `v` from the range `in_lo..in_hi` to `out_lo..out_hi`.
+def remap(v: $T, in_lo: T, in_hi: T, out_lo: T, out_hi: T) -> T
+  lerp(out_lo, out_hi, inverse_lerp(in_lo, in_hi, v))
+end
+
+# 0 below `edge0`, 1 above `edge1`, and a smooth curve in between.
+def smoothstep(edge0: $T, edge1: T, x: T) -> T
+  t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0)
+  t * t * (3.0 - 2.0 * t)
+end
+
+# Degrees to radians.
+def to_radians(degrees: $T) -> T = degrees * RAD_PER_DEG
+
+# Radians to degrees.
+def to_degrees(radians: $T) -> T = radians * DEG_PER_RAD
+
+# -1, 0 or 1, following the sign of `x`.
+def sign(x: $T) -> T
+  return 1 if x > 0
+  return -1 if x < 0
+  0
+end
+
+# Returns true when `a` and `b` differ by at most `tolerance`.
+def close?(a: $T, b: T, tolerance: T) -> Bool = (a - b).abs <= tolerance
+
+extend F32, F64
+  # Returns true for NaN, the only value not equal to itself.
+  def nan? -> Bool = self != self
+
+  # Returns true for positive or negative infinity.
+  def infinite? -> Bool = !self.nan? && (self - self).nan?
+
+  # Returns true for every value except NaN and the infinities.
+  def finite? -> Bool = !(self - self).nan?
+end
+
+@[extern("sqrt")]
+def sqrt_f64(x: F64) -> F64
+end
+
+@[extern("sqrtf")]
+def sqrt_f32(x: F32) -> F32
+end
+
+@[extern("cbrt")]
+def cbrt_f64(x: F64) -> F64
+end
+
+@[extern("cbrtf")]
+def cbrt_f32(x: F32) -> F32
+end
+
+@[extern("sin")]
+def sin_f64(x: F64) -> F64
+end
+
+@[extern("sinf")]
+def sin_f32(x: F32) -> F32
+end
+
+@[extern("cos")]
+def cos_f64(x: F64) -> F64
+end
+
+@[extern("cosf")]
+def cos_f32(x: F32) -> F32
+end
+
+@[extern("tan")]
+def tan_f64(x: F64) -> F64
+end
+
+@[extern("tanf")]
+def tan_f32(x: F32) -> F32
+end
+
+@[extern("asin")]
+def asin_f64(x: F64) -> F64
+end
+
+@[extern("asinf")]
+def asin_f32(x: F32) -> F32
+end
+
+@[extern("acos")]
+def acos_f64(x: F64) -> F64
+end
+
+@[extern("acosf")]
+def acos_f32(x: F32) -> F32
+end
+
+@[extern("atan")]
+def atan_f64(x: F64) -> F64
+end
+
+@[extern("atanf")]
+def atan_f32(x: F32) -> F32
+end
+
+@[extern("atan2")]
+def atan2_f64(y: F64, x: F64) -> F64
+end
+
+@[extern("atan2f")]
+def atan2_f32(y: F32, x: F32) -> F32
+end
+
+@[extern("sinh")]
+def sinh_f64(x: F64) -> F64
+end
+
+@[extern("sinhf")]
+def sinh_f32(x: F32) -> F32
+end
+
+@[extern("cosh")]
+def cosh_f64(x: F64) -> F64
+end
+
+@[extern("coshf")]
+def cosh_f32(x: F32) -> F32
+end
+
+@[extern("tanh")]
+def tanh_f64(x: F64) -> F64
+end
+
+@[extern("tanhf")]
+def tanh_f32(x: F32) -> F32
+end
+
+@[extern("exp")]
+def exp_f64(x: F64) -> F64
+end
+
+@[extern("expf")]
+def exp_f32(x: F32) -> F32
+end
+
+@[extern("exp2")]
+def exp2_f64(x: F64) -> F64
+end
+
+@[extern("exp2f")]
+def exp2_f32(x: F32) -> F32
+end
+
+@[extern("log")]
+def log_f64(x: F64) -> F64
+end
+
+@[extern("logf")]
+def log_f32(x: F32) -> F32
+end
+
+@[extern("log2")]
+def log2_f64(x: F64) -> F64
+end
+
+@[extern("log2f")]
+def log2_f32(x: F32) -> F32
+end
+
+@[extern("log10")]
+def log10_f64(x: F64) -> F64
+end
+
+@[extern("log10f")]
+def log10_f32(x: F32) -> F32
+end
+
+@[extern("pow")]
+def pow_f64(x: F64, y: F64) -> F64
+end
+
+@[extern("powf")]
+def pow_f32(x: F32, y: F32) -> F32
+end
+
+@[extern("floor")]
+def floor_f64(x: F64) -> F64
+end
+
+@[extern("floorf")]
+def floor_f32(x: F32) -> F32
+end
+
+@[extern("ceil")]
+def ceil_f64(x: F64) -> F64
+end
+
+@[extern("ceilf")]
+def ceil_f32(x: F32) -> F32
+end
+
+@[extern("round")]
+def round_f64(x: F64) -> F64
+end
+
+@[extern("roundf")]
+def round_f32(x: F32) -> F32
+end
+
+@[extern("trunc")]
+def trunc_f64(x: F64) -> F64
+end
+
+@[extern("truncf")]
+def trunc_f32(x: F32) -> F32
+end
+
+@[extern("hypot")]
+def hypot_f64(x: F64, y: F64) -> F64
+end
+
+@[extern("hypotf")]
+def hypot_f32(x: F32, y: F32) -> F32
+end
+
+@[extern("fmod")]
+def fmod_f64(x: F64, y: F64) -> F64
+end
+
+@[extern("fmodf")]
+def fmod_f32(x: F32, y: F32) -> F32
+end

@@ -1,0 +1,61 @@
+struct Vec2
+  x: F32
+  y: F32
+end
+
+def find(n: Int) -> Int?
+  return nil if n < 0
+  n * 2
+end
+
+def spawn_point(ok: Bool) -> Vec2?
+  ok ? Vec2.new(1.0, 2.0) : nil
+end
+
+def describe(v: Int?) -> String
+  if v
+    "value"
+  else
+    "nothing"
+  end
+end
+
+def total(a: Int?, b: Int?) -> Int
+  return 0 if a.nil?
+  return a unless b
+  a + b
+end
+
+def main
+  x = find(4)
+  y = find(-1)
+  p x
+  p y
+  puts x.nil?
+  puts y.nil?
+  puts x || 0
+  puts y || 7
+  if v = find(10)
+    puts v + 1
+  end
+  unless y.nil?
+    puts "unreachable"
+  end
+  puts total(1, 2)
+  puts total(nil, 2)
+  puts total(5, nil)
+  s = spawn_point(true)
+  puts s&.x || -1.0
+  t = spawn_point(false)
+  puts t&.x || -1.0
+  p t
+  z: Int? = nil
+  puts z == nil
+  z = 3
+  puts z + 1
+  if s
+    puts s.y
+  end
+  maybe: Int? = 9
+  puts maybe != nil
+end

@@ -1,0 +1,44 @@
+struct Failure
+  message: String
+end
+
+union Outcome($T) = T | Failure
+
+def check(n: Int) -> Outcome(Int)
+  return Failure.new("negative") if n < 0
+  n * 2
+end
+
+def describe(o: Outcome($T)) -> String
+  case o
+  when Failure then "failed: #{o.message}"
+  when T then "ok: #{o}"
+  else "nothing"
+  end
+end
+
+def bigger(a: $T, b: T) -> T = a > b ? a : b
+
+def apply(f: proc(Int, Int) -> Int, x: Int, y: Int) -> Int = f(x, y)
+
+def lines -> [dynamic]String
+  out = [dynamic]String.new
+  out << "a"
+  out << "b"
+  out
+end
+
+def main
+  puts describe(check(4))
+  puts describe(check(-1))
+  s: Outcome(String) = "hi"
+  puts describe(s)
+  f: proc(F64, F64) -> F64 = method(:bigger)
+  puts f(1.5, 2.5)
+  puts apply(method(:bigger), 3, 9)
+  queue = lines
+  defer free(queue)
+  while item = queue.pop
+    puts item
+  end
+end

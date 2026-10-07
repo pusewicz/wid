@@ -1,0 +1,14 @@
+[package]
+name = "wid_codegen_c"
+description = "Translates Wid's typed IR into C23"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+wid_diagnostics.workspace = true
+wid_syntax.workspace = true
+wid_sema.workspace = true
+
+[lints]
+workspace = true

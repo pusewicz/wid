@@ -1,0 +1,29 @@
+error[E0316]: `h1` and `h2` in `h` both take (Int)
+ --> tests/ui/overload_dupes.wid:4:19
+  |
+4 | overload :h, :h1, :h2
+  |                   ^^^ no call could choose between these
+  |              --- this member takes the same types
+help: change one member's parameter types, or remove it from the set
+  = see `wid explain E0316`
+
+error[E0312]: `Bad` contains itself
+  --> tests/ui/overload_dupes.wid:10:19
+   |
+10 | union Bad = Lit | Bad
+   |                   ^^^ this variant stores the union by value
+   = note: a type cannot contain a full copy of itself, so it would have no finite size
+help: store a pointer instead
+   | union Bad = Lit | ^Bad
+   = see `wid explain E0312`
+
+error[E0301]: a union variant cannot be nil-able (`Lit?`)
+  --> tests/ui/overload_dupes.wid:11:19
+   |
+11 | union Opt = Int | Lit?
+   |                   ^^^^ unions already have a nil state
+help: use the non-optional type; a union value can be `nil` by itself
+   | union Opt = Int | Lit
+   = see `wid explain E0301`
+
+error: could not compile due to 3 errors

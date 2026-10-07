@@ -1,0 +1,64 @@
+error[E0202]: `Bool` is a builtin type
+ --> tests/ui/struct_errors.wid:1:8
+  |
+1 | struct Bool
+  |        ^^^^ this name always means the builtin type
+  = note: builtin types like `Int`, `String` and `Bool` can't be redeclared, so code reads the same in every package
+help: give it a name of its own
+  | struct MyBool
+  = see `wid explain E0202`
+
+error[E0312]: `Node` contains itself
+  --> tests/ui/struct_errors.wid:14:3
+   |
+14 |   next: Node
+   |   ^^^^ this field stores a `Node` by value
+   = note: `Node` would need to contain a full copy of itself, so it has no finite size
+help: store a pointer instead
+   |   next: ^Node
+   = see `wid explain E0312`
+
+error[E0303]: `Point` has no field `z`
+  --> tests/ui/struct_errors.wid:18:24
+   |
+18 |   pt = Point.new(x: 1, z: 2)
+   |                        ^ unknown field
+   = note: fields: x, y
+help: did you mean `y`?
+   |   pt = Point.new(x: 1, y: 2)
+   = see `wid explain E0303`
+
+error[E0204]: `Point` has no field or method `lenght`
+  --> tests/ui/struct_errors.wid:19:11
+   |
+19 |   puts pt.lenght
+   |           ^^^^^^ not found on `Point`
+   = note: available: norm, x, y
+   = see `wid explain E0204`
+
+error[E0204]: `Point` has no field or method `length`
+  --> tests/ui/struct_errors.wid:20:11
+   |
+20 |   puts pt.length
+   |           ^^^^^^ not found on `Point`
+   = note: available: norm, x, y
+   = see `wid explain E0204`
+
+error[E0305]: `Point` is a struct, not a method
+  --> tests/ui/struct_errors.wid:22:3
+   |
+22 |   Point(1, 2)
+   |   ^^^^^ cannot be called
+help: build a value with `new`
+   |   Point.new(1, 2)
+   = see `wid explain E0305`
+
+error[E0209]: `@x` only exists inside a method of a type
+  --> tests/ui/struct_errors.wid:23:8
+   |
+23 |   puts @x
+   |        ^^ there is no receiver here
+help: define this method inside a `struct` or `enum` to use `self` and `@fields`
+   = see `wid explain E0209`
+
+error: could not compile due to 7 errors

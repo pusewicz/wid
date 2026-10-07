@@ -1,0 +1,16 @@
+Meters = distinct F64
+Id = distinct Int
+
+def walk(d: Meters) -> Meters = d * 2.0
+
+def main
+  a: Meters = 1.5
+  b = walk(a)
+  puts b
+  puts b > a
+  raw: F64 = 3.0
+  m = raw.to(Meters)
+  puts m.to(F64) + 1.0
+  i: Id = 7
+  p i
+end

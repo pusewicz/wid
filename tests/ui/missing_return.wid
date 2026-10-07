@@ -1,0 +1,9 @@
+def sign(n: Int) -> Int
+  if n > 0
+    return 1
+  end
+end
+
+def main
+  puts sign(3)
+end

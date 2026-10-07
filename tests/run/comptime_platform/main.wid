@@ -1,0 +1,24 @@
+# Each target gets its own declarations; only the chosen branch is checked,
+# so the Windows branch may import a header this machine doesn't have.
+comptime if OS == :windows
+  cimport "windows.h", as: :sys
+  def family -> String = "windows"
+elsif OS == :darwin || OS == :linux
+  cimport "unix.h", as: :sys
+  def family -> String = "unix"
+else
+  def family -> String = "other"
+end
+
+comptime if ARCH == :wasm32
+  POINTER_BITS = 32
+else
+  POINTER_BITS = 64
+end
+
+def main
+  puts family
+  puts POINTER_BITS
+  puts sys.UNIX_MAGIC
+  puts sys.unix_double(21)
+end

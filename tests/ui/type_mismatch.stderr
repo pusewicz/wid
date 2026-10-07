@@ -1,0 +1,18 @@
+error[E0301]: expected `F32`, found `Int`
+ --> tests/ui/type_mismatch.wid:7:13
+  |
+7 |   puts half(n)
+  |             ^ this has type `Int`
+  = note: Wid never converts between numeric types implicitly
+help: convert it explicitly with `.to(F32)`
+  |   puts half(n.to(F32))
+  = see `wid explain E0301`
+
+error[E0301]: expected `String`, found `Int`
+ --> tests/ui/type_mismatch.wid:8:15
+  |
+8 |   s: String = 5
+  |               ^ this has type `Int`
+  = see `wid explain E0301`
+
+error: could not compile due to 2 errors

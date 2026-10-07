@@ -1,0 +1,71 @@
+struct Level
+  name: String
+  lives: Int
+end
+
+def parse_lives(text: String) -> (Int, Error)
+  return 0, :empty if text == ""
+  return 0, :not_a_number if text == "x"
+  return 3, nil
+end
+
+def load_level(name: String, lives_text: String) -> (Level, Error)
+  guard lives = parse_lives(lives_text) else |err|
+    return {}, err
+  end
+  return Level.new(name, lives), nil
+end
+
+def first_positive(a: Int, b: Int) -> Int?
+  return a if a > 0
+  return b if b > 0
+  nil
+end
+
+def check(n: Int) -> Error
+  return :negative if n < 0
+  nil
+end
+
+def main
+  level, err = load_level("intro", "3")
+  p level
+  p err
+  _, err2 = load_level("broken", "x")
+  p err2
+  puts err2 == :not_a_number
+  puts err2 != :empty
+  case err2
+  when :not_a_number then puts "bad number"
+  else puts "other"
+  end
+
+  guard n = first_positive(-1, 5) else
+    puts "none"
+    return
+  end
+  puts n
+
+  guard check(1) else |e|
+    puts e
+    return
+  end
+  puts "check passed"
+
+  a, b = 1, 2
+  a, b = b, a
+  puts a
+  puts b
+
+  for i in 0...3
+    guard i != 1 else
+      next
+    end
+    puts i
+  end
+  guard check(-5) else |e|
+    puts "failed"
+    p e
+    return
+  end
+end

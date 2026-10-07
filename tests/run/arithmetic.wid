@@ -1,0 +1,30 @@
+def main
+  a = 7
+  b = 2
+  puts a + b
+  puts a - b
+  puts a * b
+  puts a / b
+  puts a % b
+  puts -a / b
+  puts a << 3
+  puts a >> 1
+  puts a & 3
+  puts a | 8
+  puts a ~ 1
+  puts ~a
+  x: U8 = 250
+  x += 10
+  puts x
+  big: I64 = 9_223_372_036_854_775_807
+  puts big
+  hex = 0xFF
+  puts hex
+  puts 0b1010
+  puts 1 + 2 * 3
+  puts (1 + 2) * 3
+  puts 2 ** 10 if false
+  puts 10 > 3
+  puts 10 == 3
+  puts 3 <= 3 && 4 != 5
+end

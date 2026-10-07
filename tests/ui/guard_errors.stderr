@@ -1,0 +1,36 @@
+error[E0402]: the `else` of a `guard` must leave the scope
+ --> tests/ui/guard_errors.wid:6:3
+  |
+6 |   guard n = parse("1") else |err|
+  |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ control can continue past this guard without a value
+  = note: end the else-branch with `return`, `break`, `next` or `panic`
+help: for example, end it with `return`
+  = see `wid explain E0402`
+
+error[E0203]: `err` is assigned but never read
+ --> tests/ui/guard_errors.wid:6:30
+  |
+6 |   guard n = parse("1") else |err|
+  |                              ^^^ this value is never used
+help: if this is intentional, prefix the name with an underscore
+  |   guard n = parse("1") else |_err|
+  = see `wid explain E0203`
+
+error[E0403]: `guard` needs a value that can fail, found `Int`
+  --> tests/ui/guard_errors.wid:10:13
+   |
+10 |   guard m = 5 else
+   |             ^ this always succeeds
+   = note: guard works on optionals (`T?`), results ending in an `Error`, and `Bool` conditions
+help: assign the value directly, like `name = value`, and drop the `else` branch
+   = see `wid explain E0403`
+
+error[E0401]: the `Error` returned here is ignored
+  --> tests/ui/guard_errors.wid:13:3
+   |
+13 |   parse("2")
+   |   ^^^^^^^^^^ this call can fail
+help: handle it with `guard … else |err| … end`, or discard it explicitly with `_ = …`
+   = see `wid explain E0401`
+
+error: could not compile due to 4 errors

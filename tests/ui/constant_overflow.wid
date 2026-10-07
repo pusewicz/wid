@@ -1,0 +1,4 @@
+def main
+  small: U8 = 300
+  puts small
+end

@@ -1,0 +1,18 @@
+enum Color
+  red
+  green
+  blue
+end
+
+def name(c: Color) -> String
+  case c
+  when :red then "red"
+  when :green then "green"
+  end
+end
+
+def main
+  c: Color = :purple
+  puts name(c)
+  x = :red
+end

@@ -1,0 +1,6 @@
+def main
+  count = 3
+  if count
+    puts "never false"
+  end
+end

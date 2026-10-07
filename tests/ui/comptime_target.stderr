@@ -1,0 +1,9 @@
+error[E0701]: header `zzz_windows_only.h` not found
+ --> tests/ui/comptime_target.wid:5:11
+  |
+5 |   cimport "zzz_windows_only.h", as: :sys
+  |           ^^^^^^^^^^^^^^^^^^^^ not next to the package's files or on the include path
+help: write the path relative to the package directory, add its directory with `include_dirs:`, or name the library with `pkg_config:`
+  = see `wid explain E0701`
+
+error: could not compile due to 1 error

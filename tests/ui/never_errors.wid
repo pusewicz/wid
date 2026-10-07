@@ -1,0 +1,13 @@
+def stop(code: Int) -> Never
+  puts code
+end
+
+def leave -> Never
+  return
+end
+
+def main
+  stop(1)
+end
+
+def quit -> Never = puts("bye")

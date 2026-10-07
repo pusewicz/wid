@@ -1,0 +1,26 @@
+def main
+  s = "héllo wörld"
+  puts s.size
+  puts s[0]
+  puts s[0...5]
+  count = 0
+  for _r in s
+    count += 1
+  end
+  puts count
+  for r, i in "ab"
+    print r, i, " "
+  end
+  puts
+  puts s.include?("wör")
+  puts s.starts_with?("hé")
+  puts s.ends_with?("ld")
+  p s.index("o")
+  p s.index("zzz")
+  name = "Wid"
+  greeting = "Hello, #{name}! #{1 + 2} #{[1, 2]}"
+  puts greeting
+  puts "a" < "b"
+  puts "abc" == "abc"
+  puts 42.to_s.size
+end

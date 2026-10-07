@@ -1,0 +1,13 @@
+[package]
+name = "wid_sema"
+description = "Name resolution, type checking and lowering to typed IR for Wid"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+wid_diagnostics.workspace = true
+wid_syntax.workspace = true
+
+[lints]
+workspace = true

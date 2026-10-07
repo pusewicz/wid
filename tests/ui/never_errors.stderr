@@ -1,0 +1,28 @@
+error[E0324]: `stop` is declared `-> Never` but can reach its end
+ --> tests/ui/never_errors.wid:2:3
+  |
+1 | def stop(code: Int) -> Never
+  | ---------------------------- declared `-> Never` here
+2 |   puts code
+  |   ^^^^^^^^^ execution can continue past here
+help: end the method with `panic`, an endless `loop`, or a call to another `-> Never` method
+  = see `wid explain E0324`
+
+error[E0310]: `leave` is declared `-> Never`, so it cannot return
+ --> tests/ui/never_errors.wid:6:3
+  |
+6 |   return
+  |   ^^^^^^ this would return to the caller
+help: end the method with `panic`, an endless `loop`, or a call to another `-> Never` method
+  = see `wid explain E0310`
+
+error[E0324]: `quit` is declared `-> Never` but can reach its end
+  --> tests/ui/never_errors.wid:13:21
+   |
+13 | def quit -> Never = puts("bye")
+   |                     ^^^^^^^^^^^ this finishes, so the method would return
+   | ----------------- declared `-> Never` here
+help: end the method with `panic`, an endless `loop`, or a call to another `-> Never` method
+   = see `wid explain E0324`
+
+error: could not compile due to 3 errors

@@ -1,0 +1,20 @@
+[package]
+name = "wid_driver"
+description = "Loads Wid packages, runs the compiler stages and invokes the C compiler"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+wid_diagnostics.workspace = true
+wid_syntax.workspace = true
+wid_sema.workspace = true
+wid_codegen_c.workspace = true
+wid_cimport.workspace = true
+
+[[test]]
+name = "suite"
+harness = false
+
+[lints]
+workspace = true

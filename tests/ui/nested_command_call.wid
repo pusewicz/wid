@@ -1,0 +1,7 @@
+def double(x: Int) -> Int
+  x * 2
+end
+
+def main
+  puts double 4
+end

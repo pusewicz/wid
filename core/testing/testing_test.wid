@@ -1,0 +1,10 @@
+@[test]
+def passing_expectations_record_nothing(t: ^T)
+  t.expect(true)
+  t.expect_eq(1 + 1, 2)
+  t.expect_ne("a", "b")
+  missing: Int? = nil
+  t.expect_nil(missing)
+  t.expect(!t.failed?)
+  t.expect_eq(t.failures, 0)
+end

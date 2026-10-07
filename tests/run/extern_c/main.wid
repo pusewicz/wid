@@ -1,0 +1,17 @@
+@[extern("helper_add")]
+def helper_add(a: I32, b: I32) -> I32
+end
+
+@[export("wid_double"), c]
+def double(x: I32) -> I32
+  x * 2
+end
+
+@[extern("call_back_into_wid")]
+def call_back_into_wid(x: I32) -> I32
+end
+
+def main
+  puts helper_add(2, 40)
+  puts call_back_into_wid(21)
+end

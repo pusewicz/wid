@@ -1,0 +1,63 @@
+struct Ball
+  pos: [2]F32
+  radius: F32 = 8.0
+  alive: Bool
+
+  def area -> F32 = 3.14 * @radius * @radius
+  def grow(by: F32, times: Int)
+    @radius += by * times.to(F32)
+  end
+  def self.unit -> Ball = Ball.new
+end
+
+enum Mood
+  calm
+  angry
+
+  def loud? -> Bool = self == :angry
+end
+
+def layout(t: Type) -> String
+  out = "#{t.name} (#{t.size} bytes, align #{t.align}):"
+  for f in t.fields
+    out = "#{out} #{f.name}: #{f.type.name} @#{f.offset}"
+  end
+  out
+end
+
+def signatures(methods: []MethodInfo) -> String
+  out = ""
+  for m in methods
+    params = ""
+    for t in m.params
+      params = params == "" ? t.name : "#{params}, #{t.name}"
+    end
+    kind = m.static ? "self." : ""
+    out = "#{out}#{kind}#{m.name}(#{params}) -> #{m.ret.name}; "
+  end
+  out
+end
+
+def float_fields(t: Type) -> Int
+  n = 0
+  for f in t.fields
+    n += 1 if f.type == F32
+  end
+  n
+end
+
+BALL = comptime layout(Ball)
+BALL_METHODS = comptime signatures(Ball.methods)
+MOOD_METHODS = comptime signatures(Mood.methods)
+FLOATS = comptime float_fields(Ball)
+NAME = Ball.name
+SIZE = Ball.size
+
+def main
+  puts BALL
+  puts BALL_METHODS
+  puts MOOD_METHODS
+  puts FLOATS
+  puts NAME
+  puts SIZE
+end

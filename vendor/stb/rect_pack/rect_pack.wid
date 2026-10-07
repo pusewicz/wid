@@ -1,0 +1,13 @@
+# stb_rect_pack 1.01 (https://github.com/nothings/stb): packs rectangles into
+# a fixed-size area, for texture atlases. Vendored and public domain or MIT
+# (see ../LICENSE).
+#
+#   import "vendor:stb/rect_pack", as: :rp
+#
+#   ctx: rp.Context
+#   nodes: [256]rp.Node
+#   rp.init_target(&ctx, 256, 256, &nodes[0], 256)
+#   rp.pack_rects(&ctx, &rects[0], rects.size.to(C.int))
+#
+# Names drop the `stbrp_` prefix: `stbrp_rect` is `rp.Rect`.
+cimport "stb_rect_pack.h", strip_prefix: "stbrp_", implement: "STB_RECT_PACK_IMPLEMENTATION"

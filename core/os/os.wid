@@ -1,0 +1,137 @@
+# core:os: the command line, the environment, files, standard input and
+# process exit.
+#
+# Fallible functions return an `Error` last: `:not_found`,
+# `:permission_denied`, `:already_exists`, `:is_directory`, `:not_directory`,
+# `:no_space`, `:invalid_argument` or `:io_error`.
+
+# The command-line arguments, program name first. The strings point into the
+# process's own argument memory; nothing is allocated.
+def args -> []String
+  args_data[0...arg_count]
+end
+
+# The value of an environment variable, or nil when it is not set. The string
+# points into the environment; copy it before changing the environment.
+def get_env(name: String) -> String?
+  found = false
+  value = getenv_raw(name, &found)
+  found ? value : nil
+end
+
+# Reads a whole file. The bytes come from `allocator`; free them with it.
+def read_file(path: String, allocator: Allocator = context.allocator, loc: Location = caller_location) -> ([]U8, Error)
+  data: [^]U8? = nil
+  n = 0
+  err = os_error(read_file_raw(path, allocator, &data, &n, loc))
+  return {}, err if err != nil
+  guard bytes = data else
+    return {}, nil
+  end
+  return bytes[0...n], nil
+end
+
+# Replaces a file's contents with `data`, creating the file when it is missing.
+def write_file(path: String, data: []U8) -> Error
+  os_error(write_file_raw(path, data.to(String), false))
+end
+
+# Adds `data` to the end of a file, creating the file when it is missing.
+def append_file(path: String, data: []U8) -> Error
+  os_error(write_file_raw(path, data.to(String), true))
+end
+
+# Deletes a file or an empty directory.
+def remove(path: String) -> Error = os_error(remove_raw(path))
+
+# Creates a directory.
+def make_dir(path: String) -> Error = os_error(make_dir_raw(path))
+
+# Returns true when `path` names a file or directory.
+@[extern("wid_os_exists")]
+def exists?(path: String) -> Bool
+end
+
+# Returns true when `path` names a directory.
+@[extern("wid_os_is_dir")]
+def dir?(path: String) -> Bool
+end
+
+# Reads one line from standard input, without its line ending, or nil at the
+# end of the input. The line comes from `allocator`; free it with it.
+def read_line(allocator: Allocator = context.allocator, loc: Location = caller_location) -> String?
+  data: [^]U8? = nil
+  n = 0
+  status = read_line_raw(allocator, &data, &n, loc)
+  return nil if status != 0
+  guard bytes = data else
+    return ""
+  end
+  bytes[0...n].to(String)
+end
+
+# Writes text to standard error.
+@[extern("wid_os_write_stderr")]
+def eprint(s: String)
+end
+
+# Writes text and a newline to standard error.
+def eputs(s: String)
+  eprint(s)
+  eprint("\n")
+end
+
+# Flushes standard output and ends the process with `code`.
+def exit(code: Int = 0) -> Never
+  exit_raw(code.to(I32))
+end
+
+private def os_error(kind: I32) -> Error
+  case kind
+  when 0 then nil
+  when 1 then :not_found
+  when 2 then :permission_denied
+  when 3 then :already_exists
+  when 4 then :is_directory
+  when 5 then :not_directory
+  when 6 then :no_space
+  when 7 then :invalid_argument
+  else :io_error
+  end
+end
+
+@[extern("wid_os_args")]
+private def args_data -> [^]String
+end
+
+@[extern("wid_arg_count")]
+private def arg_count -> Int
+end
+
+@[extern("wid_os_getenv")]
+private def getenv_raw(name: String, found: ^Bool) -> String
+end
+
+@[extern("wid_os_read_file")]
+private def read_file_raw(path: String, allocator: Allocator, data: ^([^]U8?), len: ^Int, loc: Location) -> I32
+end
+
+@[extern("wid_os_write_file")]
+private def write_file_raw(path: String, data: String, append: Bool) -> I32
+end
+
+@[extern("wid_os_remove")]
+private def remove_raw(path: String) -> I32
+end
+
+@[extern("wid_os_make_dir")]
+private def make_dir_raw(path: String) -> I32
+end
+
+@[extern("wid_os_read_line")]
+private def read_line_raw(allocator: Allocator, data: ^([^]U8?), len: ^Int, loc: Location) -> I32
+end
+
+@[extern("wid_os_exit")]
+private def exit_raw(code: I32) -> Never
+end

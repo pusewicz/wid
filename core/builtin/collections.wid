@@ -1,0 +1,168 @@
+# Methods for slices. Fixed and dynamic arrays use them too: a call on an
+# array runs on a slice of it.
+extend []$T
+  # Calls the block with each element, in order.
+  def each(&blk: block(T))
+    i = 0
+    while i < size
+      yield self[i]
+      i += 1
+    end
+  end
+
+  # Calls the block with each element and its index.
+  def each_with_index(&blk: block(T, Int))
+    i = 0
+    while i < size
+      yield self[i], i
+      i += 1
+    end
+  end
+
+  # Calls the block with each element, last to first.
+  def reverse_each(&blk: block(T))
+    i = size - 1
+    while i >= 0
+      yield self[i]
+      i -= 1
+    end
+  end
+
+  # Counts the elements the block accepts.
+  def count(&pred: block(T) -> Bool) -> Int
+    n = 0
+    each do |x|
+      n += 1 if yield x
+    end
+    n
+  end
+
+  # Returns true when the block accepts any element.
+  def any?(&pred: block(T) -> Bool) -> Bool
+    each do |x|
+      return true if yield x
+    end
+    false
+  end
+
+  # Returns true when the block accepts every element.
+  def all?(&pred: block(T) -> Bool) -> Bool
+    each do |x|
+      return false unless yield x
+    end
+    true
+  end
+
+  # Returns true when the block accepts no element.
+  def none?(&pred: block(T) -> Bool) -> Bool
+    each do |x|
+      return false if yield x
+    end
+    true
+  end
+
+  # Returns the first element the block accepts.
+  def find(&pred: block(T) -> Bool) -> T?
+    each do |x|
+      return x if yield x
+    end
+    nil
+  end
+
+  # Returns the index of the first element the block accepts.
+  def find_index(&pred: block(T) -> Bool) -> Int?
+    each_with_index do |x, i|
+      return i if yield x
+    end
+    nil
+  end
+
+  # Returns true when an element equals `value`.
+  def include?(value: T) -> Bool
+    each do |x|
+      return true if x == value
+    end
+    false
+  end
+
+  # Returns the index of the first element equal to `value`.
+  def index(value: T) -> Int?
+    each_with_index do |x, i|
+      return i if x == value
+    end
+    nil
+  end
+
+  # Adds the elements together.
+  def sum -> T
+    total: T = {}
+    each do |x|
+      total += x
+    end
+    total
+  end
+
+  # Returns the smallest element.
+  def min -> T?
+    return nil if size == 0
+    best = self[0]
+    each do |x|
+      best = x if x < best
+    end
+    best
+  end
+
+  # Returns the largest element.
+  def max -> T?
+    return nil if size == 0
+    best = self[0]
+    each do |x|
+      best = x if x > best
+    end
+    best
+  end
+
+  # Reverses the elements in place.
+  def reverse!
+    i = 0
+    j = size - 1
+    while i < j
+      tmp = self[i]
+      self[i] = self[j]
+      self[j] = tmp
+      i += 1
+      j -= 1
+    end
+  end
+
+  # Sorts the elements in place in ascending order (stable insertion sort).
+  def sort!
+    i = 1
+    while i < size
+      x = self[i]
+      j = i - 1
+      while j >= 0 && self[j] > x
+        self[j + 1] = self[j]
+        j -= 1
+      end
+      self[j + 1] = x
+      i += 1
+    end
+  end
+
+  # Sorts in place by the key the block returns.
+  def sort_by!(&key: block(T) -> F64)
+    i = 1
+    while i < size
+      x = self[i]
+      kx = yield x
+      j = i - 1
+      while j >= 0 && (yield self[j]) > kx
+        self[j + 1] = self[j]
+        j -= 1
+      end
+      self[j + 1] = x
+      i += 1
+    end
+  end
+end

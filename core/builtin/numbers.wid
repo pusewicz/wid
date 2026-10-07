@@ -1,0 +1,66 @@
+# Comparisons shared by every number type.
+extend Int, I8, I16, I32, I64, UInt, U8, U16, U32, U64, F32, F64
+  # Returns true when the value lies between `lo` and `hi`, inclusive.
+  def between?(lo: Self, hi: Self) -> Bool = self >= lo && self <= hi
+
+  # Limits the value to the range from `lo` to `hi`.
+  def clamp(lo: Self, hi: Self) -> Self
+    return lo if self < lo
+    return hi if self > hi
+    self
+  end
+
+  # Returns the smaller of the value and `other`.
+  def min(other: Self) -> Self = self < other ? self : other
+
+  # Returns the larger of the value and `other`.
+  def max(other: Self) -> Self = self > other ? self : other
+
+  # Returns true for zero.
+  def zero? -> Bool = self == 0
+end
+
+# Methods for signed integers.
+extend Int, I8, I16, I32, I64
+  # Returns the absolute value.
+  def abs -> Self = self < 0 ? -self : self
+
+  # Returns true for even numbers.
+  def even? -> Bool = self % 2 == 0
+
+  # Returns true for odd numbers.
+  def odd? -> Bool = self % 2 != 0
+
+  # Calls the block with 0, 1, … up to the value minus one.
+  def times(&blk: block(Self))
+    i: Self = 0
+    while i < self
+      yield i
+      i += 1
+    end
+  end
+
+  # Calls the block with every value from this one up to `last`, inclusive.
+  def upto(last: Self, &blk: block(Self))
+    i = self
+    while i <= last
+      yield i
+      i += 1
+    end
+  end
+end
+
+# Methods for unsigned integers.
+extend UInt, U8, U16, U32, U64
+  # Returns true for even numbers.
+  def even? -> Bool = self % 2 == 0
+
+  # Returns true for odd numbers.
+  def odd? -> Bool = self % 2 != 0
+end
+
+# Methods for floats.
+extend F32, F64
+  # Returns the absolute value.
+  def abs -> Self = self < 0.0 ? -self : self
+end

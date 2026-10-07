@@ -1,0 +1,26 @@
+import "core:testing"
+
+@[test]
+def adds(t: ^testing.T)
+  t.expect_eq(add(2, 2), 4)
+end
+
+@[test]
+def reports_every_failed_expectation(t: ^testing.T)
+  t.expect_eq(add(2, 2), 5)
+  t.expect(add(1, 1) == 3, "one and one make three")
+  puts "output is shown for failed tests"
+end
+
+@[test]
+def leaks(t: ^testing.T)
+  _kept = alloc(Int)
+  t.log("allocated an Int")
+end
+
+@[test]
+def panics(t: ^testing.T)
+  xs = [1, 2, 3]
+  i = 5
+  puts xs[i]
+end

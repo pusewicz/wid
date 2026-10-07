@@ -1,0 +1,14 @@
+def numbers(&blk: block(Int))
+  yield 1 + 2
+end
+
+def count -> Int
+  numbers { |_x| }
+  while false
+  end
+end
+
+def main
+  numbers { |&x| puts x }
+  puts count
+end

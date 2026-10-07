@@ -1,0 +1,64 @@
+error[E0312]: `Node` contains itself
+ --> tests/ui/generic_errors.wid:7:3
+  |
+7 |   next: Node(T)
+  |   ^^^^ this field stores a `Node(Int)` by value
+  = note: a type cannot contain a full copy of itself, so it would have no finite size
+help: store a pointer instead
+  |   next: ^Node(T)
+  = see `wid explain E0312`
+
+error[E0314]: `$T` is not a type parameter here
+  --> tests/ui/generic_errors.wid:14:21
+   |
+14 | def make_default -> $T
+   |                     ^^ type parameters are introduced in method parameters, like `a: $T`
+help: after it is introduced, refer to it as plain `T`
+   = see `wid explain E0314`
+
+error[E0314]: `$U` is not a type parameter here
+  --> tests/ui/generic_errors.wid:20:19
+   |
+20 | def bad(x: $T) -> $U
+   |                   ^^ type parameters are introduced in method parameters, like `a: $T`
+help: after it is introduced, refer to it as plain `U`
+   = see `wid explain E0314`
+
+error[E0315]: `Box` needs type arguments
+  --> tests/ui/generic_errors.wid:25:7
+   |
+25 |   b = Box.new(1)
+   |       ^^^ write it like `Box(T)`
+   = see `wid explain E0315`
+
+error[E0315]: `Box` takes 1 generic argument, but 2 were given
+  --> tests/ui/generic_errors.wid:26:6
+   |
+ 1 | struct Box($T)
+   |        --- `Box` is declared here
+...
+26 |   c: Box(Int, Int) = {}
+   |      ^^^^^^^^^^^^^ write it like `Box(T)`
+   = see `wid explain E0315`
+
+error[E0301]: expected `Int`, found `String`
+  --> tests/ui/generic_errors.wid:29:15
+   |
+29 |   e = pair(1, "two")
+   |               ^^^^^ this has type `String`
+   = see `wid explain E0301`
+
+error[E0307]: `+` is not defined for `Opaque`
+   --> core/builtin/collections.wid:100:7
+    |
+100 |       total += x
+    |       ^^^^^^^^^^ both sides are `Opaque`
+   ::: tests/ui/generic_errors.wid:32:8
+    |
+ 32 |   puts xs.sum.id
+    |        ------ `[]Opaque#sum[Opaque]` is checked for these types because of this call
+    = note: the error is inside the generic method `[]Opaque#sum[Opaque]`
+help: define the operator on `Opaque`: `def +(other: Opaque) -> Opaque`
+    = see `wid explain E0307`
+
+error: could not compile due to 7 errors

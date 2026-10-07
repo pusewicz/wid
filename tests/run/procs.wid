@@ -1,0 +1,26 @@
+struct Button
+  label: String
+  on_click: proc(String) -> Int
+end
+
+def double(x: Int) -> Int = x * 2
+
+def apply(f: proc(Int) -> Int, x: Int) -> Int = f(x)
+
+def shout(s: String) -> Int
+  puts "clicked #{s}"
+  s.size
+end
+
+def main
+  sq = ->(x: Int) -> Int { x * x }
+  puts sq(7)
+  puts apply(sq, 3)
+  puts apply(method(:double), 21)
+  b = Button.new("ok", method(:shout))
+  puts b.on_click(b.label)
+  cb: proc(Int) -> Int = ->(x: Int) -> Int { x + 1 }
+  puts cb.call(1)
+  none: proc(Int) -> Int = nil
+  puts none.nil?
+end

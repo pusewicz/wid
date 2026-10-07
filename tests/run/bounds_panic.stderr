@@ -1,0 +1,2 @@
+panic: index 5 is out of bounds for length 3
+  at tests/run/bounds_panic.wid:4:8 in `main`

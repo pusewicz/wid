@@ -1,0 +1,5 @@
+cimport "broken.h", as: :broken
+
+def main
+  puts broken.ok
+end

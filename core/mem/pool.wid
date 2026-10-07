@@ -1,0 +1,127 @@
+# Pool: fixed-size chunks recycled through a free list. Allocations up to the
+# chunk size cost a pointer swap; freeing returns the chunk to the list.
+
+# Bytes reserved at the start of each pool block for the link to the previous
+# block.
+private POOL_HEADER = 16
+
+struct Pool
+  backing: Allocator
+  chunk_size: Int
+  chunks_per_block: Int = 64
+  free_list: RawPtr
+  blocks: RawPtr
+
+  # An empty pool of `chunk_size`-byte chunks, taking `chunks_per_block`
+  # chunks at a time from `backing`. Chunks are aligned to 16 bytes.
+  def self.create(chunk_size: Int, chunks_per_block: Int = 64, backing: Allocator = context.allocator) -> Pool
+    size = chunk_size < 8 ? 8 : chunk_size
+    stride = align_forward(size.to(UInt), 16).to(Int)
+    Pool.new(backing: backing, chunk_size: stride, chunks_per_block: chunks_per_block < 1 ? 1 : chunks_per_block)
+  end
+
+  # The allocator that hands out chunks from this pool.
+  def allocator -> Allocator
+    Allocator.new(proc: method(:pool_proc), data: &self)
+  end
+
+  # Returns a zeroed chunk, or nil when the backing allocator is out of memory.
+  def get(size: Int, loc: Location) -> RawPtr
+    if size > @chunk_size
+      panic "this pool hands out #{@chunk_size}-byte chunks and cannot allocate #{size} bytes"
+    end
+    grow(loc) if @free_list == nil
+    chunk = @free_list
+    return nil if chunk == nil
+    @free_list = link_of(chunk)
+    zero(chunk, @chunk_size)
+    chunk
+  end
+
+  # Returns a chunk to the pool.
+  def put(chunk: RawPtr)
+    set_link(chunk, @free_list)
+    @free_list = chunk
+  end
+
+  # Returns every chunk to the pool, keeping the blocks.
+  def free_all
+    @free_list = nil
+    block = @blocks
+    while block != nil
+      thread(block)
+      block = link_of(block)
+    end
+  end
+
+  # Returns every block to the backing allocator.
+  def destroy(loc: Location = caller_location)
+    block = @blocks
+    while block != nil
+      prev = link_of(block)
+      @backing.proc(@backing.data, :free, 0, 0, block, block_bytes, loc)
+      block = prev
+    end
+    @blocks = nil
+    @free_list = nil
+  end
+
+  private def block_bytes -> Int = POOL_HEADER + @chunk_size * @chunks_per_block
+
+  private def grow(loc: Location)
+    block = @backing.proc(@backing.data, :alloc, block_bytes, 16, nil, 0, loc)
+    return if block == nil
+    set_link(block, @blocks)
+    @blocks = block
+    thread(block)
+  end
+
+  # Pushes every chunk of `block` onto the free list.
+  private def thread(block: RawPtr)
+    first = block.to(UInt) + POOL_HEADER.to(UInt)
+    i = @chunks_per_block - 1
+    while i >= 0
+      chunk = (first + (i * @chunk_size).to(UInt)).to(RawPtr)
+      put(chunk)
+      i -= 1
+    end
+  end
+end
+
+# Reads the pointer stored at the start of a free chunk or block.
+private def link_of(p: RawPtr) -> RawPtr
+  guard slot = p.to(^RawPtr?) else
+    return nil
+  end
+  slot^
+end
+
+# Stores a pointer at the start of a free chunk or block.
+private def set_link(p: RawPtr, target: RawPtr)
+  if slot = p.to(^RawPtr?)
+    slot^ = target
+  end
+end
+
+@[c]
+private def pool_proc(data: RawPtr, mode: AllocMode, size: Int, align: Int, old: RawPtr, old_size: Int, loc: Location) -> RawPtr
+  guard pool = data.to(^Pool?) else
+    return nil
+  end
+  case mode
+  when :alloc then pool.get(size, loc)
+  when :free
+    pool.put(old) if old != nil
+    nil
+  when :free_all
+    pool.free_all
+    nil
+  when :resize
+    return pool.get(size, loc) if old == nil
+    if size > pool.chunk_size
+      panic "this pool hands out #{pool.chunk_size}-byte chunks and cannot grow a block to #{size} bytes"
+    end
+    zero((old.to(UInt) + old_size.to(UInt)).to(RawPtr), size - old_size) if size > old_size
+    old
+  end
+end

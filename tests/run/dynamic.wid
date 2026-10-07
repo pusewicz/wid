@@ -1,0 +1,37 @@
+struct Ball
+  x: Int
+end
+
+def main
+  balls = [dynamic]Ball.new
+  defer free(balls)
+  balls << Ball.new(1)
+  balls << Ball.new(2)
+  balls.push(Ball.new(3))
+  puts balls.size
+  for &b in balls
+    b.x *= 10
+  end
+  p balls
+  balls.insert(0, Ball.new(0))
+  balls.delete_at(1)
+  p balls
+  last = balls.pop
+  p last
+  puts balls.size
+  ints = [dynamic]Int.new
+  defer free(ints)
+  for i in 0...100
+    ints << i * i
+  end
+  puts ints[99]
+  puts ints.capacity >= 100
+  total = 0
+  for v in ints[90..]
+    total += v
+  end
+  puts total
+  ints.clear
+  puts ints.empty?
+  p ints.pop
+end

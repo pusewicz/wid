@@ -1,0 +1,25 @@
+def close_all(count: Int)
+  defer do
+    return if count == 0
+    puts count
+  end
+  for i in 0...count
+    defer do
+      next if i == 0
+    end
+  end
+end
+
+def answer -> Int
+  return 42
+  puts "never"
+end
+
+def main
+  close_all(2)
+  puts answer
+  loop do
+    break
+    puts "after break"
+  end
+end

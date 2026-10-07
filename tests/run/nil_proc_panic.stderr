@@ -1,0 +1,2 @@
+panic: called or unwrapped a nil value
+  at tests/run/nil_proc_panic.wid:3:8 in `main`

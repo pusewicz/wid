@@ -1,0 +1,135 @@
+import "core:mem"
+
+struct Vec2
+  x: F32
+  y: F32
+end
+
+struct Entry
+  name: String
+  pos: Vec2
+  tags: []Int
+end
+
+enum Shape
+  circle
+  square
+end
+
+def square(x: Int) -> Int = x * x
+
+def sine_table -> [8]F32
+  t: [8]F32 = {}
+  for i in 0...8
+    t[i] = (i * 45).to(F32) / 360.0
+  end
+  t
+end
+
+def names(n: Int) -> []String
+  out = [dynamic]String.new
+  for i in 0...n
+    out << "item_#{i}"
+  end
+  out
+end
+
+def primes(limit: Int) -> []Int
+  out = [dynamic]Int.new
+  for n in 2...limit
+    prime = true
+    for d in 2...n
+      if n % d == 0
+        prime = false
+        break
+      end
+    end
+    out << n if prime
+  end
+  out
+end
+
+def word_counts -> [3]Int
+  m = map[String]Int.new
+  for w in ["a", "b", "a", "c", "a", "b"]
+    m[w] += 1
+  end
+  [m["a"] || 0, m["b"] || 0, m["c"] || 0]
+end
+
+def arena_sum -> Int
+  arena = mem.Arena.create
+  defer arena.destroy
+  total = 0
+  context.allocator = arena.allocator
+  for i in 1..10
+    p = alloc(Int)
+    p^ = i
+    total += p^
+  end
+  total
+end
+
+def width(x: $T) -> Int
+  comptime if T == F32
+    4
+  elsif T == U8
+    1
+  else
+    8
+  end
+end
+
+def hello -> String = "hello"
+def bye -> String = "bye"
+
+SQ = comptime square(12)
+TABLE = comptime sine_table
+NAMES = comptime names(3)
+PRIMES = comptime primes(30)
+ORIGIN = Vec2.new(x: 1.5, y: -2.0)
+ENTRY = comptime Entry.new(name: "hero", pos: ORIGIN, tags: primes(8))
+COUNTS = comptime word_counts
+GREETING = comptime "answer: #{40 + 2}, pi: #{3.25}, shape: #{Shape.square}"
+SIZE = comptime square(4)
+BUFFER: [SIZE]U8 = {}
+SUM = comptime arena_sum
+GREETERS = comptime [method(:hello), method(:bye)]
+FAVORITE: Shape? = comptime Shape.circle
+
+def main
+  puts SQ
+  p TABLE
+  p NAMES
+  p PRIMES
+  p ORIGIN
+  p ENTRY
+  p COUNTS
+  puts GREETING
+  puts BUFFER.size
+  puts SUM
+  total = 0
+  for x in PRIMES
+    total += x
+  end
+  puts total
+  puts TABLE[2] * 2.0
+  for g in GREETERS
+    puts g.call
+  end
+  p FAVORITE
+  later = comptime do
+    acc = 0
+    for i in 0...5
+      acc += square(i)
+    end
+    acc
+  end
+  puts later
+  puts width(1.5.to(F32)), width(7.to(U8)), width(2)
+  comptime if OS == :darwin || OS == :linux
+    puts "unix"
+  else
+    puts "not unix"
+  end
+end

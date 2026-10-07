@@ -1,0 +1,54 @@
+error[E0309]: strings are immutable
+ --> tests/ui/collection_errors.wid:7:3
+  |
+7 |   s[0] = 65
+  |   ^^^^ cannot change a byte of a `String`
+help: build a new string, for example with interpolation
+  = see `wid explain E0309`
+
+error[E0309]: `<<` appends to a dynamic array variable or field
+ --> tests/ui/collection_errors.wid:8:3
+  |
+8 |   make << 1
+  |   ^^^^ this is a temporary copy
+  = see `wid explain E0309`
+
+error[E0204]: `[3]Int` has no field or method `length`
+  --> tests/ui/collection_errors.wid:10:11
+   |
+10 |   puts xs.length
+   |           ^^^^^^ not found on `[3]Int`
+help: Wid calls this `size`
+   = see `wid explain E0204`
+
+error[E0301]: expected 2 elements for `[2]Int`, found 3
+  --> tests/ui/collection_errors.wid:11:16
+   |
+11 |   ys: [2]Int = [1, 2, 3]
+   |                ^^^^^^^^^ this literal has 3 elements
+   = see `wid explain E0301`
+
+error[E0304]: cannot infer the type of an empty array
+  --> tests/ui/collection_errors.wid:13:7
+   |
+13 |   e = []
+   |       ^^ no elements to infer from
+help: give it a type, like `xs: [0]Int = []`, or use `[dynamic]Int.new`
+   = see `wid explain E0304`
+
+error[E0323]: a range is not a value by itself
+  --> tests/ui/collection_errors.wid:15:7
+   |
+15 |   r = 1..3
+   |       ^^^^ ranges work in `for`, `case` and indexing
+help: loop with `for i in a...b`, or slice with `xs[a...b]`
+   = see `wid explain E0323`
+
+error[E0301]: expected `String`, found `Int`
+  --> tests/ui/collection_errors.wid:18:5
+   |
+18 |   m[1] = 2
+   |     ^ this has type `Int`
+   = see `wid explain E0301`
+
+error: could not compile due to 7 errors

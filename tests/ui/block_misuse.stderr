@@ -1,0 +1,58 @@
+error[E0320]: `twice` has no block parameter to `yield` to
+ --> tests/ui/block_misuse.wid:2:3
+  |
+2 |   yield x
+  |   ^^^^^^^ nothing to yield to
+help: declare the block in the signature: `&blk: block(Int)`
+  | def twice(x: Int, &blk: block(Int)) -> Int
+  = see `wid explain E0320`
+
+error[E0302]: this block takes 2 values, but 1 is yielded
+  --> tests/ui/block_misuse.wid:11:3
+   |
+11 |   yield 1
+   |   ^^^^^^^ check the block type in the method signature
+   = see `wid explain E0302`
+
+error[E0325]: methods that take blocks call each other: `ping` → `pong` → `ping`
+  --> tests/ui/block_misuse.wid:19:3
+   |
+19 |   ping { |x| yield x }
+   |   ^^^^ methods with blocks are inlined at each call, so they cannot recurse
+help: move the recursion into a helper method without a block, or loop instead
+   = see `wid explain E0325`
+
+error[E0319]: block parameter `b` receives nothing
+  --> tests/ui/block_misuse.wid:28:15
+   |
+28 |   each1 { |a, b| puts a + b }
+   |               ^ the method yields 1 value
+   = see `wid explain E0319`
+
+error[E0319]: `size` does not take a block
+  --> tests/ui/block_misuse.wid:32:18
+   |
+32 |   puts nums.size { |x| x }
+   |                  ^^^^^^^^^ this block is never called
+   |             ---- `size` is a built-in method
+help: remove the block
+   = see `wid explain E0319`
+
+error[E0305]: `f` is a field, not a method
+  --> tests/ui/block_misuse.wid:34:10
+   |
+34 |   puts s.f()
+   |          ^ this field holds an `Int`
+help: read the field without `()`
+   |   puts s.f
+   = see `wid explain E0305`
+
+error[E0320]: a proc cannot `yield`
+  --> tests/ui/block_misuse.wid:35:20
+   |
+35 |   f = ->(x: Int) { yield x }
+   |                    ^^^^^^^ procs take no block
+help: pass the code to run as a proc parameter, like `->(f: proc(Int)) { f.call(1) }`
+   = see `wid explain E0320`
+
+error: could not compile due to 7 errors

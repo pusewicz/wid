@@ -1,0 +1,25 @@
+def main
+  ages = map[String]Int.new
+  defer free(ages)
+  ages["ada"] = 36
+  ages["linus"] = 54
+  ages["ada"] = 37
+  puts ages.size
+  p ages["ada"]
+  p ages["nobody"]
+  puts ages["linus"] || 0
+  puts ages.has_key?("ada")
+  puts ages.delete("linus")
+  puts ages.has_key?("linus")
+  counts = map[Int]Int.new
+  defer free(counts)
+  for i in 0...10
+    counts[i % 3] += 1
+  end
+  total = 0
+  for k, v in counts
+    total += k * v
+  end
+  puts total
+  puts counts.size
+end

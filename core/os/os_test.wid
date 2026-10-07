@@ -1,0 +1,36 @@
+import "core:testing"
+
+@[test]
+def command_line_and_environment(t: ^testing.T)
+  t.expect(args.size >= 1, "the program name comes first")
+  t.expect_nil(get_env("WID_SURELY_UNSET_VARIABLE"))
+  t.expect(get_env("PATH") != nil, "PATH is set")
+end
+
+@[test]
+def files_round_trip(t: ^testing.T)
+  dir = get_env("TMPDIR") || "/tmp"
+  path = "#{dir}/wid-os-test-#{args.size}.txt"
+  t.expect_nil(write_file(path, "one\n".to([]U8)))
+  t.expect_nil(append_file(path, "two\n".to([]U8)))
+  t.expect(exists?(path))
+  t.expect(!dir?(path))
+  guard data = read_file(path) else |err|
+    t.fail("read_file failed: #{err}")
+    return
+  end
+  t.expect_eq(data.to(String), "one\ntwo\n")
+  free(data)
+  t.expect_nil(remove(path))
+  t.expect(!exists?(path))
+end
+
+@[test]
+def reports_errors(t: ^testing.T)
+  _, err = read_file("/nonexistent/wid/file")
+  t.expect_eq(err, :not_found)
+  t.expect_eq(remove("/nonexistent/wid/file"), :not_found)
+  _, dir_err = read_file(".")
+  t.expect_eq(dir_err, :is_directory)
+  t.expect(dir?("."))
+end

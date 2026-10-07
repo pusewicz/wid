@@ -1,0 +1,17 @@
+error[E0902]: `attr_reader :hp` cannot expand: macros cannot run yet
+ --> tests/ui/not_yet_available.wid:2:3
+  |
+2 |   attr_reader :hp
+  |   ^^^^^^^^^^^^^^^ a macro call inside a type
+help: write the methods out, for example `def hp = @hp` for a reader
+  = see `wid explain E0902`
+
+error[E0902]: `quote` only works inside a `macro def`
+ --> tests/ui/not_yet_available.wid:7:10
+  |
+7 |   code = quote do
+  |          ^^^^^^^^ this is not inside a macro
+help: write the code directly; `quote do … end` builds code for a macro to return
+  = see `wid explain E0902`
+
+error: could not compile due to 2 errors

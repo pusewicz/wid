@@ -1,0 +1,43 @@
+def two -> (Int, Int)
+  return 1, 2, 3
+end
+
+def pick(x: Int) -> String
+  case x
+  when 1 then "one"
+  end
+end
+
+def label(x: Int) -> String
+  s = if x > 1
+    "big"
+  end
+  return s
+end
+
+def five -> Int = 5
+
+def pair -> (Int, Int)
+  return 1, 2
+end
+
+def first(xs: []$T) -> T = xs[0]
+
+def main
+  guard d = five else
+    return
+  end
+  if e = five
+    puts e
+  end
+  a, b, c = pair
+  puts d, a, b, c, pick(1), label(2), two
+  puts first([])
+  count = 3
+  flag = !count
+  puts flag
+  n = 3
+  until n
+    n -= 1
+  end
+end

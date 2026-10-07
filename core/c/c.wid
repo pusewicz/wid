@@ -1,0 +1,23 @@
+# core:c: C's types and limits, for calling C code.
+#
+# `c.int`, `c.long`, `c.size_t` and the other C type names are built into the
+# compiler, because their sizes depend on the target: on 64-bit Unix (LP64)
+# `long` is 64 bits, `char` is a byte (`U8`) and `size_t` is `UInt`. Import the
+# package as `C` to write them the way `cimport` does: `import "core:c", as: :C`
+# gives `C.int`.
+
+CHAR_BIT = 8
+SCHAR_MIN = -128
+SCHAR_MAX = 127
+UCHAR_MAX = 255
+SHRT_MIN = -32768
+SHRT_MAX = 32767
+USHRT_MAX = 65535
+INT_MIN = -2147483648
+INT_MAX = 2147483647
+UINT_MAX = 4294967295
+LONG_MIN = -9223372036854775808
+LONG_MAX = 9223372036854775807
+
+# Returns the length of a NUL-terminated string, not counting the NUL.
+def strlen(s: CString) -> Int = s.to(String).size

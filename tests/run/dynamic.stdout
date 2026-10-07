@@ -1,0 +1,10 @@
+3
+[Ball(x: 10), Ball(x: 20), Ball(x: 30)]
+[Ball(x: 0), Ball(x: 20), Ball(x: 30)]
+Ball(x: 30)
+2
+9801
+true
+89385
+true
+nil

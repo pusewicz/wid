@@ -1,0 +1,24 @@
+struct Bool
+  on: Int
+end
+
+struct Point
+  x: Int
+  y: Int
+
+  def norm -> Int = @x + @y
+end
+
+struct Node
+  value: Int
+  next: Node
+end
+
+def main
+  pt = Point.new(x: 1, z: 2)
+  puts pt.lenght
+  puts pt.length
+  puts pt.norm
+  Point(1, 2)
+  puts @x
+end

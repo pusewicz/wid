@@ -1,0 +1,8 @@
+LEVEL = config(:level, 1)
+VERBOSE = config(:verbose, false)
+SPEED = config(:speed, 1.0)
+
+def main
+  puts LEVEL, VERBOSE, SPEED
+  puts config(:level)
+end

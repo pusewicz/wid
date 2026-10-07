@@ -1,0 +1,65 @@
+struct Ball
+  x: Int
+end
+
+def main
+  xs = [5, 3, 8, 1]
+  xs.each { |x| print x, " " }
+  puts
+  puts xs.sum
+  p xs.min
+  p xs.max
+  puts xs.include?(8)
+  p xs.index(3)
+  puts xs.count { |x| x > 2 }
+  puts xs.any? { |x| x > 7 }
+  puts xs.all? { |x| x > 0 }
+  p xs.find { |x| x % 2 == 0 }
+  xs.sort!
+  p xs
+  xs.reverse!
+  p xs
+  balls = [dynamic]Ball.new
+  defer free(balls)
+  balls << Ball.new(1)
+  balls << Ball.new(2)
+  balls.each { |&b| b.x *= 10 }
+  p balls
+  balls.each_with_index { |b, i| print i, "=", b.x, " " }
+  puts
+  puts 5.between?(1, 10)
+  puts 15.clamp(0, 10)
+  puts -7.abs
+  puts 4.even?
+  total = 0
+  3.times { |i| total += i }
+  puts total
+  2.upto(4) { |i| print i }
+  puts
+  speed: F32 = 450.5
+  puts speed.between?(0.0, 450.0)
+  puts (-2.5).abs
+  more
+end
+
+def more
+  xs = [5, 3, 8, 1]
+  xs.reverse_each { |x| print x }
+  puts
+  puts xs.none? { |x| x > 100 }
+  p xs.find_index { |x| x == 8 }
+  p xs.find_index { |x| x == 42 }
+  words = ["ccc", "a", "bb"]
+  words.sort_by! { |w| w.size.to(F64) }
+  p words
+  puts 3.min(9)
+  puts 3.max(9)
+  puts 0.zero?
+  puts 7.odd?
+  n: U8 = 6
+  puts n.even?
+  puts n.odd?
+  f: F64 = -1.25
+  puts f.abs
+  puts f.clamp(-1.0, 1.0)
+end

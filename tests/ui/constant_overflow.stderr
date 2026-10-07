@@ -1,0 +1,9 @@
+error[E0311]: `300` does not fit in `U8`
+ --> tests/ui/constant_overflow.wid:2:15
+  |
+2 |   small: U8 = 300
+  |               ^^^ `U8` holds values from 0 to 255
+help: use a wider type like `U16`, or a value in range
+  = see `wid explain E0311`
+
+error: could not compile due to 1 error

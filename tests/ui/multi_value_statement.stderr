@@ -1,0 +1,11 @@
+error[E0105]: expected end of line, found `,`
+ --> tests/ui/multi_value_statement.wid:2:4
+  |
+2 |   1, 2
+  |    ^ a list of values is not a statement
+help: to return several values, write `return`
+  |   return 1, 2
+help: to assign several values, write `a, b = …`
+  = see `wid explain E0105`
+
+error: could not compile due to 1 error

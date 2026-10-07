@@ -1,0 +1,12 @@
+25.0
+Vec2(x: 6.0, y: 8.0)
+Vec2(x: 0.0, y: 0.0)
+Vec2(x: 7.0, y: 9.0)
+true
+Ball(pos: Vec2(x: 22.0, y: 103.0), vel: Vec2(x: 120.0, y: -80.0), radius: 8.0, name: "ball")
+-80.0
+2.5
+ball
+2.5
+false
+true

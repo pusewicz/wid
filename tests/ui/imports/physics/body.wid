@@ -1,0 +1,9 @@
+private struct Secret
+  v: Int
+end
+
+private SECRET = 3
+
+def make -> Secret = Secret.new(v: 1)
+
+private def hidden -> Int = 1

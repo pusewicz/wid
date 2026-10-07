@@ -1,0 +1,14 @@
+LEVEL = config(:level, 1)
+NAME = config(:name, "default")
+FAST = config(:fast, false)
+SCALE = config(:scale, 1.5)
+UNSET = config(:unset, 42)
+
+def main
+  puts LEVEL, NAME, FAST, SCALE, UNSET
+  buffer: [LEVEL]U8 = {}
+  puts buffer.size
+  comptime if FAST
+    puts "fast path"
+  end
+end

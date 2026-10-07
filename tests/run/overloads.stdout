@@ -1,0 +1,38 @@
+Vec2(x: 2.0, y: 4.0)
+Vec2(x: 3.0, y: 8.0)
+Vec2(x: -1.0, y: -2.0)
+Vec2(x: 2.0, y: 4.0)
+36.0
+Vec2(x: 12.0, y: 4.0)
+Vec2(x: 30.0, y: 0.0)
+1.0
+6.0
+10
+1.0
+0
+int 7
+text hi
+vec 1.0,2.0
+2.5
+hey!
+2.5
+I am Ada at 2.0,1.5 with 7 hp
+true
+I am Grace
+Grace
+1
+10
+[button] bumped to 1
+[button] bumped to 3
+[button] bumped to 4
+8
+:south
+:north
+<5>
+<x>
+Vec2(x: 2.0, y: 6.0)
+pick 1
+15
+Grid(cells: [0, 15, -1, 0], reads: 3)
+[0, 15, -1, 9]
+Mask(bits: 255)

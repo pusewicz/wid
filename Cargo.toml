@@ -1,0 +1,32 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+rust-version = "1.85"
+
+[workspace.dependencies]
+wid_diagnostics = { path = "crates/wid_diagnostics" }
+wid_syntax = { path = "crates/wid_syntax" }
+wid_sema = { path = "crates/wid_sema" }
+wid_codegen_c = { path = "crates/wid_codegen_c" }
+wid_cimport = { path = "crates/wid_cimport" }
+wid_driver = { path = "crates/wid_driver" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2

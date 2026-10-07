@@ -1,0 +1,65 @@
+import "core:testing"
+
+@[test]
+def library_functions_for_both_widths(t: ^testing.T)
+  t.expect_eq(sqrt(9.0), 3.0)
+  t.expect_eq(sqrt(9.0.to(F32)), 3.0.to(F32))
+  t.expect_eq(floor(2.7), 2.0)
+  t.expect_eq(pow(2.0, 10.0), 1024.0)
+  t.expect(close?(atan2(1.0, 1.0), PI / 4.0, 1e-12))
+  t.expect(close?(sin(PI / 2.0), 1.0, 1e-12))
+end
+
+@[test]
+def interpolation(t: ^testing.T)
+  t.expect_eq(lerp(0.0, 10.0, 0.25), 2.5)
+  t.expect_eq(inverse_lerp(0.0, 10.0, 2.5), 0.25)
+  t.expect_eq(remap(5.0, 0.0, 10.0, 100.0, 200.0), 150.0)
+  t.expect_eq(smoothstep(0.0, 1.0, 0.5), 0.5)
+  t.expect_eq(smoothstep(0.0, 1.0, 2.0), 1.0)
+  t.expect_eq(sign(-3.0), -1.0)
+  t.expect_eq(sign(0.0.to(F32)), 0.0.to(F32))
+  t.expect_eq(to_degrees(PI), 180.0)
+  t.expect(close?(to_radians(90.0), PI / 2.0, 1e-12))
+end
+
+@[test]
+def float_predicates(t: ^testing.T)
+  nan = 0.0 / 0.0
+  inf = 1.0 / 0.0
+  t.expect(nan.nan?)
+  t.expect(!nan.finite?)
+  t.expect(inf.infinite?)
+  t.expect(!2.0.nan?)
+  t.expect(2.0.to(F32).finite?)
+end
+
+@[test]
+def vectors(t: ^testing.T)
+  v: Vec2 = [3.0, 4.0]
+  t.expect_eq(v.length, 5.0)
+  t.expect_eq(v.length_squared, 25.0)
+  t.expect_eq(v.normalize, [0.6, 0.8])
+  t.expect_eq(v.dot([1.0, 0.0]), 3.0)
+  t.expect_eq(v.cross([0.0, 1.0]), 3.0)
+  t.expect_eq(v.perp, [-4.0, 3.0])
+  t.expect_eq(v.distance([0.0, 0.0]), 5.0)
+  t.expect_eq(v.lerp([5.0, 4.0], 0.5), [4.0, 4.0])
+  zero: Vec2 = [0.0, 0.0]
+  t.expect_eq(zero.normalize, zero)
+  x: Vec3 = [1.0, 0.0, 0.0]
+  t.expect_eq(x.cross([0.0, 1.0, 0.0]), [0.0, 0.0, 1.0])
+  t.expect_eq(x.length, 1.0)
+end
+
+@[test]
+def rectangles(t: ^testing.T)
+  r = Rect.new(0.0, 0.0, 10.0, 5.0)
+  t.expect(r.contains?([1.0, 1.0]))
+  t.expect(!r.contains?([10.0, 1.0]))
+  t.expect_eq(r.center, [5.0, 2.5])
+  t.expect_eq(r.intersection(Rect.new(5.0, 2.0, 10.0, 10.0)), Rect.new(5.0, 2.0, 5.0, 3.0))
+  t.expect_nil(r.intersection(Rect.new(50.0, 2.0, 1.0, 1.0)))
+  t.expect(r.intersects?(Rect.new(9.0, 4.0, 2.0, 2.0)))
+  t.expect_eq(r.translate([1.0, 2.0]).position, [1.0, 2.0])
+end

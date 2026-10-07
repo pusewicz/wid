@@ -1,0 +1,54 @@
+import "vendor:stb/image", as: :stbi
+import "vendor:stb/image_write", as: :stbiw
+import "vendor:stb/rect_pack", as: :rp
+import "core:c", as: :C
+
+# Collects what stb_image_write produces.
+struct Sink
+  bytes: [dynamic]U8
+end
+
+@[c]
+def collect(sink: RawPtr?, data: RawPtr?, size: C.int)
+  out = sink.to(^Sink?)
+  bytes = data.to([^]U8?)
+  return if out.nil? || bytes.nil?
+  for i in 0...size.to(Int)
+    out.bytes << bytes[i]
+  end
+end
+
+def round_trip
+  pixels: [16]U8
+  for i in 0...16
+    pixels[i] = (i * 16).to(U8)
+  end
+  sink = Sink.new(bytes: [dynamic]U8.new)
+  defer free(sink.bytes)
+  written = stbiw.write_png_to_func(method(:collect), &sink, 2, 2, 4, &pixels[0], 8)
+  puts "png: #{written == 1}, #{sink.bytes[1..3]}"
+
+  w, h, n: C.int
+  guard px = stbi.load_from_memory(sink.bytes.to([^]U8), sink.bytes.size.to(C.int), &w, &h, &n, 4) else
+    panic "decode failed"
+  end
+  defer stbi.image_free(px)
+  puts "#{w}x#{h}, #{n} channels, pixel 1: #{px[4]} #{px[5]} #{px[6]} #{px[7]}"
+end
+
+def pack
+  ctx: rp.Context
+  nodes: [64]rp.Node
+  rp.init_target(&ctx, 64, 64, &nodes[0], 64)
+  rects = [rp.Rect.new(id: 1, w: 40, h: 30), rp.Rect.new(id: 2, w: 24, h: 30), rp.Rect.new(id: 3, w: 64, h: 34)]
+  all = rp.pack_rects(&ctx, &rects[0], 3)
+  for r in rects
+    puts "rect #{r.id}: packed #{r.was_packed != 0} at #{r.x},#{r.y}"
+  end
+  puts "all packed: #{all != 0}"
+end
+
+def main
+  round_trip
+  pack
+end

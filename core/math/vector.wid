@@ -1,0 +1,109 @@
+# Vectors as small fixed arrays, which already support element-wise math and
+# swizzles (`v.x`, `v.yx`), and an axis-aligned rectangle.
+
+Vec2 = [2]F32
+Vec3 = [3]F32
+Vec4 = [4]F32
+
+extend [2]F32
+  # The vector's length.
+  def length -> F32 = sqrt_f32(self.length_squared)
+
+  # The squared length, which skips the square root.
+  def length_squared -> F32 = self.x * self.x + self.y * self.y
+
+  # The dot product.
+  def dot(o: [2]F32) -> F32 = self.x * o.x + self.y * o.y
+
+  # The 2D cross product: the z of the 3D cross product.
+  def cross(o: [2]F32) -> F32 = self.x * o.y - self.y * o.x
+
+  # The vector scaled to length 1; the zero vector stays zero.
+  def normalize -> [2]F32
+    len = self.length
+    len == 0.0 ? self : self / len
+  end
+
+  # The distance to `o`.
+  def distance(o: [2]F32) -> F32 = (o - self).length
+
+  # The angle from the positive x axis, in radians.
+  def angle -> F32 = atan2_f32(self.y, self.x)
+
+  # The vector rotated counterclockwise by `radians`.
+  def rotate(radians: F32) -> [2]F32
+    c = cos_f32(radians)
+    s = sin_f32(radians)
+    [self.x * c - self.y * s, self.x * s + self.y * c]
+  end
+
+  # The vector turned a quarter counterclockwise.
+  def perp -> [2]F32 = [-self.y, self.x]
+
+  # The point `t` of the way to `o`.
+  def lerp(o: [2]F32, t: F32) -> [2]F32 = self + (o - self) * t
+end
+
+extend [3]F32
+  # The vector's length.
+  def length -> F32 = sqrt_f32(self.length_squared)
+
+  # The squared length, which skips the square root.
+  def length_squared -> F32 = self.x * self.x + self.y * self.y + self.z * self.z
+
+  # The dot product.
+  def dot(o: [3]F32) -> F32 = self.x * o.x + self.y * o.y + self.z * o.z
+
+  # The cross product.
+  def cross(o: [3]F32) -> [3]F32
+    [self.y * o.z - self.z * o.y, self.z * o.x - self.x * o.z, self.x * o.y - self.y * o.x]
+  end
+
+  # The vector scaled to length 1; the zero vector stays zero.
+  def normalize -> [3]F32
+    len = self.length
+    len == 0.0 ? self : self / len
+  end
+
+  # The distance to `o`.
+  def distance(o: [3]F32) -> F32 = (o - self).length
+
+  # The point `t` of the way to `o`.
+  def lerp(o: [3]F32, t: F32) -> [3]F32 = self + (o - self) * t
+end
+
+# An axis-aligned rectangle: a corner and a size.
+struct Rect
+  x: F32
+  y: F32
+  w: F32
+  h: F32
+
+  # The top-left corner.
+  def position -> [2]F32 = [@x, @y]
+
+  # The width and height.
+  def size -> [2]F32 = [@w, @h]
+
+  # The middle point.
+  def center -> [2]F32 = [@x + @w / 2.0, @y + @h / 2.0]
+
+  # Returns true when `p` is inside; the right and bottom edges are outside.
+  def contains?(p: [2]F32) -> Bool = p.x >= @x && p.x < @x + @w && p.y >= @y && p.y < @y + @h
+
+  # Returns true when the rectangles overlap.
+  def intersects?(o: Rect) -> Bool = @x < o.x + o.w && o.x < @x + @w && @y < o.y + o.h && o.y < @y + @h
+
+  # The overlap of two rectangles, or nil when they do not touch.
+  def intersection(o: Rect) -> Rect?
+    left = @x.max(o.x)
+    top = @y.max(o.y)
+    right = (@x + @w).min(o.x + o.w)
+    bottom = (@y + @h).min(o.y + o.h)
+    return nil if right <= left || bottom <= top
+    Rect.new(left, top, right - left, bottom - top)
+  end
+
+  # The rectangle moved by `delta`.
+  def translate(delta: [2]F32) -> Rect = Rect.new(@x + delta.x, @y + delta.y, @w, @h)
+end

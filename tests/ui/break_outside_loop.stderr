@@ -1,0 +1,9 @@
+error[E0404]: `break` outside of a loop or block
+ --> tests/ui/break_outside_loop.wid:2:3
+  |
+2 |   break
+  |   ^^^^^ there is no loop or block to leave
+help: to leave the method early, use `return`
+  = see `wid explain E0404`
+
+error: could not compile due to 1 error

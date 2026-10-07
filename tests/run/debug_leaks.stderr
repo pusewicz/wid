@@ -1,0 +1,2 @@
+leak: 1 allocation (8 bytes) never freed
+  8 bytes allocated at tests/run/debug_leaks.wid:2:10 in `main`

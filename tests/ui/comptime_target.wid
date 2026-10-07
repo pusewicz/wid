@@ -1,0 +1,16 @@
+# Checked as if for Windows (see comptime_target.flags): the Windows branch
+# is chosen, so its missing header is reported, and the Unix branch is not
+# checked at all.
+comptime if OS == :windows
+  cimport "zzz_windows_only.h", as: :sys
+  def family -> String = "windows"
+else
+  cimport "zzz_unix_only.h", as: :sys
+  def family -> String = "unix"
+  def broken -> Int = "not checked"
+end
+
+def main
+  puts family
+  puts ARCH
+end

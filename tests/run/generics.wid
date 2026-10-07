@@ -1,0 +1,56 @@
+def largest(a: $T, b: T) -> T
+  a > b ? a : b
+end
+
+def first_or(xs: []$T, fallback: T) -> T
+  return fallback if xs.size == 0
+  xs[0]
+end
+
+struct Stack($T)
+  items: [dynamic]T
+
+  def push(x: T)
+    @items << x
+  end
+
+  def pop -> T?
+    @items.pop
+  end
+
+  def size -> Int = @items.size
+
+  def self.of(x: T) -> Stack(T)
+    s = Stack(T).new
+    s.push(x)
+    s
+  end
+end
+
+struct Pair($A, $B)
+  first: A
+  second: B
+end
+
+def main
+  puts largest(3, 9)
+  puts largest(2.5, 1.5)
+  puts largest("apple", "banana")
+  nums = [4, 5, 6]
+  puts first_or(nums, 0)
+  empty: [0]Int = []
+  puts first_or(empty, -1)
+  s = Stack(Int).new
+  s.push(1)
+  s.push(2)
+  puts s.size
+  p s.pop
+  p s.pop
+  p s.pop
+  t = Stack(String).of("x")
+  p t.pop
+  pair = Pair(Int, String).new(1, "one")
+  p pair
+  free(s.items)
+  free(t.items)
+end

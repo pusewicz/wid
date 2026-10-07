@@ -1,0 +1,11 @@
+error[E0109]: `double` is called without parentheses inside another expression
+ --> tests/ui/nested_command_call.wid:6:8
+  |
+6 |   puts double 4
+  |        ^^^^^^^^ this nested call needs parentheses
+  = note: only the outermost call of a statement may omit parentheses
+help: add parentheses
+  |   puts double(4)
+  = see `wid explain E0109`
+
+error: could not compile due to 1 error

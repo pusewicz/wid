@@ -1,0 +1,34 @@
+error[E0313]: `case` does not handle :blue
+ --> tests/ui/enum_errors.wid:8:8
+  |
+8 |   case c
+  |        ^ `Color` has 3 members
+help: add `when :blue` or an `else` branch
+  = see `wid explain E0313`
+
+error[E0204]: `Color` has no member `purple`
+  --> tests/ui/enum_errors.wid:15:14
+   |
+15 |   c: Color = :purple
+   |              ^^^^^^^ not a member of `Color`
+   = note: members: :red, :green, :blue
+   = see `wid explain E0204`
+
+error[E0203]: `x` is assigned but never read
+  --> tests/ui/enum_errors.wid:17:3
+   |
+17 |   x = :red
+   |   ^ this value is never used
+help: if this is intentional, prefix the name with an underscore
+   |   _x = :red
+   = see `wid explain E0203`
+
+error[E0304]: cannot infer which enum this symbol belongs to
+  --> tests/ui/enum_errors.wid:17:7
+   |
+17 |   x = :red
+   |       ^^^^ symbols need an expected enum type
+help: declare the variable's type, like `dir: Dir = :north`
+   = see `wid explain E0304`
+
+error: could not compile due to 4 errors

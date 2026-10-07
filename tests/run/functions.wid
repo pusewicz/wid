@@ -1,0 +1,25 @@
+MAX_HP = 100
+
+def heal(hp: Int, amount: Int = 10, cap: Int = MAX_HP) -> Int
+  total = hp + amount
+  return cap if total > cap
+  total
+end
+
+def greet(name: String)
+  print "hi "
+  puts name
+end
+
+def answer -> Int = 42
+
+def main
+  puts heal(50)
+  puts heal(95)
+  puts heal(50, 30)
+  puts heal(50, cap: 60)
+  puts heal(hp: 1, amount: 2)
+  greet "there"
+  puts answer
+  puts answer + 1
+end

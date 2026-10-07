@@ -1,0 +1,624 @@
+//! Resolving type expressions to interned types.
+
+use wid_diagnostics::{Diagnostic, Span, codes, did_you_mean};
+use wid_syntax::Name;
+use wid_syntax::ast::{self, TypeKind as T};
+
+use super::items::ConstValue;
+use super::{Checker, DeclKind, DeclLoc};
+use crate::types::{FloatTy, IntTy, TyId, TyKind};
+
+/// The context a type expression is resolved in.
+#[derive(Clone, Debug)]
+pub(crate) struct TyCtx {
+    pub loc: DeclLoc,
+    pub self_ty: Option<TyId>,
+    /// Bindings of generic parameters visible here.
+    pub subst: super::generics::Subst,
+}
+
+/// Names of the builtin types, for lookup and suggestions.
+pub(crate) const PRIMITIVE_NAMES: &[&str] = &[
+    "Int",
+    "UInt",
+    "I8",
+    "I16",
+    "I32",
+    "I64",
+    "U8",
+    "U16",
+    "U32",
+    "U64",
+    "F32",
+    "F64",
+    "Bool",
+    "Rune",
+    "String",
+    "CString",
+    "RawPtr",
+    "TypeId",
+    "Any",
+    "Error",
+    "Context",
+    "Allocator",
+    "AllocMode",
+    "Location",
+    "Logger",
+    "Never",
+    "Type",
+];
+
+/// Builtin types a package may declare its own type under: library types
+/// that are predeclared, as opposed to the language's own types. Inside such
+/// a package the name means the package's type.
+pub(crate) const SHADOWABLE_NAMES: &[&str] = &["Context", "Allocator", "AllocMode", "Location", "Logger", "Type"];
+
+/// Whether a package-level declaration can't use `name`, because it is one
+/// of the language's builtin types (`Int`, `String`, `Bool`, …).
+pub fn is_reserved_type_name(name: &str) -> bool {
+    PRIMITIVE_NAMES.contains(&name) && !SHADOWABLE_NAMES.contains(&name)
+}
+
+/// The C types `core:c` names, as in Odin's `core:c`.
+pub(crate) const C_TYPE_NAMES: &[&str] = &[
+    "char",
+    "schar",
+    "uchar",
+    "short",
+    "ushort",
+    "int",
+    "uint",
+    "long",
+    "ulong",
+    "longlong",
+    "ulonglong",
+    "float",
+    "double",
+    "bool",
+    "size_t",
+    "ssize_t",
+    "ptrdiff_t",
+    "intptr_t",
+    "uintptr_t",
+    "int8_t",
+    "uint8_t",
+    "int16_t",
+    "uint16_t",
+    "int32_t",
+    "uint32_t",
+    "int64_t",
+    "uint64_t",
+    "wchar_t",
+];
+
+impl<'a> Checker<'a> {
+    /// The Wid type a C type name stands for on the 64-bit Unix targets
+    /// (LP64): `long` is 64 bits and `char` is a byte.
+    pub fn c_type_alias(&mut self, name: &str) -> Option<TyId> {
+        let int = |t: IntTy| TyKind::Int(t);
+        let kind = match name {
+            "char" | "uchar" | "uint8_t" => int(IntTy::U8),
+            "schar" | "int8_t" => int(IntTy::I8),
+            "short" | "int16_t" => int(IntTy::I16),
+            "ushort" | "uint16_t" => int(IntTy::U16),
+            "int" | "int32_t" | "wchar_t" => int(IntTy::I32),
+            "uint" | "uint32_t" => int(IntTy::U32),
+            "long" | "longlong" | "int64_t" => int(IntTy::I64),
+            "ulong" | "ulonglong" | "uint64_t" => int(IntTy::U64),
+            "size_t" | "uintptr_t" => int(IntTy::UInt),
+            "ssize_t" | "ptrdiff_t" | "intptr_t" => int(IntTy::Int),
+            "float" => TyKind::Float(FloatTy::F32),
+            "double" => TyKind::Float(FloatTy::F64),
+            "bool" => TyKind::Bool,
+            _ => return None,
+        };
+        Some(self.types.intern(kind))
+    }
+
+    /// Returns the builtin type with this name.
+    pub fn primitive(&mut self, name: &str) -> Option<TyId> {
+        let kind = match name {
+            "Int" => TyKind::Int(IntTy::Int),
+            "UInt" => TyKind::Int(IntTy::UInt),
+            "I8" => TyKind::Int(IntTy::I8),
+            "I16" => TyKind::Int(IntTy::I16),
+            "I32" => TyKind::Int(IntTy::I32),
+            "I64" => TyKind::Int(IntTy::I64),
+            "U8" => TyKind::Int(IntTy::U8),
+            "U16" => TyKind::Int(IntTy::U16),
+            "U32" => TyKind::Int(IntTy::U32),
+            "U64" => TyKind::Int(IntTy::U64),
+            "F32" => TyKind::Float(FloatTy::F32),
+            "F64" => TyKind::Float(FloatTy::F64),
+            "Bool" => TyKind::Bool,
+            "Rune" => TyKind::Rune,
+            "String" => TyKind::String,
+            "CString" => TyKind::CString,
+            "RawPtr" => TyKind::RawPtr,
+            "TypeId" => TyKind::TypeId,
+            "Type" => TyKind::Type,
+            "Any" => TyKind::Any,
+            "Error" => TyKind::Error,
+            "Never" => TyKind::Never,
+            "Context" => return Some(self.types.context_ty),
+            "Allocator" => return Some(self.types.allocator_ty),
+            "AllocMode" => return Some(self.types.alloc_mode_ty),
+            "Location" => return Some(self.types.location_ty),
+            "Logger" => return Some(self.types.logger_ty),
+            _ => return None,
+        };
+        Some(self.types.intern(kind))
+    }
+
+    /// Resolves a type expression, reporting errors and returning the
+    /// unknown type on failure.
+    pub fn resolve_type(&mut self, texpr: &ast::TypeExpr, ctx: &TyCtx) -> TyId {
+        let ty = self.resolve_type_inner(texpr, ctx);
+        self.fill_pending_types();
+        ty
+    }
+
+    /// Resolves a type behind an indirection: structs and unions it names
+    /// need not be complete yet.
+    fn resolve_shallow(&mut self, texpr: &ast::TypeExpr, ctx: &TyCtx) -> TyId {
+        self.shallow += 1;
+        let ty = self.resolve_type_inner(texpr, ctx);
+        self.shallow -= 1;
+        ty
+    }
+
+    fn resolve_type_inner(&mut self, texpr: &ast::TypeExpr, ctx: &TyCtx) -> TyId {
+        let pointee = std::mem::take(&mut self.pointee);
+        match &texpr.kind {
+            T::Error => self.types.unknown(),
+            T::Path { segments, args } => {
+                let ty = self.resolve_path_type(segments, args, texpr.span, ctx);
+                if !pointee {
+                    self.check_not_opaque(ty, texpr.span);
+                }
+                ty
+            }
+            T::Param(name) => match super::generics::lookup(&ctx.subst, name.name) {
+                Some(t) => t,
+                None => {
+                    self.report(
+                        Diagnostic::error(
+                            codes::UNKNOWN_TYPE,
+                            format!("`${}` is not a type parameter here", name.as_str()),
+                        )
+                        .primary(name.span, "type parameters are introduced in method parameters, like `a: $T`")
+                        .help(format!("after it is introduced, refer to it as plain `{}`", name.as_str())),
+                    );
+                    self.types.unknown()
+                }
+            },
+            T::Pointer(inner) => {
+                self.pointee = true;
+                let t = self.resolve_shallow(inner, ctx);
+                self.pointee = false;
+                self.types.pointer(t)
+            }
+            T::MultiPointer(inner) => {
+                let t = self.resolve_shallow(inner, ctx);
+                self.types.intern(TyKind::MultiPointer(t))
+            }
+            T::Slice(inner) => {
+                let t = self.resolve_shallow(inner, ctx);
+                self.types.slice(t)
+            }
+            T::Dynamic(inner) => {
+                let t = self.resolve_shallow(inner, ctx);
+                self.types.intern(TyKind::Dynamic(t))
+            }
+            T::Map(k, v) => {
+                let k = self.resolve_shallow(k, ctx);
+                let v = self.resolve_shallow(v, ctx);
+                self.types.intern(TyKind::Map(k, v))
+            }
+            T::Array(len, elem) => {
+                let elem = self.resolve_type_inner(elem, ctx);
+                let bound = match &len.kind {
+                    ast::ExprKind::Const(n) => {
+                        super::generics::lookup(&ctx.subst, *n).and_then(|t| match self.types.kind(t) {
+                            TyKind::ConstValue(v) => Some(ConstValue::Int(*v)),
+                            _ => None,
+                        })
+                    }
+                    _ => None,
+                };
+                if let Some(TyKind::Param(_)) = match &len.kind {
+                    ast::ExprKind::Const(n) => {
+                        super::generics::lookup(&ctx.subst, *n).map(|t| self.types.kind(t).clone())
+                    }
+                    _ => None,
+                } {
+                    return self.types.intern(TyKind::Array(elem, 0));
+                }
+                match bound.or_else(|| self.eval_const(len, ctx.loc)) {
+                    Some(ConstValue::Int(n)) if n >= 0 => self.types.intern(TyKind::Array(elem, n as u64)),
+                    Some(ConstValue::Int(_)) => {
+                        self.report(
+                            Diagnostic::error(codes::TYPE_MISMATCH, "array length cannot be negative")
+                                .primary(len.span, "negative length"),
+                        );
+                        self.types.unknown()
+                    }
+                    _ => {
+                        let mut diag =
+                            Diagnostic::error(codes::COMPTIME_ONLY, "array length must be a compile-time integer")
+                                .primary(len.span, "not a constant integer");
+                        let var = match len.kind {
+                            ast::ExprKind::Ident(name) if !self.body.frames.is_empty() => {
+                                self.find_var(name).map(|v| {
+                                    v.read = true;
+                                    (name, v.span)
+                                })
+                            }
+                            _ => None,
+                        };
+                        if let Some((name, decl_span)) = var {
+                            let upper = name.as_str().to_uppercase();
+                            let elem_shown = self.types.display(elem);
+                            diag = diag
+                                .secondary(decl_span, format!("`{name}` is a variable, so its value is only known at run time"))
+                                .help(format!(
+                                    "declare a package-level constant like `{upper} = …` and write `[{upper}]`, or allocate at run time with `alloc([]{elem_shown}, {name})`"
+                                ));
+                        } else {
+                            diag = diag.help("use a literal like `[4]F32` or a constant like `[MAX]F32`; for a runtime size use `[]T` or `[dynamic]T`");
+                        }
+                        self.report(diag);
+                        self.types.unknown()
+                    }
+                }
+            }
+            T::Proc { params, ret, c_abi, variadic } => {
+                let params = params.iter().map(|p| self.resolve_shallow(p, ctx)).collect();
+                let ret = match ret {
+                    Some(r) => self.resolve_shallow(r, ctx),
+                    None => self.types.void(),
+                };
+                if *variadic && !*c_abi {
+                    self.report(
+                        Diagnostic::error(codes::TYPE_MISMATCH, "only C procs take variadic arguments")
+                            .primary(texpr.span, "`...` needs the C calling convention")
+                            .suggest(
+                                "mark the proc type as C",
+                                vec![wid_diagnostics::Edit {
+                                    span: texpr.span.shrink_to_start(),
+                                    replacement: "@[c] ".into(),
+                                }],
+                                wid_diagnostics::Applicability::MachineApplicable,
+                            ),
+                    );
+                }
+                self.types.intern(TyKind::Proc(crate::types::ProcSig {
+                    params,
+                    ret,
+                    abi: if *c_abi { crate::types::Abi::C } else { crate::types::Abi::Wid },
+                    variadic: *variadic && *c_abi,
+                }))
+            }
+            T::Block { .. } => {
+                self.report(
+                    Diagnostic::error(codes::BLOCK_MISMATCH, "`block(…)` types only describe `&block` parameters")
+                        .primary(texpr.span, "a block cannot be stored or passed as a value")
+                        .help("for a storable callback, use a `proc(…)` type"),
+                );
+                self.types.unknown()
+            }
+            T::Optional(inner) => {
+                let t = self.resolve_type(inner, ctx);
+                if matches!(self.types.kind(t), TyKind::Optional(_)) {
+                    self.report(
+                        Diagnostic::error(codes::TYPE_MISMATCH, "optional of an optional")
+                            .primary(texpr.span, "`T??` is the same as `T?`"),
+                    );
+                }
+                self.types.optional(t)
+            }
+            T::Tuple(elems) => {
+                let elems = elems.iter().map(|e| self.resolve_type(e, ctx)).collect();
+                self.types.tuple(elems)
+            }
+            T::Distinct(inner) => {
+                let base = self.source_text(inner.span);
+                self.report(
+                    Diagnostic::error(codes::NOT_A_TYPE, "`distinct` types need a name")
+                        .primary(texpr.span, "a `distinct` type is declared once, as a constant")
+                        .note("each `distinct` declaration creates a new type, so an unnamed one could never match another")
+                        .help(format!("declare it at package level, like `Meters = distinct {base}`, then use `Meters`")),
+                );
+                self.types.unknown()
+            }
+            T::Matrix { rows, cols, elem } => self.resolve_matrix(rows, cols, elem, ctx),
+        }
+    }
+
+    fn resolve_path_type(
+        &mut self,
+        segments: &[ast::Ident],
+        args: &[ast::GenericArg],
+        span: Span,
+        ctx: &TyCtx,
+    ) -> TyId {
+        let (pkg, name) = match segments {
+            [only] => (ctx.loc.pkg, *only),
+            [pkg, name] => match self.lookup_import(ctx.loc, pkg.name) {
+                Some(p) => (p, *name),
+                None => {
+                    if !self.import_failed(ctx.loc, pkg.name) {
+                        self.undefined(pkg.name, pkg.span, Vec::new(), "package");
+                    }
+                    return self.types.unknown();
+                }
+            },
+            _ => {
+                self.report(
+                    Diagnostic::error(codes::UNKNOWN_TYPE, "type paths have at most one `.`")
+                        .primary(span, "write `package.Type`"),
+                );
+                return self.types.unknown();
+            }
+        };
+        let text = name.name.as_str();
+        if segments.len() == 2 && self.input.packages[pkg.0 as usize].path == "core:c" {
+            if let Some(t) = self.c_type_alias(text) {
+                return t;
+            }
+            let mut diag = Diagnostic::error(codes::UNKNOWN_TYPE, format!("unknown C type `{text}`"))
+                .primary(name.span, "`core:c` has no type with this name");
+            if let Some(best) = did_you_mean(text, C_TYPE_NAMES.iter().copied()) {
+                diag = diag.suggest_replace(
+                    format!("did you mean `{best}`?"),
+                    name.span,
+                    best,
+                    wid_diagnostics::Applicability::MaybeIncorrect,
+                );
+            } else {
+                diag = diag.note(format!("C types: {}", C_TYPE_NAMES.join(", ")));
+            }
+            self.report(diag);
+            return self.types.unknown();
+        }
+        if segments.len() == 1
+            && args.is_empty()
+            && let Some(t) = super::generics::lookup(&ctx.subst, name.name)
+        {
+            return t;
+        }
+        if segments.len() == 1 {
+            if text == "Self" {
+                if let Some(s) = ctx.self_ty {
+                    return s;
+                }
+                self.report(
+                    Diagnostic::error(codes::SELF_OUTSIDE_METHOD, "`Self` is only available inside a type")
+                        .primary(name.span, "not inside a struct, enum, union or extend"),
+                );
+                return self.types.unknown();
+            }
+            if let Some(t) = self.primitive(text)
+                && !(SHADOWABLE_NAMES.contains(&text) && self.lookup_pkg(pkg, name.name).is_some())
+            {
+                return t;
+            }
+        }
+        if args.is_empty()
+            && let Some(t) = self.c_type_override(pkg, name.name)
+        {
+            return t;
+        }
+        let found = self
+            .lookup_pkg(pkg, name.name)
+            .or_else(|| if segments.len() == 1 { self.lookup_prelude(name.name) } else { None });
+        if let Some(decl) = found {
+            self.check_visible_from(decl, ctx.loc.pkg, name.span);
+            if !args.is_empty() {
+                let arg_tys: Vec<TyId> = args
+                    .iter()
+                    .map(|a| match a {
+                        ast::GenericArg::Type(t) => self.resolve_type(t, ctx),
+                        ast::GenericArg::Expr(e) => match self.eval_const(e, ctx.loc) {
+                            Some(ConstValue::Int(v)) => self.types.intern(TyKind::ConstValue(v)),
+                            _ => {
+                                self.report(
+                                    Diagnostic::error(
+                                        codes::GENERIC_ARGS,
+                                        "a generic value argument must be a constant integer",
+                                    )
+                                    .primary(e.span, "not a constant"),
+                                );
+                                self.types.unknown()
+                            }
+                        },
+                    })
+                    .collect();
+                let arg_spans: Vec<Span> = args
+                    .iter()
+                    .map(|a| match a {
+                        ast::GenericArg::Type(t) => t.span,
+                        ast::GenericArg::Expr(e) => e.span,
+                    })
+                    .collect();
+                let generic = matches!(self.decls[decl.0 as usize].kind, DeclKind::Struct(s) if !s.generics.is_empty())
+                    || matches!(self.decls[decl.0 as usize].kind, DeclKind::Union(u) if !u.generics.is_empty());
+                if generic && !self.check_generic_args(decl, &arg_tys, &arg_spans, span) {
+                    return self.types.unknown();
+                }
+                return match self.decls[decl.0 as usize].kind {
+                    DeclKind::Struct(s) if !s.generics.is_empty() => self.struct_instance(decl, arg_tys, span),
+                    DeclKind::Union(u) if !u.generics.is_empty() => self.union_instance(decl, arg_tys, span),
+                    _ => {
+                        self.report(
+                            Diagnostic::error(codes::GENERIC_ARGS, format!("`{text}` takes no type arguments"))
+                                .primary(span, "remove the arguments"),
+                        );
+                        self.types.unknown()
+                    }
+                };
+            }
+            if let DeclKind::Union(u) = self.decls[decl.0 as usize].kind
+                && !u.generics.is_empty()
+            {
+                let names: Vec<&str> = u.generics.iter().map(|g| g.name.as_str()).collect();
+                self.report(
+                    Diagnostic::error(codes::GENERIC_ARGS, format!("`{text}` needs type arguments"))
+                        .primary(name.span, format!("write it like `{text}({})`", names.join(", "))),
+                );
+                return self.types.unknown();
+            }
+            if matches!(self.decls[decl.0 as usize].kind, DeclKind::Struct(s) if !s.generics.is_empty()) {
+                let DeclKind::Struct(s) = self.decls[decl.0 as usize].kind else { unreachable!() };
+                let names: Vec<&str> = s.generics.iter().map(|g| g.name.as_str()).collect();
+                self.report(
+                    Diagnostic::error(codes::GENERIC_ARGS, format!("`{text}` needs type arguments"))
+                        .primary(name.span, format!("write it like `{text}({})`", names.join(", "))),
+                );
+                return self.types.unknown();
+            }
+            return self.decl_as_type(decl, name.span);
+        }
+        if self.failed_merges.contains(&pkg)
+            || ((segments.len() == 2 || self.merged_cimports.contains_key(&pkg))
+                && self.report_not_imported(pkg, name.name, name.span))
+        {
+            return self.types.unknown();
+        }
+        if segments.len() == 1
+            && self.body.frames.last().is_some_and(|f| f.loc.pkg == pkg)
+            && let Some(var) = self.find_var(name.name)
+        {
+            var.read = true;
+            let (var_ty, var_span) = (var.ty, var.span);
+            let shown = self.types.display(var_ty);
+            let mut diag = Diagnostic::error(codes::NOT_A_TYPE, format!("`{text}` is a variable, not a type"))
+                .primary(name.span, "expected a type here")
+                .secondary(var_span, format!("`{text}` is declared here"));
+            if !matches!(self.types.kind(var_ty), TyKind::Unknown) {
+                diag = diag.suggest_replace(
+                    format!("to declare another `{shown}`, write its type"),
+                    name.span,
+                    shown,
+                    wid_diagnostics::Applicability::MaybeIncorrect,
+                );
+            }
+            self.report(diag);
+            return self.types.unknown();
+        }
+        let mut candidates: Vec<&'static str> = PRIMITIVE_NAMES.to_vec();
+        candidates
+            .extend(self.package_names(pkg).into_iter().filter(|n| n.chars().next().is_some_and(char::is_uppercase)));
+        let mut diag = Diagnostic::error(codes::UNKNOWN_TYPE, format!("unknown type `{text}`"))
+            .primary(name.span, "no type with this name is in scope");
+        if let Some(best) = did_you_mean(text, candidates) {
+            diag = diag.suggest_replace(
+                format!("a similar type exists: `{best}`"),
+                name.span,
+                best,
+                wid_diagnostics::Applicability::MaybeIncorrect,
+            );
+        } else if let Some(hint) = common_type_hint(text) {
+            diag = diag.help(hint);
+        }
+        self.report(diag);
+        self.types.unknown()
+    }
+
+    /// Returns the type a declaration names, reporting when it isn't a type.
+    pub fn decl_as_type(&mut self, decl: super::DeclId, span: Span) -> TyId {
+        let is_record = matches!(self.decls[decl.0 as usize].kind, DeclKind::Struct(_) | DeclKind::Union(_));
+        if !is_record && let Some(&t) = self.decl_types.get(&decl) {
+            return t;
+        }
+        let d = self.decls[decl.0 as usize].clone();
+        match d.kind {
+            DeclKind::Struct(_) => self.struct_type(decl),
+            DeclKind::Enum(_) => self.enum_type(decl),
+            DeclKind::Union(_) => self.union_type(decl),
+            DeclKind::Const(c) => {
+                if let ast::ExprKind::Type(t) = &c.value.kind {
+                    let ctx = TyCtx { loc: d.loc, self_ty: None, subst: Default::default() };
+                    if let ast::TypeKind::Distinct(inner) = &t.kind {
+                        let base = self.resolve_type(inner, &ctx);
+                        let prefix = self.pkg_prefix(d.loc.pkg);
+                        let ty = self.types.new_distinct(crate::types::DistinctInfo {
+                            name: d.name.as_str().to_string(),
+                            c_name: format!("{prefix}__{}", super::mangle_ident(d.name.as_str())),
+                            base,
+                        });
+                        self.decl_types.insert(decl, ty);
+                        return ty;
+                    }
+                    self.pointee = true;
+                    let ty = self.resolve_type(t, &ctx);
+                    self.pointee = false;
+                    self.decl_types.insert(decl, ty);
+                    return ty;
+                }
+                if let ast::ExprKind::Member { recv, safe: false, .. } = &c.value.kind
+                    && matches!(recv.kind, ast::ExprKind::Ident(p) | ast::ExprKind::Const(p) if self.lookup_import(d.loc, p).is_some())
+                {
+                    let ctx = TyCtx { loc: d.loc, self_ty: None, subst: Default::default() };
+                    let texpr = super::members::expr_as_type(&c.value);
+                    self.pointee = true;
+                    let ty = self.resolve_type(&texpr, &ctx);
+                    self.pointee = false;
+                    self.decl_types.insert(decl, ty);
+                    return ty;
+                }
+                if let ast::ExprKind::Const(_) = &c.value.kind {
+                    let ctx = TyCtx { loc: d.loc, self_ty: None, subst: Default::default() };
+                    let texpr = ast::TypeExpr {
+                        kind: ast::TypeKind::Path {
+                            segments: vec![ast::Ident {
+                                name: match c.value.kind {
+                                    ast::ExprKind::Const(n) => n,
+                                    _ => unreachable!(),
+                                },
+                                span: c.value.span,
+                            }],
+                            args: Vec::new(),
+                        },
+                        span: c.value.span,
+                    };
+                    let ty = self.resolve_type(&texpr, &ctx);
+                    self.decl_types.insert(decl, ty);
+                    return ty;
+                }
+                self.not_a_type(d.name, span, "a constant");
+                self.types.unknown()
+            }
+            ref other => {
+                let what = other.a_describe();
+                self.not_a_type(d.name, span, &what);
+                self.types.unknown()
+            }
+        }
+    }
+
+    fn not_a_type(&mut self, name: Name, span: Span, what: &str) {
+        self.report(
+            Diagnostic::error(codes::NOT_A_TYPE, format!("`{name}` is {what}, not a type"))
+                .primary(span, "expected a type here")
+                .help("types are primitives like `Int`, structs, enums, unions, and constants like `Meters = distinct F64`"),
+        );
+    }
+}
+
+/// Hints for type names people often bring from other languages.
+fn common_type_hint(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "Integer" | "Fixnum" | "int" | "i64" | "isize" => "Wid's default integer type is `Int`",
+        "Float" | "float" | "f32" => "Wid has `F32` and `F64`",
+        "Double" | "double" | "f64" => "a 64-bit float is `F64`",
+        "Boolean" | "bool" => "booleans are `Bool`",
+        "Str" | "string" | "str" => "strings are `String`",
+        "Array" | "Vec" | "List" => {
+            "use `[N]T` for fixed arrays, `[]T` for slices and `[dynamic]T` for growable arrays"
+        }
+        "Hash" | "HashMap" | "Dict" => "use `map[K]V`",
+        "Void" | "Unit" | "Nil" => "a method that returns nothing simply has no `-> Type`",
+        _ => return None,
+    })
+}

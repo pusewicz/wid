@@ -1,0 +1,7 @@
+import "core:c"
+
+def main
+  a: c.integer = 1
+  b: c.lnog = 2
+  p a, b
+end

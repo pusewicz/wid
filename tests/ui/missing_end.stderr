@@ -1,0 +1,14 @@
+error[E0106]: this `if` is never closed
+ --> tests/ui/missing_end.wid:2:3
+  |
+2 |   if true
+  |   ^^ `if` opened here needs a matching `end`
+...
+6 | end
+  | --- this `end` is indented like an outer block, so it probably closes that instead
+help: the indentation suggests the `end` belongs here
+  |   end
+  |   puts "after"
+  = see `wid explain E0106`
+
+error: could not compile due to 1 error

@@ -1,0 +1,109 @@
+//! Diagnostics infrastructure for the Wid compiler: source maps, spans, the
+//! diagnostic model, the error-code registry and the renderers.
+
+pub mod codes;
+mod diagnostic;
+mod render;
+mod source;
+
+pub use codes::{Code, CodeInfo};
+pub use diagnostic::{Applicability, Diagnostic, Diagnostics, Edit, Help, Label, Severity};
+pub use render::{RenderOptions, render, render_all, render_json, to_json};
+pub use source::{FileId, SourceFile, SourceMap, Span};
+
+mod explanations {
+    include!(concat!(env!("OUT_DIR"), "/explanations.rs"));
+}
+
+/// Returns the long-form explanation for `code`, if one exists.
+pub fn explain(code: &str) -> Option<&'static str> {
+    explanations::EXPLANATIONS.iter().find(|(c, _)| c.eq_ignore_ascii_case(code)).map(|(_, text)| *text)
+}
+
+/// Returns every code that has an explanation document.
+pub fn explained_codes() -> impl Iterator<Item = &'static str> {
+    explanations::EXPLANATIONS.iter().map(|(c, _)| *c)
+}
+
+/// Computes the edit distance between two strings, for "did you mean" hints.
+/// Insertions, deletions, substitutions and swaps of two neighbouring
+/// characters each cost one, so `pirnt` is one edit from `print`.
+pub fn edit_distance(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let mut before = vec![0; b.len() + 1];
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    let mut cur = vec![0; b.len() + 1];
+    for i in 1..=a.len() {
+        cur[0] = i;
+        for j in 1..=b.len() {
+            let cost = usize::from(a[i - 1] != b[j - 1]);
+            cur[j] = (prev[j] + 1).min(cur[j - 1] + 1).min(prev[j - 1] + cost);
+            if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
+                cur[j] = cur[j].min(before[j - 2] + 1);
+            }
+        }
+        std::mem::swap(&mut before, &mut prev);
+        std::mem::swap(&mut prev, &mut cur);
+    }
+    prev[b.len()]
+}
+
+/// Chooses "a" or "an" for a word or type name as it is read aloud: "an
+/// `Int`", "an `F32`", "a `U8`", "a `String`", "a `[4]Int`".
+pub fn a_or_an(word: &str) -> &'static str {
+    let word = word.trim_start_matches(|c: char| !c.is_alphanumeric());
+    let mut chars = word.chars();
+    let Some(first) = chars.next() else { return "a" };
+    let spelled_out = chars.next().is_none_or(|c| c.is_ascii_digit() || c.is_ascii_uppercase());
+    let vowel_sound =
+        if spelled_out { "AEFHILMNORSX".contains(first.to_ascii_uppercase()) } else { "aeiouAEIOU".contains(first) };
+    if vowel_sound { "an" } else { "a" }
+}
+
+/// Picks the closest candidate to `name`, if any is close enough to suggest.
+pub fn did_you_mean<'a>(name: &str, candidates: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
+    // One edit turns a one- or two-letter name into an unrelated one, so
+    // short names only match when they differ in case.
+    let len = name.chars().count();
+    let max = if len <= 2 { 0 } else { (len / 3).max(1) };
+    candidates
+        .into_iter()
+        .filter(|c| *c != name)
+        .map(|c| (edit_distance(&name.to_lowercase(), &c.to_lowercase()), c))
+        .filter(|(d, _)| *d <= max)
+        .min_by_key(|(d, c)| (*d, c.len()))
+        .map(|(_, c)| c)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{a_or_an, did_you_mean, edit_distance};
+
+    #[test]
+    fn transpositions_cost_one_edit() {
+        assert_eq!(edit_distance("pirnt", "print"), 1);
+        assert_eq!(edit_distance("bonsu", "bonus"), 1);
+        assert_eq!(edit_distance("nroth", "north"), 1);
+        assert_eq!(edit_distance("kitten", "sitting"), 3);
+        assert_eq!(edit_distance("", "abc"), 3);
+    }
+
+    #[test]
+    fn articles_follow_pronunciation() {
+        assert_eq!(a_or_an("Int"), "an");
+        assert_eq!(a_or_an("F32"), "an");
+        assert_eq!(a_or_an("U8"), "a");
+        assert_eq!(a_or_an("String"), "a");
+        assert_eq!(a_or_an("[4]Int"), "a");
+        assert_eq!(a_or_an("^Node"), "a");
+    }
+
+    #[test]
+    fn suggests_the_closest_candidate() {
+        assert_eq!(did_you_mean("tset", ["test", "export"]), Some("test"));
+        assert_eq!(did_you_mean("xyz", ["test", "export"]), None);
+        assert_eq!(did_you_mean("d", ["p", "e"]), None);
+        assert_eq!(did_you_mean("X", ["x"]), Some("x"));
+    }
+}

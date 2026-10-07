@@ -1,0 +1,4 @@
+def main
+  total = 0
+  _ignored = 1
+end

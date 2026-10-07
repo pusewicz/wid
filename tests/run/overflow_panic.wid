@@ -1,0 +1,7 @@
+def main
+  x: I8 = 120
+  for _i in 0...10
+    x += 1
+    puts x
+  end
+end

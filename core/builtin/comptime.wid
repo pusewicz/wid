@@ -1,0 +1,40 @@
+# Compile-time support: the target a program is built for, and the records
+# reflection hands out.
+
+# Operating systems a program can be compiled for. `OS` holds the target's,
+# so `comptime if OS == :windows` picks code per platform.
+enum Os
+  darwin
+  linux
+  windows
+  freebsd
+  openbsd
+  netbsd
+  freestanding
+end
+
+# CPU architectures a program can be compiled for. `ARCH` holds the target's.
+enum Arch
+  arm64
+  amd64
+  i386
+  arm32
+  riscv64
+  wasm32
+  wasm64
+end
+
+# A field of a struct, as `T.fields` describes it while compiling.
+struct FieldInfo
+  name: String
+  type: Type
+  offset: Int
+end
+
+# A method of a type, as `T.methods` describes it while compiling.
+struct MethodInfo
+  name: String
+  params: []Type
+  ret: Type
+  static: Bool
+end

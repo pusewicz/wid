@@ -1,0 +1,23 @@
+error[E0202]: `tally_fresh` is declared here and by `tally.h`
+ --> tests/ui/cimport_merge/main.wid:3:5
+  |
+1 | cimport "tally.h"
+  | ----------------- this `cimport` adds `TallyFresh` from C as `tally_fresh`
+...
+3 | def tally_fresh -> Int = 0
+  |     ^^^^^^^^^^^ declared in this package
+  = note: a `cimport` without `as:` adds the header's names to the package
+help: give the C one another name, or rename this declaration
+  | cimport "tally.h", names: {TallyFresh: :c_tally_fresh}
+  = see `wid explain E0202`
+
+error[E0705]: `TALLY_TWICE` from `tally.h` was not imported
+ --> tests/ui/cimport_merge/main.wid:8:8
+  |
+8 |   puts tally_twice(4)
+  |        ^^^^^^^^^^^ `TALLY_TWICE` is a function-like macro
+  = note: C declares it at tally.h:6
+help: write a small C function in a `.c` file of the package that calls the macro, and declare it with `@[extern]`
+  = see `wid explain E0705`
+
+error: could not compile due to 2 errors

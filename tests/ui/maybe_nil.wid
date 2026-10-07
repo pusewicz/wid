@@ -1,0 +1,27 @@
+struct Vec2
+  x: F32
+  y: F32
+end
+
+struct Player
+  pos: Vec2
+end
+
+struct Data
+  spawn: Vec2?
+
+  def find_spawn -> Vec2? = @spawn
+end
+
+def setup(data: Data) -> Player
+  player = Player.new
+  spawn = data.find_spawn
+  player.pos = spawn
+  player
+end
+
+def main
+  setup(Data.new)
+  count = Data.new.find_spawn
+  puts count.x
+end

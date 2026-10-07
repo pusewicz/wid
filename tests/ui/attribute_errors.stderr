@@ -1,0 +1,87 @@
+error[E0328]: unknown attribute `@[whatever]`
+ --> tests/ui/attribute_errors.wid:1:3
+  |
+1 | @[whatever] struct Pair
+  |   ^^^^^^^^ not an attribute Wid knows
+  = note: struct attributes: extern, opaque, size, align
+help: remove `@[whatever]`
+  = see `wid explain E0328`
+
+error[E0328]: `@[c]` only applies to methods
+ --> tests/ui/attribute_errors.wid:2:5
+  |
+2 |   @[c] a: Int
+  |     ^ this is a field, not a `def`
+  = note: a field takes no attributes
+help: remove `@[c]`
+  = see `wid explain E0328`
+
+error[E0328]: unknown attribute `@[expoert]`
+ --> tests/ui/attribute_errors.wid:5:3
+  |
+5 | @[expoert] X = 1
+  |   ^^^^^^^ not an attribute Wid knows
+  = note: constant attributes: extern
+help: remove `@[expoert]`
+  = see `wid explain E0328`
+
+error[E0328]: `@[export]` is written twice
+ --> tests/ui/attribute_errors.wid:7:16
+  |
+7 | @[export("x"), export]
+  |                ^^^^^^ repeated here
+help: remove the second one
+  = see `wid explain E0328`
+
+error[E0328]: `@[extern]` takes one string
+  --> tests/ui/attribute_errors.wid:11:3
+   |
+11 | @[extern(1)]
+   |   ^^^^^^^^^ expected a C symbol name like `"on_audio"`
+help: write `@[extern("symbol")]`, or `@[extern]` to use the method's name
+   = see `wid explain E0328`
+
+error[E0328]: an `@[extern]` method has no body
+  --> tests/ui/attribute_errors.wid:12:1
+   |
+12 | def bad_extern
+   | ^^^^^^^^^^^^^^ its code lives in C
+help: remove the body, leaving `def … end`
+   = see `wid explain E0328`
+
+error[E0328]: `@[c]` takes no arguments
+  --> tests/ui/attribute_errors.wid:16:5
+   |
+16 | @[c(2), tset]
+   |     ^ unexpected argument
+help: remove the arguments
+   | @[c, tset]
+   = see `wid explain E0328`
+
+error[E0328]: unknown attribute `@[tset]`
+  --> tests/ui/attribute_errors.wid:16:9
+   |
+16 | @[c(2), tset]
+   |         ^^^^ not an attribute Wid knows
+   = note: method attributes: c, export, extern, no_bounds_check, test
+help: did you mean `test`?
+   | @[c(2), test]
+   = see `wid explain E0328`
+
+error[E0328]: unknown attribute `@[tset]`
+  --> tests/ui/attribute_errors.wid:24:5
+   |
+24 |   @[tset] puts 1
+   |     ^^^^ not an attribute Wid knows
+   = note: statements accept only `@[no_bounds_check]`
+   = see `wid explain E0328`
+
+error[E0328]: `@[export]` does not apply to a statement
+  --> tests/ui/attribute_errors.wid:25:5
+   |
+25 |   @[export] puts 2
+   |     ^^^^^^ it goes before a `def`
+   = note: statements accept only `@[no_bounds_check]`
+   = see `wid explain E0328`
+
+error: could not compile due to 10 errors

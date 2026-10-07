@@ -1,0 +1,152 @@
+# core:fmt: number formatting with bases, widths, padding and precision.
+#
+# The `write_*` methods append to a `strings.Builder`, so their only memory is
+# the builder's. The functions that return a `String` build it on `allocator`,
+# which defaults to `context.temp_allocator` like string interpolation does:
+# `puts "#{fmt.float(ratio, precision: 2)}%"` allocates nothing that outlives
+# the frame. `bprint` formats into a caller's buffer and never allocates.
+
+import "core:strings"
+
+# How `float` lays out digits.
+enum FloatStyle
+  # `1234.5`: digits after the point; the shortest exact digits when the
+  # precision is negative.
+  fixed
+  # `1.2345e+03`: one digit before the point and an exponent.
+  exponent
+  # Fixed or exponent, whichever is shorter; precision counts significant
+  # digits.
+  general
+end
+
+DIGITS = "0123456789abcdefghijklmnopqrstuvwxyz"
+
+# Appends `n` in `base` (2 to 36), padded on the left with `pad` to `width`
+# runes. With a `'0'` pad the sign goes before the zeros. `plus` writes `+`
+# before positive numbers.
+def write_int(b: ^strings.Builder, n: Int, base: Int = 10, width: Int = 0, pad: Rune = ' ', plus: Bool = false)
+  magnitude = n < 0 ? (0 - (n + 1)).to(UInt) + 1 : n.to(UInt)
+  sign = n < 0 ? "-" : (plus ? "+" : "")
+  write_digits(b, magnitude, base, width, pad, sign)
+end
+
+# Appends an unsigned number; see `write_int`.
+def write_uint(b: ^strings.Builder, n: UInt, base: Int = 10, width: Int = 0, pad: Rune = ' ')
+  write_digits(b, n, base, width, pad, "")
+end
+
+# Appends a float. A negative `precision` prints the shortest digits that read
+# back as the same number, like `to_s`.
+def write_float(
+  b: ^strings.Builder,
+  x: F64,
+  precision: Int = -1,
+  style: FloatStyle = :fixed,
+  width: Int = 0,
+  pad: Rune = ' ',
+  plus: Bool = false
+)
+  buf: [128]U8 = ---
+  code = case style
+    when :fixed then 102
+    when :exponent then 101
+    when :general then 103
+  end
+  n = format_float_raw(x, precision, code.to(U8), &buf[0], 128)
+  text = buf[0...n].to(String)
+  sign = ""
+  if text.starts_with?("-")
+    sign = "-"
+    text = text[1...text.size]
+  elsif plus
+    sign = "+"
+  end
+  write_padded(b, sign, text, width, pad)
+end
+
+# `n` as a string; see `write_int`.
+def int(
+  n: Int,
+  base: Int = 10,
+  width: Int = 0,
+  pad: Rune = ' ',
+  plus: Bool = false,
+  allocator: Allocator = context.temp_allocator
+) -> String
+  b = strings.Builder.create(allocator: allocator)
+  write_int(&b, n, base: base, width: width, pad: pad, plus: plus)
+  b.string
+end
+
+# `n` as a string; see `write_uint`.
+def uint(n: UInt, base: Int = 10, width: Int = 0, pad: Rune = ' ', allocator: Allocator = context.temp_allocator) -> String
+  b = strings.Builder.create(allocator: allocator)
+  write_uint(&b, n, base: base, width: width, pad: pad)
+  b.string
+end
+
+# `x` as a string; see `write_float`.
+def float(
+  x: F64,
+  precision: Int = -1,
+  style: FloatStyle = :fixed,
+  width: Int = 0,
+  pad: Rune = ' ',
+  plus: Bool = false,
+  allocator: Allocator = context.temp_allocator
+) -> String
+  b = strings.Builder.create(allocator: allocator)
+  write_float(&b, x, precision: precision, style: style, width: width, pad: pad, plus: plus)
+  b.string
+end
+
+# Copies `s` into `buf`, cutting it short when it does not fit, and returns
+# the copied text. Nothing is allocated.
+def bprint(buf: []U8, s: String) -> String
+  n = s.size < buf.size ? s.size : buf.size
+  for i in 0...n
+    buf[i] = s[i]
+  end
+  buf[0...n].to(String)
+end
+
+# Copies `s` into memory from `allocator`; free it with that allocator.
+def aprint(s: String, allocator: Allocator = context.allocator) -> String = s.clone(allocator: allocator)
+
+private def write_digits(b: ^strings.Builder, n: UInt, base: Int, width: Int, pad: Rune, sign: String)
+  if base < 2 || base > 36
+    panic "fmt: base must be between 2 and 36, not #{base}"
+  end
+  buf: [64]U8 = ---
+  i = 64
+  v = n
+  bb = base.to(UInt)
+  loop do
+    i -= 1
+    buf[i] = DIGITS[(v % bb).to(Int)]
+    v /= bb
+    break if v == 0
+  end
+  write_padded(b, sign, buf[i...64].to(String), width, pad)
+end
+
+private def write_padded(b: ^strings.Builder, sign: String, digits: String, width: Int, pad: Rune)
+  fill = width - sign.size - digits.size
+  if pad == '0'
+    b.write(sign)
+    for _i in 0...fill
+      b.write_rune(pad)
+    end
+  else
+    for _i in 0...fill
+      b.write_rune(pad)
+    end
+    b.write(sign)
+  end
+  b.write(digits)
+end
+
+@[extern("wid_fmt_float")]
+private def format_float_raw(x: F64, precision: Int, style: U8, buf: ^U8, cap: Int) -> Int
+end

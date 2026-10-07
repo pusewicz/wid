@@ -1,0 +1,566 @@
+# Wid — Language Spec (draft 0.1)
+
+Wid reads like Ruby but is statically and strongly typed, uses manual memory
+management, and compiles to C23. Its semantics, memory model and CLI come from
+Odin. It is built for 2D games but works as a general-purpose systems language,
+and it is meant to be easy for both people and LLMs to read, write and debug.
+It aims for programmer happiness: one obvious way to do things, no hidden costs,
+and error messages that teach.
+
+## Taste
+
+```ruby
+import "vendor:raylib", as: :rl
+
+Vec2 = [2]F32
+
+struct Ball
+  pos: Vec2
+  vel: Vec2 = [120.0, 80.0]
+  radius: F32 = 8.0
+
+  def update(dt: F32)
+    @pos += @vel * dt
+    @vel.y = -@vel.y unless @pos.y.between?(0.0, 450.0)
+  end
+end
+
+def main
+  rl.init_window(800, 450, "bounce")
+  defer rl.close_window
+
+  balls = [dynamic]Ball.new
+  defer free(balls)
+  balls << Ball.new(pos: [400.0, 225.0])
+
+  until rl.window_should_close
+    balls.each { |&b| b.update(rl.get_frame_time) }
+    rl.begin_drawing
+    rl.clear_background(rl.BLACK)
+    for b in balls
+      rl.draw_circle_v(b.pos, b.radius, rl.RED)
+    end
+    rl.end_drawing
+    free_all(context.temp_allocator)
+  end
+end
+```
+
+## Syntax
+
+- Wid keeps Ruby's surface: `def … end`, endless `def f = expr`,
+  `if/unless/elsif`, postfix `if`/`unless`, `while/until/loop`, `case/when`,
+  implicit return, `#{}` interpolation, ranges `0..n`/`0...n`, `#` comments and
+  no semicolons. `?` methods must return `Bool`. Source files use the `.wid`
+  extension.
+- **Blocks** can be written `do |x| … end` or `{ |x| … }`. A `{` right after a
+  call opens a block; anywhere else, `{}` is the zero-value literal.
+- **Declarations.** The first assignment declares a variable: `x = 1`,
+  `speed: F32 = 120.0`, or `grid: [4][4]U8`. Variables are zero-initialized,
+  and `= ---` opts out. As in Ruby, a name that starts with an uppercase letter
+  is a compile-time constant: `MAX = 256`, `Vec2 = [2]F32`. Reading an
+  undeclared name is an error with a "did you mean", and so is a local
+  variable that is assigned but never read (prefix it with `_` to keep it).
+  Unused parameters are allowed.
+- **Calls.** Parentheses are optional for zero-argument calls and for the
+  outermost call of a statement (`puts "hi"`). Any parameter can be passed by
+  name. Defaults are written `hp: Int = 100`.
+- **Symbols.** `:north` is a compile-time name. Where an enum is expected it
+  selects a member, like Odin's `.North`; anywhere else it is a plain
+  identifier (in macros and `cimport` options, for example).
+- **Attributes.** Written `@[export("on_audio"), c]`. Methods take `c`,
+  `export`, `extern`, `no_bounds_check` and `test`; statements take
+  `no_bounds_check`. C declarations take `extern`: a struct defined by C
+  (`@[extern("struct Foo"), size(8), align(4)]`, or `opaque` when only C
+  knows its fields), a field with a different C name, and a constant C reads
+  by name (`@[extern("RED")] RED: Color = ---`). Other declarations take
+  none. Inside a method, `@name` means `self.name`.
+- **Smaller syntax rules:**
+  - `def self.name` declares a type-level function (`Vec2.zero`).
+  - `def -` with no parameters is unary minus.
+  - `private def …` hides a declaration outside its package, or outside its
+    type for methods: a private method can only be called from methods of the
+    same type, including ones mixed in with `include` or added by `extend`.
+  - `loop do … end` loops forever.
+  - `for x in xs`, `for &x in xs` and `for x, i in xs` iterate.
+  - `^` only builds pointer types (`^T`) and dereferences (`p^`). Bitwise xor
+    is `~`, as in Odin.
+  - `&x` takes an address.
+  - `{…}` literals must be empty.
+  - Enum members are lowercase.
+  - `map`, `proc`, `block`, `distinct`, `matrix` and `dynamic` are keywords only
+    where a type is expected.
+  - A line that ends with an operator or `,`, or a next line that starts with
+    `.method`, continues the statement.
+  - `x ? a : b` needs spaces around `?`, because `x?` is a predicate name.
+
+## Types
+
+- **Primitives:** `Int`/`UInt` (pointer-sized), `I8…I64`, `U8…U64`, `F32`,
+  `F64`, `Bool`, `Rune`, `String` (an immutable UTF-8 ptr+len view), `CString`,
+  `RawPtr`, `TypeId` and `Any`. These names, `Error` and `Never` can't be
+  declared again. `Context`, `Allocator`, `AllocMode`, `Location` and
+  `Logger` are predeclared library types: a package may declare its own type
+  under one of these names (a C library's `stbrp_context` becomes `Context`),
+  and inside that package the name means its own type.
+- **Constructors (Odin):** `^T`, `[^]T`, `[N]T`, `[]T`, `[dynamic]T`,
+  `map[K]V`, `proc(A) -> R`, `distinct T` and `matrix[R, C]T`. Small numeric
+  arrays support element-wise math and swizzles (`v.xy`, `c.rgb`).
+- **Distinct types** are declared as constants, `Meters = distinct F64`, and
+  each declaration is a new type with the base type's representation and
+  operators. Untyped literals convert to it; typed values convert with `.to`
+  in either direction (`f.to(Meters)`, `m.to(F64)`), never implicitly.
+- **Optionals:** `T?`, whose empty value is `nil`. A `T` converts to `T?`
+  implicitly; the reverse needs an unwrap. Pointers can't be nil
+  unless written `^T?` (the `?` after `^T` or `[^]T` makes the pointer
+  nil-able; `^(T?)` points at an optional). Use `x || default` to unwrap with a fallback, `x&.f` to
+  chain, `if v = maybe … end` to bind, and `while v = maybe … end` to loop
+  until it is nil. `a ||= b` assigns when `a` is nil or false (on a map entry:
+  when the key is missing) and `a &&= b` when it holds a value or is true;
+  `b` is only evaluated then. Checks narrow a local's type for the
+  code they protect: `if x`, `unless x.nil?`, `x != nil`, `return … if x.nil?`
+  and `guard`. Assigning to the local ends the narrowing, and loops forget it
+  for locals they assign. Fields don't narrow; copy them into a local. Only
+  `nil` and `false` are falsy; a condition must be a `Bool` or a nil-able
+  value.
+- **Conversions** are always explicit: `n.to(F32)`, `to_i`, `to_f`, `to_s`.
+  `.to(T)` also converts between pointer types (`^T`, `[^]T`, `RawPtr`,
+  `CString`), between a pointer and its address (`Int`/`UInt`), and between the
+  byte views `String`, `[]U8` (also from `[N]U8` and `[dynamic]U8`) and
+  `CString` (to `String` only). These conversions never copy. A conversion
+  from a nil-able pointer must target a nil-able one (`raw.to(^Node?)`), so
+  nil stays visible. On an array, slice or dynamic array of `T`,
+  `.to([^]T)` is a pointer to its first element, for C calls; it doesn't copy
+  and is valid while the container is. The one implicit conversion is any
+  pointer to `RawPtr` or `RawPtr?`.
+- **`[^]T` arithmetic:** `p + n` and `p - n` move by whole elements, and
+  `p - q` counts the elements between two of them.
+- **`Never`** is the return type of methods that never return, like
+  `os.exit`. Their body must end in `panic`, an endless loop or another
+  `-> Never` call, and a call to one ends the code path, so it satisfies
+  `guard … else`.
+- **`caller_location`** is a `Location` (`file`, `line`, `column`, `proc`).
+  As a parameter default, `loc: Location = caller_location`, it is the
+  location of the call, which is how `t.expect` and allocators report where
+  something happened. `AllocMode` and `Location` are builtin types, so
+  allocators can be written in Wid: an `Allocator` is a C-ABI
+  `proc(RawPtr, AllocMode, Int, Int, RawPtr, Int, Location) -> RawPtr` and a
+  data pointer.
+- **Generics:** a `$T` in a parameter introduces a type parameter
+  (`def max(a: $T, b: T) -> T`). Generic structs are written
+  `struct Pool($T, $N: Int)` and used as `Pool(Ball, 64)`.
+  - Type arguments are inferred from the arguments. A `[N]T` or `[dynamic]T`
+    argument matches a `[]$T` parameter.
+  - Generic code is checked once per set of type arguments, like a template:
+    using `<` on a `T` is fine as long as every `T` it is used with has `<`.
+    Generic methods that are never called are not checked.
+- A minus sign written directly before a number literal belongs to it, so
+  `-7.abs` is `7`, as in Ruby.
+- **Literals:** `{}` is the zero value of the expected type, and `[1, 2, 3]` is
+  a fixed array (or a slice of a temporary array where `[]T` is expected).
+- **Collections:**
+  - `xs[i]` is bounds-checked. `xs[a...b]`, `xs[a..b]`, `xs[a..]` and
+    `xs[..b]` make slices.
+  - Arrays and dynamic arrays convert to `[]T` where a slice is expected.
+  - Arrays, slices and dynamic arrays share `.size`, `.empty?`, `.first` and
+    `.last`. The last two return `T?`.
+  - Dynamic arrays also have `<<` and `.push`, `.pop` (returns `T?`),
+    `.insert(i, x)`, `.delete_at(i)`, `.reserve(n)`, `.clear` and
+    `.capacity`.
+  - `[dynamic]T.new` and `map[K]V.new` start empty and grow with the
+    allocator that was `context.allocator` at creation, or with `allocator:`.
+    A zero-valued container adopts `context.allocator` when it first grows.
+  - As in Odin, growing a dynamic array or map while iterating it, or while
+    holding a pointer into it, invalidates the iteration and the pointer.
+  - Map keys are numbers, runes, bools, enums, pointers or strings. `m[k]`
+    returns `V?`, `m[k] = v` stores, and `m[k] += 1` starts from zero for a
+    missing key. Maps also have `.has_key?`, `.delete` and `.size`.
+- **Strings** are byte views:
+  - `.size` counts bytes, `s[i]` is a `U8`, and `s[a...b]` slices bytes.
+  - `for r in s` iterates runes, and `for r, i in s` adds the byte offset.
+  - Strings compare with `==` and `<`. They also have `.include?`,
+    `.index` (returns `Int?`), `.starts_with?`, `.ends_with?`, `.empty?` and
+    `.to_cstr`.
+- **Fixed numeric arrays** support element-wise `+ - * / %` with each other or
+  with a scalar, unary `-`, and swizzles (`v.x`, `v.yx`, `c.rgb`).
+- **Matrices:** `matrix[R, C]T` holds numbers in column-major order (as in
+  Odin and GLSL), with 1 to 16 rows and columns. A literal lists the elements
+  row by row: `m: matrix[2, 2]F32 = [1.0, 2.0, 3.0, 4.0]`. `m[row, col]`
+  reads and writes an element. `+` and `-` work element-wise, `*` and `/` by a
+  scalar scale every element, and `*` between a matrix and a matrix or vector
+  is the matrix product: `matrix[R, K] * matrix[K, C]`, `matrix[R, C] * [C]T`
+  (a column) and `[R]T * matrix[R, C]` (a row). They also have `==`,
+  `.transpose`, `.row(i)`, `.column(j)` and `matrix[N, N]T.identity`.
+- **Dynamic arrays** also have `.concat(xs)`, which appends a slice, and
+  `.resize(n)`, which zero-fills new elements.
+
+## Data and behavior
+
+- A `struct` has fields and methods, and its values are copied. Methods get
+  `self` as `^Self`, and the call site takes the address for you. `T.new(…)`
+  builds a value and **never allocates**. It takes fields by position (in
+  declaration order) or by name; missing fields use their declared default or
+  zero. `new` is reserved for this, so name custom constructors otherwise
+  (`def self.create`). `==` compares structs field by field when every field
+  is comparable; define `==` to customize it.
+- **No implicit overloading.** Two defs can't share a name. To overload, you
+  declare an explicit set, like an Odin proc group:
+  `overload :clamp, :clamp_f32, :clamp_int`. A call picks the member with the
+  most exact parameter matches. Typed values never convert between number
+  types; an untyped literal matches its default type exactly and converts to
+  other number types, so `clamp(5)` picks `clamp_int` and `clamp(0.5)` picks
+  `clamp_f32`. If none fits, or several fit equally well, the error lists
+  every member. Members can't take blocks or `$` type parameters, and no two
+  may take the same parameter types.
+- **Operators are methods**, because math-heavy game code needs them. You can
+  define `+ - * / %`, unary `-`, `==`, `<=>` (which gives you `<`, `<=`, `>`
+  and `>=`), `[]` and `[]=`, and `+=`-style forms are derived automatically.
+  When a type needs more than one right-hand type, use an explicit set, as
+  with any other overload:
+
+  ```ruby
+  struct Transform
+    origin: Vec2
+    basis: matrix[2, 2]F32
+
+    def apply(p: Vec2) -> Vec2 = @basis * p + @origin
+    def compose(t: Transform) -> Transform =
+      Transform.new(apply(t.origin), @basis * t.basis)
+    overload :*, :apply, :compose      # xf * point, xf * xf
+  end
+  ```
+
+  If the left operand isn't the struct (as in `F32 * Transform`), define the
+  operator at package level: `def *(s: F32, t: Transform) -> Transform`, or
+  name several such functions and group them with `overload :*, …`. An
+  untyped literal operand takes its type from the operator's other parameter,
+  so `2.0 * xf` works.
+- There is no inheritance. `using base: Entity` (or `using base: ^Entity`)
+  promotes another struct's fields and methods into this one, so `player.hp`
+  and `@hp` reach `player.base.hp`. Promotion is transitive. The struct's own
+  members win over promoted ones, and a name that two `using` fields provide
+  is an error until the access names the field.
+- `module Name … end` holds methods and constants (no fields). `include Name`
+  in a struct, enum, module or `extend` mixes its methods in at compile time.
+  Module methods are generic over `Self`, checked for each type that includes
+  them, and `@field` reads that type's fields.
+- `extend T1, T2 … end` adds methods to existing types. That includes builtin
+  types and patterns such as `[]$T`. Extensions apply program-wide, and two
+  extensions that define the same method for a type are an error. A method
+  call looks for a field, then the type's own methods, then included modules,
+  then members promoted by `using`, then builtin methods (`size`, `push`,
+  `to_s`, …), then extensions. For arrays and dynamic arrays it also looks
+  for extensions of `[]T`.
+- **The prelude** (`core:builtin`, visible everywhere without an import)
+  extends:
+  - slices with `each`, `each_with_index`, `reverse_each`, `count`, `any?`,
+    `all?`, `none?`, `find`, `find_index`, `include?`, `index`, `sum`, `min`,
+    `max`, `reverse!`, `sort!` and `sort_by!`;
+  - numbers with `between?`, `clamp`, `min`, `max`, `zero?`, `abs`, `even?`,
+  `odd?`, `times` and `upto`. Inside a method, `self` is the receiver itself (passed by
+  pointer, so changes are visible to the caller), and a bare method name calls
+  it on `self`.
+- `enum Dir : U8 … end` declares an enum (backed by `Int` when no type is
+  given). Members count up from 0 unless written `name = value`; `Dir.north`
+  and `:north` both name one, and `.to_i` gives its value. `union Shape =
+  Circle | Rect` declares a tagged union, matched with
+  `case s when Circle then s.radius`. `s` is narrowed in each branch.
+- `case` over an enum or union must handle every member unless it has an
+  `else`; `when` takes several values, and ranges such as `1..9`. A `case`
+  used as a value needs an `else` unless it is exhaustive. An exhaustive
+  `case` without `else` panics if the value is a nil union or not a valid
+  enum member.
+- Polymorphism is explicit: use tagged unions, or structs of `proc` fields.
+  There are no hidden vtables.
+- **Blocks.** A method declares `&blk: block(T) -> R` and calls the block with
+  `yield`. Blocks are **inlined** into the caller, so they capture locals freely
+  and allocate nothing; `break`, `next` and `return` work as in Ruby. A block
+  can't be stored. `|&x|` and `for &x in xs` bind by reference; otherwise
+  bindings are by value.
+  - `block` alone takes and returns nothing.
+  - `next v` gives the block's value and `break v` gives the method's.
+  - A method that takes a block cannot call itself, because it is inlined.
+  - Passing a block to a method without one, or calling a block method
+    without one, is an error.
+- **Procs.** Storable callbacks are non-capturing procs, written
+  `->(x: Int) -> Int { x * 2 }` or `method(:on_hit)` (a package or
+  type-level method). A proc is called like a method, `f(x)` or `f.call(x)`,
+  including through a field (`button.on_click(e)`). Procs are nil-able. If a
+  proc captures a local, the error suggests a parameter or a block instead.
+
+## Errors
+
+```ruby
+def load_level(path: String) -> (Level, Error)
+  guard data = os.read_file(path) else |err|
+    return {}, err
+  end
+
+  guard spawn = data.find_spawn else   # Vec2?
+    return {}, :no_spawn
+  end
+
+  lives = data.parse_int("lives") || 3
+  return Level.new(data, spawn, lives), nil
+end
+```
+
+- Wid has no exceptions. A fallible function returns multiple values, with the
+  error last.
+- `Error` is a built-in enum made of every error symbol the program uses, like
+  Zig's `anyerror`: writing `:name` where an `Error` is expected (returning it,
+  comparing with it, matching it in `case`) adds it to the set. A union that
+  can be nil also works as the error value. `nil` means success.
+- `guard a, b = f() else |err| … end` binds the non-error values, or unwraps a
+  `T?`, for the rest of the scope. The `else` branch must leave the scope with
+  `return`, `break`, `next` or `panic`. There are no shorthand propagation
+  operators such as `or_return` or `?`. `guard cond else … end` also works
+  with a plain `Bool` condition.
+- By convention a failing function returns `{}, err` if its type is
+  `(T, Error)` and `nil` if its type is `T?`. Silently dropping an `Error` is a
+  compile error; discard one explicitly with `_`.
+- Use `assert` and `panic` for bugs and `unreachable` for impossible paths.
+
+## Memory
+
+- Memory is managed manually, as in Odin. Every Wid procedure gets an implicit
+  `context` carrying `allocator`, `temp_allocator`, `logger` and `user_data`.
+  Setting `context.allocator = arena` lasts until the end of the scope.
+- **Allocation is always visible.** You allocate with `alloc(T)` (returns
+  `^T`) or `alloc([]T, n)`, and release with `free(x)`; each takes an optional
+  `allocator:`. A container grows using the allocator it was created with.
+  String interpolation and `to_s` use `context.temp_allocator`; reset it once
+  per frame with `free_all`. `.new`, `{}` and array literals never allocate.
+- Cleanup uses `defer`, which runs at scope exit. Wid has no `ensure`.
+- `core:mem` ships the heap and temp allocators, a growing `Arena`, a
+  fixed-chunk `Pool` and a `Tracker`, plus `copy`, `set`, `zero` and
+  `compare`. In `-debug` builds the heap is wrapped in a tracking allocator
+  that reports leaks with their allocation sites when `main` returns, and a
+  double free (or a free with the wrong allocator) panics with both sites.
+- Functions in `core` that build new strings or slices (`s.split`,
+  `s.upcase`, `fmt.int`, …) take `allocator:`, which defaults to
+  `context.temp_allocator` like interpolation does; pass another allocator to
+  keep the result. Functions that read data (`os.read_file`, `os.read_line`)
+  default to `context.allocator`. Views (`s.strip`, `os.args`) never allocate.
+- Checks are on by default: bounds, nil, and integer overflow (in `-debug`).
+  Turn them off for a whole build (`-no-bounds-check`), or for one method or
+  statement (`@[no_bounds_check]`). The attribute is lexical: it covers the
+  code written inside, not the methods that code calls.
+
+## Compile-time
+
+```ruby
+SIN = comptime build_table(256)       # [256]F32, computed while compiling
+LEVEL = config(:level, 1)             # -define:level=3
+FONT = embed("assets/font.ttf")       # []U8, through C23 #embed
+
+comptime if OS == :windows
+  def path_sep = "\\"
+else
+  def path_sep = "/"
+end
+```
+
+- `comptime expr` and `comptime do … end` run Wid code inside the compiler,
+  and the result becomes a constant of the program. The code is checked like
+  any other and run by an interpreter over the same IR, so it computes exactly
+  what the built program would. It always runs with the checks of a `-debug`
+  build: bounds, nil and integer overflow.
+- **Constants** are evaluated while compiling. Literal arithmetic stays
+  untyped (`SIZE = 4 * 64`). Struct literals, `T.size`, indexing other
+  constants and the like evaluate too (`ORIGIN = Vec2.new(x: 0.0, y: 0.0)`).
+  Calling a method needs `comptime`, so every place where code runs at compile
+  time says so (E0327 suggests adding it).
+- `comptime` code can use constants, literals and any Wid method, but not the
+  variables around it, which have no value yet. It can allocate:
+  `context.allocator` is a compile-time heap. `puts` and `p` show their output
+  as a warning (E0909), for debugging. C can't run in the compiler (E0904),
+  except the pure math functions (`sqrt`, `sin`, `pow`, …) and `core`'s memory
+  helpers, which the compiler implements itself. `@[c]` defs are Wid code and
+  do run. One evaluation may run 20 million steps, nest 256 calls and use 256
+  MiB (E0903).
+- **What crosses to run time:** numbers, `Bool`, strings, enums, procs that
+  name Wid methods, and structs, fixed arrays, tuples, optionals and unions of
+  these. A slice crosses as a copy of its elements in static storage. Pointers,
+  dynamic arrays, maps, allocators and `Type` values point at memory that only
+  exists in the compiler, so they can't (E0905): return a fixed array or a
+  slice instead. Large values live in one read-only static object that every
+  use shares.
+- **`comptime if cond … elsif … else … end`** chooses code, at declaration
+  level and in method bodies. Only the chosen branch is checked and compiled;
+  the others are only parsed, so a branch may `cimport` a header or call an API
+  that exists on one platform only. Declaration-level conditions run once every
+  declaration outside them is known, in source order. A struct's fields can't
+  be conditional.
+- `OS` and `ARCH` hold the target, as members of the prelude enums `Os`
+  (`:darwin`, `:linux`, `:windows`, `:freebsd`, …) and `Arch` (`:arm64`,
+  `:amd64`, `:wasm32`, …). `-target:os_arch` sets them (default: the host).
+  `wid check -target:linux_amd64` checks another target's code; building for
+  another target isn't supported yet (E0709).
+- `config(:name, default)` reads `-define:name=value`, parsed as the default's
+  type (`Bool`, an integer, a float or `String`); without the flag it is the
+  default.
+- A `macro def` runs at compile time. It receives types, AST and symbols, and
+  returns code built with `quote do … end`, using `#{}` to splice values in.
+  `core` uses macros for `attr_reader` and `attr_accessor`.
+- **Reflection** at compile time: `T.fields` is a `[]FieldInfo` (`name`,
+  `type`, `offset`), `T.methods` a `[]MethodInfo` (`name`, `params`, `ret`,
+  `static`), and `T.name`, `T.size` and `T.align` describe the type. A type
+  written where a `Type` is expected, or used as a value in `comptime` code, is
+  a `Type` value; it answers `.name`, `.size`, `.align` and `.fields` and
+  compares with `==`. `Type` values exist only while compiling: a method the
+  built program runs can't use them (E0906). At run time, `type_info(x)`
+  describes values. `p x` pretty-prints any value.
+- `embed("font.ttf")` reads a file, relative to the package directory, when the
+  program is compiled, and returns its bytes as a `[]U8` stored with C23
+  `#embed`. Embedded files are inputs of the build.
+
+## C and C++ interop
+
+```ruby
+cimport "vendor/stb_image.h", as: :stbi, strip_prefix: "stbi_",
+  implement: "STB_IMAGE_IMPLEMENTATION"
+
+def load_rgba(path: CString) -> ([^]U8, Int, Int)?
+  w, h, n: C.int
+  px = stbi.load(path, &w, &h, &n, 4)
+  return nil if px.nil?
+  return px, w.to_i, h.to_i
+end
+```
+
+- `cimport` uses libclang to turn the functions, structs, unions, enums,
+  typedefs, constants and simple macros of a header into a package of Wid
+  declarations. `wid cimport --dump <header>` prints that package.
+- **Namespaces.** With `as: :stbi`, the declarations live under `stbi.` in
+  the file that imports them, like an `import`, and other packages don't see
+  them. Without `as:`, they join the package's own namespace, exactly as if
+  the package declared them: its code calls them unqualified and its
+  importers reach them like any other declaration. That is how a binding
+  package is written: `vendor/raylib/raylib.wid` is one `cimport` without
+  `as:`, so `import "vendor:raylib", as: :rl` gives `rl.init_window` and
+  `rl.Color`, and Wid helpers can sit next to it. A name the package declares
+  itself, or that two such `cimport`s add, is an error (E0202) that suggests
+  `names:`. `cimport` also brings `C`
+  into scope, which holds `C.int`, `C.size_t` and the other C types, sized for
+  the target (`long` is 64 bits on 64-bit Unix). Without `cimport`, write
+  `import "core:c", as: :C` for the same names.
+- **Headers.** A path is looked up next to the package's files first, then on
+  the include path, like `#include <name>`. The import covers the header and
+  the headers in its directory tree (so `SDL3/SDL.h` brings `SDL3/SDL_*.h`);
+  a header directly in a shared directory such as `/usr/include` brings the
+  headers at that directory's top level. Names C reserves (`__x`, `_X`) are
+  left out.
+- **Names.** `strip_prefix:` (a string or an array, matched ignoring case)
+  goes first. Then functions, parameters and fields become `snake_case`
+  (`InitWindow` → `init_window`, `vertexCount` → `vertex_count`), types
+  `PascalCase` (`io_callbacks` → `IoCallbacks`), and constants keep their
+  spelling, or become `SCREAMING_CASE` if they start with a lowercase letter.
+  `rename: :keep` keeps C names, only lowercasing the first letter of
+  functions and fields. `names: {CName: :wid_name}` names single
+  declarations. Names that two declarations would share go to neither, and
+  using one is an error (E0704) that suggests `names:`.
+- **Types.** `char *` (const or not) is `CString?`, `unsigned char *` (and
+  `uint8_t *`) is `[^]U8?`, `void *` is `RawPtr?` and every other pointer is
+  `^T?`. C arrays in structs are `[N]T`, and function pointers are C-ABI procs,
+  `@[c] proc(x: C.int) -> C.int`, which take `method(:name)` of an `@[c]` def
+  and can be called with `.call`. An enum is its integer type
+  (`KeyboardKey = C.int`) and its constants are untyped integer constants, so
+  they fit any integer parameter. Typedefs are aliases. A struct whose fields
+  C hides is `opaque` and is only used through `^T`. Types from outside the
+  import that are only pointed at (`FILE`) become opaque structs.
+- **`types: {Vector2: Vec2}`** lets a Wid type stand in for a C struct of the
+  same size and alignment (checked, E0706): every function, field and constant
+  that uses the struct uses the Wid type, and values are copied across with
+  `memcpy`.
+- **Constants and macros.** Macros that evaluate to numbers, strings or bools
+  become constants. Other value macros, like raylib's `RED`, and `const`
+  globals are read by name in C (`@[extern("RED")] RED: Color = ---`). A macro
+  that names a function (`#define GetMouseRay GetScreenToWorldRay`) is a
+  function. Function-like macros, mutable globals and bit-fields are not
+  imported, and using one is an error (E0705) that explains why.
+- **Calls.** String literals convert to `CString`; a runtime `String` needs
+  `.to_cstr`. A C function ending in `...` takes numbers, pointers, C strings
+  and C structs there; untyped literals become `C.int` and `C.double`, as in C.
+  Only `@[extern]` methods may end their parameters with `...`.
+- The generated C `#include`s the original header unchanged, so the C compiler
+  is responsible for getting the ABI, layout and macros right, and checks every
+  call; where Wid's C spelling of a type differs (`char *` against
+  `const char *`), the call casts. This is the main reason Wid compiles to C23.
+  An `@[extern]` method is declared under a name of its own, bound to the C
+  symbol, so it never conflicts with a header that declares the same function.
+- `define: ["NAME=value"]` sets macros before every inclusion. `implement:`
+  defines a header-only library's implementation macro in exactly one
+  translation unit of its own. `link:` names libraries (`"m"`), library files
+  and macOS frameworks (`"framework:Cocoa"`). `pkg_config:` takes compiler and
+  linker flags from pkg-config, and `include_dirs:` adds header directories.
+- `wid build` compiles and links any `.c` and `.cpp` files in a package (C++
+  as C++20, with the C++ compiler matching the C one). C++ is
+  reached through C APIs (`extern "C"`, e.g. cimgui). Importing C++ classes or
+  templates directly is out of scope.
+- **Calling Wid from C.** `@[c]` gives a def the C ABI and `@[export("name")]`
+  gives it a stable symbol. A C-ABI def starts with `Context.default`.
+- `wid doc` works on C symbols too.
+
+## Toolchain and CLI
+
+- The compiler is written in Rust. It emits C23 and calls the host C compiler
+  (clang ≥ 19 or gcc ≥ 15); `cimport` also needs libclang. The output has
+  `#line` directives, so lldb, gdb and sanitizers point at `.wid` sources.
+  `-keep-c` keeps the generated C.
+- **Tests.** `wid test <dir>` builds the package together with its
+  `_test.wid` files (which other builds skip) and runs every `@[test]` method:
+  a package-level `def name(t: ^testing.T)` from `core:testing`.
+  `t.expect(cond)`, `t.expect_eq(got, want)`, `t.expect_nil(x)` and
+  `t.fail(message)` record a failure at the caller and the test continues;
+  `t.log` adds to the test's output. Each test runs in its own process on a
+  fresh tracking allocator: a panic fails only that test, and every block it
+  leaks from `context.allocator` fails it with the allocation site. Failures
+  are diagnostics (E0802) pointing at the expectation, the panic or the
+  allocation. `-filter:<text>` runs the tests whose name contains the text,
+  and `-json-errors` prints the results as JSON. The exit status is 1 when a
+  test fails.
+- A package is a directory. Imports look like `import "core:fmt"`,
+  `import "vendor:raylib"` and `import "./physics"`. Wid ships the `core:` and
+  `vendor:` collections. `vendor:` holds `raylib` and `sdl3` (the system
+  libraries, through pkg-config) and the vendored `stb/image`,
+  `stb/image_write`, `stb/truetype`, `stb/rect_pack` and `miniaudio`. `core:` holds
+  `builtin` (the prelude), `mem`, `fmt`, `strings`, `os`, `math`, `c` and
+  `testing`.
+- The CLI follows Odin. Commands: `wid run <dir> [-- args]`, `build`, `check`,
+  `test`, `doc`, `fmt`, `explain`, `cimport`, `query`, `lsp` and `version`. Flags:
+  `-out:`, `-o:none|minimal|size|speed|aggressive`, `-debug`, `-vet`,
+  `-define:NAME=val`, `-collection:name=path`, `-target:os_arch`, `-file`,
+  `-sanitize:address`, `-filter:` (for `test`) and `-json-errors`.
+
+## Built for humans and LLMs
+
+```
+error[E0207]: `spawn` may be nil here
+  --> game/level.wid:14:18
+   |
+14 |   player.pos = spawn
+   |                ^^^^^ `data.find_spawn` returns `Vec2?`
+help: unwrap it and handle the nil case
+   |   guard spawn = data.find_spawn else
+   |     return {}, :no_spawn
+   |   end
+   = see `wid explain E0207`
+```
+
+- Every diagnostic has a stable code, a labeled span, a plain explanation of the
+  problem and at least one concrete fix. Fixes are machine-applicable where
+  possible, and "did you mean" candidates are included. The compiler recovers
+  and reports every error, not just the first one.
+- `-json-errors` produces the same diagnostics with structured fix-its.
+  `wid explain <code>` gives the long-form explanation with examples.
+- `wid query` answers questions about a package in JSON: `outline`,
+  `def <sym>`, `refs <sym>`, `type <file:line:col>` and `methods <Type>`. It
+  shares an engine with `wid lsp`.
+- `wid fmt` is canonical and has no configuration. `p`/`inspect` works on every
+  type, and the tracking allocator reports leaks.
+
+## Open
+
+Map literal syntax, error payloads, threads/async, hot reloading, a package
+manager, `#soa` layouts, and a comptime-backed REPL.

@@ -1,0 +1,9 @@
+def area(w: Int, h: Int) -> Int
+  w * h
+end
+
+def main
+  puts area(3)
+  puts area(1, 2, 3)
+  puts area(w: 1, height: 2)
+end

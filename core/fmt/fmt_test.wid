@@ -1,0 +1,42 @@
+import "core:strings"
+import "core:testing"
+
+@[test]
+def integers(t: ^testing.T)
+  t.expect_eq(int(42), "42")
+  t.expect_eq(int(42, width: 6), "    42")
+  t.expect_eq(int(-42, width: 6, pad: '0'), "-00042")
+  t.expect_eq(int(255, base: 16), "ff")
+  t.expect_eq(int(5, base: 2, width: 8, pad: '0'), "00000101")
+  t.expect_eq(int(5, plus: true), "+5")
+  t.expect_eq(int(-9223372036854775807 - 1), "-9223372036854775808")
+  t.expect_eq(uint(18446744073709551615), "18446744073709551615")
+end
+
+@[test]
+def floats(t: ^testing.T)
+  t.expect_eq(float(3.14159, precision: 2), "3.14")
+  t.expect_eq(float(0.1), "0.1")
+  t.expect_eq(float(1234.5, style: :exponent, precision: 3), "1.234e+03")
+  t.expect_eq(float(1234.5, style: :general, precision: 2), "1.2e+03")
+  t.expect_eq(float(-2.5, width: 8, pad: '0'), "-00002.5")
+  t.expect_eq(float(2.5, plus: true), "+2.5")
+  t.expect_eq(float(0.0 / 0.0), "NaN")
+end
+
+@[test]
+def writing_into_builders_and_buffers(t: ^testing.T)
+  b = strings.Builder.create
+  defer b.destroy
+  write_int(&b, 7, width: 3, pad: '0')
+  b.write(" ")
+  write_uint(&b, 10, base: 8)
+  b.write(" ")
+  write_float(&b, 0.5, precision: 3)
+  t.expect_eq(b.string, "007 12 0.500")
+  buf: [5]U8
+  t.expect_eq(bprint(buf[0...5], "truncated"), "trunc")
+  kept = aprint("kept")
+  t.expect_eq(kept, "kept")
+  free(kept.to([]U8))
+end

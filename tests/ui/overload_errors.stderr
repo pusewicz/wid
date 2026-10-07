@@ -1,0 +1,163 @@
+error[E0201]: overload set `broken` names unknown method `show_itn`
+  --> tests/ui/overload_errors.wid:13:19
+   |
+13 | overload :broken, :show_itn, :LIMIT, :first_of, :twice, :twice, :double
+   |                   ^^^^^^^^^ no method with this name next to the set
+   = note: an overload set lists methods declared in the same scope as the `overload` line
+help: a similar method exists: `show_int`
+   | overload :broken, :show_int, :LIMIT, :first_of, :twice, :twice, :double
+   = see `wid explain E0201`
+
+error[E0305]: `LIMIT` is a constant, not a method
+  --> tests/ui/overload_errors.wid:13:30
+   |
+ 9 | LIMIT = 3
+   | ----- `LIMIT` is declared here
+...
+13 | overload :broken, :show_itn, :LIMIT, :first_of, :twice, :twice, :double
+   |                              ^^^^^^ overload sets list methods
+help: list only `def`s declared next to the `overload` line
+   = see `wid explain E0305`
+
+error[E0316]: `first_of` cannot be part of an overload set because it has `$` type parameters
+  --> tests/ui/overload_errors.wid:13:38
+   |
+10 | def first_of(xs: []$T) -> T = xs[0]
+   |     -------- declared here
+...
+13 | overload :broken, :show_itn, :LIMIT, :first_of, :twice, :twice, :double
+   |                                      ^^^^^^^^^ not allowed in an overload set
+   = note: a call picks a member by its argument types, which needs concrete parameter types
+help: remove `:first_of` from the set and call it by its own name
+   = see `wid explain E0316`
+
+error[E0202]: `twice` is listed twice in `broken`
+  --> tests/ui/overload_errors.wid:13:57
+   |
+13 | overload :broken, :show_itn, :LIMIT, :first_of, :twice, :twice, :double
+   |                                                         ^^^^^^ listed again here
+help: remove the repeated name
+   = see `wid explain E0202`
+
+error[E0316]: `twice` and `double` in `broken` both take (Int)
+  --> tests/ui/overload_errors.wid:13:65
+   |
+13 | overload :broken, :show_itn, :LIMIT, :first_of, :twice, :twice, :double
+   |                                                                 ^^^^^^^ no call could choose between these
+   |                                                 ------ this member takes the same types
+help: change one member's parameter types, or remove it from the set
+   = see `wid explain E0316`
+
+error[E0105]: modules cannot declare fields
+  --> tests/ui/overload_errors.wid:32:3
+   |
+32 |   greeting: String
+   |   ^^^^^^^^ a module only holds methods and constants
+help: declare `greeting` in each struct that includes the module; module methods read it with `@greeting`
+   = see `wid explain E0105`
+
+error[E0322]: `include` takes a module, but this is a struct
+  --> tests/ui/overload_errors.wid:38:11
+   |
+15 | struct Entity
+   |        ------ the struct is declared here
+...
+38 |   include Entity
+   |           ^^^^^^ not a module
+help: to reuse a struct's fields and methods, add a `using` field instead
+   |   using entity: Entity
+   = see `wid explain E0322`
+
+error[E0201]: undefined module `Greting`
+  --> tests/ui/overload_errors.wid:39:11
+   |
+39 |   include Greting
+   |           ^^^^^^^ not found in this scope
+help: a similar name exists: `Greeting`
+   |   include Greeting
+   = see `wid explain E0201`
+
+error[E0316]: no member of `show` takes (float literal)
+  --> tests/ui/overload_errors.wid:43:8
+   |
+43 |   puts show(1.5)
+   |        ^^^^^^^^^ called with (float literal)
+   = note: the members are `show_int(n: Int)`, `show_text(s: String)`
+help: convert an argument with `.to(T)` so that one member's parameter types match
+   = see `wid explain E0316`
+
+error[E0303]: overloaded calls take positional arguments
+  --> tests/ui/overload_errors.wid:44:13
+   |
+44 |   puts show(n: 1)
+   |             ^ the argument types choose the method, not the names
+help: remove `n:`
+   = see `wid explain E0303`
+
+error[E0316]: several members of `pick` take (integer literal)
+  --> tests/ui/overload_errors.wid:45:5
+   |
+45 |   p pick(5)
+   |     ^^^^^^^ `pick_i32` and `pick_i64` fit equally well
+   = note: the members are `pick_i32(x: I32)`, `pick_i64(x: I64)`
+help: convert the argument to `I32`
+   |   p pick(5.to(I32))
+   = see `wid explain E0316`
+
+error[E0205]: `secret` is private to `Entity`
+  --> tests/ui/overload_errors.wid:47:7
+   |
+19 |   private def secret -> Int = 42
+   |               ------ declared `private` here
+...
+47 |   p e.secret
+   |       ^^^^^^ called from outside `Entity`
+help: call a public method instead, or remove `private` from the declaration
+   = see `wid explain E0205`
+
+error[E0204]: `id` is ambiguous in `Player`
+  --> tests/ui/overload_errors.wid:49:8
+   |
+49 |   p pl.id
+   |        ^^ both `entity` and `badge` provide `id`
+   = note: `using` promotes the members of several fields here, and more than one has this name
+help: name the field to read it through, like `.entity.id`
+   |   p pl.entity.id
+   = see `wid explain E0204`
+
+error[E0105]: an enum cannot declare fields
+  --> tests/ui/overload_errors.wid:56:3
+   |
+56 |   level: Int
+   |   ^^^^^ fields belong inside a `struct`
+help: enum values carry no data; keep `level` in a struct next to the enum
+   = see `wid explain E0105`
+
+error[E0205]: `hidden` is private to `Vault`
+  --> tests/ui/overload_errors.wid:69:7
+   |
+60 |   private def hidden -> Int = 1
+   |               ------ declared `private` here
+...
+69 |   p v.hidden
+   |       ^^^^^^ called from outside `Vault`
+help: call a public method instead, or remove `private` from the declaration
+   = see `wid explain E0205`
+
+error[E0309]: `Lookup` has no `[]=` method
+  --> tests/ui/overload_errors.wid:83:3
+   |
+83 |   l[0] = 1
+   |   ^^^^ cannot assign through this index
+help: define `def []=(index: Int, value: T)` in `Lookup` to support `x[i] = value`
+   = see `wid explain E0309`
+
+error[E0309]: `Sink` has `[]=` but no `[]` method
+  --> tests/ui/overload_errors.wid:85:3
+   |
+85 |   s[0] += 1
+   |   ^^^^ a compound assignment reads the old value first
+help: define `def [](index: Int) -> T` in `Sink`, or assign with `=`
+   = see `wid explain E0309`
+
+error: could not compile due to 17 errors

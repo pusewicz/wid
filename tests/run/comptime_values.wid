@@ -1,0 +1,61 @@
+# Compile-time values of every kind that crosses to run time: unions,
+# optionals, enums, errors, matrices and a large table.
+
+union Value = Int | String | F64
+
+enum Color
+  red
+  green
+end
+
+struct Cell
+  color: Color
+  value: Value
+  maybe: Int?
+  pair: [2]Color
+end
+
+def make -> [3]Cell
+  [
+    Cell.new(color: :red, value: 5, maybe: 3),
+    Cell.new(color: :green, value: "five", maybe: nil),
+    Cell.new(color: :red, value: 5.5),
+  ]
+end
+
+def failing -> Error
+  :not_found
+end
+
+def mat -> matrix[2, 2]F32
+  m: matrix[2, 2]F32 = {}
+  m[0, 0] = 1.0
+  m[0, 1] = 2.0
+  m[1, 1] = 4.0
+  m * m
+end
+
+CELLS = comptime make
+ERR = comptime failing
+M = comptime mat
+BIG = comptime do
+  t: [1024]F32 = {}
+  for i in 0...1024
+    t[i] = i.to(F32) * 0.5
+  end
+  t
+end
+
+def main
+  p CELLS
+  p ERR
+  p M
+  puts BIG[1023]
+  for c in CELLS
+    case c.value
+    when Int then puts "int"
+    when String then puts "string"
+    when F64 then puts "float"
+    end
+  end
+end

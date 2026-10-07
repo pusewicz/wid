@@ -1,0 +1,23 @@
+LIMIT = 4
+
+struct P
+  x: Int
+end
+
+def size -> Int = 3
+
+def main
+  width = 2
+  height = 3
+  width * height = 12
+  size() = 4
+  LIMIT = 5
+  p: P? = nil
+  p&.x = 3
+  a = 1
+  b = 2
+  a, b += 1
+  if a + 1 = 2
+    puts a
+  end
+end

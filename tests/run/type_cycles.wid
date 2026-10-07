@@ -1,0 +1,45 @@
+struct A
+  b: ^B?
+  n: Int
+end
+
+struct B
+  a: A
+end
+
+# A struct first named behind a pointer, then stored by value.
+struct Pool
+  head: ^Slot?
+  spare: [2]Slot
+end
+
+struct Slot
+  next_: ^Slot?
+  v: Int
+end
+
+struct Lit
+  v: Int
+end
+
+union Expr = Lit | Neg
+
+struct Neg
+  inner: ^Expr
+end
+
+def main
+  x: B = {}
+  x.a.n = 4
+  puts x.a.n
+  pool: Pool = {}
+  pool.spare[1].v = 7
+  pool.head = &pool.spare[1]
+  puts pool.head&.v
+  lit: Expr = Lit.new(v: 3)
+  neg: Expr = Neg.new(inner: &lit)
+  case neg
+  when Neg then puts "neg"
+  when Lit then puts "lit"
+  end
+end

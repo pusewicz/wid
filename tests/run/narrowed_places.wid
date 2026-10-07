@@ -1,0 +1,52 @@
+struct Counter
+  n: Int
+
+  def bump!
+    @n += 1
+  end
+end
+
+struct Circle
+  radius: F64
+end
+
+struct Square
+  side: F64
+end
+
+union Shape = Circle | Square
+
+def find(ok: Bool) -> Counter?
+  ok ? Counter.new(1) : nil
+end
+
+def main
+  c = find(true)
+  if c
+    c.bump!
+    c.n += 10
+  end
+  p c
+
+  shape: Shape = Circle.new(1.0)
+  case shape
+  when Circle
+    shape.radius = 5.0
+  when Square
+    shape.side = 2.0
+  end
+  p shape
+
+  x: Int? = nil
+  x = 4
+  if x
+    x += 1
+  end
+  p x
+  y = find(false)
+  puts y&.n || 0
+  z = find(true)
+  if z
+    puts z.n
+  end
+end

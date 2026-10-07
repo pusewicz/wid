@@ -1,0 +1,9 @@
+import "core:c", as: :C
+
+def main
+  puts size_of(C.char), size_of(C.short), size_of(C.int), size_of(C.long), size_of(C.size_t), size_of(C.double)
+  x: C.int = 5
+  y = x.to(C.long) * 3
+  puts y
+  puts C.INT_MAX, C.strlen("héllo".to_cstr)
+end

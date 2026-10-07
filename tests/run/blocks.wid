@@ -1,0 +1,74 @@
+struct Bag
+  items: [4]Int
+
+  def each(&blk: block(Int))
+    for x in @items
+      yield x
+    end
+  end
+
+  def each_ref(&blk: block(Int))
+    i = 0
+    while i < 4
+      yield @items[i]
+      i += 1
+    end
+  end
+
+  def sum_by(&f: block(Int) -> Int) -> Int
+    total = 0
+    each do |x|
+      total += yield x
+    end
+    total
+  end
+
+  def find_first(&pred: block(Int) -> Bool) -> Int?
+    each do |x|
+      return x if yield x
+    end
+    nil
+  end
+end
+
+def times(n: Int, &blk: block(Int))
+  i = 0
+  while i < n
+    yield i
+    i += 1
+  end
+end
+
+def twice(&blk: block)
+  yield
+  yield
+end
+
+def main
+  bag = Bag.new([1, 2, 3, 4])
+  bag.each { |x| print x, " " }
+  puts
+  puts bag.sum_by { |x| x * x }
+  p bag.find_first { |x| x > 2 }
+  p bag.find_first { |x| x > 10 }
+  times(5) do |i|
+    next if i == 1
+    break if i == 3
+    print i
+  end
+  puts
+  twice { puts "hi" }
+  count = 0
+  times 3 do |_i|
+    count += 1
+  end
+  puts count
+  bag.each_ref { |&x| x *= 10 }
+  p bag
+  result = 0
+  times(10) do |i|
+    defer result += 1
+    result += i
+  end
+  puts result
+end

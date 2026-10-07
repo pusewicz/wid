@@ -1,0 +1,24 @@
+def value_before_defer -> Int
+  x = 1
+  defer x = 5
+  return x
+end
+
+def cleanup_loops(fail: Bool) -> Int
+  defer do
+    for i in 0...2
+      print i
+    end
+    puts
+  end
+  if fail
+    return 1
+  end
+  0
+end
+
+def main
+  puts value_before_defer
+  puts cleanup_loops(true)
+  puts cleanup_loops(false)
+end

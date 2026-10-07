@@ -1,0 +1,37 @@
+def twice(x: Int) -> Int
+  yield x
+  return x
+end
+
+def each1(&blk: block(Int))
+  yield 1
+end
+
+def each2(&blk: block(Int, Int))
+  yield 1
+end
+
+def ping(&b: block(Int))
+  pong { |x| yield x }
+end
+
+def pong(&b: block(Int))
+  ping { |x| yield x }
+end
+
+struct S
+  f: Int
+end
+
+def main
+  puts twice(1) { |v| v }
+  each1 { |a, b| puts a + b }
+  each2 { |a, b| puts a + b }
+  ping { |x| puts x }
+  nums = [1, 2, 3]
+  puts nums.size { |x| x }
+  s = S.new(f: 1)
+  puts s.f()
+  f = ->(x: Int) { yield x }
+  f.call(1)
+end

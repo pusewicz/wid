@@ -1,0 +1,55 @@
+error[E0210]: package `imports` imports itself
+ --> tests/ui/imports/main.wid:1:8
+  |
+1 | import "."
+  |        ^^^ this is the package being compiled
+  = note: every file of a package already sees the declarations of the others
+help: remove the import
+  = see `wid explain E0210`
+
+error[E0206]: package `./phyiscs` not found
+ --> tests/ui/imports/main.wid:2:8
+  |
+2 | import "./phyiscs"
+  |        ^^^^^^^^^^^ no directory at `tests/ui/imports/phyiscs`
+help: did you mean `physics`?
+  | import "./physics"
+  = see `wid explain E0206`
+
+error[E0205]: `Secret` is private to package `physics`
+ --> tests/ui/imports/main.wid:6:14
+  |
+6 |   s: physics.Secret = physics.make
+  |              ^^^^^^ not visible from here
+ ::: tests/ui/imports/physics/body.wid:1:16
+  |
+1 | private struct Secret
+  |                ------ declared `private` here
+help: use a public method of `physics` instead, or remove `private` from the declaration
+  = see `wid explain E0205`
+
+error[E0205]: `SECRET` is private to package `physics`
+ --> tests/ui/imports/main.wid:7:22
+  |
+7 |   puts s.v + physics.SECRET + physics.hidden
+  |                      ^^^^^^ not visible from here
+ ::: tests/ui/imports/physics/body.wid:5:9
+  |
+5 | private SECRET = 3
+  |         ------ declared `private` here
+help: use a public method of `physics` instead, or remove `private` from the declaration
+  = see `wid explain E0205`
+
+error[E0205]: `hidden` is private to package `physics`
+ --> tests/ui/imports/main.wid:7:39
+  |
+7 |   puts s.v + physics.SECRET + physics.hidden
+  |                                       ^^^^^^ not visible from here
+ ::: tests/ui/imports/physics/body.wid:9:13
+  |
+9 | private def hidden -> Int = 1
+  |             ------ declared `private` here
+help: use a public method of `physics` instead, or remove `private` from the declaration
+  = see `wid explain E0205`
+
+error: could not compile due to 5 errors

@@ -1,0 +1,69 @@
+# Pointer conversions, multi-pointer arithmetic, byte views, a Wid-written
+# allocator, caller locations and `-> Never`.
+
+struct Counter
+  backing: Allocator
+  allocations: Int
+end
+
+@[c]
+def counting_proc(data: RawPtr, mode: AllocMode, size: Int, align: Int, old: RawPtr, old_size: Int, loc: Location) -> RawPtr
+  guard c = data.to(^Counter?) else
+    return nil
+  end
+  c.allocations += 1 if mode == :alloc
+  c.backing.proc(c.backing.data, mode, size, align, old, old_size, loc)
+end
+
+def where(loc: Location = caller_location) -> String = "#{loc.file.to(String).ends_with?("pointers.wid")}:#{loc.line}:#{loc.column}"
+
+def fail_hard(message: String) -> Never
+  panic message
+end
+
+def checked(n: Int) -> Int
+  return n if n >= 0
+  fail_hard("negative")
+end
+
+def main
+  counter = Counter.new(backing: context.allocator)
+  a = Allocator.new(proc: method(:counting_proc), data: &counter)
+  x = alloc(Int, allocator: a)
+  y = alloc(F64, allocator: a)
+  free(x, allocator: a)
+  free(y, allocator: a)
+  puts counter.allocations
+
+  raw = alloc(Int).to(RawPtr)
+  guard ip = raw.to(^Int?) else
+    return
+  end
+  ip^ = 42
+  puts ip^, ip.to(UInt) % 8
+  free(ip)
+
+  buf = alloc([]U8, 8)
+  defer free(buf)
+  start = buf[0...8].to(String).to([]U8)
+  p start.size
+  first = (&buf[0]).to([^]U8)
+  third = first + 2
+  third[0] = 7
+  puts buf[2], third - first
+
+  nums = [1, 2, 3]
+  np = nums.to([^]Int)
+  dyn = [dynamic]Int.new
+  defer free(dyn)
+  dyn << 9
+  maybe: RawPtr? = np
+  puts np[2], dyn.to([^]Int)[0], maybe.nil?
+
+  s = "héllo"
+  bytes = s.to([]U8)
+  puts bytes.size, bytes[1...3].to(String) == "é"
+  puts s.to_cstr.to(String)
+  puts where
+  puts checked(3)
+end

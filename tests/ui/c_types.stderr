@@ -1,0 +1,18 @@
+error[E0314]: unknown C type `integer`
+ --> tests/ui/c_types.wid:4:8
+  |
+4 |   a: c.integer = 1
+  |        ^^^^^^^ `core:c` has no type with this name
+  = note: C types: char, schar, uchar, short, ushort, int, uint, long, ulong, longlong, ulonglong, float, double, bool, size_t, ssize_t, ptrdiff_t, intptr_t, uintptr_t, int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t, wchar_t
+  = see `wid explain E0314`
+
+error[E0314]: unknown C type `lnog`
+ --> tests/ui/c_types.wid:5:8
+  |
+5 |   b: c.lnog = 2
+  |        ^^^^ `core:c` has no type with this name
+help: did you mean `long`?
+  |   b: c.long = 2
+  = see `wid explain E0314`
+
+error: could not compile due to 2 errors

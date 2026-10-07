@@ -1,0 +1,100 @@
+import "core:testing"
+
+@[test]
+def builder_collects_text(t: ^testing.T)
+  b = Builder.create
+  defer b.destroy
+  b.write("héllo")
+  b.write_byte(32)
+  b.write_rune('ω')
+  b.write_rune('😀')
+  t.expect_eq(b.string, "héllo ω😀")
+  t.expect_eq(b.size, 13)
+  b.clear
+  t.expect(b.empty?)
+end
+
+@[test]
+def trimming_and_affixes(t: ^testing.T)
+  t.expect_eq("  pad me \n".strip, "pad me")
+  t.expect_eq("  pad".lstrip, "pad")
+  t.expect_eq("x  ".rstrip, "x")
+  t.expect_eq("".strip, "")
+  t.expect_eq("file.wid".delete_suffix(".wid"), "file")
+  t.expect_eq("file.wid".delete_prefix("file."), "wid")
+  t.expect_eq("file.wid".delete_prefix("x"), "file.wid")
+end
+
+@[test]
+def searching(t: ^testing.T)
+  t.expect_eq("abcabc".rindex("bc"), 4)
+  t.expect_nil("abc".rindex("x"))
+  t.expect_eq("aaaa".count("aa"), 2)
+  t.expect_eq("héllo".rune_count, 5)
+end
+
+@[test]
+def splitting_and_joining(t: ^testing.T)
+  parts = "a,b,,c".split(",")
+  t.expect_eq(parts.size, 4)
+  t.expect_eq(parts[2], "")
+  t.expect_eq(parts.join("|"), "a|b||c")
+  t.expect_eq("abc".split("").size, 1)
+  lines = 0
+  "one\ntwo\r\nthree\n".each_line do |line|
+    lines += 1
+    t.expect(!line.ends_with?("\r"), "no carriage return")
+  end
+  t.expect_eq(lines, 3)
+end
+
+@[test]
+def building_new_strings(t: ^testing.T)
+  t.expect_eq("hello world".replace("o", "0"), "hell0 w0rld")
+  t.expect_eq("MiXed 1".upcase, "MIXED 1")
+  t.expect_eq("MiXed 1".downcase, "mixed 1")
+  t.expect_eq("ab".repeat(3), "ababab")
+  t.expect_eq("hi".ljust(5, '.'), "hi...")
+  t.expect_eq("hi".rjust(4), "  hi")
+  t.expect_eq("hi".center(6, '*'), "**hi**")
+  kept = "keep".clone
+  t.expect_eq(kept, "keep")
+  free(kept.to([]U8))
+end
+
+@[test]
+def parsing_numbers(t: ^testing.T)
+  expect_int(t, "42", 42)
+  expect_int(t, "-17", -17)
+  expect_int(t, "+1_000", 1000)
+  expect_int(t, "ff", 255, base: 16)
+  expect_int(t, "9223372036854775807", 9223372036854775807)
+  expect_int(t, "-9223372036854775808", -9223372036854775807 - 1)
+  expect_bad_int(t, "9223372036854775808", :out_of_range)
+  expect_bad_int(t, "12x", :invalid_number)
+  expect_bad_int(t, "", :invalid_number)
+  expect_bad_int(t, "1__0", :invalid_number)
+  expect_bad_int(t, "_1", :invalid_number)
+  f, err = "3.5".parse_float
+  t.expect_eq(f, 3.5)
+  t.expect_nil(err)
+  g, _ = "-2e3".parse_float
+  t.expect_eq(g, -2000.0)
+  _, bad = " 1".parse_float
+  t.expect_eq(bad, :invalid_number)
+  yes, _ = "true".parse_bool
+  t.expect(yes)
+  _, not_bool = "yes".parse_bool
+  t.expect_eq(not_bool, :invalid_bool)
+end
+
+def expect_int(t: ^testing.T, text: String, want: Int, base: Int = 10, loc: Location = caller_location)
+  n, err = text.parse_int(base: base)
+  t.expect_eq(n, want, loc: loc)
+  t.expect_nil(err, loc: loc)
+end
+
+def expect_bad_int(t: ^testing.T, text: String, want: Error, loc: Location = caller_location)
+  _, err = text.parse_int
+  t.expect_eq(err, want, loc: loc)
+end

@@ -1,0 +1,19 @@
+def make -> [dynamic]Int
+  [dynamic]Int.new
+end
+
+def main
+  s = "abc"
+  s[0] = 65
+  make << 1
+  xs = [1, 2, 3]
+  puts xs.length
+  ys: [2]Int = [1, 2, 3]
+  puts ys[0]
+  e = []
+  puts e
+  r = 1..3
+  puts r
+  m = map[String]Int.new
+  m[1] = 2
+end

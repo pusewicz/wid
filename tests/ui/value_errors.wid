@@ -1,0 +1,21 @@
+def total(xs: []Int) -> Int = xs.size
+
+def next_line -> String? = nil
+
+def main
+  x = ---
+  t = [4]F32
+  nums = [1, 2, 3]
+  p total(*nums)
+  for i, j in 0...3
+    p i
+  end
+  for &k in 0...3
+    p k
+  end
+  total(nums) = 3
+  p x, t
+  until line = next_line
+    p line
+  end
+end

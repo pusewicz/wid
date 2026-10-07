@@ -1,0 +1,10 @@
+error[E0203]: `total` is assigned but never read
+ --> tests/ui/unused_variable.wid:2:3
+  |
+2 |   total = 0
+  |   ^^^^^ this value is never used
+help: if this is intentional, prefix the name with an underscore
+  |   _total = 0
+  = see `wid explain E0203`
+
+error: could not compile due to 1 error

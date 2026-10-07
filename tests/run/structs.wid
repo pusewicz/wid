@@ -1,0 +1,58 @@
+struct Vec2
+  x: F32
+  y: F32
+
+  def self.zero -> Vec2 = Vec2.new(0.0, 0.0)
+
+  def length_squared -> F32 = @x * @x + @y * @y
+
+  def scale!(k: F32)
+    @x *= k
+    @y *= k
+  end
+
+  def +(o: Vec2) -> Vec2 = Vec2.new(@x + o.x, @y + o.y)
+
+  def ==(o: Vec2) -> Bool = @x == o.x && @y == o.y
+end
+
+struct Ball
+  pos: Vec2
+  vel: Vec2 = Vec2.new(x: 120.0, y: 80.0)
+  radius: F32 = 8.0
+  name: String = "ball"
+
+  def update(dt: F32)
+    @pos = @pos + Vec2.new(@vel.x * dt, @vel.y * dt)
+    bounce if @pos.y > 100.0
+  end
+
+  def bounce
+    @vel.y = -@vel.y
+  end
+end
+
+def main
+  v = Vec2.new(x: 3.0, y: 4.0)
+  puts v.length_squared
+  v.scale!(2.0)
+  p v
+  puts Vec2.zero
+  w = v + Vec2.new(1.0, 1.0)
+  p w
+  puts w == Vec2.new(7.0, 9.0)
+
+  b = Ball.new(pos: Vec2.new(10.0, 95.0))
+  b.update(0.1)
+  p b
+  b.update(0.1)
+  puts b.vel.y
+  b.radius = 2.5
+  puts b.radius
+  puts b.name
+  c = b
+  c.radius = 1.0
+  puts b.radius
+  puts c == b
+  puts c != b
+end

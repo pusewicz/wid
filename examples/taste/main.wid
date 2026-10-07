@@ -1,0 +1,34 @@
+import "vendor:raylib", as: :rl
+
+Vec2 = [2]F32
+
+struct Ball
+  pos: Vec2
+  vel: Vec2 = [120.0, 80.0]
+  radius: F32 = 8.0
+
+  def update(dt: F32)
+    @pos += @vel * dt
+    @vel.y = -@vel.y unless @pos.y.between?(0.0, 450.0)
+  end
+end
+
+def main
+  rl.init_window(800, 450, "bounce")
+  defer rl.close_window
+
+  balls = [dynamic]Ball.new
+  defer free(balls)
+  balls << Ball.new(pos: [400.0, 225.0])
+
+  until rl.window_should_close
+    balls.each { |&b| b.update(rl.get_frame_time) }
+    rl.begin_drawing
+    rl.clear_background(rl.BLACK)
+    for b in balls
+      rl.draw_circle_v(b.pos, b.radius, rl.RED)
+    end
+    rl.end_drawing
+    free_all(context.temp_allocator)
+  end
+end

@@ -1,0 +1,7 @@
+def main
+  a: F32 = 1.0
+  b = 2
+  puts a + b
+  s = "x"
+  puts s + s
+end

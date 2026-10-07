@@ -1,0 +1,10 @@
+import "vendor:sdl3", as: :sdl
+
+def main
+  puts "init: #{sdl.init(0)}"
+  defer sdl.quit
+  puts "version 3: #{sdl.get_version() >= 3000000}"
+  rect = sdl.Rect.new(x: 1, y: 2, w: 3, h: 4)
+  other = sdl.Rect.new(x: 2, y: 3, w: 3, h: 4)
+  puts "intersect: #{sdl.has_rect_intersection(&rect, &other)}"
+end

@@ -1,0 +1,27 @@
+@[whatever] struct Pair
+  @[c] a: Int
+end
+
+@[expoert] X = 1
+
+@[export("x"), export]
+def twice_exported
+end
+
+@[extern(1)]
+def bad_extern
+  puts 1
+end
+
+@[c(2), tset]
+def typo
+end
+
+@[no_bounds_check]
+def unchecked(xs: []Int) -> Int = xs[3]
+
+def main
+  @[tset] puts 1
+  @[export] puts 2
+  puts unchecked([1, 2, 3, 4])
+end

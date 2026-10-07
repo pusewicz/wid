@@ -1,0 +1,16 @@
+def h1(x: Int) -> Int = x
+def h2(x: Int) -> Int = x
+
+overload :h, :h1, :h2
+
+struct Lit
+  v: Int
+end
+
+union Bad = Lit | Bad
+union Opt = Int | Lit?
+
+def main
+  puts h(1)
+  puts h(2)
+end

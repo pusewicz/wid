@@ -1,0 +1,14 @@
+def parse(s: String) -> (Int, Error)
+  return 1, nil
+end
+
+def main
+  guard n = parse("1") else |err|
+    puts "failed"
+  end
+  puts n
+  guard m = 5 else
+    return
+  end
+  parse("2")
+end

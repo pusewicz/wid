@@ -1,0 +1,21 @@
+GREETING = embed("greeting.txt")
+EMPTY = embed("empty.txt")
+
+def line_count(bytes: []U8) -> Int
+  n = 0
+  for b in bytes
+    n += 1 if b == 10
+  end
+  n
+end
+
+LINES = comptime line_count(embed("greeting.txt"))
+
+def main
+  puts GREETING.size
+  print GREETING.to(String)
+  puts EMPTY.size
+  puts LINES
+  again = embed("greeting.txt")
+  puts again[0] == GREETING[0]
+end

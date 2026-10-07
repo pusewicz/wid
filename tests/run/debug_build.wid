@@ -1,0 +1,16 @@
+struct P
+  x: Int
+end
+
+def main
+  total = 0
+  for i in 0...5
+    total += i
+  end
+  defer puts "done"
+  p P.new(total)
+  puts 2 ** 10
+  puts 2.0 ** 0.5
+  puts 3 <=> 5
+  puts "b" <=> "a"
+end

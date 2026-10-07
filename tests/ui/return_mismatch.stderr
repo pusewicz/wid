@@ -1,0 +1,16 @@
+error[E0310]: `log` does not return a value
+ --> tests/ui/return_mismatch.wid:3:10
+  |
+3 |   return 1
+  |          ^ this value has nowhere to go
+help: declare a return type with `-> Type`, or remove the value
+  = see `wid explain E0310`
+
+error[E0310]: this method must return `Int`
+ --> tests/ui/return_mismatch.wid:7:3
+  |
+7 |   return
+  |   ^^^^^^ `return` without a value
+  = see `wid explain E0310`
+
+error: could not compile due to 2 errors

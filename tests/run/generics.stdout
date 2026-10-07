@@ -1,0 +1,11 @@
+9
+2.5
+banana
+4
+-1
+2
+2
+1
+nil
+"x"
+Pair(Int, String)(first: 1, second: "one")
