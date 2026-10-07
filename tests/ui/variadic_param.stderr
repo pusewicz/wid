@@ -3,7 +3,7 @@ error[E0112]: only a `macro def` can take a `*` parameter
   |
 1 | def sum(*xs: Int) -> Int
   |         ^^^^^^^^ this would collect the remaining arguments
-  = note: a method takes a fixed number of arguments; a `*` parameter is for macros, like `attr_reader :hp, :mana`
+  = note: a method takes a fixed number of arguments; a `*` parameter is for macros, like `flags :READ, :WRITE`
 help: take a slice instead, and pass an array literal: `sum([a, b, c])`
   | def sum(xs: []Int) -> Int
   = see `wid explain E0112`
@@ -33,7 +33,7 @@ error[E0112]: only a `macro def` can take a `*` parameter
    |
 21 |   double = ->(*xs: Int) -> Int { xs.size * 2 }
    |               ^^^^^^^^ this would collect the remaining arguments
-   = note: a proc takes a fixed number of arguments; a `*` parameter is for macros, like `attr_reader :hp, :mana`
+   = note: a proc takes a fixed number of arguments; a `*` parameter is for macros, like `flags :READ, :WRITE`
 help: take a slice instead, and pass an array literal: `f.call([a, b, c])`
    |   double = ->(xs: []Int) -> Int { xs.size * 2 }
    = see `wid explain E0112`

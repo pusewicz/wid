@@ -1,0 +1,35 @@
+# Fields are always public, so `private` on one is an error. It is reported
+# once per field, and the field still exists, so its uses check normally.
+struct Base
+  id: Int
+end
+
+struct Hero
+  private hp: Int
+  name: String
+  private using base: Base
+
+  # `private` still applies to methods.
+  private def heal
+    @hp += 1
+  end
+end
+
+struct Box($T)
+  private value: T
+end
+
+def boxed -> Int = Box(Int).new.value
+
+# In a macro's `quote` it is reported where it is written, once however
+# many times the macro runs.
+macro def counter(name: Symbol) -> Code
+  quote do
+    struct #{name}
+      private count: Int
+    end
+  end
+end
+
+counter :Kills
+counter :Deaths

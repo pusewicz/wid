@@ -39,7 +39,10 @@ runs the stages; `wid_cli` is the `wid` binary.
   emitted as its own C scope, so a local is declared once per copy.
 - `private` is enforced for package members (`pkg.name`) and for methods
   (callable only when the frame's `self` type is the receiver type or the
-  method's owner).
+  method's owner). Fields are always public: `private` on a field in a
+  struct body (a `using` one, or one inside a `quote`'s struct, too) is
+  E0105 from the parser (`Parser::private_field`), with a fix that removes
+  it; the field is kept, and the item's `private` flag cleared.
 - Overload resolution works on lowered argument values
   (`call_with_values`), so compound assignments and `[]=` reuse it without
   re-evaluating operands. Module and generic-struct members of a set are
@@ -410,6 +413,8 @@ runs the stages; `wid_cli` is the `wid` binary.
   Nested (`puts size_of Int?`), that is one E0109 whose fix puts the `)`
   before the line end; after an argument that failed to parse, the fix is
   only `MaybeIncorrect`.
+- `private` on a struct field is E0105 (fields are always public), once per
+  field, with a machine-applicable fix that removes it (#9).
 - Macro syntax: `quote` bodies holding statements and declarations, with
   splices in every expression, type, declaration and name position (`#{x}`,
   `@#{f}`, `:#{s}`), splices outside a `quote` (E0111), variadic
@@ -465,23 +470,19 @@ macro stack.
      (**landed**; see "Conventions fixed so far");
    - declaration-level expansion (**landed**; see "Conventions fixed so
      far" and "Done");
-   - the `attr_*` macros: waiting on a decision about accessor semantics
-     (see below);
    - `type_info` (landed separately; see "Done").
 
-   The design below is settled and written into SPEC.md ("Compile-time").
-   What remains:
-   - **`attr_reader`, `attr_writer` and `attr_accessor`** in `core:builtin`
-     (SPEC: "`core` uses macros for …"). They wait on the user's decision
-     about accessor semantics: today a method can't share a field's name
-     (E0202, "both a field and a method"), so `attr_reader :hp` can't
-     generate `def hp`, and Wid has no setter syntax (`hero.hp = 3` with a
-     method behind it) for `attr_writer`. Until then
-     `tests/ui/not_yet_available` shows `attr_reader :hp` as an undefined
-     macro (E0201) with a note and a workaround (`undefined_macro` in
-     `check/decl_macros.rs`). Once decided, they are ordinary `macro def`s
-     reading the field's type from `Self.fields`; a macro's `Self` is
-     already the type whose body holds the call.
+   **No accessor macros (decided):** Wid has no `attr_reader`,
+   `attr_writer` or `attr_accessor`. Fields are always public and code
+   reads and writes them directly (SPEC "Data and behavior"), and a method
+   can't share a field's name (E0202). `attr_reader :hp` stays an undefined
+   macro (E0201) with a note saying so (`undefined_macro` in
+   `check/decl_macros.rs`, `tests/ui/accessor_macros`); a macro of the
+   program's own with that name works like any other
+   (`tests/run/macro_ruby_names`).
+
+   The design below is settled and written into SPEC.md ("Compile-time"),
+   and all of it has landed; the notes stay as a map of the implementation:
    - **Syntax (landed):**
      - Lexer: `#{` outside a string emits `SpliceBegin`, its `}` emits
        `SpliceEnd` (an `Interp` with `quote: None`; newlines inside are
@@ -497,7 +498,7 @@ macro stack.
        of a top-level `comptime if`; every other line is a statement. So
        PR 2 uses the body as is in a method, and in a declaration context
        takes each `StmtKind::Item`'s item and turns a call or name statement
-       (`attr_reader :hp`) into an `ItemKind::MacroCall`.
+       (`counter :kills`) into an `ItemKind::MacroCall`.
      - A splice is `ExprKind::Splice(i)` in an expression,
        `TypeKind::Splice(i)` in a type, and `ItemKind::Splice(i)` alone on a
        line in a type body (in an enum body it may be `Symbol`s, i.e.
@@ -559,9 +560,6 @@ macro stack.
    - **New comptime-only types:** `Code` and first-class `Symbol` values,
      plus `sym.to_s` and `str.to_sym`. Extend `check_comptime_only` (E0906)
      to cover them.
-   - **`core:builtin`:** `attr_reader`, `attr_writer` and `attr_accessor`
-     macros, waiting on the accessor-semantics decision above. They look
-     up the field type through `Self.fields`.
    - **`type_info(x)` / `type_info(T)`:** landed separately, ahead of the
      macros (see "Done" and SPEC "Compile-time").
    - **Settled (in SPEC.md, "Compile-time"):** errors in generated code

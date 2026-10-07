@@ -46,7 +46,7 @@ macro def record(name: Symbol, ty: Type, init: Code, *extras: Symbol) -> Code
       LIMIT = 2
     end
     stats.counter :kills
-    #{if extras.empty? then quote do end else quote do attr_reader #{extras} end end}
+    #{if extras.empty? then quote do end else quote do stats.counter :#{extras} end end}
   end
 end
 

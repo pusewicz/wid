@@ -1,0 +1,41 @@
+error[E0201]: undefined macro `attr_reader`
+ --> tests/ui/accessor_macros.wid:4:3
+  |
+4 |   attr_reader :hp
+  |   ^^^^^^^^^^^ no macro with this name is in scope
+  = note: a call among declarations runs a macro, and the declarations it generates take the call's place
+  = note: Wid has no accessor macros: fields are always public, and code reads and writes them directly
+help: remove the call and use the field itself, like `hero.hp` or `@hp` in a method
+  = see `wid explain E0201`
+
+error[E0201]: undefined macro `attr_writer`
+ --> tests/ui/accessor_macros.wid:5:3
+  |
+5 |   attr_writer :mana
+  |   ^^^^^^^^^^^ no macro with this name is in scope
+  = note: a call among declarations runs a macro, and the declarations it generates take the call's place
+  = note: Wid has no accessor macros: fields are always public, and code reads and writes them directly
+help: remove the call and use the field itself, like `hero.mana = …` or `@mana = …` in a method
+  = see `wid explain E0201`
+
+error[E0201]: undefined macro `attr_accessor`
+ --> tests/ui/accessor_macros.wid:6:3
+  |
+6 |   attr_accessor :name
+  |   ^^^^^^^^^^^^^ no macro with this name is in scope
+  = note: a call among declarations runs a macro, and the declarations it generates take the call's place
+  = note: Wid has no accessor macros: fields are always public, and code reads and writes them directly
+help: remove the call and use the field itself, like `hero.name` or `@name` in a method
+  = see `wid explain E0201`
+
+error[E0201]: undefined macro `attr_reader`
+  --> tests/ui/accessor_macros.wid:12:1
+   |
+12 | attr_reader
+   | ^^^^^^^^^^^ no macro with this name is in scope
+   = note: a call among declarations runs a macro, and the declarations it generates take the call's place
+   = note: Wid has no accessor macros: fields are always public, and code reads and writes them directly
+help: remove the call and use the field itself, like `hero.hp` or `@hp` in a method
+   = see `wid explain E0201`
+
+error: could not compile due to 4 errors

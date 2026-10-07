@@ -1,0 +1,8 @@
+import "./lib"
+
+def main
+  h = lib.Hero.new
+  puts h.hp
+  h.hp = 3
+  p h.base.id, h.id, lib.boxed, lib.Kills.new.count, lib.Deaths.new.count
+end

@@ -154,9 +154,9 @@ pub enum ItemKind {
     Include(TypeExpr),
     /// A field inside a struct.
     Field(Box<FieldDecl>),
-    /// A macro invocation used as a declaration: `attr_reader :x`,
-    /// `attr_reader(:x)`, or qualified by a package, `lib.attr_reader :x`
-    /// and `lib.make`. The expression is an [`ExprKind::Call`], an
+    /// A macro invocation used as a declaration: `counter :x`,
+    /// `counter(:x)`, or qualified by a package, `lib.counter :x` and
+    /// `lib.make`. The expression is an [`ExprKind::Call`], an
     /// [`ExprKind::Ident`] or an [`ExprKind::Member`].
     MacroCall(Box<Expr>),
     /// `comptime if cond … else … end` choosing declarations.
@@ -638,7 +638,7 @@ pub enum ExprKind {
 /// the top of the body keeps the same rule in its branches. Expanded as
 /// statements, the body is used as is; expanded as declarations, each
 /// [`StmtKind::Item`] gives its item, and a call or name statement
-/// (`attr_reader :hp`) gives an [`ItemKind::MacroCall`].
+/// (`counter :kills`) gives an [`ItemKind::MacroCall`].
 ///
 /// Splices are numbered in source order per `quote`: each `#{expr}`
 /// directly inside this quote (not inside a nested `quote`) appends `expr`

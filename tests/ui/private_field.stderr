@@ -1,0 +1,41 @@
+error[E0105]: a field can't be `private`
+ --> tests/ui/private_field/lib/lib.wid:8:3
+  |
+8 |   private hp: Int
+  |   ^^^^^^^ fields are always public
+  = note: any code can read and write `hp` directly; `private` applies to methods and other declarations
+help: remove `private`
+  |   hp: Int
+  = see `wid explain E0105`
+
+error[E0105]: a field can't be `private`
+  --> tests/ui/private_field/lib/lib.wid:10:3
+   |
+10 |   private using base: Base
+   |   ^^^^^^^ fields are always public
+   = note: any code can read and write `base` directly; `private` applies to methods and other declarations
+help: remove `private`
+   |   using base: Base
+   = see `wid explain E0105`
+
+error[E0105]: a field can't be `private`
+  --> tests/ui/private_field/lib/lib.wid:19:3
+   |
+19 |   private value: T
+   |   ^^^^^^^ fields are always public
+   = note: any code can read and write `value` directly; `private` applies to methods and other declarations
+help: remove `private`
+   |   value: T
+   = see `wid explain E0105`
+
+error[E0105]: a field can't be `private`
+  --> tests/ui/private_field/lib/lib.wid:29:7
+   |
+29 |       private count: Int
+   |       ^^^^^^^ fields are always public
+   = note: any code can read and write `count` directly; `private` applies to methods and other declarations
+help: remove `private`
+   |       count: Int
+   = see `wid explain E0105`
+
+error: could not compile due to 4 errors
