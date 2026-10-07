@@ -1,0 +1,31 @@
+# `[$N]T` tries to introduce a value parameter, which only generic structs
+# take: one error at `$N`, a slice fix that reads `N` as `xs.size`, and no
+# further errors for the uses of `N`.
+def total(xs: [$N]Int) -> Int = N
+
+def sum(xs: [$N]Int) -> Int
+  out = 0
+  for i in 0...N
+    out += xs[i]
+  end
+  out
+end
+
+def copy(xs: [$N]Int) -> [N]Int
+  out: [N]Int = {}
+  out
+end
+
+def zeros -> [$N]Int = {}
+
+struct Grid($T)
+  cells: [$N]T
+end
+
+def main
+  puts total([1, 2, 3])
+  puts sum([1, 2, 3])
+  p copy([1, 2]), zeros
+  g: Grid(Int) = {}
+  p g
+end

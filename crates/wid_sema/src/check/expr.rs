@@ -64,6 +64,14 @@ impl<'a> Checker<'a> {
     }
 
     fn expr_here(&mut self, e: &ast::Expr, expected: Option<TyId>) -> ir::Expr {
+        // A type that reads as a call or a member (`Pool(Ball, 64)`,
+        // `C.int`, `rl.Color`) is a `Type` value where one is expected.
+        if matches!(e.kind, E::Call(_) | E::Member { .. })
+            && (self.comptime_depth > 0 || expected.is_some_and(|t| matches!(self.types.kind(t), TyKind::Type)))
+            && let Some(v) = self.type_as_value(e)
+        {
+            return v;
+        }
         match &e.kind {
             E::Int(v) => self.int_literal(*v, expected, e.span),
             E::Float(v) => self.float_literal(*v, expected, e.span),
@@ -144,14 +152,21 @@ impl<'a> Checker<'a> {
                 );
                 ir::Expr::new(ExprKind::Zero, self.types.unknown())
             }
-            E::Type(_) => {
+            E::Type(t) => {
+                // Where a `Type` is expected, or in `comptime` code, a type
+                // written in place is a `Type` value.
+                let wants_type = expected.is_some_and(|t| matches!(self.types.kind(t), TyKind::Type));
+                if (wants_type || self.comptime_depth > 0)
+                    && let Some(v) = self.type_as_value(e)
+                {
+                    return v;
+                }
                 let text = self.source_text(e.span);
+                let help = self.make_value_help(t, &text);
                 self.report(
                     Diagnostic::error(codes::NOT_A_VALUE, format!("`{text}` is a type, not a value"))
                         .primary(e.span, "a type cannot be used as a value here")
-                        .help(format!(
-                            "make a value of it with `{{}}` where `{text}` is expected, or `{text}.new` for containers"
-                        )),
+                        .help(help),
                 );
                 ir::Expr::new(ExprKind::Zero, self.types.unknown())
             }
@@ -1787,6 +1802,53 @@ impl<'a> Checker<'a> {
     }
 
     /// Returns the source text of a span.
+    /// How to make a value of a type written where a value goes: `.new`
+    /// only for the containers that have it, otherwise `{}` or a literal.
+    fn make_value_help(&self, t: &ast::TypeExpr, text: &str) -> String {
+        use ast::TypeKind as T;
+        let kind = match &t.kind {
+            T::Spliced(id) if (*id as usize) < self.types.len() => self.types.kind(TyId(*id)).clone(),
+            _ => TyKind::Unknown,
+        };
+        match (&t.kind, kind) {
+            (T::Dynamic(_) | T::Map(..), _) | (_, TyKind::Dynamic(_) | TyKind::Map(..)) => {
+                format!("make an empty one with `{text}.new`, or with `{{}}` where `{text}` is expected")
+            }
+            (T::Optional(_), _) | (_, TyKind::Optional(_)) => {
+                format!("for an empty `{text}`, write `nil` where `{text}` is expected")
+            }
+            (T::Slice(_), _) | (_, TyKind::Slice(_)) => {
+                format!("where `{text}` is expected, an array literal like `[1, 2]` makes one, and `{{}}` an empty one")
+            }
+            (T::Array(..), _) | (_, TyKind::Array(..)) => format!(
+                "make a zero value with `{{}}` where `{text}` is expected, like `x: {text} = {{}}`, or write an array literal"
+            ),
+            (T::Proc { params, ret, .. }, _) => {
+                let params: Vec<String> = params
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| format!("{}: {}", (b'a' + (i % 26) as u8) as char, self.source_text(p.span)))
+                    .collect();
+                let ret = ret.as_ref().map(|r| format!(" -> {}", self.source_text(r.span))).unwrap_or_default();
+                format!(
+                    "a `{text}` value is a proc literal, like `->({}){ret} {{ … }}`, or a method, `method(:name)`",
+                    params.join(", ")
+                )
+            }
+            (_, TyKind::Proc(_)) => {
+                format!("a `{text}` value is a proc literal or a method, `method(:name)`")
+            }
+            (T::Pointer(_), _) | (_, TyKind::Pointer(_)) => {
+                format!("a `{text}` value is the address of a variable or field, like `&x`")
+            }
+            (T::MultiPointer(inner), _) => {
+                let elem = self.source_text(inner.span);
+                format!("a `{text}` value points into an array, a slice or a dynamic array, like `xs.to([^]{elem})`")
+            }
+            _ => format!("make a zero value of it with `{{}}` where `{text}` is expected, like `x: {text} = {{}}`"),
+        }
+    }
+
     pub fn source_text(&self, span: Span) -> String {
         self.source_texts
             .get(&span.file)

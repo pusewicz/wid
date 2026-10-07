@@ -341,7 +341,7 @@ impl<'a> Checker<'a> {
 }
 
 /// Whether an operand of `e` failed to parse, so the parser has reported it.
-fn holds_parse_error(e: &ast::Expr) -> bool {
+pub(super) fn holds_parse_error(e: &ast::Expr) -> bool {
     match &e.kind {
         E::Error => true,
         E::Ternary { cond, then, else_ } => [cond, then, else_].iter().any(|x| holds_parse_error(x)),

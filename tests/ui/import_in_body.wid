@@ -1,0 +1,33 @@
+# Imports belong at the top level of a file: one inside a `struct`, `enum`,
+# `module` or `extend` body is reported once, with a fix that moves it next
+# to the file's imports, and the names it would bind aren't reported again.
+import "core:strings"
+
+struct Box
+  import "core:fmt", as: :f
+  w: Int
+
+  def show = f.println("box")
+end
+
+enum Color
+  red
+  import "core:math"
+end
+
+module Greeter
+  import "core:os"
+
+  def bye = os.exit(0)
+end
+
+extend Int
+  cimport "stdio.h"
+end
+
+def main
+  p Box.new(w: 1), Color.red
+  b = strings.Builder.create
+  b.write("ok")
+  puts b.string
+end

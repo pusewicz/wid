@@ -350,11 +350,8 @@ impl<'a> Checker<'a> {
                 return;
             }
             ItemKind::Import(_) | ItemKind::Cimport(_) if self.generated_import(item) => return,
-            ItemKind::Cimport(_) => {
-                self.report(
-                    Diagnostic::error(codes::UNEXPECTED_TOKEN, "`cimport` belongs at the top level of a file")
-                        .primary(item.span, "move it out of this declaration"),
-                );
+            ItemKind::Import(_) | ItemKind::Cimport(_) => {
+                self.import_in_body(item, loc);
                 return;
             }
             ItemKind::ComptimeIf(c) => {
@@ -362,7 +359,7 @@ impl<'a> Checker<'a> {
                 self.pending_decls.push(super::comptime::Pending::If(pending));
                 return;
             }
-            ItemKind::Import(_) | ItemKind::Error => return,
+            ItemKind::Error => return,
         };
         if let (Some(o), DeclKind::Struct(_) | DeclKind::Enum(_) | DeclKind::Union(_) | DeclKind::Module) =
             (owner, &kind)
@@ -532,6 +529,8 @@ impl<'a> Checker<'a> {
     pub fn is_type_alias_value(&self, value: &ast::Expr, loc: DeclLoc, depth: u32) -> bool {
         match &value.kind {
             ast::ExprKind::Type(_) => true,
+            // Parentheses group a type: `X = (Int)`.
+            ast::ExprKind::Paren(inner) => self.is_type_alias_value(inner, loc, depth),
             ast::ExprKind::Member { recv, .. } => {
                 matches!(recv.kind, ast::ExprKind::Ident(p) | ast::ExprKind::Const(p) if self.lookup_import(loc, p).is_some())
             }

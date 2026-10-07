@@ -1,0 +1,30 @@
+# A type name in parentheses is a type alias, like the name alone, while a
+# value name in parentheses stays a value.
+struct Vec2
+  x: F32
+  y: F32
+end
+
+Count = (Int)
+Real = ((F32))
+Point = (Vec2)
+NINE = 9
+ALSO_NINE = (NINE)
+TEN = (NINE) + 1
+NINE_AGAIN = NINE
+
+def type_name(t: Type) -> String = t.name
+
+COUNT_NAME = comptime type_name(Count)
+POINT_NAME = comptime type_name(Point)
+
+def main
+  n: Count = 3
+  r: Real = 2.5
+  pt = Point.new(x: 1.0, y: 2.0)
+  q: Point = {}
+  p n, r, pt, q
+  p size_of(Count), Real.size, Point.size
+  p ALSO_NINE, TEN, NINE_AGAIN.abs, ALSO_NINE.abs
+  puts COUNT_NAME, POINT_NAME
+end

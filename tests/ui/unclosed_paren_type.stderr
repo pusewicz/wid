@@ -1,0 +1,31 @@
+error[E0105]: expected `)`, found end of line
+ --> tests/ui/unclosed_paren_type.wid:4:29
+  |
+4 | Callback = (proc(Int) -> Int
+  |                             ^ expected `)`
+  |            - this `(` is never closed
+help: close it
+  | Callback = (proc(Int) -> Int)
+  = see `wid explain E0105`
+
+error[E0105]: expected `)`, found end of line
+ --> tests/ui/unclosed_paren_type.wid:5:12
+  |
+5 | Ref = (^Int
+  |            ^ expected `)`
+  |       - this `(` is never closed
+help: close it
+  | Ref = (^Int)
+  = see `wid explain E0105`
+
+error[E0105]: expected `)`, found end of line
+ --> tests/ui/unclosed_paren_type.wid:6:22
+  |
+6 | Pair = ([]Int, String
+  |                      ^ expected `)`
+  |        - this `(` is never closed
+help: close it
+  | Pair = ([]Int, String)
+  = see `wid explain E0105`
+
+error: could not compile due to 3 errors

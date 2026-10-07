@@ -1,0 +1,12 @@
+# In a file with no imports, the fix moves the import above the first
+# declaration and its doc comment.
+
+# A box with a width.
+struct Box
+  import "core:fmt"
+  w: Int
+end
+
+def main
+  p Box.new(w: 1)
+end

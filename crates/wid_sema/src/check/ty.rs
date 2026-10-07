@@ -234,13 +234,20 @@ impl<'a> Checker<'a> {
                     }
                     _ => None,
                 };
-                if let Some(TyKind::Param(_)) = match &len.kind {
+                match match &len.kind {
                     ast::ExprKind::Const(n) => {
                         super::generics::lookup(&ctx.subst, *n).map(|t| self.types.kind(t).clone())
                     }
                     _ => None,
                 } {
-                    return self.types.intern(TyKind::Array(elem, 0));
+                    Some(TyKind::Param(_)) => return self.types.intern(TyKind::Array(elem, 0)),
+                    // A value argument that was reported.
+                    Some(TyKind::Unknown) => return self.types.unknown(),
+                    _ => {}
+                }
+                // A length that failed to parse (like `[$N]`) was reported.
+                if super::runtime::holds_parse_error(len) {
+                    return self.types.unknown();
                 }
                 let loc = self.virtual_file(len.span.file).map_or(ctx.loc, |v| v.loc);
                 match bound.or_else(|| self.eval_const(len, loc)) {
@@ -436,20 +443,18 @@ impl<'a> Checker<'a> {
             if !args.is_empty() {
                 let arg_tys: Vec<TyId> = args
                     .iter()
-                    .map(|a| match a {
-                        ast::GenericArg::Type(t) => self.resolve_type(t, ctx),
-                        ast::GenericArg::Expr(e) => match self.eval_const(e, ctx.loc) {
-                            Some(ConstValue::Int(v)) => self.types.intern(TyKind::ConstValue(v)),
-                            _ => {
-                                self.report(
-                                    Diagnostic::error(
-                                        codes::GENERIC_ARGS,
-                                        "a generic value argument must be a constant integer",
-                                    )
-                                    .primary(e.span, "not a constant"),
-                                );
-                                self.types.unknown()
-                            }
+                    .enumerate()
+                    .map(|(i, a)| match a {
+                        // A name for a value parameter may be a constant.
+                        ast::GenericArg::Type(t) => match path_as_expr(t)
+                            .and_then(|e| self.value_generic_arg(decl, i, &e, ctx.loc, &ctx.subst))
+                        {
+                            Some(ty) => ty,
+                            None => self.resolve_type(t, ctx),
+                        },
+                        ast::GenericArg::Expr(e) => match self.value_generic_arg(decl, i, e, ctx.loc, &ctx.subst) {
+                            Some(ty) => ty,
+                            None => self.generic_expr_arg(e, ctx.loc),
                         },
                     })
                     .collect();
@@ -544,6 +549,22 @@ impl<'a> Checker<'a> {
         self.types.unknown()
     }
 
+    /// A generic argument written as an expression for a parameter that
+    /// takes a type, or of a declaration that isn't generic: its constant
+    /// integer value, which the caller reports as misplaced.
+    fn generic_expr_arg(&mut self, e: &ast::Expr, loc: DeclLoc) -> TyId {
+        match self.eval_const(e, loc) {
+            Some(ConstValue::Int(v)) => self.types.intern(TyKind::ConstValue(v)),
+            _ => {
+                self.report(
+                    Diagnostic::error(codes::GENERIC_ARGS, "a generic value argument must be a constant integer")
+                        .primary(e.span, "not a constant"),
+                );
+                self.types.unknown()
+            }
+        }
+    }
+
     /// Returns the type a declaration names, reporting when it isn't a type.
     pub fn decl_as_type(&mut self, decl: super::DeclId, span: Span) -> TyId {
         let is_record = matches!(self.decls[decl.0 as usize].kind, DeclKind::Struct(_) | DeclKind::Union(_));
@@ -556,7 +577,12 @@ impl<'a> Checker<'a> {
             DeclKind::Enum(_) => self.enum_type(decl),
             DeclKind::Union(_) => self.union_type(decl),
             DeclKind::Const(c) => {
-                if let ast::ExprKind::Type(t) = &c.value.kind {
+                // Parentheses group a type: `X = (Int)`.
+                let mut value = &c.value;
+                while let ast::ExprKind::Paren(inner) = &value.kind {
+                    value = inner;
+                }
+                if let ast::ExprKind::Type(t) = &value.kind {
                     let ctx = TyCtx { loc: d.loc, self_ty: None, subst: Default::default() };
                     if let ast::TypeKind::Distinct(inner) = &t.kind {
                         let base = self.resolve_type(inner, &ctx);
@@ -575,31 +601,25 @@ impl<'a> Checker<'a> {
                     self.decl_types.insert(decl, ty);
                     return ty;
                 }
-                if let ast::ExprKind::Member { recv, safe: false, .. } = &c.value.kind
+                if let ast::ExprKind::Member { recv, safe: false, .. } = &value.kind
                     && matches!(recv.kind, ast::ExprKind::Ident(p) | ast::ExprKind::Const(p) if self.lookup_import(d.loc, p).is_some())
                 {
                     let ctx = TyCtx { loc: d.loc, self_ty: None, subst: Default::default() };
-                    let texpr = super::members::expr_as_type(&c.value);
+                    let texpr = super::members::expr_as_type(value);
                     self.pointee = true;
                     let ty = self.resolve_type(&texpr, &ctx);
                     self.pointee = false;
                     self.decl_types.insert(decl, ty);
                     return ty;
                 }
-                if let ast::ExprKind::Const(_) = &c.value.kind {
+                if let ast::ExprKind::Const(name) = value.kind {
                     let ctx = TyCtx { loc: d.loc, self_ty: None, subst: Default::default() };
                     let texpr = ast::TypeExpr {
                         kind: ast::TypeKind::Path {
-                            segments: vec![ast::Ident {
-                                name: match c.value.kind {
-                                    ast::ExprKind::Const(n) => n,
-                                    _ => unreachable!(),
-                                },
-                                span: c.value.span,
-                            }],
+                            segments: vec![ast::Ident { name, span: value.span }],
                             args: Vec::new(),
                         },
-                        span: c.value.span,
+                        span: value.span,
                     };
                     let ty = self.resolve_type(&texpr, &ctx);
                     self.decl_types.insert(decl, ty);
@@ -623,6 +643,28 @@ impl<'a> Checker<'a> {
                 .help("types are primitives like `Int`, structs, enums, unions, and constants like `Meters = distinct F64`"),
         );
     }
+}
+
+/// A generic argument parsed as a type name (`N`, `geo.N`) as the
+/// expression it also reads as, for a value parameter.
+fn path_as_expr(t: &ast::TypeExpr) -> Option<ast::Expr> {
+    let T::Path { segments, args } = &t.kind else { return None };
+    if !args.is_empty() {
+        return None;
+    }
+    let kind = match segments.as_slice() {
+        [name] => ast::ExprKind::Const(name.name),
+        [pkg, name] => {
+            let recv = if pkg.as_str().starts_with(|c: char| c.is_ascii_uppercase()) {
+                ast::ExprKind::Const(pkg.name)
+            } else {
+                ast::ExprKind::Ident(pkg.name)
+            };
+            ast::ExprKind::Member { recv: Box::new(ast::Expr { kind: recv, span: pkg.span }), name: *name, safe: false }
+        }
+        _ => return None,
+    };
+    Some(ast::Expr { kind, span: t.span })
 }
 
 /// Hints for type names people often bring from other languages.

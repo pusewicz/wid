@@ -415,6 +415,40 @@ runs the stages; `wid_cli` is the `wid` binary.
   only `MaybeIncorrect`.
 - `private` on a struct field is E0105 (fields are always public), once per
   field, with a machine-applicable fix that removes it (#9).
+- Any type written where a `Type` is expected, or in `comptime` code, is a
+  `Type` value: constructors (`name_of([]Int)`, `name_of(Int?)`,
+  `name_of(^Node)`, `name_of((proc(Int) -> Int)?)`), generic instances and
+  package types (`name_of(Pool(Ball, 64))`, `name_of(C.int)`). Elsewhere,
+  E0323's help fits the type: `.new` only for `[dynamic]T` and `map[K]V`,
+  `nil` for an optional, a proc literal for a proc type, `&x` for a pointer
+  and `{}` otherwise.
+- Named constants as generic value arguments: `Pool(Ball, MAX)`,
+  `Pool(Ball, MAX * 2)`, `Pool(Ball, (N))` and `comptime` results work like
+  the literal, in types and in calls (`Checker::value_generic_arg`). A
+  non-integer constant is E0315 saying the parameter takes an `Int` (with a
+  `.to(Int)` fix for a float), a variable is E0315 with its declaration, an
+  unknown name is E0201, and a reported argument no longer cascades into
+  E0327 at the instance's `[N]T` fields.
+- An `import` inside a `struct`, `enum`, `module` or `extend` body is E0105,
+  like a `cimport` there, instead of being ignored. Both get a
+  machine-applicable fix that moves the line after the file's last import
+  (or above its first declaration), and the names they would bind aren't
+  reported again. Suggestions whose edits are far apart show each place,
+  with `...` between them.
+- `[$N]T` in a method's signature is one E0105 at `$N` (a method can't take
+  a value parameter), whose fix takes a slice and reads `N` as `xs.size`;
+  the parameter recovers as that slice and the uses of `N` aren't reported
+  again. Elsewhere, like in a struct field, `[$N]T` is one E0105, and an
+  array length that failed to parse is no longer reported again as E0327.
+- A type name in parentheses is a type alias: `X = (Int)`, `P = (Vec2)`
+  (the checker looks through `Paren` when it classifies a constant, so
+  `X.new`, `X.size` and `name_of(X)` work too), while `Y = (NINE)` stays a
+  value. A type alias constant passed where a `Type` is expected is that
+  type (it was `{unknown}`), and a value constant's methods (`X.abs` for
+  `X = NINE`) no longer read it as a type. A constant whose value starts
+  with `(` and a type-only token (`(proc`, `(^`, `([]`, `(distinct`, …)
+  commits to the type parse, and an unclosed `(` at the end of a line is
+  one E0105 there with a fix that adds the `)`.
 - Macro syntax: `quote` bodies holding statements and declarations, with
   splices in every expression, type, declaration and name position (`#{x}`,
   `@#{f}`, `:#{s}`), splices outside a `quote` (E0111), variadic
@@ -639,10 +673,6 @@ before anyone starts them.
   whether a proc is `@[c]`. Nothing stops a program from writing through a
   `^TypeInfo` (the run-time tables are `const`, so it faults; at compile
   time it succeeds).
-- Types written in place reach a `Type` parameter only as plain names:
-  `name_of(Int)` works, but `name_of([]Int)` and `name_of(Int?)` are E0323.
-  A type-only argument is recognized before `,` or `)` only, so a call
-  without parentheses can't take `Int?` as its last argument.
 - Macros: a `quote` inside a splice must fit on one line, because newlines
   are suppressed inside splices (`#{if a then quote do x end else quote do
   end end}` works; a multi-line `quote` there doesn't). Code spliced from

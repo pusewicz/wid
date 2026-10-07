@@ -1,0 +1,50 @@
+error[E0105]: a method can't take a value parameter like `$N`
+ --> tests/ui/array_value_param.wid:4:16
+  |
+4 | def total(xs: [$N]Int) -> Int = N
+  |                ^^ `$N` would be the length of the array passed in
+  = note: only generic structs take value parameters, like `struct Pool($T, $N: Int)`
+help: take a slice: an array argument converts to one, and `xs.size` is its length
+  | def total(xs: []Int) -> Int = xs.size
+  = see `wid explain E0105`
+
+error[E0105]: a method can't take a value parameter like `$N`
+ --> tests/ui/array_value_param.wid:6:14
+  |
+6 | def sum(xs: [$N]Int) -> Int
+  |              ^^ `$N` would be the length of the array passed in
+  = note: only generic structs take value parameters, like `struct Pool($T, $N: Int)`
+help: take a slice: an array argument converts to one, and `xs.size` is its length
+  | def sum(xs: []Int) -> Int
+  |   out = 0
+  |   for i in 0...xs.size
+  = see `wid explain E0105`
+
+error[E0105]: a method can't take a value parameter like `$N`
+  --> tests/ui/array_value_param.wid:14:15
+   |
+14 | def copy(xs: [$N]Int) -> [N]Int
+   |               ^^ `$N` would be the length of the array passed in
+   = note: only generic structs take value parameters, like `struct Pool($T, $N: Int)`
+help: take a slice: an array argument converts to one, and `xs.size` is its length
+   | def copy(xs: []Int) -> [N]Int
+   = see `wid explain E0105`
+
+error[E0105]: a method can't take a value parameter like `$N`
+  --> tests/ui/array_value_param.wid:19:15
+   |
+19 | def zeros -> [$N]Int = {}
+   |               ^^ `$N` would be the length of the array returned
+   = note: only generic structs take value parameters, like `struct Pool($T, $N: Int)`
+help: return an array of a constant length, like `[4]Int`, or a slice, like `[]Int`
+   = see `wid explain E0105`
+
+error[E0105]: `$N` can't be an array length here
+  --> tests/ui/array_value_param.wid:22:11
+   |
+22 |   cells: [$N]T
+   |           ^^ only a generic struct takes value parameters
+help: write a constant length, like `[4]T`; a generic struct declares a value parameter, like `struct Pool($T, $N: Int)`, and writes `[N]T`
+   = see `wid explain E0105`
+
+error: could not compile due to 5 errors

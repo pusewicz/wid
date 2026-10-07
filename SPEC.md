@@ -96,7 +96,11 @@ end
   - `map`, `proc`, `block`, `distinct`, `matrix` and `dynamic` are keywords only
     where a type is expected.
   - Parentheses group a type, as in `(proc(Int) -> Int)?`, an optional proc
-    (`proc(Int) -> Int?` returns an optional).
+    (`proc(Int) -> Int?` returns an optional). A constant whose value is a
+    name in parentheses is whatever the name is: `X = (Int)` is a type
+    alias like `X = Int`, and `Y = (NINE)` a value. One whose value starts
+    with `(` and something only a type starts with (`proc`, `distinct`,
+    `^`, `[]`, `@[`, …) is a type, and is reported as one when malformed.
   - A line that ends with an operator or `,`, or a next line that starts with
     `.method`, continues the statement.
   - `x ? a : b` needs spaces around `?`, because `x?` is a predicate name.
@@ -104,7 +108,8 @@ end
     `,` or `)` follows it (in a call without parentheses, also the end of
     the statement or an `if`/`unless` modifier, as in `n = size_of Int?`):
     a type that ends in its own `?` (`Int?`, `rl.Color?`,
-    `Pool(Ball, 64)?`, unlike the name `empty?`), or a `proc(…) -> R` or
+    `Pool(Ball, 64)?`, `(proc(Int) -> Int)?`, unlike the name `empty?`), or
+    a `proc(…) -> R` or
     `@[c] proc(…)` type. `size_of(T)` and `align_of(T)`
     (a type's size and alignment in bytes) and `type_info(T)` expect a
     type, so there `proc`, `block` and `distinct` start one too (unless a
@@ -167,7 +172,13 @@ end
   data pointer.
 - **Generics:** a `$T` in a parameter introduces a type parameter
   (`def max(a: $T, b: T) -> T`). Generic structs are written
-  `struct Pool($T, $N: Int)` and used as `Pool(Ball, 64)`.
+  `struct Pool($T, $N: Int)` and used as `Pool(Ball, 64)`. A value
+  parameter like `$N: Int` takes any constant integer: a literal, a named
+  constant (`Pool(Ball, MAX)`), constant arithmetic (`Pool(Ball, MAX * 2)`)
+  or a `comptime` result; a name there is a constant unless it names a type.
+  Only generic structs take value parameters: a method's `xs: [$N]Int` is
+  E0105, and the method takes a slice, `xs: []Int`, with `xs.size` as its
+  length, instead.
   - Type arguments are inferred from the arguments. A `[N]T` or `[dynamic]T`
     argument matches a `[]$T` parameter.
   - Generic code is checked once per set of type arguments, like a template:
@@ -574,8 +585,10 @@ end
   `type`, `offset`), `T.methods` a `[]MethodInfo` (`name`, `params`, `ret`,
   `static`), and `T.name`, `T.size` and `T.align` describe the type. A type
   written where a `Type` is expected, or used as a value in `comptime` code, is
-  a `Type` value; it answers `.name`, `.size`, `.align` and `.fields` and
-  compares with `==`. `Type` values exist only while compiling: a method the
+  a `Type` value, whatever its form (`name_of([]Int)`, `name_of(Int?)`,
+  `name_of(Pool(Ball, 64))`, `name_of(C.int)`); it answers `.name`, `.size`,
+  `.align` and `.fields` and compares with `==`. Elsewhere a type is not a
+  value (E0323). `Type` values exist only while compiling: a method the
   built program runs can't use them (E0906). `p x` pretty-prints any value.
 - **`type_info(T)`** and **`type_info(x)`** describe a type at run time. `T`
   is any type, written in place (`type_info(Int?)`,
@@ -727,7 +740,10 @@ end
   and `-json-errors` prints the results as JSON. The exit status is 1 when a
   test fails.
 - A package is a directory. Imports look like `import "core:fmt"`,
-  `import "vendor:raylib"` and `import "./physics"`. Wid ships the `core:` and
+  `import "vendor:raylib"` and `import "./physics"`. An `import` or
+  `cimport` is written at the top level of a file (or in a top-level
+  `comptime if`), never in a `struct`, `enum`, `module` or `extend` body
+  (E0105). Wid ships the `core:` and
   `vendor:` collections. `vendor:` holds `raylib` and `sdl3` (the system
   libraries, through pkg-config) and the vendored `stb/image`,
   `stb/image_write`, `stb/truetype`, `stb/rect_pack` and `miniaudio`. `core:` holds

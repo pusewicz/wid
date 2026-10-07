@@ -11,7 +11,7 @@ error[E0323]: `[4]F32` is a type, not a value
   |
 7 |   t = [4]F32
   |       ^^^^^^ a type cannot be used as a value here
-help: make a value of it with `{}` where `[4]F32` is expected, or `[4]F32.new` for containers
+help: make a zero value with `{}` where `[4]F32` is expected, like `x: [4]F32 = {}`, or write an array literal
   = see `wid explain E0323`
 
 error[E0302]: Wid has no argument spreading

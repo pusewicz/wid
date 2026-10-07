@@ -159,7 +159,9 @@ impl<'a> Checker<'a> {
                         DeclKind::Struct(_) | DeclKind::Enum(_) | DeclKind::Union(_) => {
                             Receiver::Type(self.decl_as_type(decl, recv.span))
                         }
-                        DeclKind::Const(c) if matches!(c.value.kind, E::Type(_) | E::Const(_)) => {
+                        DeclKind::Const(c)
+                            if self.is_type_alias_value(&c.value, self.decls[decl.0 as usize].loc, 0) =>
+                        {
                             Receiver::Type(self.decl_as_type(decl, recv.span))
                         }
                         _ => Receiver::Value,
@@ -189,7 +191,8 @@ impl<'a> Checker<'a> {
                 if !matches!(self.decls[decl.0 as usize].kind, DeclKind::Struct(s) if !s.generics.is_empty()) {
                     return Receiver::Value;
                 }
-                let args: Vec<TyId> = call.args.iter().map(|a| self.generic_arg_type(&a.value)).collect();
+                let args: Vec<TyId> =
+                    call.args.iter().enumerate().map(|(i, a)| self.generic_arg_type(decl, i, &a.value)).collect();
                 let spans: Vec<Span> = call.args.iter().map(|a| a.value.span).collect();
                 if !self.check_generic_args(decl, &args, &spans, recv.span) {
                     return Receiver::Type(self.types.unknown());
@@ -925,9 +928,13 @@ impl<'a> Checker<'a> {
 }
 
 impl Checker<'_> {
-    /// Resolves an expression used as a generic argument: a type, or a
-    /// constant integer for value parameters.
-    pub fn generic_arg_type(&mut self, e: &ast::Expr) -> TyId {
+    /// Resolves an expression used as generic argument `index` of `decl`: a
+    /// type, or a constant integer for value parameters.
+    pub fn generic_arg_type(&mut self, decl: super::DeclId, index: usize, e: &ast::Expr) -> TyId {
+        let ctx = self.body_ctx();
+        if let Some(t) = self.value_generic_arg(decl, index, e, ctx.loc, &ctx.subst) {
+            return t;
+        }
         if let ast::ExprKind::Int(_) | ast::ExprKind::Unary { .. } | ast::ExprKind::Binary { .. } = e.kind
             && let Some(super::items::ConstValue::Int(v)) = self.fold_const(e, self.loc())
         {

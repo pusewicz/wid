@@ -1,0 +1,69 @@
+error[E0315]: `Pool` takes a constant `Int` for `N`, but `RATE` is a `F64`
+  --> tests/ui/generic_value_consts.wid:18:16
+   |
+12 | struct Pool($T, $N: Int)
+   |                 ------- `N` is a value parameter
+...
+18 |   a: Pool(Int, RATE) = {}
+   |                ^^^^ expected a constant `Int`
+help: convert it explicitly with `.to(Int)`
+   |   a: Pool(Int, RATE.to(Int)) = {}
+   = see `wid explain E0315`
+
+error[E0315]: `Pool` takes a constant `Int` for `N`, but `NAME` is a `String`
+  --> tests/ui/generic_value_consts.wid:19:17
+   |
+12 | struct Pool($T, $N: Int)
+   |                 ------- `N` is a value parameter
+...
+19 |   b = Pool(Int, NAME).new
+   |                 ^^^^ expected a constant `Int`
+help: pass an integer constant, like `4`, `SIZE` or `SIZE * 2`
+   = see `wid explain E0315`
+
+error[E0315]: `Pool` takes a constant `Int` for `N`, but `Ball` is a type
+  --> tests/ui/generic_value_consts.wid:20:16
+   |
+12 | struct Pool($T, $N: Int)
+   |                 ------- `N` is a value parameter
+...
+20 |   c: Pool(Int, Ball) = {}
+   |                ^^^^ expected a constant `Int`, like `4`
+   = see `wid explain E0315`
+
+error[E0201]: undefined constant `MAXX`
+  --> tests/ui/generic_value_consts.wid:21:16
+   |
+21 |   d: Pool(Int, MAXX) = {}
+   |                ^^^^ not found in this scope
+help: a similar name exists: `MAX`
+   |   d: Pool(Int, MAX) = {}
+   = see `wid explain E0201`
+
+error[E0315]: `Pool` takes a constant `Int` for `N`, but `RATE * 2` is a `F64`
+  --> tests/ui/generic_value_consts.wid:22:17
+   |
+12 | struct Pool($T, $N: Int)
+   |                 ------- `N` is a value parameter
+...
+22 |   e = Pool(Int, RATE * 2).new
+   |                 ^^^^^^^^ expected a constant `Int`
+help: convert it explicitly with `.to(Int)`
+   |   e = Pool(Int, (RATE * 2).to(Int)).new
+   = see `wid explain E0315`
+
+error[E0315]: a generic value argument must be a constant integer
+  --> tests/ui/generic_value_consts.wid:23:16
+   |
+12 | struct Pool($T, $N: Int)
+   |                 ------- `N` is a value parameter
+...
+17 |   count = 3
+   |   ----- `count` is declared here
+...
+23 |   f: Pool(Int, count) = {}
+   |                ^^^^^ `count` is a variable, so its value is only known at run time
+help: declare a package-level constant like `COUNT = …` and pass `COUNT`
+   = see `wid explain E0315`
+
+error: could not compile due to 6 errors

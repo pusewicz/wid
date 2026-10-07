@@ -83,7 +83,7 @@ error[E0323]: `Int?` is a type, not a value
    |
 20 |   puts double(Int?)
    |               ^^^^ a type cannot be used as a value here
-help: make a value of it with `{}` where `Int?` is expected, or `Int?.new` for containers
+help: for an empty `Int?`, write `nil` where `Int?` is expected
    = see `wid explain E0323`
 
 error[E0323]: `proc(Int) -> Int` is a type, not a value
@@ -91,7 +91,7 @@ error[E0323]: `proc(Int) -> Int` is a type, not a value
    |
 21 |   puts double(proc(Int) -> Int)
    |               ^^^^^^^^^^^^^^^^ a type cannot be used as a value here
-help: make a value of it with `{}` where `proc(Int) -> Int` is expected, or `proc(Int) -> Int.new` for containers
+help: a `proc(Int) -> Int` value is a proc literal, like `->(a: Int) -> Int { … }`, or a method, `method(:name)`
    = see `wid explain E0323`
 
 error: could not compile due to 11 errors

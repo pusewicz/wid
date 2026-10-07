@@ -1,0 +1,65 @@
+error[E0323]: `[4]F32` is a type, not a value
+ --> tests/ui/type_as_value.wid:8:10
+  |
+8 |   grid = [4]F32
+  |          ^^^^^^ a type cannot be used as a value here
+help: make a zero value with `{}` where `[4]F32` is expected, like `x: [4]F32 = {}`, or write an array literal
+  = see `wid explain E0323`
+
+error[E0323]: `[dynamic]Int` is a type, not a value
+ --> tests/ui/type_as_value.wid:9:11
+  |
+9 |   items = [dynamic]Int
+  |           ^^^^^^^^^^^^ a type cannot be used as a value here
+help: make an empty one with `[dynamic]Int.new`, or with `{}` where `[dynamic]Int` is expected
+  = see `wid explain E0323`
+
+error[E0323]: `map[String]Int` is a type, not a value
+  --> tests/ui/type_as_value.wid:10:12
+   |
+10 |   counts = map[String]Int
+   |            ^^^^^^^^^^^^^^ a type cannot be used as a value here
+help: make an empty one with `map[String]Int.new`, or with `{}` where `map[String]Int` is expected
+   = see `wid explain E0323`
+
+error[E0323]: `^Int` is a type, not a value
+  --> tests/ui/type_as_value.wid:11:9
+   |
+11 |   ptr = ^Int
+   |         ^^^^ a type cannot be used as a value here
+help: a `^Int` value is the address of a variable or field, like `&x`
+   = see `wid explain E0323`
+
+error[E0323]: `[^]U8` is a type, not a value
+  --> tests/ui/type_as_value.wid:12:11
+   |
+12 |   bytes = [^]U8
+   |           ^^^^^ a type cannot be used as a value here
+help: a `[^]U8` value points into an array, a slice or a dynamic array, like `xs.to([^]U8)`
+   = see `wid explain E0323`
+
+error[E0323]: `[]Int` is a type, not a value
+  --> tests/ui/type_as_value.wid:14:11
+   |
+14 |   p total([]Int)
+   |           ^^^^^ a type cannot be used as a value here
+help: where `[]Int` is expected, an array literal like `[1, 2]` makes one, and `{}` an empty one
+   = see `wid explain E0323`
+
+error[E0323]: `proc(Int) -> Int` is a type, not a value
+  --> tests/ui/type_as_value.wid:15:11
+   |
+15 |   p twice(proc(Int) -> Int)
+   |           ^^^^^^^^^^^^^^^^ a type cannot be used as a value here
+help: a `proc(Int) -> Int` value is a proc literal, like `->(a: Int) -> Int { … }`, or a method, `method(:name)`
+   = see `wid explain E0323`
+
+error[E0323]: `Int?` is a type, not a value
+  --> tests/ui/type_as_value.wid:16:11
+   |
+16 |   p total(Int?)
+   |           ^^^^ a type cannot be used as a value here
+help: for an empty `Int?`, write `nil` where `Int?` is expected
+   = see `wid explain E0323`
+
+error: could not compile due to 8 errors
