@@ -1,0 +1,41 @@
+error[E0112]: only a `macro def` can take a `*` parameter
+ --> tests/ui/variadic_param.wid:1:9
+  |
+1 | def sum(*xs: Int) -> Int
+  |         ^^^^^^^^ this would collect the remaining arguments
+  = note: a method takes a fixed number of arguments; a `*` parameter is for macros, like `attr_reader :hp, :mana`
+help: take a slice instead, and pass an array literal: `sum([a, b, c])`
+  | def sum(xs: []Int) -> Int
+  = see `wid explain E0112`
+
+error[E0112]: a `*` parameter must be the last parameter
+  --> tests/ui/variadic_param.wid:9:18
+   |
+ 9 | macro def tagged(*names: Symbol, tag: String) -> Code
+   |                  ^^^^^^^^^^^^^^ this collects every remaining argument
+   |                                  ----------- so no parameter can come after it
+help: move it to the end
+   | macro def tagged(tag: String, *names: Symbol) -> Code
+   = see `wid explain E0112`
+
+error[E0112]: a `*` parameter can't have a default
+  --> tests/ui/variadic_param.wid:14:35
+   |
+14 | macro def listed(*names: Symbol = [:hp]) -> Code
+   |                                   ^^^^^ a default for a `*` parameter
+   = note: it collects zero or more arguments, so without any it is an empty slice
+help: remove the default
+   | macro def listed(*names: Symbol) -> Code
+   = see `wid explain E0112`
+
+error[E0112]: only a `macro def` can take a `*` parameter
+  --> tests/ui/variadic_param.wid:21:15
+   |
+21 |   double = ->(*xs: Int) -> Int { xs.size * 2 }
+   |               ^^^^^^^^ this would collect the remaining arguments
+   = note: a proc takes a fixed number of arguments; a `*` parameter is for macros, like `attr_reader :hp, :mana`
+help: take a slice instead, and pass an array literal: `f.call([a, b, c])`
+   |   double = ->(xs: []Int) -> Int { xs.size * 2 }
+   = see `wid explain E0112`
+
+error: could not compile due to 4 errors

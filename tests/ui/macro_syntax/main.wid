@@ -1,0 +1,59 @@
+import "./stats"
+
+# A `quote` with a splice in every position it accepts. This parses; the
+# macro calls in `Hero` are E0902 until macros can run.
+macro def record(name: Symbol, ty: Type, init: Code, *extras: Symbol) -> Code
+  reader = quote do
+    @#{name}
+  end
+  quote do
+    struct #{name}
+      #{name}: #{ty} = #{init}
+      #{extras}
+    end
+
+    enum #{name}
+      #{name}, other
+      #{extras}
+    end
+
+    def #{name}(#{name}: #{ty}, counts: [#{3}]#{ty}?) -> #{ty}
+      value: #{ty} = #{reader}
+      copy = self.#{name}
+      @#{name} = :#{name}
+      #{name}(1, #{name}: 2)
+      for #{name} in [1, 2]
+        puts "#{name} is interpolated at run time"
+      end
+      [1].each { |#{name}| p #{name} }
+      if #{name} = maybe
+        p #{name}
+      end
+      guard #{name} = maybe else |#{name}|
+        return copy
+      end
+      #{init}
+      value
+    end
+
+    def self.#{name} = #{init}
+    overload :#{name}, :#{name}
+    #{name} = #{init}
+    @[export("record")] private def exported = 1
+    comptime if OS == :linux
+      LIMIT = 2
+    end
+    stats.counter :kills
+    #{if extras.empty? then quote do end else quote do attr_reader #{extras} end end}
+  end
+end
+
+struct Hero
+  hp: Int
+  record :hp, Int, 100
+  stats.counter :kills, :deaths
+end
+
+def main
+  p Hero.new
+end

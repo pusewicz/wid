@@ -44,6 +44,16 @@ enum ItemCtx {
     Extend,
 }
 
+/// What a parameter list belongs to, which decides whether it may end with
+/// a `*` parameter.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ParamsOf {
+    /// A method, with its name for the advice.
+    Def(Name),
+    Macro,
+    Proc,
+}
+
 struct Opener {
     keyword: &'static str,
     span: Span,
@@ -80,6 +90,16 @@ struct Parser<'a> {
     /// applied by the enclosing type's suffix so `^C.int?` is `(^C.int)?`
     /// like `^Int?`.
     pending_optional: Option<Span>,
+    /// The splice lists of the open `quote`s, innermost last. A splice
+    /// expression is parsed with this stack emptied, so a `quote` inside it
+    /// starts its own list and a bare splice inside it is reported.
+    quotes: Vec<Vec<Expr>>,
+    /// How many splice expressions enclose the position, counted from the
+    /// innermost `quote` (for the message about a splice inside a splice).
+    splice_depth: u32,
+    /// Whether the position is inside a `macro def` (for the advice about a
+    /// splice outside a `quote`).
+    in_macro: bool,
 }
 
 /// Binding powers for infix operators.
@@ -175,6 +195,9 @@ impl<'a> Parser<'a> {
             closed: Vec::new(),
             yield_seen: false,
             pending_optional: None,
+            quotes: Vec::new(),
+            splice_depth: 0,
+            in_macro: false,
         }
     }
 
@@ -229,9 +252,17 @@ impl<'a> Parser<'a> {
         &self.text[span.start as usize..span.end as usize]
     }
 
+    /// Skips newlines, and splices outside a `quote` that read as comments
+    /// (reported).
     fn skip_newlines(&mut self) {
-        while self.at(T::Newline) {
-            self.bump();
+        loop {
+            if self.at(T::Newline) {
+                self.bump();
+            } else if self.at(T::SpliceBegin) && !self.splices_are_code() && self.stray_is_comment() {
+                self.stray_splice();
+            } else {
+                return;
+            }
         }
     }
 
@@ -277,6 +308,8 @@ impl<'a> Parser<'a> {
             T::Ident | T::Const | T::IVar | T::Int | T::Float | T::Symbol | T::TypeParam => {
                 format!("`{}`", self.text_of(tok.span))
             }
+            // Where the lexer assumed a splice's missing `}`.
+            T::SpliceEnd if tok.span.is_empty() => "end of line".to_string(),
             k => k.describe().to_string(),
         }
     }
@@ -344,13 +377,14 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Skips to the end of the current line after an error.
+    /// Skips to the end of the current line, or of the enclosing splice,
+    /// after an error.
     fn recover_line(&mut self) {
         let mut depth = 0i32;
         loop {
             match self.kind() {
                 T::Eof => return,
-                T::Newline if depth <= 0 => return,
+                T::Newline | T::SpliceEnd if depth <= 0 => return,
                 T::LParen | T::LBracket | T::LBrace => depth += 1,
                 T::RParen | T::RBracket | T::RBrace => depth -= 1,
                 _ => {}
@@ -368,6 +402,7 @@ impl<'a> Parser<'a> {
         }
         let save = self.pos;
         let diags = self.diags.len();
+        let splices = self.splice_mark();
         let texpr = self.parse_type();
         let only_type = match &texpr.kind {
             TypeKind::Optional(_) | TypeKind::Pointer(_) | TypeKind::MultiPointer(_) => true,
@@ -383,6 +418,7 @@ impl<'a> Parser<'a> {
         }
         self.pos = save;
         self.diags.truncate(diags);
+        self.rewind_splices(splices);
         None
     }
 
@@ -394,6 +430,7 @@ impl<'a> Parser<'a> {
                 | T::RBrace
                 | T::RParen
                 | T::InterpEnd
+                | T::SpliceEnd
                 | T::Kw(K::End)
                 | T::Kw(K::Else)
                 | T::Kw(K::Elsif)
@@ -403,6 +440,10 @@ impl<'a> Parser<'a> {
     }
 
     fn expect_stmt_end(&mut self) {
+        if self.at(T::SpliceBegin) && self.quotes.is_empty() {
+            // Most likely a comment written without a space after `#`.
+            self.stray_splice();
+        }
         if self.at_stmt_end() {
             return;
         }
@@ -475,6 +516,409 @@ impl<'a> Parser<'a> {
         self.locals[floor..].iter().any(|s| s.contains(&name))
     }
 
+    // ----- quotes and splices ---------------------------------------------
+
+    /// The number of tokens of the splice `#{…}` that starts `n` tokens
+    /// ahead, through its `}`.
+    fn splice_len(&self, n: usize) -> Option<usize> {
+        if self.nth(n).kind != T::SpliceBegin {
+            return None;
+        }
+        let mut depth = 0usize;
+        let mut i = n;
+        loop {
+            match self.nth(i).kind {
+                T::SpliceBegin => depth += 1,
+                T::SpliceEnd if depth == 1 => return Some(i - n + 1),
+                T::SpliceEnd => depth -= 1,
+                T::Eof => return None,
+                _ => {}
+            }
+            i += 1;
+        }
+    }
+
+    /// Whether a splice here is code: inside a `quote`, or inside a splice
+    /// (where another splice is reported as nested). Elsewhere a splice is
+    /// a comment written without a space and is skipped at the end of the
+    /// statement.
+    fn splices_are_code(&self) -> bool {
+        !self.quotes.is_empty() || self.splice_depth > 0
+    }
+
+    /// The number of tokens of the name `n` tokens ahead: an identifier,
+    /// or inside a `quote` a splice standing for one.
+    fn name_len(&self, n: usize) -> Option<usize> {
+        match self.nth(n).kind {
+            T::Ident => Some(1),
+            T::SpliceBegin if !self.quotes.is_empty() => self.splice_len(n),
+            _ => None,
+        }
+    }
+
+    /// Parses a name: an identifier, or a splice, which becomes the
+    /// placeholder [`splice_name`].
+    fn parse_name(&mut self, what: &str) -> Ident {
+        if !self.at(T::SpliceBegin) {
+            return self.expect_ident(what);
+        }
+        let span = self.peek().span;
+        self.parse_splice_name().unwrap_or(Ident { name: Name::new("<error>"), span })
+    }
+
+    /// Parses the name of a declared type: a constant, or a splice.
+    fn parse_type_name(&mut self, what: &str) -> Ident {
+        if self.at(T::SpliceBegin) { self.parse_name(what) } else { self.expect_const(what) }
+    }
+
+    /// Parses a splice in a name position. `None` means it was outside a
+    /// `quote` (reported).
+    fn parse_splice_name(&mut self) -> Option<Ident> {
+        let (index, span) = self.parse_splice();
+        index.map(|i| Ident { name: splice_name(i), span })
+    }
+
+    /// The length of the innermost quote's splice list, so a speculative
+    /// parse can drop its splices with [`Parser::rewind_splices`].
+    fn splice_mark(&self) -> usize {
+        self.quotes.last().map_or(0, Vec::len)
+    }
+
+    fn rewind_splices(&mut self, mark: usize) {
+        if let Some(list) = self.quotes.last_mut() {
+            list.truncate(mark);
+        }
+    }
+
+    /// Parses `#{expr}` at a `SpliceBegin`. Inside a `quote`, appends
+    /// `expr` to the innermost quote's splices and returns its index;
+    /// outside one, reports the splice, skips it and returns `None`. The
+    /// span covers `#{` through `}`.
+    fn parse_splice(&mut self) -> (Option<u32>, Span) {
+        let begin = self.peek();
+        if self.quotes.is_empty() {
+            self.stray_splice();
+            return (None, begin.span.to(self.prev_span()));
+        }
+        self.bump();
+        let quotes = std::mem::take(&mut self.quotes);
+        let no_do = std::mem::replace(&mut self.no_do, false);
+        self.splice_depth += 1;
+        // The expression runs in the macro, so the macro's locals are in
+        // scope there.
+        self.scope_floor.push(0);
+        let expr = if self.at(T::SpliceEnd) && !self.peek().span.is_empty() {
+            let end = self.peek().span;
+            self.report(
+                Diagnostic::error(codes::UNEXPECTED_TOKEN, "empty splice")
+                    .primary(begin.span.to(end), "there is nothing to insert here")
+                    .help("put the macro value to insert between the braces, like `#{name}`"),
+            );
+            Expr { kind: ExprKind::Error, span: end }
+        } else {
+            self.parse_expr()
+        };
+        self.scope_floor.pop();
+        self.splice_depth -= 1;
+        self.no_do = no_do;
+        self.quotes = quotes;
+        self.close_splice(begin.span);
+        let span = begin.span.to(self.prev_span());
+        match self.quotes.last_mut() {
+            Some(list) => {
+                list.push(expr);
+                (Some(list.len() as u32 - 1), span)
+            }
+            None => (None, span),
+        }
+    }
+
+    /// Consumes the `}` of the splice whose `#{` is at `begin`, skipping
+    /// what its expression left over.
+    fn close_splice(&mut self, begin: Span) {
+        let mut depth = 0u32;
+        let mut i = 0;
+        let end = loop {
+            match self.nth(i).kind {
+                T::Eof => break None,
+                T::SpliceBegin => depth += 1,
+                T::SpliceEnd if depth == 0 => break Some(self.nth(i)),
+                T::SpliceEnd => depth -= 1,
+                _ => {}
+            }
+            i += 1;
+        };
+        match end {
+            // The lexer found no `}`: report that, not the tokens before
+            // the place it assumed one.
+            Some(end) if end.span.is_empty() => self.report(
+                Diagnostic::error(codes::UNTERMINATED_STRING, "unterminated splice")
+                    .primary(begin, "this `#{` is never closed")
+                    .suggest(
+                        "close it with `}`",
+                        vec![Edit { span: end.span, replacement: "}".into() }],
+                        Applicability::MaybeIncorrect,
+                    ),
+            ),
+            _ if i > 0 => self.error_expected("`}` to close the splice"),
+            _ => {}
+        }
+        for _ in 0..i {
+            self.bump();
+        }
+        self.eat(T::SpliceEnd);
+    }
+
+    /// Whether the splice at the current `SpliceBegin`, outside any `quote`,
+    /// reads as a comment written without a space after `#`: it starts a
+    /// line, follows a complete expression, or ends a line after a `,`.
+    /// After `=`, `.` or `def` it is meant as code.
+    fn stray_is_comment(&self) -> bool {
+        let ends_line = self.splice_len(0).is_some_and(|n| matches!(self.nth(n).kind, T::Newline | T::Eof));
+        match self.pos.checked_sub(1).map(|i| self.tokens[i].kind) {
+            None | Some(T::Newline) => true,
+            Some(T::Comma) => ends_line,
+            Some(kind) => matches!(
+                kind,
+                T::Int
+                    | T::Float
+                    | T::Str(_)
+                    | T::StrEnd
+                    | T::Symbol
+                    | T::Ident
+                    | T::Const
+                    | T::IVar
+                    | T::TypeParam
+                    | T::RParen
+                    | T::RBracket
+                    | T::RBrace
+                    | T::SpliceEnd
+                    | T::Kw(K::End | K::Nil | K::True | K::False | K::SelfKw | K::Then | K::Else | K::Do)
+            ),
+        }
+    }
+
+    /// Reports the splice at the current `SpliceBegin`, which is outside any
+    /// `quote`, and skips it. When it reads as a comment, the rest of its
+    /// line is skipped too, as the comment would be.
+    fn stray_splice(&mut self) {
+        let comment = self.stray_is_comment();
+        let begin = self.bump();
+        let mut depth = 1u32;
+        while depth > 0 && !self.at(T::Eof) {
+            match self.bump().kind {
+                T::SpliceBegin => depth += 1,
+                T::SpliceEnd => depth -= 1,
+                _ => {}
+            }
+        }
+        let end = self.prev_span();
+        let span = begin.span.to(end);
+        if self.splice_depth > 0 {
+            let mut edits = vec![Edit { span: begin.span, replacement: String::new() }];
+            if !end.is_empty() && end != begin.span {
+                edits.push(Edit { span: end, replacement: String::new() });
+            }
+            self.report(
+                Diagnostic::error(codes::SPLICE_OUTSIDE_QUOTE, "a splice inside a splice")
+                    .primary(span, "this is already macro code")
+                    .note("the expression inside `#{…}` runs in the macro, so it uses values directly")
+                    .suggest("remove the inner `#{` and `}`", edits, Applicability::MachineApplicable),
+            );
+            return;
+        }
+        if comment {
+            while !matches!(self.kind(), T::Newline | T::Eof) {
+                self.bump();
+            }
+        }
+        let after_hash = Span::new(self.file, begin.span.start + 1, begin.span.start + 1);
+        let mut diag = Diagnostic::error(codes::SPLICE_OUTSIDE_QUOTE, "`#{` starts a splice outside a `quote`")
+            .primary(span, "a splice only works inside `quote do … end`")
+            .note("outside a string, `#{` always starts a splice; a comment starts with `# `");
+        diag = if comment || end.is_empty() {
+            let applicability = if comment { Applicability::MachineApplicable } else { Applicability::MaybeIncorrect };
+            diag.suggest(
+                "if this is a comment, add a space after `#`",
+                vec![Edit { span: after_hash, replacement: " ".into() }],
+                applicability,
+            )
+        } else {
+            diag.suggest(
+                "to write the code itself, remove `#{` and `}`",
+                vec![
+                    Edit { span: begin.span, replacement: String::new() },
+                    Edit { span: end, replacement: String::new() },
+                ],
+                Applicability::MaybeIncorrect,
+            )
+        };
+        if self.in_macro {
+            diag = diag.help("to build code in a macro, splice values into a `quote do … end` and return it");
+        }
+        self.report(diag);
+    }
+
+    /// Parses the body of a `quote do … end` (see [`QuoteExpr`]).
+    fn parse_quote_body(&mut self) -> Vec<Stmt> {
+        let mut stmts = Vec::new();
+        loop {
+            self.skip_newlines();
+            if matches!(
+                self.kind(),
+                T::Eof | T::RBrace | T::SpliceEnd | T::Kw(K::End) | T::Kw(K::Else) | T::Kw(K::Elsif) | T::Kw(K::When)
+            ) {
+                break;
+            }
+            let before = self.pos;
+            stmts.push(self.parse_quote_line());
+            self.expect_stmt_end();
+            if self.pos == before {
+                self.bump();
+            }
+        }
+        stmts
+    }
+
+    /// One line of a `quote` body: a declaration when the line can only
+    /// start one, otherwise a statement.
+    fn parse_quote_line(&mut self) -> Stmt {
+        let start = self.peek().span;
+        if self.quote_item_ahead() {
+            let kind = match self.parse_item(ItemCtx::Package) {
+                Some(item) => StmtKind::Item(Box::new(item)),
+                None => StmtKind::Error,
+            };
+            return Stmt { kind, span: start.to(self.prev_span()), attrs: Vec::new() };
+        }
+        if self.at_kw(K::Comptime) && self.nth(1).kind == T::Kw(K::If) {
+            return self.parse_quote_comptime_if();
+        }
+        self.parse_stmt()
+    }
+
+    /// Whether the line ahead, after any attributes and `private`, starts a
+    /// declaration that can't be a statement.
+    fn quote_item_ahead(&self) -> bool {
+        let mut i = 0;
+        while self.nth(i).kind == T::AtBracket {
+            let mut depth = 0u32;
+            loop {
+                match self.nth(i).kind {
+                    T::AtBracket | T::LBracket => depth += 1,
+                    T::RBracket if depth <= 1 => break,
+                    T::RBracket => depth -= 1,
+                    T::Eof => return false,
+                    _ => {}
+                }
+                i += 1;
+            }
+            i += 1;
+            while self.nth(i).kind == T::Newline {
+                i += 1;
+            }
+        }
+        if self.nth(i).kind == T::Kw(K::Private) {
+            i += 1;
+        }
+        match self.nth(i).kind {
+            T::Kw(
+                K::Def
+                | K::Macro
+                | K::Struct
+                | K::Enum
+                | K::Union
+                | K::Module
+                | K::Extend
+                | K::Overload
+                | K::Include
+                | K::Import
+                | K::Cimport,
+            ) => true,
+            T::Const => matches!(self.nth(i + 1).kind, T::Eq | T::Colon),
+            _ => false,
+        }
+    }
+
+    /// `comptime if` at the top of a `quote` body. Its branches follow the
+    /// body's rules, so they may hold declarations as well as statements.
+    fn parse_quote_comptime_if(&mut self) -> Stmt {
+        let start = self.bump().span;
+        let kw = self.bump();
+        self.openers.push(Opener { keyword: "comptime if", span: start.to(kw.span) });
+        let branch = |p: &mut Self| {
+            let no_do = std::mem::replace(&mut p.no_do, true);
+            let cond = p.parse_cond();
+            p.no_do = no_do;
+            p.eat_kw(K::Then);
+            p.push_scope();
+            p.declare_cond(&cond);
+            let body = p.parse_quote_body();
+            p.pop_scope();
+            (cond, body)
+        };
+        let (cond, then) = branch(self);
+        let mut elifs = Vec::new();
+        while self.eat_kw(K::Elsif) {
+            elifs.push(branch(self));
+        }
+        let else_ = if self.eat_kw(K::Else) {
+            self.push_scope();
+            let body = self.parse_quote_body();
+            self.pop_scope();
+            Some(body)
+        } else {
+            None
+        };
+        self.expect_end();
+        let span = start.to(self.prev_span());
+        let if_expr = IfExpr { cond, then, elifs, else_, unless: false };
+        Stmt {
+            kind: StmtKind::Expr(Expr { kind: ExprKind::ComptimeIf(Box::new(if_expr)), span }),
+            span,
+            attrs: Vec::new(),
+        }
+    }
+
+    /// A declaration that starts with a splice, inside a `quote`: a field
+    /// (`#{name}: T` in a struct), a constant (`#{name} = value`), or a
+    /// splice standing alone ([`ItemKind::Splice`]).
+    fn parse_splice_item(&mut self, ctx: ItemCtx) -> ItemKind {
+        let after = self.splice_len(0).map(|n| self.nth(n));
+        match after.map(|t| (t.kind, t.space_before)) {
+            Some((T::Colon, false)) => {
+                let name = self.parse_name("a name");
+                self.bump();
+                let ty = self.parse_type();
+                let default = match (self.eat(T::Eq), ctx) {
+                    (false, _) => None,
+                    (true, ItemCtx::Package) => Some(self.parse_const_value()),
+                    (true, _) => Some(self.parse_expr()),
+                };
+                match (ctx, default) {
+                    (ItemCtx::Package, Some(value)) => {
+                        ItemKind::Const(Box::new(ConstDecl { name, ty: Some(ty), value }))
+                    }
+                    (ItemCtx::Package, None) => {
+                        self.error_expected("`=` and the constant's value");
+                        ItemKind::Error
+                    }
+                    (_, default) => ItemKind::Field(Box::new(FieldDecl { name, ty, default, using: false })),
+                }
+            }
+            Some((T::Eq, _)) => {
+                let name = self.parse_name("a name");
+                self.bump();
+                let value = self.parse_const_value();
+                ItemKind::Const(Box::new(ConstDecl { name, ty: None, value }))
+            }
+            _ => match self.parse_splice().0 {
+                Some(index) => ItemKind::Splice(index),
+                None => ItemKind::Error,
+            },
+        }
+    }
+
     // ----- items ---------------------------------------------------------
 
     fn parse_items_until_eof(&mut self) -> Vec<Item> {
@@ -509,7 +953,7 @@ impl<'a> Parser<'a> {
         let mut items = Vec::new();
         loop {
             self.skip_newlines();
-            if self.at(T::Eof) || self.at_kw(K::End) || self.at_kw(K::Else) || self.at_kw(K::Elsif) {
+            if matches!(self.kind(), T::Eof | T::SpliceEnd | T::Kw(K::End | K::Else | K::Elsif)) {
                 break;
             }
             let before = self.pos;
@@ -619,7 +1063,7 @@ impl<'a> Parser<'a> {
             }
             T::Kw(K::Using) if ctx != ItemCtx::Package => {
                 self.bump();
-                let name = self.expect_ident("a field name");
+                let name = self.parse_name("a field name");
                 self.expect(T::Colon, "`:` and the field type");
                 let ty = self.parse_type();
                 ItemKind::Field(Box::new(FieldDecl { name, ty, default: None, using: true }))
@@ -632,16 +1076,7 @@ impl<'a> Parser<'a> {
                 let name = self.expect_const("a constant name");
                 let ty = if self.eat(T::Colon) { Some(self.parse_type()) } else { None };
                 self.expect(T::Eq, "`=` and the constant's value");
-                let type_start = self.at(T::AtBracket)
-                    || (self.at(T::Ident) && matches!(self.text_of(self.peek().span), "distinct" | "proc"));
-                let value = if type_start {
-                    let texpr = self.parse_type();
-                    Expr { span: texpr.span, kind: ExprKind::Type(Box::new(texpr)) }
-                } else if let Some(texpr) = self.try_type_alias() {
-                    Expr { span: texpr.span, kind: ExprKind::Type(Box::new(texpr)) }
-                } else {
-                    self.parse_expr()
-                };
+                let value = self.parse_const_value();
                 ItemKind::Const(Box::new(ConstDecl { name, ty, value }))
             }
             T::Ident | T::Kw(_)
@@ -656,15 +1091,30 @@ impl<'a> Parser<'a> {
                 let default = if self.eat(T::Eq) { Some(self.parse_expr()) } else { None };
                 ItemKind::Field(Box::new(FieldDecl { name, ty, default, using: false }))
             }
+            T::SpliceBegin if self.quotes.is_empty() => {
+                // Most likely a comment written without a space after `#`.
+                self.stray_splice();
+                return None;
+            }
+            T::SpliceBegin => self.parse_splice_item(ctx),
             T::Ident => {
                 let save = self.pos;
+                let splices = self.splice_mark();
                 let expr = self.parse_expr_cmd();
                 let is_statement =
                     self.at(T::Eq) || is_assign_op(self.kind()) || self.at(T::Comma) || self.at_modifier();
+                // A call, a name, or a package member (`lib.make`) may be a
+                // macro call.
+                let qualified = matches!(
+                    &expr.kind,
+                    ExprKind::Member { recv, safe: false, .. } if matches!(recv.kind, ExprKind::Ident(_))
+                );
                 match &expr.kind {
                     ExprKind::Call(_) | ExprKind::Ident(_) if !is_statement => ItemKind::MacroCall(Box::new(expr)),
+                    _ if qualified && !is_statement => ItemKind::MacroCall(Box::new(expr)),
                     _ => {
                         self.pos = save;
+                        self.rewind_splices(splices);
                         let stmt = self.parse_stmt();
                         self.top_level_statement(stmt.span, ctx);
                         ItemKind::Error
@@ -687,7 +1137,7 @@ impl<'a> Parser<'a> {
                             | K::Defer
                             | K::Guard
                     )
-                ) || tok.kind == T::IVar
+                ) || matches!(tok.kind, T::IVar | T::AtSplice)
                 {
                     let stmt = self.parse_stmt();
                     self.top_level_statement(stmt.span, ctx);
@@ -706,6 +1156,21 @@ impl<'a> Parser<'a> {
         };
         let span = start.to(self.prev_span());
         Some(Item { kind, span, attrs, private, doc })
+    }
+
+    /// The value of a constant after its `=`: an expression, or a type that
+    /// only reads as one (`distinct F64`, `proc(Int)`, `^Node?`, `C.int`).
+    fn parse_const_value(&mut self) -> Expr {
+        let type_start = self.at(T::AtBracket)
+            || (self.at(T::Ident) && matches!(self.text_of(self.peek().span), "distinct" | "proc"));
+        if type_start {
+            let texpr = self.parse_type();
+            Expr { span: texpr.span, kind: ExprKind::Type(Box::new(texpr)) }
+        } else if let Some(texpr) = self.try_type_alias() {
+            Expr { span: texpr.span, kind: ExprKind::Type(Box::new(texpr)) }
+        } else {
+            self.parse_expr()
+        }
     }
 
     fn top_level_statement(&mut self, span: Span, ctx: ItemCtx) {
@@ -845,6 +1310,7 @@ impl<'a> Parser<'a> {
         let tok = self.peek();
         let text: Option<String> = match tok.kind {
             T::Ident => Some(self.text_of(tok.span).to_string()),
+            T::SpliceBegin => return self.parse_name("a method name"),
             T::Plus
             | T::Minus
             | T::Star
@@ -915,8 +1381,10 @@ impl<'a> Parser<'a> {
         let name = self.parse_def_name();
         self.push_def_scope();
         let outer_yield = std::mem::replace(&mut self.yield_seen, false);
+        let outer_macro = std::mem::replace(&mut self.in_macro, is_macro);
+        let owner = if is_macro { ParamsOf::Macro } else { ParamsOf::Def(name.name) };
         let (params, block, c_variadic) =
-            if self.at(T::LParen) { self.parse_params() } else { (Vec::new(), None, None) };
+            if self.at(T::LParen) { self.parse_params(owner) } else { (Vec::new(), None, None) };
         let ret = if self.eat(T::Arrow) { Some(self.parse_type()) } else { None };
         let sig_span = def_tok.span.to(self.prev_span());
         let body = if self.eat(T::Eq) {
@@ -929,13 +1397,15 @@ impl<'a> Parser<'a> {
             FnBody::Block(body)
         };
         self.pop_def_scope();
+        self.in_macro = outer_macro;
         let yields = std::mem::replace(&mut self.yield_seen, outer_yield);
         FnDecl { name, is_static, is_macro, params, block, ret, body, sig_span, yields, c_variadic }
     }
 
-    fn parse_params(&mut self) -> (Vec<Param>, Option<BlockParamDecl>, Option<Span>) {
+    fn parse_params(&mut self, owner: ParamsOf) -> (Vec<Param>, Option<BlockParamDecl>, Option<Span>) {
         self.bump();
         let mut params = Vec::new();
+        let mut stars = Vec::new();
         let mut block = None;
         let mut variadic = None;
         loop {
@@ -957,7 +1427,7 @@ impl<'a> Parser<'a> {
             }
             let start = self.peek().span;
             if self.eat(T::Amp) {
-                let name = self.expect_ident("a block parameter name");
+                let name = self.parse_name("a block parameter name");
                 if !self.eat(T::Colon) {
                     self.report(
                         Diagnostic::error(codes::UNEXPECTED_TOKEN, "block parameters need a type")
@@ -977,8 +1447,11 @@ impl<'a> Parser<'a> {
                 block = Some(BlockParamDecl { name, ty, span: start.to(self.prev_span()) });
                 self.declare(name.name);
             } else {
-                let splat = self.eat(T::Star);
-                let name = self.expect_ident("a parameter name");
+                let splat = self.at(T::Star);
+                if splat {
+                    stars.push((params.len(), self.bump().span));
+                }
+                let name = self.parse_name("a parameter name");
                 self.declare(name.name);
                 let ty = if self.eat(T::Colon) {
                     self.parse_type()
@@ -986,7 +1459,7 @@ impl<'a> Parser<'a> {
                     self.report(
                         Diagnostic::error(
                             codes::UNEXPECTED_TOKEN,
-                            format!("parameter `{}` needs a type", name.as_str()),
+                            format!("parameter `{}` needs a type", self.text_of(name.span)),
                         )
                         .primary(name.span, "every parameter has a declared type")
                         .suggest(
@@ -1007,7 +1480,89 @@ impl<'a> Parser<'a> {
         }
         self.skip_newlines();
         self.expect(T::RParen, "`)` to close the parameter list");
+        for (index, star) in stars {
+            self.check_variadic_param(owner, &mut params, index, star);
+        }
         (params, block, variadic)
+    }
+
+    /// Reports a `*` parameter anywhere but last in a `macro def`, or with
+    /// a default (E0112). Outside a macro, recovers as if the suggested
+    /// `[]T` parameter had been written.
+    fn check_variadic_param(&mut self, owner: ParamsOf, params: &mut [Param], index: usize, star: Span) {
+        let count = params.len();
+        let param = &mut params[index];
+        let text = self.text_of(param.span);
+        if owner != ParamsOf::Macro {
+            let (what, call) = match owner {
+                ParamsOf::Def(name) if splice_index(name).is_none() => ("a method", format!("{name}([a, b, c])")),
+                ParamsOf::Def(_) | ParamsOf::Macro => ("a method", "f([a, b, c])".to_string()),
+                ParamsOf::Proc => ("a proc", "f.call([a, b, c])".to_string()),
+            };
+            let ty = self.text_of(param.ty.span);
+            // Without a type (already reported) there is no slice to suggest.
+            let typed = !matches!(param.ty.kind, TypeKind::Error);
+            if typed {
+                self.report(
+                    Diagnostic::error(codes::VARIADIC_PARAM, "only a `macro def` can take a `*` parameter")
+                        .primary(param.span, "this would collect the remaining arguments")
+                        .note(format!(
+                            "{what} takes a fixed number of arguments; a `*` parameter is for macros, \
+                         like `attr_reader :hp, :mana`"
+                        ))
+                        .suggest(
+                            format!("take a slice instead, and pass an array literal: `{call}`"),
+                            vec![
+                                Edit { span: star, replacement: String::new() },
+                                Edit { span: param.ty.span, replacement: format!("[]{ty}") },
+                            ],
+                            Applicability::MaybeIncorrect,
+                        ),
+                );
+            }
+            // Recover as the suggested slice parameter. It keeps `splat`, so
+            // sema lets it take a call's remaining arguments without more
+            // errors.
+            let elem = std::mem::replace(&mut param.ty, TypeExpr { kind: TypeKind::Error, span: star });
+            param.ty = TypeExpr { span: elem.span, kind: TypeKind::Slice(Box::new(elem)) };
+            param.default = None;
+            return;
+        }
+        if index + 1 < count {
+            let last = params[count - 1].span;
+            let next = params[index + 1].span;
+            let param = &params[index];
+            self.report(
+                Diagnostic::error(codes::VARIADIC_PARAM, "a `*` parameter must be the last parameter")
+                    .primary(param.span, "this collects every remaining argument")
+                    .secondary(next, "so no parameter can come after it")
+                    .suggest(
+                        "move it to the end",
+                        vec![
+                            Edit {
+                                span: Span::new(self.file, param.span.start, next.start),
+                                replacement: String::new(),
+                            },
+                            Edit { span: last.shrink_to_end(), replacement: format!(", {text}") },
+                        ],
+                        Applicability::MaybeIncorrect,
+                    ),
+            );
+        }
+        let param = &params[index];
+        if let Some(default) = &param.default {
+            self.report(
+                Diagnostic::error(codes::VARIADIC_PARAM, "a `*` parameter can't have a default")
+                    .primary(default.span, "a default for a `*` parameter")
+                    .note("it collects zero or more arguments, so without any it is an empty slice")
+                    .suggest_replace(
+                        "remove the default",
+                        Span::new(self.file, param.ty.span.end, default.span.end),
+                        "",
+                        Applicability::MachineApplicable,
+                    ),
+            );
+        }
     }
 
     fn parse_generic_params(&mut self) -> Vec<GenericParam> {
@@ -1041,7 +1596,7 @@ impl<'a> Parser<'a> {
 
     fn parse_struct(&mut self) -> ItemKind {
         let kw = self.bump();
-        let name = self.expect_const("a struct name");
+        let name = self.parse_type_name("a struct name");
         let generics = self.parse_generic_params();
         self.openers.push(Opener { keyword: "struct", span: kw.span.to(name.span) });
         let body = self.parse_item_body(ItemCtx::Struct);
@@ -1051,20 +1606,32 @@ impl<'a> Parser<'a> {
 
     fn parse_enum(&mut self) -> ItemKind {
         let kw = self.bump();
-        let name = self.expect_const("an enum name");
+        let name = self.parse_type_name("an enum name");
         let backing = if self.eat(T::Colon) { Some(self.parse_type()) } else { None };
         self.openers.push(Opener { keyword: "enum", span: kw.span.to(name.span) });
         let mut members = Vec::new();
         let mut body = Vec::new();
         loop {
             self.skip_newlines();
-            if self.at(T::Eof) || self.at_kw(K::End) {
+            if matches!(self.kind(), T::Eof | T::SpliceEnd | T::Kw(K::End)) {
                 break;
             }
-            let member_start = self.at(T::Ident) || is_keyword_member(self.kind());
-            if member_start && matches!(self.nth(1).kind, T::Newline | T::Eq | T::Comma | T::Kw(K::End)) {
+            // A splice is a member when a value or another member follows;
+            // standing alone it is an `ItemKind::Splice`. `struct`, `enum`
+            // and `union` standing alone are members (`TypeKind.struct`).
+            let member = match self.name_len(0) {
+                Some(n) if self.at(T::Ident) => {
+                    matches!(self.nth(n).kind, T::Newline | T::Eq | T::Comma | T::Kw(K::End))
+                }
+                Some(n) => matches!(self.nth(n).kind, T::Eq | T::Comma),
+                None => {
+                    is_keyword_member(self.kind())
+                        && matches!(self.nth(1).kind, T::Newline | T::Eq | T::Comma | T::Kw(K::End))
+                }
+            };
+            if member {
                 loop {
-                    let member = self.expect_enum_member();
+                    let member = self.parse_enum_member();
                     let value = if self.eat(T::Eq) { Some(self.parse_expr()) } else { None };
                     members.push(EnumMember { name: member, value });
                     if !self.eat(T::Comma) {
@@ -1097,21 +1664,21 @@ impl<'a> Parser<'a> {
         ItemKind::Enum(Box::new(EnumDecl { name, backing, members, body }))
     }
 
-    /// An enum member's name: an identifier, or `struct`, `enum` or `union`
-    /// standing alone, so an enum can name the kinds of types
+    /// An enum member's name: an identifier, a splice, or `struct`, `enum`
+    /// or `union` standing alone, so an enum can name the kinds of types
     /// (`TypeKind.struct`).
-    fn expect_enum_member(&mut self) -> Ident {
+    fn parse_enum_member(&mut self) -> Ident {
         let tok = self.peek();
         if is_keyword_member(tok.kind) && matches!(self.nth(1).kind, T::Newline | T::Eq | T::Comma | T::Kw(K::End)) {
             self.bump();
             return Ident { name: Name::new(self.text_of(tok.span)), span: tok.span };
         }
-        self.expect_ident("an enum member")
+        self.parse_name("an enum member")
     }
 
     fn parse_union(&mut self) -> ItemKind {
         self.bump();
-        let name = self.expect_const("a union name");
+        let name = self.parse_type_name("a union name");
         let generics = self.parse_generic_params();
         self.expect(T::Eq, "`=` followed by the variants, like `union Shape = Circle | Rect`");
         let mut variants = vec![self.parse_type()];
@@ -1123,7 +1690,7 @@ impl<'a> Parser<'a> {
 
     fn parse_module(&mut self) -> ItemKind {
         let kw = self.bump();
-        let name = self.expect_const("a module name");
+        let name = self.parse_type_name("a module name");
         self.openers.push(Opener { keyword: "module", span: kw.span.to(name.span) });
         let body = self.parse_item_body(ItemCtx::Module);
         self.expect_end();
@@ -1145,6 +1712,10 @@ impl<'a> Parser<'a> {
 
     fn parse_symbol_ident(&mut self, what: &str) -> Option<Ident> {
         let tok = self.peek();
+        if tok.kind == T::ColonSplice {
+            self.bump();
+            return self.parse_splice_name().map(|name| Ident { span: tok.span.to(name.span), ..name });
+        }
         if tok.kind == T::Symbol {
             self.bump();
             Some(Ident { name: Name::new(&self.text_of(tok.span)[1..]), span: tok.span })
@@ -1243,7 +1814,7 @@ impl<'a> Parser<'a> {
             let start = self.line_starts[line] as usize;
             let end = self.line_starts.get(line + 1).map_or(self.text.len(), |e| *e as usize);
             let content = self.text[start..end].trim();
-            if content.is_empty() || content.starts_with('#') {
+            if content.is_empty() || (content.starts_with('#') && !content.starts_with("#{")) {
                 continue;
             }
             if self.indent_of_line(line) <= indent
@@ -1445,6 +2016,10 @@ impl<'a> Parser<'a> {
                 TypeKind::Matrix { rows: Box::new(rows), cols: Box::new(cols), elem: Box::new(elem) }
             }
             T::Const | T::Ident => return self.parse_type_path(),
+            T::SpliceBegin => {
+                let (index, span) = self.parse_splice();
+                return TypeExpr { kind: index.map_or(TypeKind::Error, TypeKind::Splice), span };
+            }
             _ => {
                 self.error_expected("a type");
                 return TypeExpr { kind: TypeKind::Error, span: tok.span };
@@ -1527,11 +2102,13 @@ impl<'a> Parser<'a> {
         let saved_pos = self.pos;
         let saved_diags = self.diags.len();
         let saved_last = self.last_error_at;
+        let saved_splices = self.splice_mark();
         let ty = self.parse_type();
         if self.diags.len() > saved_diags || matches!(ty.kind, TypeKind::Error) {
             self.pos = saved_pos;
             self.diags.truncate(saved_diags);
             self.last_error_at = saved_last;
+            self.rewind_splices(saved_splices);
             return None;
         }
         Some(ty)
@@ -1545,7 +2122,7 @@ impl<'a> Parser<'a> {
             self.skip_newlines();
             if matches!(
                 self.kind(),
-                T::Eof | T::RBrace | T::Kw(K::End) | T::Kw(K::Else) | T::Kw(K::Elsif) | T::Kw(K::When)
+                T::Eof | T::RBrace | T::SpliceEnd | T::Kw(K::End) | T::Kw(K::Else) | T::Kw(K::Elsif) | T::Kw(K::When)
             ) {
                 break;
             }
@@ -1562,12 +2139,10 @@ impl<'a> Parser<'a> {
     fn is_decl_start(&self) -> bool {
         let mut i = 0;
         loop {
-            if self.nth(i).kind != T::Ident {
-                return false;
-            }
-            match self.nth(i + 1).kind {
+            let Some(len) = self.name_len(i) else { return false };
+            match self.nth(i + len).kind {
                 T::Colon => return true,
-                T::Comma => i += 2,
+                T::Comma => i += len + 1,
                 _ => return false,
             }
         }
@@ -1610,7 +2185,7 @@ impl<'a> Parser<'a> {
                     None => StmtKind::Error,
                 }
             }
-            T::Ident if self.is_decl_start() => self.parse_decl(),
+            T::Ident | T::SpliceBegin if self.is_decl_start() => self.parse_decl(),
             _ => self.parse_expr_or_assign(),
         };
         let mut stmt = Stmt { kind, span: start.to(self.prev_span()), attrs };
@@ -1643,9 +2218,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_decl(&mut self) -> StmtKind {
-        let mut names = vec![self.expect_ident("a variable name")];
+        let mut names = vec![self.parse_name("a variable name")];
         while self.eat(T::Comma) {
-            names.push(self.expect_ident("a variable name"));
+            names.push(self.parse_name("a variable name"));
         }
         self.expect(T::Colon, "`:`");
         let ty = self.parse_type();
@@ -1669,21 +2244,19 @@ impl<'a> Parser<'a> {
         let mut names = Vec::new();
         let save = self.pos;
         let mut is_bind = false;
-        if self.at(T::Ident) {
-            let mut i = 0;
-            while self.nth(i).kind == T::Ident {
-                if self.nth(i + 1).kind == T::Comma {
-                    i += 2;
-                    continue;
-                }
-                is_bind = self.nth(i + 1).kind == T::Eq;
-                break;
+        let mut i = 0;
+        while let Some(len) = self.name_len(i) {
+            if self.nth(i + len).kind == T::Comma {
+                i += len + 1;
+                continue;
             }
+            is_bind = self.nth(i + len).kind == T::Eq;
+            break;
         }
         if is_bind {
-            names.push(self.expect_ident("a name"));
+            names.push(self.parse_name("a name"));
             while self.eat(T::Comma) {
-                names.push(self.expect_ident("a name"));
+                names.push(self.parse_name("a name"));
             }
             self.expect(T::Eq, "`=`");
         } else {
@@ -1721,7 +2294,7 @@ impl<'a> Parser<'a> {
         let mut err = None;
         self.push_scope();
         if self.eat(T::Pipe) {
-            let e = self.expect_ident("the error binding name");
+            let e = self.parse_name("the error binding name");
             self.declare(e.name);
             err = Some(e);
             self.expect(T::Pipe, "`|`");
@@ -1741,6 +2314,7 @@ impl<'a> Parser<'a> {
         if self.at(T::Comma) && is_assignable(&first) {
             let mut targets = vec![first];
             let save = self.pos;
+            let splices = self.splice_mark();
             let mut ok = true;
             while self.eat(T::Comma) {
                 let t = self.parse_expr_bp(PREFIX_NEG_BP, false);
@@ -1764,6 +2338,7 @@ impl<'a> Parser<'a> {
                 return StmtKind::Assign { targets, op: binop_of(tok.kind), values: vec![value] };
             }
             self.pos = save;
+            self.rewind_splices(splices);
             let first = targets.swap_remove(0);
             return self.recover_value_list(first);
         }
@@ -1989,6 +2564,9 @@ impl<'a> Parser<'a> {
     }
 
     fn can_start_expr(&self, tok: Token) -> bool {
+        if matches!(tok.kind, T::SpliceBegin | T::AtSplice | T::ColonSplice) {
+            return self.splices_are_code();
+        }
         matches!(
             tok.kind,
             T::Int
@@ -2051,6 +2629,8 @@ impl<'a> Parser<'a> {
             | T::LParen
             | T::Bang
             | T::Kw(K::Comptime) => true,
+            // Outside a `quote` a splice is a mistyped comment, not an argument.
+            T::SpliceBegin | T::AtSplice | T::ColonSplice => self.splices_are_code(),
             T::LBracket | T::Minus | T::Star | T::Amp | T::Tilde | T::Caret => tight_next,
             _ => false,
         }
@@ -2260,9 +2840,38 @@ impl<'a> Parser<'a> {
                     self.error_expected("`do` after `quote`");
                 }
                 self.openers.push(Opener { keyword: "quote", span });
-                let body = self.parse_block_body();
+                // The quote's code runs where the macro is called: it has
+                // its own locals, splices and `yield`s.
+                self.quotes.push(Vec::new());
+                let splice_depth = std::mem::replace(&mut self.splice_depth, 0);
+                let outer_yield = std::mem::replace(&mut self.yield_seen, false);
+                self.push_def_scope();
+                let body = self.parse_quote_body();
+                self.pop_def_scope();
+                self.yield_seen = outer_yield;
+                self.splice_depth = splice_depth;
+                let splices = self.quotes.pop().unwrap_or_default();
                 self.expect_end();
-                Expr { kind: ExprKind::Quote(body), span: span.to(self.prev_span()) }
+                Expr { kind: ExprKind::Quote(Box::new(QuoteExpr { body, splices })), span: span.to(self.prev_span()) }
+            }
+            T::SpliceBegin => {
+                let (index, span) = self.parse_splice();
+                let Some(index) = index else { return Expr { kind: ExprKind::Error, span } };
+                if self.at(T::LParen) && !self.peek().space_before {
+                    // `#{name}(args)` calls the method the splice names.
+                    let name = Ident { name: splice_name(index), span };
+                    return self.parse_call_with_parens(Callee::Name(name), span);
+                }
+                Expr { kind: ExprKind::Splice(index), span }
+            }
+            T::AtSplice | T::ColonSplice => {
+                self.bump();
+                let Some(name) = self.parse_splice_name() else {
+                    return Expr { kind: ExprKind::Error, span: span.to(self.prev_span()) };
+                };
+                let kind =
+                    if tok.kind == T::AtSplice { ExprKind::IVar(name.name) } else { ExprKind::Symbol(name.name) };
+                Expr { kind, span: span.to(name.span) }
             }
             T::LBrace => {
                 self.bump();
@@ -2409,11 +3018,12 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_arg(&mut self) -> Arg {
-        if self.at(T::Ident) && self.nth(1).kind == T::Colon {
-            let tok = self.bump();
+        if let Some(len) = self.name_len(0)
+            && self.nth(len).kind == T::Colon
+        {
+            let name = self.parse_name("an argument name");
             self.bump();
             self.skip_newlines();
-            let name = Ident { name: Name::new(self.text_of(tok.span)), span: tok.span };
             let value = self.parse_expr();
             return Arg { name: Some(name), value, splat: false };
         }
@@ -2496,7 +3106,7 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 let by_ref = self.eat(T::Amp);
-                let name = self.expect_ident("a block parameter name");
+                let name = self.parse_name("a block parameter name");
                 self.declare(name.name);
                 params.push(BlockParam { name, by_ref });
                 if !self.eat(T::Comma) {
@@ -2531,16 +3141,24 @@ impl<'a> Parser<'a> {
                     self.bump();
                     self.skip_newlines();
                     let name_tok = self.peek();
-                    let name_text = match name_tok.kind {
-                        T::Ident | T::Const => self.text_of(name_tok.span).to_string(),
-                        T::Kw(k) => k.as_str().to_string(),
+                    let name = match name_tok.kind {
+                        T::Ident | T::Const => {
+                            self.bump();
+                            Ident { name: Name::new(self.text_of(name_tok.span)), span: name_tok.span }
+                        }
+                        T::Kw(k) => {
+                            self.bump();
+                            Ident { name: Name::new(k.as_str()), span: name_tok.span }
+                        }
+                        T::SpliceBegin => match self.parse_splice_name() {
+                            Some(name) => name,
+                            None => return Expr { kind: ExprKind::Error, span: expr.span.to(self.prev_span()) },
+                        },
                         _ => {
                             self.error_expected("a method or field name after `.`");
                             return Expr { kind: ExprKind::Error, span: expr.span.to(name_tok.span) };
                         }
                     };
-                    self.bump();
-                    let name = Ident { name: Name::new(&name_text), span: name_tok.span };
                     let start = expr.span;
                     if self.at(T::LParen) && !self.peek().space_before {
                         expr = self.parse_call_with_parens(Callee::Method { recv: expr, name, safe }, start);
@@ -2600,8 +3218,10 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_cond(&mut self) -> Cond {
-        if self.at(T::Ident) && self.nth(1).kind == T::Eq {
-            let name = self.expect_ident("a name");
+        if let Some(len) = self.name_len(0)
+            && self.nth(len).kind == T::Eq
+        {
+            let name = self.parse_name("a name");
             self.bump();
             let value = self.parse_expr();
             return Cond::Bind { name, value };
@@ -2700,7 +3320,7 @@ impl<'a> Parser<'a> {
         let mut bindings = Vec::new();
         loop {
             let by_ref = self.eat(T::Amp);
-            let name = self.expect_ident("a loop variable");
+            let name = self.parse_name("a loop variable");
             bindings.push(BlockParam { name, by_ref });
             if !self.eat(T::Comma) {
                 break;
@@ -2774,12 +3394,13 @@ impl<'a> Parser<'a> {
     fn parse_lambda(&mut self) -> Expr {
         let arrow = self.bump();
         self.push_def_scope();
-        let (params, block, variadic) = if self.at(T::LParen) { self.parse_params() } else { (Vec::new(), None, None) };
+        let (params, block, variadic) =
+            if self.at(T::LParen) { self.parse_params(ParamsOf::Proc) } else { (Vec::new(), None, None) };
         if let Some(dots) = variadic {
             self.report(
                 Diagnostic::error(codes::UNEXPECTED_TOKEN, "procs cannot take C variadic arguments")
                     .primary(dots, "only `@[extern]` methods take `...`")
-                    .help("collect extra arguments into a slice with a `*rest: T` parameter"),
+                    .help("take the extra values as a slice parameter, like `rest: []Int`"),
             );
         }
         if let Some(b) = block {
@@ -2811,7 +3432,9 @@ impl<'a> Parser<'a> {
 
 fn is_assignable(expr: &Expr) -> bool {
     match &expr.kind {
-        ExprKind::Ident(_) | ExprKind::IVar(_) | ExprKind::Index { .. } | ExprKind::Deref(_) => true,
+        ExprKind::Ident(_) | ExprKind::IVar(_) | ExprKind::Index { .. } | ExprKind::Deref(_) | ExprKind::Splice(_) => {
+            true
+        }
         ExprKind::Member { safe, .. } => !safe,
         ExprKind::Paren(inner) => is_assignable(inner),
         _ => false,
@@ -2947,6 +3570,307 @@ end
         let ItemKind::Def(def) = &file.items[0].kind else { panic!() };
         let FnBody::Block(body) = &def.body else { panic!() };
         assert_eq!(body.len(), 3);
+    }
+
+    /// The first `quote` in the body of the file's first def.
+    fn first_quote(file: &File) -> QuoteExpr {
+        let ItemKind::Def(def) = &file.items[0].kind else { panic!("not a def") };
+        let FnBody::Block(body) = &def.body else { panic!("endless def") };
+        body.iter()
+            .find_map(|s| match &s.kind {
+                StmtKind::Expr(Expr { kind: ExprKind::Quote(q), .. }) => Some((**q).clone()),
+                StmtKind::Assign { values, .. } => match &values[0].kind {
+                    ExprKind::Quote(q) => Some((**q).clone()),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .expect("a quote")
+    }
+
+    fn splice_of(ident: &Ident) -> u32 {
+        ident.splice_index().unwrap_or_else(|| panic!("`{}` is not a splice", ident.as_str()))
+    }
+
+    fn codes_of(src: &str) -> Vec<&'static str> {
+        parse_file(FileId(0), src).1.iter().map(|d| d.code.as_str()).collect()
+    }
+
+    #[test]
+    fn splices_in_expression_and_type_positions() {
+        let file = parse_ok(
+            "macro def m(ty: Type, value: Code) -> Code\n\
+             \x20 quote do\n\
+             \x20   x: #{ty} = #{value}\n\
+             \x20   y = [#{value}, 2]\n\
+             \x20   #{value}.foo(#{value})\n\
+             \x20   z: [#{value}]#{ty}? = {}\n\
+             \x20   #{value}\n\
+             \x20 end\n\
+             end\n",
+        );
+        let q = first_quote(&file);
+        assert_eq!(q.splices.len(), 8);
+        assert!(matches!(&q.splices[0].kind, ExprKind::Ident(n) if n.as_str() == "ty"));
+        let StmtKind::Decl { ty, value: Some(value), .. } = &q.body[0].kind else { panic!("{:?}", q.body[0]) };
+        assert!(matches!(ty.kind, TypeKind::Splice(0)));
+        assert!(matches!(value.kind, ExprKind::Splice(1)));
+        let StmtKind::Assign { values, .. } = &q.body[1].kind else { panic!() };
+        let ExprKind::Array(elems) = &values[0].kind else { panic!("{:?}", values[0]) };
+        assert!(matches!(elems[0].kind, ExprKind::Splice(2)));
+        let StmtKind::Expr(Expr { kind: ExprKind::Call(call), .. }) = &q.body[2].kind else { panic!() };
+        let Callee::Method { recv, .. } = &call.callee else { panic!() };
+        assert!(matches!(recv.kind, ExprKind::Splice(3)));
+        assert!(matches!(call.args[0].value.kind, ExprKind::Splice(4)));
+        let StmtKind::Decl { ty, .. } = &q.body[3].kind else { panic!() };
+        let TypeKind::Array(len, elem) = &ty.kind else { panic!("{ty:?}") };
+        assert!(matches!(len.kind, ExprKind::Splice(5)));
+        let TypeKind::Optional(elem) = &elem.kind else { panic!("{elem:?}") };
+        assert!(matches!(elem.kind, TypeKind::Splice(6)));
+        // Standing alone, a splice is a statement (or, expanded among
+        // declarations, the declarations it holds).
+        assert!(matches!(q.body[4].kind, StmtKind::Expr(Expr { kind: ExprKind::Splice(7), .. })));
+    }
+
+    #[test]
+    fn splices_in_name_positions() {
+        let file = parse_ok(
+            "macro def m(name: Symbol) -> Code\n\
+             \x20 quote do\n\
+             \x20   def #{name}(#{name}: Int) = @#{name}\n\
+             \x20   def self.#{name} = x.#{name}\n\
+             \x20   struct #{name}\n\
+             \x20     #{name}: Int\n\
+             \x20   end\n\
+             \x20   enum #{name}\n\
+             \x20     #{name}, b\n\
+             \x20   end\n\
+             \x20   y = :#{name}\n\
+             \x20   #{name}(1, #{name}: 2)\n\
+             \x20   for #{name} in xs\n\
+             \x20   end\n\
+             \x20   xs.each { |#{name}| }\n\
+             \x20   if #{name} = maybe\n\
+             \x20   end\n\
+             \x20   #{name}: Int = 1\n\
+             \x20   overload :#{name}, :#{name}\n\
+             \x20   guard #{name} = maybe else |#{name}|\n\
+             \x20     return\n\
+             \x20   end\n\
+             \x20 end\n\
+             end\n",
+        );
+        let q = first_quote(&file);
+        assert_eq!(q.splices.len(), 20);
+        let item = |i: usize| match &q.body[i].kind {
+            StmtKind::Item(item) => item.kind.clone(),
+            other => panic!("statement {i} is not an item: {other:?}"),
+        };
+        let ItemKind::Def(def) = item(0) else { panic!() };
+        assert_eq!(splice_of(&def.name), 0);
+        assert_eq!(splice_of(&def.params[0].name), 1);
+        let FnBody::Expr(body) = &def.body else { panic!() };
+        assert!(matches!(&body.kind, ExprKind::IVar(n) if splice_index(*n) == Some(2)));
+        let ItemKind::Def(def) = item(1) else { panic!() };
+        assert!(def.is_static);
+        assert_eq!(splice_of(&def.name), 3);
+        let FnBody::Expr(body) = &def.body else { panic!() };
+        let ExprKind::Member { name, .. } = &body.kind else { panic!("{body:?}") };
+        assert_eq!(splice_of(name), 4);
+        let ItemKind::Struct(s) = item(2) else { panic!() };
+        assert_eq!(splice_of(&s.name), 5);
+        let ItemKind::Field(field) = &s.body[0].kind else { panic!("{:?}", s.body[0]) };
+        assert_eq!(splice_of(&field.name), 6);
+        let ItemKind::Enum(e) = item(3) else { panic!() };
+        assert_eq!(splice_of(&e.name), 7);
+        assert_eq!(splice_of(&e.members[0].name), 8);
+        assert_eq!(e.members[1].name.as_str(), "b");
+        let StmtKind::Assign { values, .. } = &q.body[4].kind else { panic!() };
+        assert!(matches!(&values[0].kind, ExprKind::Symbol(n) if splice_index(*n) == Some(9)));
+        let StmtKind::Expr(Expr { kind: ExprKind::Call(call), .. }) = &q.body[5].kind else { panic!() };
+        let Callee::Name(callee) = &call.callee else { panic!() };
+        assert_eq!(splice_of(callee), 10);
+        assert_eq!(splice_of(call.args[1].name.as_ref().expect("a named argument")), 11);
+        let StmtKind::Expr(Expr { kind: ExprKind::For(f), .. }) = &q.body[6].kind else { panic!() };
+        assert_eq!(splice_of(&f.bindings[0].name), 12);
+        let StmtKind::Expr(Expr { kind: ExprKind::Call(call), .. }) = &q.body[7].kind else { panic!() };
+        assert_eq!(splice_of(&call.block.as_ref().expect("a block").params[0].name), 13);
+        let StmtKind::Expr(Expr { kind: ExprKind::If(if_expr), .. }) = &q.body[8].kind else { panic!() };
+        let Cond::Bind { name, .. } = &if_expr.cond else { panic!() };
+        assert_eq!(splice_of(name), 14);
+        let StmtKind::Decl { names, .. } = &q.body[9].kind else { panic!("{:?}", q.body[9]) };
+        assert_eq!(splice_of(&names[0]), 15);
+        let ItemKind::Overload(o) = item(10) else { panic!() };
+        assert_eq!((splice_of(&o.name), splice_of(&o.members[0])), (16, 17));
+        let StmtKind::Guard { names, err: Some(err), .. } = &q.body[11].kind else { panic!() };
+        assert_eq!((splice_of(&names[0]), splice_of(err)), (18, 19));
+    }
+
+    #[test]
+    fn quote_in_a_splice_has_its_own_splices() {
+        let file = parse_ok(
+            "macro def m(a: Code, c: Bool) -> Code\n\
+             \x20 quote do\n\
+             \x20   x = #{c ? quote do foo(#{a}) end : a}\n\
+             \x20   y = #{a}\n\
+             \x20 end\n\
+             end\n",
+        );
+        let q = first_quote(&file);
+        assert_eq!(q.splices.len(), 2);
+        let ExprKind::Ternary { then, .. } = &q.splices[0].kind else { panic!("{:?}", q.splices[0]) };
+        let ExprKind::Quote(inner) = &then.kind else { panic!() };
+        assert_eq!(inner.splices.len(), 1);
+        let StmtKind::Expr(Expr { kind: ExprKind::Call(call), .. }) = &inner.body[0].kind else { panic!() };
+        assert!(matches!(call.args[0].value.kind, ExprKind::Splice(0)));
+        let StmtKind::Assign { values, .. } = &q.body[1].kind else { panic!() };
+        assert!(matches!(values[0].kind, ExprKind::Splice(1)));
+    }
+
+    #[test]
+    fn quote_bodies_hold_declarations() {
+        let file = parse_ok(
+            "macro def m(methods: []Code) -> Code\n\
+             \x20 quote do\n\
+             \x20   @[c] def a = 1\n\
+             \x20   private def b = 2\n\
+             \x20   MAX = 3\n\
+             \x20   struct S\n\
+             \x20     x: Int\n\
+             \x20     #{methods}\n\
+             \x20   end\n\
+             \x20   include Comparable\n\
+             \x20   attr_reader :hp\n\
+             \x20   lib.attr_reader :hp, :mana\n\
+             \x20   comptime if OS == :linux\n\
+             \x20     def c = 1\n\
+             \x20     LIMIT: Int = 2\n\
+             \x20   else\n\
+             \x20     puts 1\n\
+             \x20   end\n\
+             \x20   #{methods}\n\
+             \x20   @[no_bounds_check] x = xs[0]\n\
+             \x20 end\n\
+             end\n",
+        );
+        let q = first_quote(&file);
+        let item = |stmt: &Stmt| match &stmt.kind {
+            StmtKind::Item(item) => (**item).clone(),
+            other => panic!("not an item: {other:?}"),
+        };
+        let a = item(&q.body[0]);
+        assert!(a.has_attr("c") && matches!(a.kind, ItemKind::Def(_)));
+        assert!(item(&q.body[1]).private);
+        assert!(matches!(item(&q.body[2]).kind, ItemKind::Const(_)));
+        let ItemKind::Struct(s) = item(&q.body[3]).kind else { panic!() };
+        assert!(matches!(s.body[0].kind, ItemKind::Field(_)));
+        assert!(matches!(s.body[1].kind, ItemKind::Splice(0)));
+        assert!(matches!(item(&q.body[4]).kind, ItemKind::Include(_)));
+        assert!(matches!(q.body[5].kind, StmtKind::Expr(Expr { kind: ExprKind::Call(_), .. })));
+        assert!(matches!(q.body[6].kind, StmtKind::Expr(Expr { kind: ExprKind::Call(_), .. })));
+        let StmtKind::Expr(Expr { kind: ExprKind::ComptimeIf(if_expr), .. }) = &q.body[7].kind else { panic!() };
+        assert!(matches!(item(&if_expr.then[0]).kind, ItemKind::Def(_)));
+        assert!(matches!(item(&if_expr.then[1]).kind, ItemKind::Const(_)));
+        assert!(matches!(if_expr.else_.as_ref().expect("else")[0].kind, StmtKind::Expr(_)));
+        assert!(matches!(q.body[8].kind, StmtKind::Expr(Expr { kind: ExprKind::Splice(1), .. })));
+        assert!(matches!(q.body[9].kind, StmtKind::Assign { .. }));
+        assert_eq!(q.body[9].attrs[0].name.as_str(), "no_bounds_check");
+    }
+
+    #[test]
+    fn variadic_macro_parameter() {
+        let file = parse_ok("macro def attr_reader(*names: Symbol) -> Code\n  quote do\n  end\nend\n");
+        let ItemKind::Def(def) = &file.items[0].kind else { panic!() };
+        assert!(def.params[0].splat);
+        assert!(matches!(&def.params[0].ty.kind, TypeKind::Path { segments, .. } if segments[0].as_str() == "Symbol"));
+    }
+
+    #[test]
+    fn misused_variadic_parameters() {
+        let (file, diags) = parse_file(FileId(0), "def sum(*xs: Int) -> Int = 0\n");
+        assert_eq!(diags.iter().map(|d| d.code.as_str()).collect::<Vec<_>>(), ["E0112"]);
+        // Recovery reads it as the suggested slice parameter.
+        let ItemKind::Def(def) = &file.items[0].kind else { panic!() };
+        assert!(def.params[0].splat && matches!(def.params[0].ty.kind, TypeKind::Slice(_)));
+        assert_eq!(codes_of("def main\n  g = ->(*xs: Int) { 1 }\nend\n"), ["E0112"]);
+        assert_eq!(codes_of("macro def m(*a: Symbol, b: Int) -> Code = quote do end\n"), ["E0112"]);
+        assert_eq!(codes_of("macro def m(*a: Symbol = [:x]) -> Code = quote do end\n"), ["E0112"]);
+    }
+
+    #[test]
+    fn qualified_macro_calls_are_declarations() {
+        let file = parse_ok(
+            "lib.setup :a, :b\n\
+             lib.make(:a)\n\
+             lib.init\n\
+             struct S\n\
+             \x20 hp: Int\n\
+             \x20 lib.attr_reader :hp, :mana\n\
+             \x20 lib.make\n\
+             end\n\
+             enum E\n\
+             \x20 a\n\
+             \x20 lib.attr(:x)\n\
+             end\n\
+             module M\n\
+             \x20 lib.helpers\n\
+             end\n\
+             extend S\n\
+             \x20 lib.more :x\n\
+             end\n",
+        );
+        let is_call = |item: &Item| matches!(item.kind, ItemKind::MacroCall(_));
+        assert!(file.items[..3].iter().all(is_call));
+        let ItemKind::Struct(s) = &file.items[3].kind else { panic!() };
+        assert!(s.body[1..].iter().all(is_call));
+        let ItemKind::Enum(e) = &file.items[4].kind else { panic!() };
+        assert!(is_call(&e.body[0]));
+        let ItemKind::Module(m) = &file.items[5].kind else { panic!() };
+        assert!(is_call(&m.body[0]));
+        let ItemKind::Extend(x) = &file.items[6].kind else { panic!() };
+        assert!(is_call(&x.body[0]));
+    }
+
+    #[test]
+    fn stray_splices_are_reported_and_skipped() {
+        let (file, diags) = parse_file(
+            FileId(0),
+            "def main\n  #{TODO} fix this\n  x = 1 #{note}\n  y = #{x}\n  xs = [\n    1, #{first}\n    2,\n  ]\n  puts x\nend\n#{top}\n",
+        );
+        let codes: Vec<_> = diags.iter().map(|d| (d.code.as_str(), d.helps[0].applicability)).collect();
+        use Applicability::*;
+        assert_eq!(
+            codes,
+            [
+                ("E0111", MachineApplicable),
+                ("E0111", MachineApplicable),
+                ("E0111", MaybeIncorrect),
+                ("E0111", MachineApplicable),
+                ("E0111", MachineApplicable)
+            ]
+        );
+        let ItemKind::Def(def) = &file.items[0].kind else { panic!() };
+        let FnBody::Block(body) = &def.body else { panic!() };
+        assert_eq!(body.len(), 4);
+        let StmtKind::Assign { values, .. } = &body[2].kind else { panic!() };
+        assert!(matches!(&values[0].kind, ExprKind::Array(elems) if elems.len() == 2));
+        // Unclosed outside a `quote`, it is still the one error.
+        assert_eq!(codes_of("def main\n  #{ oops\n  puts 1\nend\n"), ["E0111"]);
+    }
+
+    #[test]
+    fn splice_errors_inside_quotes() {
+        assert_eq!(
+            codes_of("macro def m(a: Symbol) -> Code\n  quote do\n    def #{a\n    end\n  end\nend\n"),
+            ["E0102"]
+        );
+        assert_eq!(
+            codes_of("macro def m(a: Symbol) -> Code\n  quote do\n    def #{f(#{a})} = 1\n  end\nend\n"),
+            ["E0111"]
+        );
+        let (_, diags) = parse_file(FileId(0), "macro def m(a: Symbol) -> Code\n  #{a}\nend\n");
+        assert_eq!(diags.iter().map(|d| d.code.as_str()).collect::<Vec<_>>(), ["E0111"]);
+        assert_eq!(diags.iter().next().expect("one").helps.len(), 2, "advice about `quote` in a macro");
     }
 
     #[test]

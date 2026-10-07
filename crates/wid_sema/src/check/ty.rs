@@ -170,7 +170,8 @@ impl<'a> Checker<'a> {
     fn resolve_type_inner(&mut self, texpr: &ast::TypeExpr, ctx: &TyCtx) -> TyId {
         let pointee = std::mem::take(&mut self.pointee);
         match &texpr.kind {
-            T::Error => self.types.unknown(),
+            // Splices exist only inside `quote`, which is never resolved.
+            T::Error | T::Splice(_) => self.types.unknown(),
             T::Path { segments, args } => {
                 let ty = self.resolve_path_type(segments, args, texpr.span, ctx);
                 if !pointee {

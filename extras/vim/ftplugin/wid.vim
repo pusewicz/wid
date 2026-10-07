@@ -12,7 +12,8 @@ let b:did_ftplugin = 1
 let s:cpo_save = &cpo
 set cpo&vim
 
-setlocal comments=:# commentstring=#\ %s
+" A comment leader is `#` and a blank: a line starting with `#{` is a splice.
+setlocal comments=b:# commentstring=#\ %s
 setlocal formatoptions-=t formatoptions+=croql
 setlocal suffixesadd=.wid
 setlocal include=

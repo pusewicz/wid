@@ -50,9 +50,9 @@ end
 
 - Wid keeps Ruby's surface: `def … end`, endless `def f = expr`,
   `if/unless/elsif`, postfix `if`/`unless`, `while/until/loop`, `case/when`,
-  implicit return, `#{}` interpolation, ranges `0..n`/`0...n`, `#` comments and
-  no semicolons. `?` methods must return `Bool`. Source files use the `.wid`
-  extension.
+  implicit return, `#{}` interpolation, ranges `0..n`/`0...n`, `# ` comments
+  and no semicolons (outside a string, `#{` starts a macro splice). `?`
+  methods must return `Bool`. Source files use the `.wid` extension.
 - **Blocks** can be written `do |x| … end` or `{ |x| … }`. A `{` right after a
   call opens a block; anywhere else, `{}` is the zero-value literal.
 - **Declarations.** The first assignment declares a variable: `x = 1`,
@@ -411,32 +411,57 @@ end
     - A `Symbol` parameter receives a symbol literal (`:hp`) as a name.
     - A `Type` parameter receives a type.
     - Any other parameter type receives a value computed like `comptime`.
+    - The last parameter may be written `*names: T`. It collects the
+      remaining positional arguments, zero or more, into a `[]T`, each
+      converted by `T`'s rule, so `*names: Symbol` takes
+      `attr_reader :hp, :mana`. It can't have a default. Only macros take
+      one; other methods take a `[]T` and an array literal (E0112).
     - A macro always returns `Code`. `Code` and `Symbol` values exist only
       while compiling, like `Type`.
+  - **Quotes:** the code in a `quote` may be statements or declarations
+    (`def`, `struct`, constants, other macro calls, …); which it must be
+    depends on where the macro is called.
   - **Splices:** a spliced value is inserted according to its type.
     - `Code` inserts that code.
     - `[]Code` inserts a sequence of statements or declarations.
     - `Symbol` inserts a name, usable as an identifier, a method name
       (`def #{name}`, `x.#{name}`), a field (`@#{name}`) or a parameter
-      name.
+      name. `:#{name}` inserts a symbol literal; its value must be a
+      `Symbol`.
     - `Type` inserts the type.
     - Numbers, `Bool`s and strings insert literals.
   - **Lexing:** `#{` outside a string literal always starts a splice, and a
-    splice is only valid inside `quote`. Comments therefore start with `# `.
-    Inside a string literal in a `quote`, `#{}` is ordinary run-time
-    interpolation of the generated code.
+    splice is only valid inside `quote` (E0111). Comments therefore start
+    with `# `. A splice is one expression and may span lines. Inside a
+    string literal in a `quote`, `#{}` is ordinary run-time interpolation
+    of the generated code.
+  - **Calls:** macros are package members like any def. `pkg.name(…)`, and
+    `pkg.name args` as a statement or declaration, works wherever an
+    unqualified call does, including at declaration level.
+    `private macro def` hides a macro outside its package.
   - **Where a macro call expands:** in an expression, as a statement, as a
     declaration in a `struct`, `enum`, `module` or `extend` body, or at
     package level. Declaration-level calls expand once every declaration
     outside them is known, in source order, like `comptime if`. A macro
     can't add fields, because a struct's layout is fixed before its macros
     run.
+  - **Names** in the quote's own code that aren't locals bound in the
+    quote or members of `self` (reached with `@name` or an implicit-self
+    call), that is methods, types, constants and packages, resolve where
+    the macro is defined, with that package's imports and privacy. So a
+    library macro can call its own helpers without the caller importing
+    them. Names that come from splices, and `Self`, resolve at the call
+    site.
   - **Hygiene:** each expansion renames the locals that the quote's own code
     binds: assignment targets, `for` variables, block parameters, and
     `guard` and `if v =` bindings. Names that come from splices keep their
     spelling, so a macro can deliberately bind a caller's name.
   - **Errors** in generated code point at the line inside the `quote` and
-    at the macro call that expanded it.
+    at each macro call that led to it, innermost first, in the human and
+    JSON output alike.
+  - **Budgets:** each macro run has the `comptime` limits. Expansions may
+    nest at most 64 deep (a macro whose code calls a macro), and one build
+    runs at most 65,536 expansions. Exceeding either is E0903.
 - **Reflection** at compile time: `T.fields` is a `[]FieldInfo` (`name`,
   `type`, `offset`), `T.methods` a `[]MethodInfo` (`name`, `params`, `ret`,
   `static`), and `T.name`, `T.size` and `T.align` describe the type. A type

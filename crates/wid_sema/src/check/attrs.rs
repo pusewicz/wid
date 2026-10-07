@@ -79,7 +79,7 @@ impl Checker<'_> {
                 return;
             }
             ItemKind::Field(_) => "a field",
-            ItemKind::MacroCall(_) | ItemKind::ComptimeIf(_) | ItemKind::Error => return,
+            ItemKind::MacroCall(_) | ItemKind::ComptimeIf(_) | ItemKind::Splice(_) | ItemKind::Error => return,
         };
         for attr in &item.attrs {
             let name = attr.name.as_str();
