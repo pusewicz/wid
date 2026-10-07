@@ -384,6 +384,9 @@ runs the stages; `wid_cli` is the `wid` binary.
   `$T: typeid`) is one E0105 at `$T`, with a fix that introduces it where a
   parameter's type first uses `T` (`xs: []$T`); the parameter list recovers
   as that fix, so the rest of the file is checked normally.
+- Parenthesized types as constant values: `MaybeCb = (proc(Int) -> Int)?`,
+  `Pair = (Int, String)` (`Parser::try_type_alias`). A value in parentheses
+  that parses as an expression (`(1 + 2) * 3`, `(Vec2)`) stays one.
 - Macro syntax: `quote` bodies holding statements and declarations, with
   splices in every expression, type, declaration and name position (`#{x}`,
   `@#{f}`, `:#{s}`), splices outside a `quote` (E0111), variadic

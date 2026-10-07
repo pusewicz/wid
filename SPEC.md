@@ -93,6 +93,8 @@ end
     select it.
   - `map`, `proc`, `block`, `distinct`, `matrix` and `dynamic` are keywords only
     where a type is expected.
+  - Parentheses group a type, as in `(proc(Int) -> Int)?`, an optional proc
+    (`proc(Int) -> Int?` returns an optional).
   - A line that ends with an operator or `,`, or a next line that starts with
     `.method`, continues the statement.
   - `x ? a : b` needs spaces around `?`, because `x?` is a predicate name.

@@ -417,17 +417,23 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses a constant's value as a type when the whole value is one that
-    /// only reads as a type, like `RawPtr?`, `^Node?` or `C.int`. Restores the
-    /// position and returns `None` otherwise.
+    /// only reads as a type, like `RawPtr?`, `^Node?`, `C.int` or a
+    /// parenthesized type (`(proc(Int) -> Int)?`, `(Int, Int)`). A
+    /// parenthesized name (`(Vec2)`) or splice (`(#{v})`) reads as an
+    /// expression the same way, and an expression like `(1 + 2) * 3`
+    /// doesn't parse as a type.
+    /// Restores the position and returns `None` otherwise.
     fn try_type_alias(&mut self) -> Option<TypeExpr> {
-        if !matches!(self.peek().kind, T::Const | T::Ident | T::Caret | T::LBracket) {
+        let paren = self.at(T::LParen);
+        if !paren && !matches!(self.peek().kind, T::Const | T::Ident | T::Caret | T::LBracket) {
             return None;
         }
         let save = self.pos;
-        let diags = self.diags.len();
         let splices = self.splice_mark();
-        let texpr = self.parse_type();
+        let texpr = self.try_parse_type()?;
         let only_type = match &texpr.kind {
+            TypeKind::Path { .. } | TypeKind::Splice(_) if paren => false,
+            _ if paren => true,
             TypeKind::Optional(_) | TypeKind::Pointer(_) | TypeKind::MultiPointer(_) => true,
             TypeKind::Path { segments, args } => {
                 args.is_empty()
@@ -436,11 +442,10 @@ impl<'a> Parser<'a> {
             }
             _ => false,
         };
-        if only_type && self.diags.len() == diags && self.at_stmt_end() {
+        if only_type && self.at_stmt_end() {
             return Some(texpr);
         }
         self.pos = save;
-        self.diags.truncate(diags);
         self.rewind_splices(splices);
         None
     }
@@ -1182,7 +1187,8 @@ impl<'a> Parser<'a> {
     }
 
     /// The value of a constant after its `=`: an expression, or a type that
-    /// only reads as one (`distinct F64`, `proc(Int)`, `^Node?`, `C.int`).
+    /// only reads as one (`distinct F64`, `proc(Int)`, `^Node?`, `C.int`,
+    /// `(proc(Int) -> Int)?`).
     fn parse_const_value(&mut self) -> Expr {
         let type_start = self.at(T::AtBracket)
             || (self.at(T::Ident) && matches!(self.text_of(self.peek().span), "distinct" | "proc"));
@@ -4232,6 +4238,57 @@ end
         let (_, diags) = parse_file(FileId(0), "macro def m(a: Symbol) -> Code\n  #{a}\nend\n");
         assert_eq!(diags.iter().map(|d| d.code.as_str()).collect::<Vec<_>>(), ["E0111"]);
         assert_eq!(diags.iter().next().expect("one").helps.len(), 2, "advice about `quote` in a macro");
+    }
+
+    #[test]
+    fn parenthesized_types_as_constant_values() {
+        let file = parse_ok(
+            "MaybeCb = (proc(Int) -> Int)?\n\
+             Cb = (proc(Int) -> Int)\n\
+             Pair = (Int, String)\n\
+             Same = (Vec2)\n\
+             NINE = (1 + 2) * 3\n\
+             SEVEN = (NINE - 2)\n",
+        );
+        let values: Vec<_> = file
+            .items
+            .iter()
+            .map(|item| match &item.kind {
+                ItemKind::Const(c) => &c.value.kind,
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        let ExprKind::Type(ty) = values[0] else { panic!("{:?}", values[0]) };
+        let TypeKind::Optional(inner) = &ty.kind else { panic!("{ty:?}") };
+        assert!(matches!(inner.kind, TypeKind::Proc { ret: Some(_), .. }));
+        assert!(matches!(values[1], ExprKind::Type(t) if matches!(t.kind, TypeKind::Proc { .. })));
+        assert!(matches!(values[2], ExprKind::Type(t) if matches!(t.kind, TypeKind::Tuple(_))));
+        // These read as expressions.
+        assert!(matches!(values[3], ExprKind::Paren(_)));
+        assert!(matches!(values[4], ExprKind::Binary { .. }));
+        assert!(matches!(values[5], ExprKind::Paren(_)));
+        // In a `quote`, a parenthesized splice may be any code.
+        let file = parse_ok(
+            "macro def m(v: Code, t: Type) -> Code\n\
+             \x20 quote do\n\
+             \x20   A = (#{v})\n\
+             \x20   B = (#{v}) * 2\n\
+             \x20   C = (#{t})?\n\
+             \x20 end\n\
+             end\n",
+        );
+        let q = first_quote(&file);
+        let value = |stmt: &Stmt| match &stmt.kind {
+            StmtKind::Item(item) => match &item.kind {
+                ItemKind::Const(c) => c.value.kind.clone(),
+                other => panic!("{other:?}"),
+            },
+            other => panic!("{other:?}"),
+        };
+        assert!(matches!(value(&q.body[0]), ExprKind::Paren(_)));
+        assert!(matches!(value(&q.body[1]), ExprKind::Binary { .. }));
+        assert!(matches!(value(&q.body[2]), ExprKind::Type(t) if matches!(t.kind, TypeKind::Optional(_))));
+        assert_eq!(q.splices.len(), 3);
     }
 
     #[test]
