@@ -245,6 +245,10 @@ impl<'a> Checker<'a> {
                     Some(TyKind::Unknown) => return self.types.unknown(),
                     _ => {}
                 }
+                // A length that failed to parse (like `[$N]`) was reported.
+                if super::runtime::holds_parse_error(len) {
+                    return self.types.unknown();
+                }
                 let loc = self.virtual_file(len.span.file).map_or(ctx.loc, |v| v.loc);
                 match bound.or_else(|| self.eval_const(len, loc)) {
                     Some(ConstValue::Int(n)) if n >= 0 => self.types.intern(TyKind::Array(elem, n as u64)),

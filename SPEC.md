@@ -172,6 +172,9 @@ end
   parameter like `$N: Int` takes any constant integer: a literal, a named
   constant (`Pool(Ball, MAX)`), constant arithmetic (`Pool(Ball, MAX * 2)`)
   or a `comptime` result; a name there is a constant unless it names a type.
+  Only generic structs take value parameters: a method's `xs: [$N]Int` is
+  E0105, and the method takes a slice, `xs: []Int`, with `xs.size` as its
+  length, instead.
   - Type arguments are inferred from the arguments. A `[N]T` or `[dynamic]T`
     argument matches a `[]$T` parameter.
   - Generic code is checked once per set of type arguments, like a template:

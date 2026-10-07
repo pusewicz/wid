@@ -435,6 +435,11 @@ runs the stages; `wid_cli` is the `wid` binary.
   (or above its first declaration), and the names they would bind aren't
   reported again. Suggestions whose edits are far apart show each place,
   with `...` between them.
+- `[$N]T` in a method's signature is one E0105 at `$N` (a method can't take
+  a value parameter), whose fix takes a slice and reads `N` as `xs.size`;
+  the parameter recovers as that slice and the uses of `N` aren't reported
+  again. Elsewhere, like in a struct field, `[$N]T` is one E0105, and an
+  array length that failed to parse is no longer reported again as E0327.
 - Macro syntax: `quote` bodies holding statements and declarations, with
   splices in every expression, type, declaration and name position (`#{x}`,
   `@#{f}`, `:#{s}`), splices outside a `quote` (E0111), variadic

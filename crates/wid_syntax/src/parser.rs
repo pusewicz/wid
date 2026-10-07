@@ -6,6 +6,7 @@ use crate::ast::*;
 use crate::intern::Name;
 use crate::lexer::{Lexed, lex};
 use crate::token::{Comment, Keyword, Token, TokenKind};
+use crate::visit::{VisitMut, walk_expr, walk_type};
 
 use Keyword as K;
 use TokenKind as T;
@@ -57,6 +58,18 @@ enum ParamsOf {
 struct Opener {
     keyword: &'static str,
     span: Span,
+}
+
+/// An array length written `[$N]` in a method's signature, as if a method
+/// could take a value parameter (only generic structs can). The type reads
+/// as the slice `[]T` it should be, and `parse_def` reports it.
+struct ArrayValueParam {
+    /// `N`, without the `$`.
+    name: Name,
+    /// The `$N` token.
+    tok: Span,
+    /// `[$N]`, which the fix makes `[]`.
+    brackets: Span,
 }
 
 /// A `$T` written as a parameter of its own (`$T, xs: []T`, or Odin's
@@ -118,6 +131,9 @@ struct Parser<'a> {
     /// the last parameter list whose fix found no type to introduce them
     /// in; `parse_def` drops their uses in the return type.
     uninferred: Vec<Name>,
+    /// While a method's parameters and return type are parsed, the `[$N]`
+    /// array lengths in them (see [`ArrayValueParam`]).
+    array_params: Option<Vec<ArrayValueParam>>,
 }
 
 /// Binding powers for infix operators.
@@ -221,6 +237,7 @@ impl<'a> Parser<'a> {
             splice_depth: 0,
             in_macro: false,
             uninferred: Vec::new(),
+            array_params: None,
         }
     }
 
@@ -1440,10 +1457,12 @@ impl<'a> Parser<'a> {
         let outer_yield = std::mem::replace(&mut self.yield_seen, false);
         let outer_macro = std::mem::replace(&mut self.in_macro, is_macro);
         let owner = if is_macro { ParamsOf::Macro } else { ParamsOf::Def(name.name) };
-        let (params, block, c_variadic) =
+        let outer_array_params = self.array_params.replace(Vec::new());
+        let (mut params, block, c_variadic) =
             if self.at(T::LParen) { self.parse_params(owner) } else { (Vec::new(), None, None) };
         let uninferred = std::mem::take(&mut self.uninferred);
         let mut ret = if self.eat(T::Arrow) { Some(self.parse_type()) } else { None };
+        let array_params = std::mem::replace(&mut self.array_params, outer_array_params).unwrap_or_default();
         // A loose `$T` that no parameter could introduce was reported; its
         // uses in the return type would only repeat that as unknown types.
         if let Some(ret) = &mut ret {
@@ -1454,7 +1473,7 @@ impl<'a> Parser<'a> {
             }
         }
         let sig_span = def_tok.span.to(self.prev_span());
-        let body = if self.eat(T::Eq) {
+        let mut body = if self.eat(T::Eq) {
             self.skip_newlines();
             FnBody::Expr(Box::new(self.parse_expr_cmd()))
         } else {
@@ -1463,6 +1482,9 @@ impl<'a> Parser<'a> {
             self.expect_end();
             FnBody::Block(body)
         };
+        for found in &array_params {
+            self.report_array_value_param(is_macro, found, &mut params, &mut ret, &mut body);
+        }
         self.pop_def_scope();
         self.in_macro = outer_macro;
         let yields = std::mem::replace(&mut self.yield_seen, outer_yield);
@@ -1589,6 +1611,101 @@ impl<'a> Parser<'a> {
     /// Reports a `$T` written as a parameter of its own (E0105). In a
     /// method, the fix removes it and introduces `$T` where a parameter's
     /// type first uses `T`, and the parameters recover as that fix.
+    /// Parses `[$N]T` after the `[`, as if `$N` introduced a value
+    /// parameter. In a method's signature it reads as the slice `[]T` and is
+    /// reported by `parse_def` (see [`ArrayValueParam`]); anywhere else it is
+    /// reported here.
+    fn array_value_param(&mut self, open: Span) -> TypeKind {
+        let tok = self.bump();
+        self.bump();
+        let name = Name::new(&self.text_of(tok.span)[1..]);
+        let brackets = open.to(self.prev_span());
+        let elem = self.parse_type();
+        if let Some(found) = &mut self.array_params {
+            found.push(ArrayValueParam { name, tok: tok.span, brackets });
+            return TypeKind::Slice(Box::new(elem));
+        }
+        let elem_text = self.text_of(elem.span).to_string();
+        self.report(
+            Diagnostic::error(codes::UNEXPECTED_TOKEN, format!("`${name}` can't be an array length here"))
+                .primary(tok.span, "only a generic struct takes value parameters")
+                .help(format!(
+                    "write a constant length, like `[4]{elem_text}`; a generic struct declares a value parameter, like `struct Pool($T, ${name}: Int)`, and writes `[{name}]T`"
+                )),
+        );
+        TypeKind::Array(Box::new(Expr { kind: ExprKind::Error, span: tok.span }), Box::new(elem))
+    }
+
+    /// Reports a `[$N]` array length in a method's signature (E0105): a
+    /// method can't take a value parameter. The parameter already reads as
+    /// a slice, which an array argument converts to, and the uses of `N` in
+    /// the method are dropped, so they aren't reported again. The fix makes
+    /// the parameter a slice and reads `N` as its `.size`.
+    fn report_array_value_param(
+        &mut self,
+        is_macro: bool,
+        found: &ArrayValueParam,
+        params: &mut [Param],
+        ret: &mut Option<TypeExpr>,
+        body: &mut FnBody,
+    ) {
+        let name = found.name;
+        let mut drop = DropValueParam { name, uses: Vec::new(), in_type: 0 };
+        for p in params.iter_mut() {
+            if let Some(default) = &mut p.default {
+                drop.visit_expr(default);
+            }
+        }
+        if let Some(ret) = ret {
+            drop.visit_type(ret);
+        }
+        match body {
+            FnBody::Expr(e) => drop.visit_expr(e),
+            FnBody::Block(stmts) => drop.visit_stmts(stmts),
+        }
+        let what = if is_macro { "a macro" } else { "a method" };
+        let holder = params.iter().find(|p| p.ty.span.start <= found.tok.start && found.tok.end <= p.ty.span.end);
+        let label = match holder {
+            Some(_) => format!("`${name}` would be the length of the array passed in"),
+            None => format!("`${name}` would be the length of the array returned"),
+        };
+        let mut diag =
+            Diagnostic::error(codes::UNEXPECTED_TOKEN, format!("{what} can't take a value parameter like `${name}`"))
+                .primary(found.tok, label)
+                .note(format!("only generic structs take value parameters, like `struct Pool($T, ${name}: Int)`"));
+        match holder {
+            // The array is the parameter itself, so `N` is its size.
+            Some(param) if param.ty.span.start == found.brackets.start => {
+                let param = param.name.as_str().to_string();
+                let in_type = drop.uses.iter().any(|(_, t)| *t);
+                let mut edits = vec![Edit { span: found.brackets, replacement: "[]".into() }];
+                if !in_type {
+                    edits.extend(
+                        drop.uses.iter().map(|(span, _)| Edit { span: *span, replacement: format!("{param}.size") }),
+                    );
+                }
+                let applicability =
+                    if in_type { Applicability::MaybeIncorrect } else { Applicability::MachineApplicable };
+                diag = diag.suggest(
+                    format!("take a slice: an array argument converts to one, and `{param}.size` is its length"),
+                    edits,
+                    applicability,
+                );
+            }
+            Some(_) => {
+                diag = diag.suggest(
+                    "take a slice: an array converts to one",
+                    vec![Edit { span: found.brackets, replacement: "[]".into() }],
+                    Applicability::MaybeIncorrect,
+                );
+            }
+            None => {
+                diag = diag.help("return an array of a constant length, like `[4]Int`, or a slice, like `[]Int`");
+            }
+        }
+        self.report(diag);
+    }
+
     fn report_loose_type_param(&mut self, owner: ParamsOf, params: &mut [Param], tp: &LooseTypeParam) {
         let name = tp.name;
         let label = match owner {
@@ -2067,6 +2184,8 @@ impl<'a> Parser<'a> {
                     self.bump();
                     self.bump();
                     TypeKind::Dynamic(Box::new(self.parse_type()))
+                } else if self.at(T::TypeParam) && self.nth(1).kind == T::RBracket {
+                    self.array_value_param(start)
                 } else {
                     let len = self.parse_expr();
                     self.expect(T::RBracket, "`]`");
@@ -3815,6 +3934,37 @@ impl<'a> Parser<'a> {
         };
         self.pop_def_scope();
         Expr { kind: ExprKind::Lambda(Box::new(Lambda { params, ret, body })), span: arrow.span.to(self.prev_span()) }
+    }
+}
+
+/// Drops the uses of a value parameter's name that `[$N]` tried to
+/// introduce (see [`Parser::report_array_value_param`]), remembering where
+/// each was and whether it was inside a type.
+struct DropValueParam {
+    name: Name,
+    uses: Vec<(Span, bool)>,
+    in_type: u32,
+}
+
+impl VisitMut for DropValueParam {
+    fn visit_expr(&mut self, expr: &mut Expr) {
+        if matches!(expr.kind, ExprKind::Const(n) if n == self.name) {
+            self.uses.push((expr.span, self.in_type > 0));
+            expr.kind = ExprKind::Error;
+            return;
+        }
+        walk_expr(self, expr);
+    }
+
+    fn visit_type(&mut self, ty: &mut TypeExpr) {
+        if is_plain_name(&ty.kind, self.name) {
+            self.uses.push((ty.span, true));
+            ty.kind = TypeKind::Error;
+            return;
+        }
+        self.in_type += 1;
+        walk_type(self, ty);
+        self.in_type -= 1;
     }
 }
 
