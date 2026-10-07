@@ -46,6 +46,9 @@ what is implemented, which conventions are fixed and what comes next.
 - `scripts/`: Ruby helpers. `errdocs_drift.rb` checks every docs/errors
   example against the compiler; `errdocs_update.rb` rewrites drifted output;
   `probe.rb` runs one-off programs through `wid check`.
+- `extras/vim/`: Vim syntax, indent and filetype plugin. Its reserved words
+  are checked against the lexer by `crates/wid_syntax/tests/editor_syntax.rs`;
+  other lexical or block syntax changes need a matching update there.
 - `tests/run/`: `.wid` programs with expected `.stdout` (and optional
   `.stderr`, `.exitcode`)
 - `tests/ui/`: `.wid` files (or directory packages, for imports) with expected
