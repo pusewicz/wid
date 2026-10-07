@@ -255,8 +255,8 @@ runs the stages; `wid_cli` is the `wid` binary.
 ## Next
 
 Everything before macros is done (see "Done"). This is the work queue for
-the orchestrator (`docs/ORCHESTRATOR.md`). Each item is one PR unless it says
-otherwise. Items 2–5 depend only on `main` and can run in parallel with the
+the orchestrator (`docs/ORCHESTRATOR.md`), together with the open GitHub
+issues. Each item is one PR unless it says otherwise. Items 2–5 depend only on `main` and can run in parallel with the
 macro stack.
 
 1. **Macros and `type_info`** (`wid/macros-*`, about three stacked PRs):

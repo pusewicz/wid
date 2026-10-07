@@ -11,8 +11,10 @@ questions unless genuinely blocked. Two rules govern the work:
 
 - Prefer quality, simplicity and long-term maintainability over development
   cost.
-- Fix any lint error, test failure or flaky test you see, even when the current
-  task didn't cause it.
+- Get every lint error, test failure, flaky test or other problem you see
+  fixed, even when the current task didn't cause it. If the current task
+  doesn't fix it, file a GitHub issue and dispatch an agent for it (see
+  "Issues").
 
 Read these before doing anything:
 
@@ -88,6 +90,19 @@ example the LSP crate, the cimgui vendor package and `wid fmt`. Stack tasks
 that touch the checker one after another. You resolve the conflicts in
 `STATUS.md` when you restack.
 
+## Issues
+
+Problems found along the way become GitHub issues, as `CLAUDE.md` describes.
+Open issues are part of the work queue, alongside `docs/STATUS.md` → "Next".
+
+- **File what you find.** Problems you find yourself while checking or
+  reviewing get an issue too, written to the same bar.
+- **Dispatch from issues.** Give each issue, or a group of closely related
+  ones, to its own agent on a `wid/<slug>` branch. Paste the issue body into
+  the prompt, since the agent should not have to fetch context.
+- **Close through the PR.** Put `Fixes #N` in the PR body for each issue it
+  resolves.
+
 ## Writing subagent prompts
 
 Subagents and forks don't see advisor output or your reasoning, so put
@@ -123,8 +138,8 @@ Agents should commit in their worktree. You push and open the PR.
   rerun the drift check.
 - **Probing.** `scripts/probe.rb` runs one-off programs through the compiler.
   Use it to look for bad diagnostics. A dedicated "bug hunt" agent that only
-  probes and logs issues found 46 real bugs last time, and is worth repeating
-  after big features.
+  probes and files GitHub issues found 46 real bugs last time, and is worth
+  repeating after big features.
 
 ## Environment
 
