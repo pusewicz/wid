@@ -1,0 +1,2 @@
+# Test expectations are compared byte for byte, so every checkout uses LF.
+* text=auto eol=lf
