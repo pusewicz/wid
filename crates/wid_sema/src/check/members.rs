@@ -159,7 +159,9 @@ impl<'a> Checker<'a> {
                         DeclKind::Struct(_) | DeclKind::Enum(_) | DeclKind::Union(_) => {
                             Receiver::Type(self.decl_as_type(decl, recv.span))
                         }
-                        DeclKind::Const(c) if matches!(c.value.kind, E::Type(_) | E::Const(_)) => {
+                        DeclKind::Const(c)
+                            if self.is_type_alias_value(&c.value, self.decls[decl.0 as usize].loc, 0) =>
+                        {
                             Receiver::Type(self.decl_as_type(decl, recv.span))
                         }
                         _ => Receiver::Value,

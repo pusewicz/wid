@@ -96,7 +96,11 @@ end
   - `map`, `proc`, `block`, `distinct`, `matrix` and `dynamic` are keywords only
     where a type is expected.
   - Parentheses group a type, as in `(proc(Int) -> Int)?`, an optional proc
-    (`proc(Int) -> Int?` returns an optional).
+    (`proc(Int) -> Int?` returns an optional). A constant whose value is a
+    name in parentheses is whatever the name is: `X = (Int)` is a type
+    alias like `X = Int`, and `Y = (NINE)` a value. One whose value starts
+    with `(` and something only a type starts with (`proc`, `distinct`,
+    `^`, `[]`, `@[`, …) is a type, and is reported as one when malformed.
   - A line that ends with an operator or `,`, or a next line that starts with
     `.method`, continues the statement.
   - `x ? a : b` needs spaces around `?`, because `x?` is a predicate name.

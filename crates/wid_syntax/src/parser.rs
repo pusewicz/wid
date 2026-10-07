@@ -445,6 +445,11 @@ impl<'a> Parser<'a> {
         if !paren && !matches!(self.peek().kind, T::Const | T::Ident | T::Caret | T::LBracket) {
             return None;
         }
+        // `(proc…`, `(^…`, `([]…`: no expression starts that way, so it is a
+        // type even when malformed, and the type parser reports what is wrong.
+        if paren && self.type_only_after_parens() {
+            return Some(self.parse_type());
+        }
         let save = self.pos;
         let splices = self.splice_mark();
         let texpr = self.try_parse_type()?;
@@ -465,6 +470,49 @@ impl<'a> Parser<'a> {
         self.pos = save;
         self.rewind_splices(splices);
         None
+    }
+
+    /// Reports a `(` whose line ended before its `)`, with a fix that
+    /// closes it after `last`, the line's last token.
+    fn unclosed_paren(&mut self, open: Span, last: Span) {
+        let at = last.shrink_to_end();
+        self.report(
+            Diagnostic::error(codes::UNEXPECTED_TOKEN, "expected `)`, found end of line")
+                .primary(at, "expected `)`")
+                .secondary(open, "this `(` is never closed")
+                .suggest(
+                    "close it",
+                    vec![Edit { span: at, replacement: ")".into() }],
+                    Applicability::MachineApplicable,
+                ),
+        );
+    }
+
+    /// Whether what follows the `(`s here can only start a type: `proc`,
+    /// `block`, `distinct`, `map[`, `matrix[`, `^`, `@[`, `$T`, `[]T`,
+    /// `[^]` or `[dynamic]`. Used where no local can have those names.
+    fn type_only_after_parens(&self) -> bool {
+        let mut n = 0;
+        while self.nth(n).kind == T::LParen {
+            n += 1;
+        }
+        let tok = self.nth(n);
+        match tok.kind {
+            T::Caret | T::AtBracket | T::TypeParam => true,
+            T::Ident => match self.text_of(tok.span) {
+                "proc" | "block" | "distinct" => true,
+                "map" | "matrix" => self.nth(n + 1).kind == T::LBracket && !self.nth(n + 1).space_before,
+                _ => false,
+            },
+            T::LBracket => match self.nth(n + 1).kind {
+                T::Caret => true,
+                // `[]` alone is an empty array literal.
+                T::RBracket => !matches!(self.nth(n + 2).kind, T::RParen | T::Comma | T::Newline | T::Eof),
+                T::Ident => self.text_of(self.nth(n + 1).span) == "dynamic" && self.nth(n + 2).kind == T::RBracket,
+                _ => false,
+            },
+            _ => false,
+        }
     }
 
     fn at_stmt_end(&self) -> bool {
@@ -2205,8 +2253,18 @@ impl<'a> Parser<'a> {
                         break;
                     }
                 }
+                let (last, before) = (self.prev_span(), self.pos);
                 self.skip_newlines();
-                self.expect(T::RParen, "`)`");
+                if !self.eat(T::RParen) {
+                    if self.pos > before || self.at(T::Eof) {
+                        // The line ends unclosed: the `)` goes at its end,
+                        // and the next line is parsed on its own.
+                        self.pos = before;
+                        self.unclosed_paren(start, last);
+                    } else {
+                        self.error_expected("`)`");
+                    }
+                }
                 if elems.len() == 1 {
                     let inner = elems.pop().expect("one element");
                     return TypeExpr { span: start.to(self.prev_span()), kind: inner.kind };

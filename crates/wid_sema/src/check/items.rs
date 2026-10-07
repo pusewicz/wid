@@ -529,6 +529,8 @@ impl<'a> Checker<'a> {
     pub fn is_type_alias_value(&self, value: &ast::Expr, loc: DeclLoc, depth: u32) -> bool {
         match &value.kind {
             ast::ExprKind::Type(_) => true,
+            // Parentheses group a type: `X = (Int)`.
+            ast::ExprKind::Paren(inner) => self.is_type_alias_value(inner, loc, depth),
             ast::ExprKind::Member { recv, .. } => {
                 matches!(recv.kind, ast::ExprKind::Ident(p) | ast::ExprKind::Const(p) if self.lookup_import(loc, p).is_some())
             }

@@ -806,8 +806,14 @@ impl<'a> Checker<'a> {
                 } else {
                     let loc = self.loc();
                     let decl = self.lookup_pkg(loc.pkg, *name).or_else(|| self.lookup_prelude(*name))?;
-                    match self.decls[decl.0 as usize].kind {
+                    let d = &self.decls[decl.0 as usize];
+                    match d.kind {
                         DeclKind::Struct(_) | DeclKind::Enum(_) | DeclKind::Union(_) => {
+                            let span = e.span;
+                            self.decl_as_type(decl, span)
+                        }
+                        // A type alias, like `Vec2 = [2]F32` or `X = (Int)`.
+                        DeclKind::Const(c) if self.is_type_alias_value(&c.value, d.loc, 0) => {
                             let span = e.span;
                             self.decl_as_type(decl, span)
                         }

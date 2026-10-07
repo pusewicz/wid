@@ -577,7 +577,12 @@ impl<'a> Checker<'a> {
             DeclKind::Enum(_) => self.enum_type(decl),
             DeclKind::Union(_) => self.union_type(decl),
             DeclKind::Const(c) => {
-                if let ast::ExprKind::Type(t) = &c.value.kind {
+                // Parentheses group a type: `X = (Int)`.
+                let mut value = &c.value;
+                while let ast::ExprKind::Paren(inner) = &value.kind {
+                    value = inner;
+                }
+                if let ast::ExprKind::Type(t) = &value.kind {
                     let ctx = TyCtx { loc: d.loc, self_ty: None, subst: Default::default() };
                     if let ast::TypeKind::Distinct(inner) = &t.kind {
                         let base = self.resolve_type(inner, &ctx);
@@ -596,31 +601,25 @@ impl<'a> Checker<'a> {
                     self.decl_types.insert(decl, ty);
                     return ty;
                 }
-                if let ast::ExprKind::Member { recv, safe: false, .. } = &c.value.kind
+                if let ast::ExprKind::Member { recv, safe: false, .. } = &value.kind
                     && matches!(recv.kind, ast::ExprKind::Ident(p) | ast::ExprKind::Const(p) if self.lookup_import(d.loc, p).is_some())
                 {
                     let ctx = TyCtx { loc: d.loc, self_ty: None, subst: Default::default() };
-                    let texpr = super::members::expr_as_type(&c.value);
+                    let texpr = super::members::expr_as_type(value);
                     self.pointee = true;
                     let ty = self.resolve_type(&texpr, &ctx);
                     self.pointee = false;
                     self.decl_types.insert(decl, ty);
                     return ty;
                 }
-                if let ast::ExprKind::Const(_) = &c.value.kind {
+                if let ast::ExprKind::Const(name) = value.kind {
                     let ctx = TyCtx { loc: d.loc, self_ty: None, subst: Default::default() };
                     let texpr = ast::TypeExpr {
                         kind: ast::TypeKind::Path {
-                            segments: vec![ast::Ident {
-                                name: match c.value.kind {
-                                    ast::ExprKind::Const(n) => n,
-                                    _ => unreachable!(),
-                                },
-                                span: c.value.span,
-                            }],
+                            segments: vec![ast::Ident { name, span: value.span }],
                             args: Vec::new(),
                         },
-                        span: c.value.span,
+                        span: value.span,
                     };
                     let ty = self.resolve_type(&texpr, &ctx);
                     self.decl_types.insert(decl, ty);

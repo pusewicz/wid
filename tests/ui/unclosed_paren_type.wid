@@ -1,0 +1,10 @@
+# A constant whose value starts like a type in parentheses (`(proc`, `(^`,
+# `([]`, `(distinct`) is parsed as a type even when it is malformed: an
+# unclosed one is one error at the end of its line, with a fix.
+Callback = (proc(Int) -> Int
+Ref = (^Int
+Pair = ([]Int, String
+
+def main
+  p size_of(Callback), size_of(Ref), size_of(Pair)
+end

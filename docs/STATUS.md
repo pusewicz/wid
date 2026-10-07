@@ -440,6 +440,15 @@ runs the stages; `wid_cli` is the `wid` binary.
   the parameter recovers as that slice and the uses of `N` aren't reported
   again. Elsewhere, like in a struct field, `[$N]T` is one E0105, and an
   array length that failed to parse is no longer reported again as E0327.
+- A type name in parentheses is a type alias: `X = (Int)`, `P = (Vec2)`
+  (the checker looks through `Paren` when it classifies a constant, so
+  `X.new`, `X.size` and `name_of(X)` work too), while `Y = (NINE)` stays a
+  value. A type alias constant passed where a `Type` is expected is that
+  type (it was `{unknown}`), and a value constant's methods (`X.abs` for
+  `X = NINE`) no longer read it as a type. A constant whose value starts
+  with `(` and a type-only token (`(proc`, `(^`, `([]`, `(distinct`, …)
+  commits to the type parse, and an unclosed `(` at the end of a line is
+  one E0105 there with a fix that adds the `)`.
 - Macro syntax: `quote` bodies holding statements and declarations, with
   splices in every expression, type, declaration and name position (`#{x}`,
   `@#{f}`, `:#{s}`), splices outside a `quote` (E0111), variadic
