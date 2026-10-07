@@ -937,17 +937,32 @@ pub(crate) fn is_type_like(e: &ast::Expr) -> bool {
     }
 }
 
-/// Reinterprets a constant-name expression as a type expression.
+/// Reinterprets a constant-name expression as a type expression. In
+/// `C.int?` the lexer reads `int?` as one name, like a predicate's; here its
+/// `?` makes the type optional.
 pub(crate) fn expr_as_type(e: &ast::Expr) -> ast::TypeExpr {
     match &e.kind {
         E::Member { recv, name, safe: false } => match recv.kind {
-            E::Ident(pkg) | E::Const(pkg) => ast::TypeExpr {
-                kind: ast::TypeKind::Path {
-                    segments: vec![Ident { name: pkg, span: recv.span }, *name],
-                    args: Vec::new(),
-                },
-                span: e.span,
-            },
+            E::Ident(pkg) | E::Const(pkg) => {
+                let (name, optional) = match name.as_str().strip_suffix('?') {
+                    Some(base) => {
+                        (Ident { name: Name::new(base), span: Span { end: name.span.end - 1, ..name.span } }, true)
+                    }
+                    None => (*name, false),
+                };
+                let path = ast::TypeExpr {
+                    kind: ast::TypeKind::Path {
+                        segments: vec![Ident { name: pkg, span: recv.span }, name],
+                        args: Vec::new(),
+                    },
+                    span: if optional { recv.span.to(name.span) } else { e.span },
+                };
+                if optional {
+                    ast::TypeExpr { kind: ast::TypeKind::Optional(Box::new(path)), span: e.span }
+                } else {
+                    path
+                }
+            }
             _ => ast::TypeExpr { kind: ast::TypeKind::Error, span: e.span },
         },
         E::Type(t) => (**t).clone(),

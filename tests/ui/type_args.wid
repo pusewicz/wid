@@ -1,0 +1,22 @@
+# Types written in place as arguments: the forms that still can't be, and
+# values where a type belongs.
+struct Pool($T, $N: Int)
+  items: [N]T
+end
+
+def double(n: Int) -> Int = n * 2
+
+def main
+  count = 3
+  puts size_of(distinct Int)
+  puts align_of(block(Int))
+  puts size_of(@[export] proc(Int))
+  puts size_of(Int??)
+  puts size_of(Int ?)
+  puts type_info(Pool(Int, 2) ?).name
+  puts size_of(count)
+  puts align_of(count + 1)
+  puts type_info(Pool(Int?)).name
+  puts double(Int?)
+  puts double(proc(Int) -> Int)
+end

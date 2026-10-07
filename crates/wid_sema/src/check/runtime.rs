@@ -228,12 +228,19 @@ impl<'a> Checker<'a> {
             self.report(Diagnostic::error(codes::ARG_COUNT, "expected one type").primary(span, "like `size_of(Vec2)`"));
             return ir::Expr::new(ExprKind::Int(0), int);
         };
-        let ty = self.type_arg(&arg.value);
+        let builtin = if align { "align_of" } else { "size_of" };
+        let ty = match self.variable_as_type_arg(&arg.value, builtin) {
+            Some(t) => t,
+            None => self.type_arg(&arg.value),
+        };
         let (size, al) = self.types.layout(ty);
         ir::Expr::new(ExprKind::Int(i128::from(if align { al } else { size })), int)
     }
 
-    /// Resolves an argument that names a type, like `alloc(Ball)`.
+    /// Resolves an argument that names a type, like `alloc(Ball)`: a type
+    /// written in place (`Int?`, `[]Ball`), a constant, a package's type or
+    /// type alias (`geo.Shape`, `C.int?`), or a generic instance
+    /// (`Pool(Ball, 64)`, `geo.Pool(Ball, 64)`).
     pub fn type_arg(&mut self, e: &ast::Expr) -> TyId {
         match &e.kind {
             E::Const(_) | E::Type(_) => {
@@ -251,19 +258,59 @@ impl<'a> Checker<'a> {
             }
             E::Member { .. } => match self.classify_receiver(e) {
                 super::members::Receiver::Type(t) => t,
-                _ => self.not_a_type_arg(e),
+                _ => match self.named_type(e) {
+                    Some(t) => t,
+                    None => self.not_a_type_arg(e),
+                },
+            },
+            E::Call(_) => match self.named_type(e) {
+                Some(t) => t,
+                None => self.not_a_type_arg(e),
             },
             _ => self.not_a_type_arg(e),
         }
     }
 
     fn not_a_type_arg(&mut self, e: &ast::Expr) -> TyId {
+        if holds_parse_error(e) {
+            // Like `Int ?`, which the parser reported as an unfinished `x ? a : b`.
+            return self.types.unknown();
+        }
+        // A variable is read here, so don't also report it unused.
+        if let E::Ident(name) = e.kind
+            && let Some(var) = self.find_var_at(name, e.span)
+        {
+            var.read = true;
+        }
         self.report(
             Diagnostic::error(codes::NOT_A_TYPE, "expected a type")
                 .primary(e.span, "this is a value")
-                .help("types are written like `Vec2`, `[]Int`, `[dynamic]Ball` or `^Node`"),
+                .help("types are written like `Vec2`, `[]Int`, `Int?`, `^Node` or `proc(Int) -> Int`"),
         );
         self.types.unknown()
+    }
+
+    /// `size_of(count)` for a variable `count`: reports it with a fix that
+    /// writes the variable's type, and marks it read so it isn't also
+    /// reported unused.
+    fn variable_as_type_arg(&mut self, e: &ast::Expr, builtin: &str) -> Option<TyId> {
+        let E::Ident(name) = e.kind else { return None };
+        let var = self.find_var_at(name, e.span)?;
+        var.read = true;
+        let (ty, decl_span) = (var.ty, var.span);
+        let mut diag = Diagnostic::error(codes::NOT_A_TYPE, format!("`{name}` is a variable, not a type"))
+            .primary(e.span, format!("`{builtin}` takes a type"))
+            .secondary(decl_span, format!("`{name}` is declared here"));
+        if !matches!(self.types.kind(ty), TyKind::Unknown) {
+            diag = diag.suggest_replace(
+                format!("to use the type of `{name}`, write it"),
+                e.span,
+                self.types.display(ty),
+                Applicability::MaybeIncorrect,
+            );
+        }
+        self.report(diag);
+        Some(self.types.unknown())
     }
 
     /// Separates an `allocator:` argument from the others.
@@ -290,5 +337,16 @@ impl<'a> Checker<'a> {
             }
         }
         (positional, allocator)
+    }
+}
+
+/// Whether an operand of `e` failed to parse, so the parser has reported it.
+fn holds_parse_error(e: &ast::Expr) -> bool {
+    match &e.kind {
+        E::Error => true,
+        E::Ternary { cond, then, else_ } => [cond, then, else_].iter().any(|x| holds_parse_error(x)),
+        E::Binary { lhs, rhs, .. } => holds_parse_error(lhs) || holds_parse_error(rhs),
+        E::Unary { expr, .. } | E::Paren(expr) => holds_parse_error(expr),
+        _ => false,
     }
 }

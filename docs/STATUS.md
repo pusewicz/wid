@@ -334,6 +334,16 @@ runs the stages; `wid_cli` is the `wid` binary.
   types, `Error`, cimported and opaque C structs, and recursive types), the
   same tables in `comptime` code, E0906 for `Type` and records that hold one,
   E0323 for `Never`, and E0906 help that points at `type_info(T)`.
+- Types written in place as arguments: `size_of`, `align_of` and `type_info`
+  take any type (`Int?`, `proc(Int) -> Int`, `@[c] proc(I32)`, `(A, B)`,
+  generic instances, also from other packages, `C.int?`); in any call, a type
+  ending in its own `?` or a `proc(…) -> R` type parses as a type
+  (`alloc(Int?)`, `Pool(Int?, 2)`). The parser decides
+  (`Parser::parse_type_arg`); expression-shaped names are resolved by
+  `Checker::type_arg` and `named_type`. A type's `?` after a space
+  (`size_of(Int ?)`) is E0105 with a fix, a variable given as a type
+  (`size_of(count)`) is E0322 with a fix that writes its type, and an
+  optional proc displays as `(proc(Int) -> Int)?`.
 - Macro syntax: `quote` bodies holding statements and declarations, with
   splices in every expression, type, declaration and name position (`#{x}`,
   `@#{f}`, `:#{s}`), splices outside a `quote` (E0111), variadic
@@ -547,14 +557,16 @@ before anyone starts them.
   copied when their address is taken, but a slice into a constant's static
   data is writable). The interpreter runs about 10 million steps a second, so
   very large tables are slow to build.
-- `type_info`: `T?` and `proc(…)` types can't be written as arguments
-  (`type_info(Int?)`, like `size_of(Int?)`, doesn't parse); name them with a
-  constant first (`MaybeInt = Int?`). At compile time the tables use Wid's
-  layouts, which differ from C's for a cimported C union (whose fields all
-  start at 0 in C), and `Error`'s members are the error symbols seen so far.
-  Proc tables don't say whether a proc is `@[c]`. Nothing stops a program
-  from writing through a `^TypeInfo` (the run-time tables are `const`, so it
-  faults; at compile time it succeeds).
+- `type_info`: at compile time the tables use Wid's layouts, which differ
+  from C's for a cimported C union (whose fields all start at 0 in C), and
+  `Error`'s members are the error symbols seen so far. Proc tables don't say
+  whether a proc is `@[c]`. Nothing stops a program from writing through a
+  `^TypeInfo` (the run-time tables are `const`, so it faults; at compile
+  time it succeeds).
+- Types written in place reach a `Type` parameter only as plain names:
+  `name_of(Int)` works, but `name_of([]Int)` and `name_of(Int?)` are E0323.
+  A type-only argument is recognized before `,` or `)` only, so a call
+  without parentheses can't take `Int?` as its last argument.
 - Macros: a `quote` inside a splice must fit on one line, because newlines
   are suppressed inside splices (`#{if a then quote do x end else quote do
   end end}` works; a multi-line `quote` there doesn't). When a statement

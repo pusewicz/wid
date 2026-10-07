@@ -1,0 +1,12 @@
+struct Point
+  x: I16
+  y: I16
+end
+
+struct Grid($T, $N: Int)
+  cells: [N]T
+end
+
+union Either($T) = T | Point
+
+MaybePoint = Point?

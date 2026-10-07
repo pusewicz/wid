@@ -748,7 +748,15 @@ impl TypeTable {
                 };
                 format!("proc({}){ret}", params.join(", "))
             }
-            TyKind::Optional(t) => format!("{}?", self.display(*t)),
+            TyKind::Optional(t) => {
+                // `proc(Int) -> Int?` returns an optional, so an optional
+                // proc that returns a value is `(proc(Int) -> Int)?`.
+                let shown = self.display(*t);
+                match self.kind(*t) {
+                    TyKind::Proc(sig) if !matches!(self.kind(sig.ret), TyKind::Void) => format!("({shown})?"),
+                    _ => format!("{shown}?"),
+                }
+            }
             TyKind::Tuple(elems) => {
                 let parts: Vec<String> = elems.iter().map(|e| self.display(*e)).collect();
                 format!("({})", parts.join(", "))
