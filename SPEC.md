@@ -53,6 +53,13 @@ end
   implicit return, `#{}` interpolation, ranges `0..n`/`0...n`, `# ` comments
   and no semicolons (outside a string, `#{` starts a macro splice). `?`
   methods must return `Bool`. Source files use the `.wid` extension.
+- **Return types are explicit,** as in Odin, so every caller knows a
+  method's type without reading its body. An endless `def` declares one
+  like any other (`def sep -> String = "/"`); without `-> T` it returns
+  nothing, and a value there is thrown away (E0310, whose fix writes the
+  value's type when Wid can: `-> T` for a type parameter's, a
+  placeholder for `nil` or a symbol). A call of such a method adds no
+  error of its own: what it was meant to return is unknown.
 - **Blocks** can be written `do |x| … end` or `{ |x| … }`. A `{` right after a
   call opens a block; anywhere else, `{}` is the zero-value literal. A type
   never takes a block: `Vec2{…}` and `Vec2 {…}` are struct literal syntax,
@@ -512,9 +519,9 @@ LEVEL = config(:level, 1)             # -define:level=3
 FONT = embed("assets/font.ttf")       # []U8, through C23 #embed
 
 comptime if OS == :windows
-  def path_sep = "\\"
+  def path_sep -> String = "\\"
 else
-  def path_sep = "/"
+  def path_sep -> String = "/"
 end
 ```
 

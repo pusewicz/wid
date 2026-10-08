@@ -1480,6 +1480,17 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   nested loops, blocks and procs; the condition; the iterated value) and
   offers the value on a line after the loop. The loop is lowered either
   way, so the locals it reads aren't E0203.
+- Endless defs keep explicit return types (#137, SPEC "Syntax"): SPEC's
+  `comptime if` example declares `def path_sep -> String`. E0310 for
+  `def sep = "/"` (`discarded_value` in `check/body.rs`) notes that a
+  method returns only what it declares, and its fix writes the value's
+  type: machine-applicable when `nameable_in` says the type is builtin or
+  the package's own (`-> T` or `-> Self` for a type a parameter is bound
+  to), `MaybeIncorrect` for another package's type, a placeholder for
+  `nil` or a symbol. A body that failed to parse isn't E0310. A call of
+  an endless def without a return type whose body failed (E0310 or any
+  other error; `poisoned_call`, which lowers a still-queued callee first
+  with `lower_queued`) has the unknown type, so it adds no E0323.
 
 ## Next
 
@@ -1628,7 +1639,6 @@ only on `main` and can run in parallel with the macro stack.
    - three cascades, including spurious E0203 when a package fails to load
      (#138);
    - `?` methods return `Bool` (#136);
-   - SPEC's endless-`def` example (#137);
    - error values (#139);
    - library and runtime gaps (#140);
    - CLI flags and tests (#142);

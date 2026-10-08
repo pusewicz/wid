@@ -666,21 +666,12 @@ impl<'a> Checker<'a> {
                     self.emit_return(Some(value), e.span);
                 } else {
                     let value = self.expr(e, None);
-                    if !matches!(self.types.kind(value.ty), TyKind::Void | TyKind::Never | TyKind::Unknown) {
-                        let shown = self.types.display(value.ty);
-                        let name = f.name.as_str();
-                        self.report(
-                            Diagnostic::error(
-                                codes::RETURN_MISMATCH,
-                                format!("`{name}` has no return type, so its value is thrown away"),
-                            )
-                            .primary(e.span, format!("this `{shown}` is discarded"))
-                            .suggest(
-                                "declare the return type",
-                                vec![Edit { span: f.sig_span.shrink_to_end(), replacement: format!(" -> {shown}") }],
-                                Applicability::MachineApplicable,
-                            ),
-                        );
+                    // A body that failed to parse was reported (its calls
+                    // are poisoned; see `poisoned_call`).
+                    if !matches!(self.types.kind(value.ty), TyKind::Void | TyKind::Never | TyKind::Unknown)
+                        && !super::runtime::holds_parse_error(e)
+                    {
+                        self.discarded_value(f, e.span, value.ty, d.loc);
                     }
                     self.emit_value_stmt(value);
                 }
@@ -719,6 +710,103 @@ impl<'a> Checker<'a> {
                 _ => {}
             }
         }
+    }
+
+    /// Reports an endless `def` without a return type whose body, at
+    /// `span`, has a value of type `ty` (E0310): the value is thrown away.
+    /// The fix declares the type, as it is when Wid can write it. In
+    /// generic code, a type a parameter is bound to is written as the
+    /// parameter (`-> T`, `-> Self`).
+    fn discarded_value(&mut self, f: &ast::FnDecl, span: Span, ty: TyId, loc: DeclLoc) {
+        let shown = self.types.display(ty);
+        let subst = self.frame().subst.clone();
+        let param = subst.iter().find(|(_, t)| *t == ty).map(|(n, _)| n.to_string());
+        let name = f.name.as_str();
+        let at = f.sig_span.shrink_to_end();
+        let diag = Diagnostic::error(
+            codes::RETURN_MISMATCH,
+            format!("`{name}` has no return type, so its value is thrown away"),
+        )
+        .primary(span, format!("this `{shown}` is discarded"))
+        .note("a method returns only what its return type declares; without `-> T`, it returns nothing");
+        let help = "declare the return type";
+        let (help, written, applicability) = match (self.types.kind(ty), param) {
+            // `def none = nil`: which optional is up to the method.
+            (TyKind::Nil, _) => (
+                "declare the return type, an optional like `-> Int?`",
+                "…?".to_string(),
+                Applicability::HasPlaceholders,
+            ),
+            // `def dir = :north`: a symbol is a value where an enum is expected.
+            (TyKind::Symbol, _) => (
+                "declare the return type, the enum the symbol is a member of",
+                "…".to_string(),
+                Applicability::HasPlaceholders,
+            ),
+            (_, Some(param)) => (help, param, Applicability::MachineApplicable),
+            _ if subst.is_empty() && self.nameable_in(ty, loc.pkg) => (help, shown, Applicability::MachineApplicable),
+            // A type of another package may need its package's name, and
+            // one in generic code may depend on the type arguments.
+            _ => (help, shown, Applicability::MaybeIncorrect),
+        };
+        let edit = Edit { span: at, replacement: format!(" -> {written}") };
+        self.report(diag.suggest(help, vec![edit], applicability));
+    }
+
+    /// Whether `ty`, written as Wid displays it, names that type in the
+    /// code of package `pkg`: it is made of builtin types and of structs
+    /// and enums `pkg` declares.
+    fn nameable_in(&self, ty: TyId, pkg: super::PackageId) -> bool {
+        match self.types.kind(ty) {
+            TyKind::Bool
+            | TyKind::Int(_)
+            | TyKind::Float(_)
+            | TyKind::Rune
+            | TyKind::String
+            | TyKind::CString
+            | TyKind::RawPtr
+            | TyKind::TypeId
+            | TyKind::Any
+            | TyKind::Error => true,
+            TyKind::Pointer(t)
+            | TyKind::MultiPointer(t)
+            | TyKind::Array(t, _)
+            | TyKind::Slice(t)
+            | TyKind::Dynamic(t)
+            | TyKind::Optional(t)
+            | TyKind::Matrix(t, _, _) => self.nameable_in(*t, pkg),
+            TyKind::Map(k, v) => self.nameable_in(*k, pkg) && self.nameable_in(*v, pkg),
+            TyKind::Tuple(ts) => ts.iter().all(|t| self.nameable_in(*t, pkg)),
+            TyKind::Proc(p) => {
+                p.abi == crate::types::Abi::Wid && p.params.iter().chain([&p.ret]).all(|t| self.nameable_in(*t, pkg))
+            }
+            TyKind::Void => true,
+            TyKind::Struct(_) | TyKind::Enum(_) => {
+                self.type_decl(ty).is_some_and(|d| self.decls[d.0 as usize].loc.pkg == pkg)
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether a call of `func`, an instance of `decl`, has a value of an
+    /// unknown type rather than none: `decl` is an endless `def` without a
+    /// return type whose body failed to parse or check, like one that
+    /// throws its value away (E0310, `def sep = "/"`), so what it was meant
+    /// to return is unknown and the call is poisoned. A queued `func` is
+    /// lowered now to find out.
+    pub(super) fn poisoned_call(&mut self, decl: DeclId, func: ir::FnId) -> bool {
+        let DeclKind::Fn(f) = self.decls[decl.0 as usize].kind else { return false };
+        let ast::FnBody::Expr(body) = &f.body else { return false };
+        if f.ret.is_some() || f.is_macro {
+            return false;
+        }
+        if super::runtime::holds_parse_error(body) {
+            return true;
+        }
+        if self.functions.get(func.0 as usize).is_some_and(Option::is_none) {
+            self.lower_queued(func);
+        }
+        self.macros.failed.contains(&func)
     }
 
     /// Emits an expression statement, dropping pure values.

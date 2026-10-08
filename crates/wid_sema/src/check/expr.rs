@@ -1962,7 +1962,8 @@ impl<'a> Checker<'a> {
             return self.inline_call(decl, subst, lowered, b, name_span, span);
         }
         let func = self.fn_instance_with(decl, subst, span);
-        ir::Expr::new(ExprKind::Call { func, args: lowered }, inst.ret)
+        let ret = if self.poisoned_call(decl, func) { self.types.unknown() } else { inst.ret };
+        ir::Expr::new(ExprKind::Call { func, args: lowered }, ret)
     }
 
     /// Lowers an argument passed through C's `...`. Untyped numbers become

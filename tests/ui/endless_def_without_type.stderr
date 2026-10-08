@@ -3,6 +3,7 @@ error[E0310]: `answer` has no return type, so its value is thrown away
   |
 1 | def answer = 42
   |              ^^ this `Int` is discarded
+  = note: a method returns only what its return type declares; without `-> T`, it returns nothing
 help: declare the return type
   | def answer -> Int = 42
   = see `wid explain E0310`

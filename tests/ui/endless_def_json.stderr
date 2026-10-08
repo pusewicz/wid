@@ -1,0 +1,238 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0310",
+      "column": 11,
+      "expansions": [],
+      "explain": "wid explain E0310",
+      "file": "tests/ui/endless_def_json/main.wid",
+      "helps": [
+        {
+          "applicability": "machine_applicable",
+          "edits": [
+            {
+              "column": 8,
+              "end": 312,
+              "end_column": 8,
+              "end_line": 11,
+              "file": "tests/ui/endless_def_json/main.wid",
+              "line": 11,
+              "replacement": " -> String",
+              "start": 312
+            }
+          ],
+          "message": "declare the return type"
+        }
+      ],
+      "labels": [
+        {
+          "column": 11,
+          "end": 318,
+          "end_column": 14,
+          "end_line": 11,
+          "file": "tests/ui/endless_def_json/main.wid",
+          "line": 11,
+          "message": "this `String` is discarded",
+          "primary": true,
+          "start": 315
+        }
+      ],
+      "line": 11,
+      "message": "`sep` has no return type, so its value is thrown away",
+      "notes": [
+        "a method returns only what its return type declares; without `-> T`, it returns nothing"
+      ],
+      "severity": "error"
+    },
+    {
+      "code": "E0310",
+      "column": 12,
+      "expansions": [],
+      "explain": "wid explain E0310",
+      "file": "tests/ui/endless_def_json/main.wid",
+      "helps": [
+        {
+          "applicability": "machine_applicable",
+          "edits": [
+            {
+              "column": 9,
+              "end": 327,
+              "end_column": 9,
+              "end_line": 12,
+              "file": "tests/ui/endless_def_json/main.wid",
+              "line": 12,
+              "replacement": " -> Ball",
+              "start": 327
+            }
+          ],
+          "message": "declare the return type"
+        }
+      ],
+      "labels": [
+        {
+          "column": 12,
+          "end": 341,
+          "end_column": 23,
+          "end_line": 12,
+          "file": "tests/ui/endless_def_json/main.wid",
+          "line": 12,
+          "message": "this `Ball` is discarded",
+          "primary": true,
+          "start": 330
+        }
+      ],
+      "line": 12,
+      "message": "`ball` has no return type, so its value is thrown away",
+      "notes": [
+        "a method returns only what its return type declares; without `-> T`, it returns nothing"
+      ],
+      "severity": "error"
+    },
+    {
+      "code": "E0310",
+      "column": 14,
+      "expansions": [],
+      "explain": "wid explain E0310",
+      "file": "tests/ui/endless_def_json/main.wid",
+      "helps": [
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [
+            {
+              "column": 11,
+              "end": 352,
+              "end_column": 11,
+              "end_line": 13,
+              "file": "tests/ui/endless_def_json/main.wid",
+              "line": 13,
+              "replacement": " -> Vec",
+              "start": 352
+            }
+          ],
+          "message": "declare the return type"
+        }
+      ],
+      "labels": [
+        {
+          "column": 14,
+          "end": 369,
+          "end_column": 28,
+          "end_line": 13,
+          "file": "tests/ui/endless_def_json/main.wid",
+          "line": 13,
+          "message": "this `Vec` is discarded",
+          "primary": true,
+          "start": 355
+        }
+      ],
+      "line": 13,
+      "message": "`origin` has no return type, so its value is thrown away",
+      "notes": [
+        "a method returns only what its return type declares; without `-> T`, it returns nothing"
+      ],
+      "severity": "error"
+    },
+    {
+      "code": "E0310",
+      "column": 23,
+      "expansions": [],
+      "explain": "wid explain E0310",
+      "file": "tests/ui/endless_def_json/main.wid",
+      "helps": [
+        {
+          "applicability": "machine_applicable",
+          "edits": [
+            {
+              "column": 20,
+              "end": 389,
+              "end_column": 20,
+              "end_line": 14,
+              "file": "tests/ui/endless_def_json/main.wid",
+              "line": 14,
+              "replacement": " -> T",
+              "start": 389
+            }
+          ],
+          "message": "declare the return type"
+        }
+      ],
+      "labels": [
+        {
+          "column": 23,
+          "end": 397,
+          "end_column": 28,
+          "end_line": 14,
+          "file": "tests/ui/endless_def_json/main.wid",
+          "line": 14,
+          "message": "this `Int` is discarded",
+          "primary": true,
+          "start": 392
+        },
+        {
+          "column": 24,
+          "end": 459,
+          "end_column": 37,
+          "end_line": 18,
+          "file": "tests/ui/endless_def_json/main.wid",
+          "line": 18,
+          "message": "`first[Int]` is checked for these types because of this call",
+          "primary": false,
+          "start": 446
+        }
+      ],
+      "line": 14,
+      "message": "`first` has no return type, so its value is thrown away",
+      "notes": [
+        "a method returns only what its return type declares; without `-> T`, it returns nothing",
+        "the error is inside the generic method `first[Int]`"
+      ],
+      "severity": "error"
+    },
+    {
+      "code": "E0310",
+      "column": 12,
+      "expansions": [],
+      "explain": "wid explain E0310",
+      "file": "tests/ui/endless_def_json/main.wid",
+      "helps": [
+        {
+          "applicability": "has_placeholders",
+          "edits": [
+            {
+              "column": 9,
+              "end": 406,
+              "end_column": 9,
+              "end_line": 15,
+              "file": "tests/ui/endless_def_json/main.wid",
+              "line": 15,
+              "replacement": " -> …?",
+              "start": 406
+            }
+          ],
+          "message": "declare the return type, an optional like `-> Int?`"
+        }
+      ],
+      "labels": [
+        {
+          "column": 12,
+          "end": 412,
+          "end_column": 15,
+          "end_line": 15,
+          "file": "tests/ui/endless_def_json/main.wid",
+          "line": 15,
+          "message": "this `nil` is discarded",
+          "primary": true,
+          "start": 409
+        }
+      ],
+      "line": 15,
+      "message": "`none` has no return type, so its value is thrown away",
+      "notes": [
+        "a method returns only what its return type declares; without `-> T`, it returns nothing"
+      ],
+      "severity": "error"
+    }
+  ],
+  "errors": 5,
+  "warnings": 0
+}

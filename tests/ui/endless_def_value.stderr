@@ -1,0 +1,65 @@
+error[E0310]: `sep` has no return type, so its value is thrown away
+ --> tests/ui/endless_def_value.wid:6:11
+  |
+6 | def sep = "/"
+  |           ^^^ this `String` is discarded
+  = note: a method returns only what its return type declares; without `-> T`, it returns nothing
+help: declare the return type
+  | def sep -> String = "/"
+  = see `wid explain E0310`
+
+error[E0310]: `none` has no return type, so its value is thrown away
+ --> tests/ui/endless_def_value.wid:7:12
+  |
+7 | def none = nil
+  |            ^^^ this `nil` is discarded
+  = note: a method returns only what its return type declares; without `-> T`, it returns nothing
+help: declare the return type, an optional like `-> Int?`
+  | def none -> …? = nil
+  = see `wid explain E0310`
+
+error[E0310]: `facing` has no return type, so its value is thrown away
+ --> tests/ui/endless_def_value.wid:8:14
+  |
+8 | def facing = :north
+  |              ^^^^^^ this `Symbol` is discarded
+  = note: a method returns only what its return type declares; without `-> T`, it returns nothing
+help: declare the return type, the enum the symbol is a member of
+  | def facing -> … = :north
+  = see `wid explain E0310`
+
+error[E0310]: `ident` has no return type, so its value is thrown away
+  --> tests/ui/endless_def_value.wid:9:20
+   |
+ 9 | def ident(v: $T) = v
+   |                    ^ this `Int` is discarded
+...
+27 |   p path, t, h, none, facing, ident(4)
+   |                               -------- `ident[Int]` is checked for these types because of this call
+   = note: a method returns only what its return type declares; without `-> T`, it returns nothing
+   = note: the error is inside the generic method `ident[Int]`
+help: declare the return type
+   | def ident(v: $T) -> T = v
+   = see `wid explain E0310`
+
+error[E0310]: `twice` has no return type, so its value is thrown away
+  --> tests/ui/endless_def_value.wid:14:15
+   |
+14 |   def twice = @n * 2
+   |               ^^^^^^ this `Int` is discarded
+   = note: a method returns only what its return type declares; without `-> T`, it returns nothing
+help: declare the return type
+   |   def twice -> Int = @n * 2
+   = see `wid explain E0310`
+
+error[E0310]: `half` has no return type, so its value is thrown away
+  --> tests/ui/endless_def_value.wid:18:14
+   |
+18 |   def half = self / 2
+   |              ^^^^^^^^ this `Int` is discarded
+   = note: a method returns only what its return type declares; without `-> T`, it returns nothing
+help: declare the return type
+   |   def half -> Self = self / 2
+   = see `wid explain E0310`
+
+error: could not compile due to 6 errors

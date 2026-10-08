@@ -22,6 +22,17 @@ use crate::types::{TyId, TyKind};
 /// How deep `comptime` code may nest `comptime` code.
 const MAX_NESTING: u32 = 16;
 
+/// The state of the code being lowered that a function lowered in the
+/// middle of it must not see (see [`Checker::lower_queued`]).
+struct LoweringState {
+    instances: Vec<(String, Span, Span, super::InstanceOf)>,
+    inline: Vec<DeclId>,
+    bindings: Vec<(Name, TyId)>,
+    capturable: Vec<Name>,
+    const_init: Option<Span>,
+    in_macro: bool,
+}
+
 /// The code a `comptime` evaluation runs.
 #[derive(Clone, Copy)]
 pub(crate) enum ComptimeCode<'b> {
@@ -192,12 +203,7 @@ impl<'a> Checker<'a> {
     /// this `comptime`) stays unlowered; calling it fails at run time.
     /// Returns whether a function it reaches had errors in its body.
     pub(super) fn lower_needed(&mut self, root: &ir::Function) -> bool {
-        let saved_instances = std::mem::take(&mut self.instance_stack);
-        let saved_inline = std::mem::take(&mut self.inline_stack);
-        let saved_bindings = std::mem::take(&mut self.owner_bindings);
-        let saved_capturable = std::mem::take(&mut self.capturable);
-        let saved_const = self.const_init.take();
-        let saved_macro = std::mem::take(&mut self.macros.in_macro);
+        let saved = self.leave_lowering();
         let mut seen = HashSet::new();
         let mut stack = Vec::new();
         if let Some(body) = &root.body {
@@ -220,13 +226,59 @@ impl<'a> Checker<'a> {
                 visit_block(body, &mut |e| callee(e, &mut stack));
             }
         }
-        self.instance_stack = saved_instances;
-        self.inline_stack = saved_inline;
-        self.owner_bindings = saved_bindings;
-        self.capturable = saved_capturable;
-        self.const_init = saved_const;
-        self.macros.in_macro = saved_macro;
+        self.resume_lowering(saved);
         failed
+    }
+
+    /// Lowers the queued function `id` now, without the state of the code
+    /// being lowered, as the queue would later. A function that isn't
+    /// queued (lowered already, or being lowered) is left as it is.
+    pub(super) fn lower_queued(&mut self, id: FnId) {
+        let Some(pos) = self.queue.iter().position(|p| p.id == id) else { return };
+        let Some(pending) = self.queue.remove(pos) else { return };
+        let saved = self.leave_lowering();
+        // The rest of the state a call can be lowered in (a statement under
+        // `@[no_bounds_check]`, a block a call inlines, `comptime` code, a
+        // proc), which the queue lowers no function in.
+        let type_scope = self.type_scope.take();
+        let no_bounds = std::mem::take(&mut self.no_bounds_check);
+        let yields = std::mem::take(&mut self.yield_targets);
+        let captured = std::mem::take(&mut self.captured);
+        let capture_kind = std::mem::take(&mut self.capture_kind);
+        let depth = std::mem::take(&mut self.comptime_depth);
+        let literal_local = self.literal_local.take();
+        self.lower_pending(pending);
+        self.type_scope = type_scope;
+        self.no_bounds_check = no_bounds;
+        self.yield_targets = yields;
+        self.captured = captured;
+        self.capture_kind = capture_kind;
+        self.comptime_depth = depth;
+        self.literal_local = literal_local;
+        self.resume_lowering(saved);
+    }
+
+    /// Sets aside the state of the code being lowered, so a queued function
+    /// can be lowered in the middle of it; [`Checker::resume_lowering`]
+    /// puts it back.
+    fn leave_lowering(&mut self) -> LoweringState {
+        LoweringState {
+            instances: std::mem::take(&mut self.instance_stack),
+            inline: std::mem::take(&mut self.inline_stack),
+            bindings: std::mem::take(&mut self.owner_bindings),
+            capturable: std::mem::take(&mut self.capturable),
+            const_init: self.const_init.take(),
+            in_macro: std::mem::take(&mut self.macros.in_macro),
+        }
+    }
+
+    fn resume_lowering(&mut self, saved: LoweringState) {
+        self.instance_stack = saved.instances;
+        self.inline_stack = saved.inline;
+        self.owner_bindings = saved.bindings;
+        self.capturable = saved.capturable;
+        self.const_init = saved.const_init;
+        self.macros.in_macro = saved.in_macro;
     }
 
     /// Runs a lowered compile-time function in the interpreter. A macro's

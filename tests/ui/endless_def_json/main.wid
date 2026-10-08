@@ -1,0 +1,19 @@
+# E0310's fix is machine-applicable when Wid can write the value's type
+# where the method is: a builtin type, the package's own type, or a type
+# parameter. Another package's type may need its package's name, and
+# `nil` doesn't say which optional it is (#137).
+import "./geo"
+
+struct Ball
+  r: Int
+end
+
+def sep = "/"
+def ball = Ball.new(1)
+def origin = geo.Vec.new(0)
+def first(xs: []$T) = xs[0]
+def none = nil
+
+def main
+  p sep, ball, origin, first([1, 2]), none
+end
