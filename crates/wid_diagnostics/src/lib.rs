@@ -49,18 +49,6 @@ pub fn edit_distance(a: &str, b: &str) -> usize {
     prev[b.len()]
 }
 
-/// Chooses "a" or "an" for a word or type name as it is read aloud: "an
-/// `Int`", "an `F32`", "a `U8`", "a `String`", "a `[4]Int`".
-pub fn a_or_an(word: &str) -> &'static str {
-    let word = word.trim_start_matches(|c: char| !c.is_alphanumeric());
-    let mut chars = word.chars();
-    let Some(first) = chars.next() else { return "a" };
-    let spelled_out = chars.next().is_none_or(|c| c.is_ascii_digit() || c.is_ascii_uppercase());
-    let vowel_sound =
-        if spelled_out { "AEFHILMNORSX".contains(first.to_ascii_uppercase()) } else { "aeiouAEIOU".contains(first) };
-    if vowel_sound { "an" } else { "a" }
-}
-
 /// Picks the closest candidate to `name`, if any is close enough to suggest.
 pub fn did_you_mean<'a>(name: &str, candidates: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
     // One edit turns a one- or two-letter name into an unrelated one, so
@@ -78,7 +66,7 @@ pub fn did_you_mean<'a>(name: &str, candidates: impl IntoIterator<Item = &'a str
 
 #[cfg(test)]
 mod tests {
-    use super::{a_or_an, did_you_mean, edit_distance};
+    use super::{did_you_mean, edit_distance};
 
     #[test]
     fn transpositions_cost_one_edit() {
@@ -87,16 +75,6 @@ mod tests {
         assert_eq!(edit_distance("nroth", "north"), 1);
         assert_eq!(edit_distance("kitten", "sitting"), 3);
         assert_eq!(edit_distance("", "abc"), 3);
-    }
-
-    #[test]
-    fn articles_follow_pronunciation() {
-        assert_eq!(a_or_an("Int"), "an");
-        assert_eq!(a_or_an("F32"), "an");
-        assert_eq!(a_or_an("U8"), "a");
-        assert_eq!(a_or_an("String"), "a");
-        assert_eq!(a_or_an("[4]Int"), "a");
-        assert_eq!(a_or_an("^Node"), "a");
     }
 
     #[test]

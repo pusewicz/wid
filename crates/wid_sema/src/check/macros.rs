@@ -522,10 +522,13 @@ impl<'a> Checker<'a> {
             if !self.spliceable(v.ty) {
                 let shown = self.types.display(v.ty);
                 self.report(
-                    Diagnostic::error(codes::SPLICE_MISMATCH, format!("a `{shown}` can't be spliced into code"))
-                        .primary(splice.span, format!("this is {} `{shown}`", wid_diagnostics::a_or_an(&shown)))
-                        .note(SPLICEABLE)
-                        .help("splice the code that makes the value instead, like `#{code}` with `code: Code`"),
+                    Diagnostic::error(
+                        codes::SPLICE_MISMATCH,
+                        format!("a value of type `{shown}` can't be spliced into code"),
+                    )
+                    .primary(splice.span, format!("this has type `{shown}`"))
+                    .note(SPLICEABLE)
+                    .help("splice the code that makes the value instead, like `#{code}` with `code: Code`"),
                 );
             }
             let v = if v.is_pure() { v } else { self.spill(v) };

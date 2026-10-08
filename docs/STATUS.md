@@ -628,6 +628,12 @@ runs the stages; `wid_cli` is the `wid` binary.
   (`Checker::self_field_names`, which reaches promoted fields too). A name
   that several `using` fields promote, written bare, called or as `@id`, is
   E0204 alone, with a fix that writes `@body.id` rather than `body.id`.
+- No message puts "a" or "an" before a type name, since no rule follows how
+  every name is read (`User`, `UInt`, `F32`, a user's `Hour`): messages
+  name the type without one, as in "this field's type is `User`", "a value
+  of type `U8` cannot be called" and "`RATE` has type `F64`" (#50; it read
+  "an `User`" and "a `F64`"). `wid_diagnostics::a_or_an` is gone; kind
+  names keep their fixed articles (`DeclKind::a_describe`).
 - A C compiler without C23 (one that rejects `-std=c23`, like gcc 13 or
   clang 17, or lacks `<stdckdint.h>` or `#embed`) is E0702 "the C compiler
   `cc` doesn't support C23", with the first line of its `--version`, the

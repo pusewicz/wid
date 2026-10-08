@@ -42,7 +42,7 @@ error[E0305]: `f` is a field, not a method
   --> tests/ui/block_misuse.wid:34:10
    |
 34 |   puts s.f()
-   |          ^ this field holds an `Int`
+   |          ^ this field's type is `Int`
 help: read the field without `()`
    |   puts s.f
    = see `wid explain E0305`

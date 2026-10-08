@@ -62,7 +62,7 @@ impl<'c> Interp<'c> {
             }
             _ => {
                 let shown = types.display(ty);
-                return Err(self.fail_at(span, format!("a `{shown}` can't be spliced into code")));
+                return Err(self.fail_at(span, format!("a value of type `{shown}` can't be spliced into code")));
             }
         })
     }

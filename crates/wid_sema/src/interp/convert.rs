@@ -273,7 +273,7 @@ impl Conv<'_> {
             _ => {
                 let shown = self.types.display(ty);
                 return Err(self.escape(
-                    format!("a `{shown}`, which can't be stored in the program"),
+                    format!("a value of type `{shown}`, which can't be stored in the program"),
                     "return a number, string, struct, array or slice instead",
                 ));
             }

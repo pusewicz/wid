@@ -59,7 +59,7 @@ help: if this is a comment, add a space after `#`
 help: to build code in a macro, splice values into a `quote do … end` and return it
    = see `wid explain E0111`
 
-error[E0305]: a `Symbol` cannot be called
+error[E0305]: a value of type `Symbol` cannot be called
   --> tests/ui/splice_errors.wid:24:11
    |
 24 |     def #{name(#{name})} = 1

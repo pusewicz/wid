@@ -1,4 +1,4 @@
-error[E0308]: a `RawPtr` may be nil, but `^Node` cannot be
+error[E0308]: `RawPtr` may be nil, but `^Node` cannot be
  --> tests/ui/conversion_errors.wid:9:10
   |
 9 |   node = raw.to(^Node)

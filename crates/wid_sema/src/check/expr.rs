@@ -254,8 +254,7 @@ impl<'a> Checker<'a> {
                 Diagnostic::error(codes::TYPE_MISMATCH, format!("expected `{want_s}`, but this has no value"))
                     .primary(span, "this returns nothing")
                     .help(format!(
-                        "pass {} `{want_s}` here, or give the method a return type with `-> {want_s}`",
-                        wid_diagnostics::a_or_an(&want_s)
+                        "pass a value of type `{want_s}` here, or give the method a return type with `-> {want_s}`"
                     )),
             );
             return;

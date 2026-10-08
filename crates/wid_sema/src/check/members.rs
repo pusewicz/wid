@@ -458,11 +458,7 @@ impl<'a> Checker<'a> {
                     self.report(
                         Diagnostic::error(
                             codes::NO_SUCH_MEMBER,
-                            format!(
-                                "`{}` is an instance method; call it on {} `{shown}` value",
-                                name.as_str(),
-                                wid_diagnostics::a_or_an(&shown)
-                            ),
+                            format!("`{}` is an instance method; call it on a value of type `{shown}`", name.as_str()),
                         )
                         .primary(name.span, "needs a receiver")
                         .help(format!(
@@ -661,7 +657,7 @@ impl<'a> Checker<'a> {
             let call_span = Span { start: name.span.end, ..span };
             let mut diag =
                 Diagnostic::error(codes::NOT_CALLABLE, format!("`{}` is a field, not a method", name.as_str()))
-                    .primary(name.span, format!("this field holds {} `{shown}`", wid_diagnostics::a_or_an(&shown)));
+                    .primary(name.span, format!("this field's type is `{shown}`"));
             if args.is_some_and(|a| a.is_empty()) && block.is_none() && call_span.end > call_span.start {
                 diag = diag.suggest_replace(
                     "read the field without `()`",
@@ -919,12 +915,11 @@ impl<'a> Checker<'a> {
         if source_nilable && to_ptr == Some(false) {
             let (fs, ts) = (self.types.display(v.ty), self.types.display(target));
             self.report(
-                Diagnostic::error(
-                    codes::INVALID_CONVERSION,
-                    format!("{} `{fs}` may be nil, but `{ts}` cannot be", wid_diagnostics::a_or_an(&fs)),
-                )
-                .primary(span, format!("converting to `{ts}` would hide a nil pointer"))
-                .help(format!("convert to `{ts}?` and unwrap it, for example with `guard p = x.to({ts}?) else … end`")),
+                Diagnostic::error(codes::INVALID_CONVERSION, format!("`{fs}` may be nil, but `{ts}` cannot be"))
+                    .primary(span, format!("converting to `{ts}` would hide a nil pointer"))
+                    .help(format!(
+                        "convert to `{ts}?` and unwrap it, for example with `guard p = x.to({ts}?) else … end`"
+                    )),
             );
             return Some(ir::Expr::new(ExprKind::Zero, target));
         }

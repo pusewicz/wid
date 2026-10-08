@@ -807,11 +807,8 @@ impl<'a> Checker<'a> {
         let TyKind::Proc(sig) = self.types.kind(self.types.base(callee.ty)).clone() else {
             let shown = self.types.display(callee.ty);
             self.report(
-                Diagnostic::error(
-                    codes::NOT_CALLABLE,
-                    format!("{} `{shown}` cannot be called", wid_diagnostics::a_or_an(&shown)),
-                )
-                .primary(span, "not a proc"),
+                Diagnostic::error(codes::NOT_CALLABLE, format!("a value of type `{shown}` cannot be called"))
+                    .primary(span, "not a proc"),
             );
             return ir::Expr::new(ExprKind::Zero, self.types.unknown());
         };

@@ -192,12 +192,9 @@ impl<'a> Checker<'a> {
             _ => {
                 let shown = self.types.display(v.ty);
                 self.report(
-                    Diagnostic::error(
-                        codes::TYPE_MISMATCH,
-                        format!("`free` cannot release {} `{shown}`", wid_diagnostics::a_or_an(&shown)),
-                    )
-                    .primary(arg.value.span, "not memory from an allocator")
-                    .note("`free` takes pointers, slices, strings, dynamic arrays and maps"),
+                    Diagnostic::error(codes::TYPE_MISMATCH, format!("`free` cannot release a value of type `{shown}`"))
+                        .primary(arg.value.span, "not memory from an allocator")
+                        .note("`free` takes pointers, slices, strings, dynamic arrays and maps"),
                 );
                 ir::Expr::new(ExprKind::Zero, void)
             }

@@ -239,7 +239,7 @@ impl<'a> Checker<'a> {
         } else {
             Diagnostic::error(
                 codes::COMPTIME_AT_RUNTIME,
-                format!("`type_info` can't describe `{shown}`: it holds a `{culprit_shown}`"),
+                format!("`type_info` can't describe `{shown}`: it holds a value of type `{culprit_shown}`"),
             )
             .primary(span, format!("`{shown}` {}", path.join(", which ")))
             .note(format!(

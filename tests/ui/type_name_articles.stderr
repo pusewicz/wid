@@ -1,0 +1,58 @@
+error[E0305]: `owner` is a field, not a method
+  --> tests/ui/type_name_articles.wid:16:5
+   |
+16 |   a.owner(1)
+   |     ^^^^^ this field's type is `User`
+help: read the field without arguments or a block
+   = see `wid explain E0305`
+
+error[E0305]: `flags` is a field, not a method
+  --> tests/ui/type_name_articles.wid:17:5
+   |
+17 |   a.flags()
+   |     ^^^^^ this field's type is `UInt`
+help: read the field without `()`
+   |   a.flags
+   = see `wid explain E0305`
+
+error[E0305]: `level` is a field, not a method
+  --> tests/ui/type_name_articles.wid:18:5
+   |
+18 |   a.level(2)
+   |     ^^^^^ this field's type is `U8`
+help: read the field without arguments or a block
+   = see `wid explain E0305`
+
+error[E0305]: `ratio` is a field, not a method
+  --> tests/ui/type_name_articles.wid:19:5
+   |
+19 |   a.ratio()
+   |     ^^^^^ this field's type is `F32`
+help: read the field without `()`
+   |   a.ratio
+   = see `wid explain E0305`
+
+error[E0305]: a value of type `U8` cannot be called
+  --> tests/ui/type_name_articles.wid:21:3
+   |
+21 |   level(1)
+   |   ^^^^^^^^ not a proc
+   = see `wid explain E0305`
+
+error[E0301]: `free` cannot release a value of type `F32`
+  --> tests/ui/type_name_articles.wid:22:8
+   |
+22 |   free(a.ratio)
+   |        ^^^^^^^ not memory from an allocator
+   = note: `free` takes pointers, slices, strings, dynamic arrays and maps
+   = see `wid explain E0301`
+
+error[E0204]: `rename` is an instance method; call it on a value of type `User`
+  --> tests/ui/type_name_articles.wid:23:10
+   |
+23 |   p User.rename
+   |          ^^^^^^ needs a receiver
+help: to make it callable as `User.rename`, declare it `def self.rename`
+   = see `wid explain E0204`
+
+error: could not compile due to 7 errors

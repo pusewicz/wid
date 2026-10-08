@@ -1,0 +1,24 @@
+struct User
+  id: Int
+
+  def rename -> Int = @id
+end
+
+struct Account
+  owner: User
+  flags: UInt
+  level: U8
+  ratio: F32
+end
+
+def main
+  a = Account.new
+  a.owner(1)
+  a.flags()
+  a.level(2)
+  a.ratio()
+  level = a.level
+  level(1)
+  free(a.ratio)
+  p User.rename
+end

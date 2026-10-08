@@ -206,7 +206,7 @@ pub fn check(types: &TypeTable, errors: &[Name], ty: TyId) -> Result<(), Undescr
         match d.kind {
             "pointer" | "multi_pointer" => edges.extend(d.elem.map(|e| (e, format!("points at `{}`", shown(e))))),
             "proc" => {
-                edges.extend(d.fields.iter().map(|f| (f.ty, format!("takes a `{}`", shown(f.ty)))));
+                edges.extend(d.fields.iter().map(|f| (f.ty, format!("takes `{}`", shown(f.ty)))));
                 edges.extend(d.elem.map(|e| (e, format!("returns `{}`", shown(e)))));
             }
             "map" => {
