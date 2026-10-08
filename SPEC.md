@@ -114,7 +114,14 @@ end
     next line means the bracket was left open at the end of the line (a
     value indented under the list's first line is read as its next item,
     with the `,` missing), as does a declaration or an `end` inside a
-    `{ }` block.
+    `{ }` block. The same holds for a method's or proc's parameters and a
+    type's arguments, array length and map key. After a `,`, a line that
+    can't start an item also means the list was left open: in a parameter
+    list, one that doesn't start with a parameter; in a list whose items
+    are never named (an array, an index, a type's arguments), a `name:`
+    declaration. A method whose parameter list was left open before a
+    declaration ends with that line. A named argument's value may go on
+    the next line only indented deeper than the call's own line.
   - `x ? a : b` needs spaces around `?`, because `x?` is a predicate name.
     So a `?` written right after a type's name or its closing `)`
     (`Int?`, `rl.Color?`, `Pool(Ball, 64)?`, `(proc(Int) -> Int)?`) ends
@@ -527,7 +534,11 @@ end
     splice is only valid inside `quote` (E0111). Comments therefore start
     with `# `. A splice is one expression and may span lines. Inside a
     string literal in a `quote`, `#{}` is ordinary run-time interpolation
-    of the generated code.
+    of the generated code. A splice inserts a whole name, so it can't be
+    glued to text, as in Ruby's `define_method("bump_#{name}")`:
+    `def bump_#{name}` or `@#{name}_count` is E0111. The macro builds the
+    name first (`fname = "bump_#{name}".to_sym`) and splices that
+    (`def #{fname}`).
   - **Calls:** macros are package members like any def, declared at the top
     level of a file (E0105 inside a type). `pkg.name(…)`, and
     `pkg.name args` as a statement or declaration, works wherever an

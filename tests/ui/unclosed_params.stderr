@@ -1,0 +1,31 @@
+error[E0105]: expected `)` to close the parameter list, found end of line
+ --> tests/ui/unclosed_params.wid:5:18
+  |
+5 | def scale(x: Int,
+  |                  ^ expected `)`
+  |          - this `(` is never closed
+help: close it
+  | def scale(x: Int,)
+  = see `wid explain E0105`
+
+error[E0105]: expected `)` to close the parameter list, found end of line
+ --> tests/ui/unclosed_params.wid:6:23
+  |
+6 | def add(a: Int, b: Int
+  |                       ^ expected `)`
+  |        - this `(` is never closed
+help: close it
+  | def add(a: Int, b: Int)
+  = see `wid explain E0105`
+
+error[E0105]: expected `)` to close the parameter list, found end of line
+  --> tests/ui/unclosed_params.wid:11:22
+   |
+11 |   double = ->(n: Int,
+   |                      ^ expected `)`
+   |              - this `(` is never closed
+help: close it
+   |   double = ->(n: Int,)
+   = see `wid explain E0105`
+
+error: could not compile due to 3 errors

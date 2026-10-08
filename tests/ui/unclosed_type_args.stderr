@@ -1,0 +1,31 @@
+error[E0105]: expected `)`, found end of line
+  --> tests/ui/unclosed_type_args.wid:9:20
+   |
+ 9 |   pool: Pool(Int, 4
+   |                    ^ expected `)`
+   |             - this `(` is never closed
+help: close it
+   |   pool: Pool(Int, 4)
+   = see `wid explain E0105`
+
+error[E0105]: expected `]`, found end of line
+  --> tests/ui/unclosed_type_args.wid:11:11
+   |
+11 |   grid: [4
+   |           ^ expected `]`
+   |         - this `[` is never closed
+help: close it
+   |   grid: [4]
+   = see `wid explain E0105`
+
+error[E0105]: expected `]`, found end of line
+  --> tests/ui/unclosed_type_args.wid:12:20
+   |
+12 |   names: map[String
+   |                    ^ expected `]`
+   |             - this `[` is never closed
+help: close it
+   |   names: map[String]
+   = see `wid explain E0105`
+
+error: could not compile due to 3 errors

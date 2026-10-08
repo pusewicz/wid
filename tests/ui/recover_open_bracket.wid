@@ -1,0 +1,7 @@
+# After an error, the rest of the line is skipped, and a bracket opened on
+# it goes on over the next lines, but not past a line that starts a
+# declaration: `X = Foo{` is one error, and `main` is still found.
+X = Foo{
+def main
+  p 1
+end

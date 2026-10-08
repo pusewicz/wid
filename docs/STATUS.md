@@ -482,6 +482,23 @@ runs the stages; `wid_cli` is the `wid` binary.
   found end of line". Line ends
   put back this way are taken back when a speculative type parse rewinds,
   and a constant whose value holds a parse error no longer adds E0327.
+- #40's rule covers parameter lists and types too (#52), through the
+  same `List`, `list_left_open` and `list_step` (with `Items` telling
+  arguments, unnamed items and parameters apart): `def foo(a: Int,`
+  before `def main` is one E0105 with a fix that adds the `)`, and the
+  method ends with that line (before a statement, the lines after it are
+  its body; an indented `b: Int` is the next parameter, `,` missing);
+  procs' parameters and proc types alike. A type's arguments
+  (`Pool(Int, 4`), a tuple, an array length, `[^`, a map key and a
+  matrix's size left open before the next field are one error with a
+  fix (`close_type_bracket`, `parse_type_list`), and the field is still
+  declared; after a `,`, a `name:` line ends a list whose items are never
+  named. A named argument's value on a line indented no deeper than the
+  call's (`x = add(a:` before `p x`) is missing. `recover_line` stops at
+  a declaration, or an `end` no skipped `do` opened, starting a later
+  line, so `X = Foo{` before `def main` is one error, and a constant
+  whose line goes on after its value isn't checked on its own (no
+  E0327).
 - A C type of `core:c` written as a value (`t = C.int?`, `u = C.size_t`)
   is the type written in place, like `t = Int?`: one E0323 with the help
   that fits it (`nil` for the optional), instead of an undefined member
@@ -496,6 +513,15 @@ runs the stages; `wid_cli` is the `wid` binary.
   E0105. Expanded in a method, the line is a nested declaration. The
   speculative parses share a `Mark` that also takes back put-back line
   ends.
+- A splice glued to text in a name inside a `quote` (`def bump_#{name}`,
+  `@#{name}_count`, `:a_#{f}`, `struct #{name}Box`, in any name position)
+  is one E0111 "a splice can't be part of a name" instead of five
+  cascading errors (#45). Its fix, to review, builds the name before the
+  `quote` (`bump_name = "bump_#{name}".to_sym`, once for each name) and
+  splices it (`def #{bump_name}`); in a `quote` inside a splice it is a
+  help. The parser reads the glued name as a splice of the
+  `"bump_#{name}".to_sym` it meant, so the declaration parses and code
+  using the generated name adds no errors.
 - Any type written where a `Type` is expected, or in `comptime` code, is a
   `Type` value: constructors (`name_of([]Int)`, `name_of(Int?)`,
   `name_of(^Node)`, `name_of((proc(Int) -> Int)?)`), generic instances and

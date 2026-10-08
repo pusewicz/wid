@@ -1,0 +1,9 @@
+error[E0105]: expected an expression, found end of line
+ --> tests/ui/named_arg_missing_value.wid:8:13
+  |
+8 |   x = add(a:
+  |             ^ expected the value of `a`
+help: write the value after `a:` on this line
+  = see `wid explain E0105`
+
+error: could not compile due to 1 error
