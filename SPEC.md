@@ -159,6 +159,13 @@ end
 - **Constructors (Odin):** `^T`, `[^]T`, `[N]T`, `[]T`, `[dynamic]T`,
   `map[K]V`, `proc(A) -> R`, `distinct T` and `matrix[R, C]T`. Small numeric
   arrays support element-wise math and swizzles (`v.xy`, `c.rgb`).
+- **Size limit:** a type can take at most `2^61 - 1` bytes, and an array can
+  have at most `2^61 - 1` elements. Clang rejects larger arrays, so every
+  type within the limit compiles with every supported C compiler. A larger
+  type is an error (E0329) where it is written: an array, optional or tuple
+  type, the field or union variant that takes its struct or union over the
+  limit, an array literal, or a call of a generic method whose instance
+  would return one.
 - **Distinct types** are declared as constants, `Meters = distinct F64`, and
   each declaration is a new type with the base type's representation and
   operators. Untyped literals convert to it; typed values convert with `.to`

@@ -643,8 +643,10 @@ impl<'a> Checker<'a> {
         // the instances doesn't make the type that names this one wait too.
         let deferrals = self.value_deferrals;
         let mut fields: Vec<FieldInfo> = Vec::new();
+        let mut spans = Vec::new();
         for item in &s.body {
             let ItemKind::Field(f) = &item.kind else { continue };
+            spans.push(f.ty.span);
             let mut fty = self.resolve_type(&f.ty, &ctx);
             if self.by_value_incomplete(fty).is_some() {
                 let shown = self.types.display(fty);
@@ -672,6 +674,8 @@ impl<'a> Checker<'a> {
             });
         }
         self.value_deferrals = deferrals;
+        let name = self.types.display(ty);
+        self.check_fields_size(&name, &mut fields, &spans);
         let parts: Vec<(u64, u64)> = fields.iter().map(|f| self.types.layout(f.ty)).collect();
         for (f, off) in fields.iter_mut().zip(offsets(&parts)) {
             f.offset = off;

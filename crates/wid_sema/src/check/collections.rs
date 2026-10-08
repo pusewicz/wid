@@ -57,6 +57,9 @@ impl<'a> Checker<'a> {
             Some(TyKind::Slice(elem)) => {
                 let arr = self.types.intern(TyKind::Array(elem, elems.len() as u64));
                 let values = self.lower_elems(elems, elem);
+                if self.report_too_large(arr, span, None) {
+                    return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+                }
                 let tmp = self.spill(ir::Expr::new(ExprKind::Aggregate(values), arr));
                 self.full_slice(tmp, expected.expect("checked above"))
             }
@@ -93,6 +96,9 @@ impl<'a> Checker<'a> {
                     values.push(x);
                 }
                 let ty = self.types.intern(TyKind::Array(elem, elems.len() as u64));
+                if self.report_too_large(ty, span, None) {
+                    return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+                }
                 ir::Expr::new(ExprKind::Aggregate(values), ty)
             }
         }

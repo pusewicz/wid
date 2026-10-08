@@ -1,0 +1,57 @@
+N = 1 << 62
+
+struct Huge
+  cells: [1 << 61]I64
+end
+
+struct Big
+  a: [1 << 60]U8
+  b: [1 << 60]U8
+  c: [1 << 60]U8
+end
+
+struct Grid($N: Int)
+  cells: [N]I64
+end
+
+union Blob = [(1 << 61) - 1]U8 | Int
+
+struct Empty
+end
+
+macro def show_size(t: Type) -> Code
+  n = t.size
+  quote do
+    p #{n}
+  end
+end
+
+def dup(x: $T) -> [4]T
+  [x, x, x, x]
+end
+
+def main
+  p size_of([1 << 61]I64)
+  p comptime size_of([1 << 61]I64)
+  show_size [1 << 61]I64
+  t = type_info([1 << 62]U8)
+  p t.size
+  a: [N]U8
+  p a[0]
+  g = Grid(1 << 61).new
+  p g
+  e: [1 << 62]Empty
+  p e.size
+  o: ([(1 << 61) - 1]U8)?
+  p o
+  w: [1 << 64]U8
+  p w
+  half: [1 << 60]U8 = {}
+  d = dup(half)
+  p d.size
+  l = [half, half, half]
+  p l.size
+  # These fit.
+  p size_of([(1 << 61) - 1]U8)
+  p size_of(Grid(4))
+end

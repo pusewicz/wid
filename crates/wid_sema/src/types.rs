@@ -639,8 +639,20 @@ impl TypeTable {
         self.layout(ty).1
     }
 
-    /// Returns `(size, align)` for 64-bit targets.
+    /// Returns `(size, align)` for 64-bit targets. A size that doesn't fit
+    /// in a `u64` is `u64::MAX`; it belongs to a type over
+    /// [`MAX_TYPE_SIZE`], which the checker reports where the type is
+    /// written, so code generation never sees one.
     pub fn layout(&self, ty: TyId) -> (u64, u64) {
+        let (size, align) = self.wide_layout(ty);
+        (narrow(size), align)
+    }
+
+    /// Returns `(size, align)` like [`TypeTable::layout`], with the size
+    /// computed without overflow, so the checker can say how large a type
+    /// over [`MAX_TYPE_SIZE`] would be.
+    pub fn wide_layout(&self, ty: TyId) -> (u128, u64) {
+        let fixed = |size: u64, align: u64| (u128::from(size), align);
         match self.kind(ty) {
             TyKind::Unknown
             | TyKind::Void
@@ -648,51 +660,98 @@ impl TypeTable {
             | TyKind::Nil
             | TyKind::TypeValue(_)
             | TyKind::Param(_)
-            | TyKind::ConstValue(_) => (0, 1),
-            TyKind::Bool => (1, 1),
-            TyKind::Int(i) => (i.size(), i.size()),
-            TyKind::Float(f) => (f.size(), f.size()),
-            TyKind::Rune | TyKind::Error => (4, 4),
-            TyKind::String | TyKind::Slice(_) => (16, 8),
-            TyKind::CString | TyKind::RawPtr | TyKind::Pointer(_) | TyKind::MultiPointer(_) | TyKind::Proc(_) => (8, 8),
-            TyKind::TypeId | TyKind::Type | TyKind::Code | TyKind::Symbol => (8, 8),
-            TyKind::Any => (16, 8),
+            | TyKind::ConstValue(_) => fixed(0, 1),
+            TyKind::Bool => fixed(1, 1),
+            TyKind::Int(i) => fixed(i.size(), i.size()),
+            TyKind::Float(f) => fixed(f.size(), f.size()),
+            TyKind::Rune | TyKind::Error => fixed(4, 4),
+            TyKind::String | TyKind::Slice(_) => fixed(16, 8),
+            TyKind::CString | TyKind::RawPtr | TyKind::Pointer(_) | TyKind::MultiPointer(_) | TyKind::Proc(_) => {
+                fixed(8, 8)
+            }
+            TyKind::TypeId | TyKind::Type | TyKind::Code | TyKind::Symbol => fixed(8, 8),
+            TyKind::Any => fixed(16, 8),
             TyKind::Array(elem, n) => {
-                let (s, a) = self.layout(*elem);
-                (s * n, a)
+                let (s, a) = self.wide_layout(*elem);
+                (s.saturating_mul(u128::from(*n)), a)
             }
             TyKind::Matrix(elem, r, c) => {
-                let (s, a) = self.layout(*elem);
-                (s * u64::from(*r) * u64::from(*c), a)
+                let (s, a) = self.wide_layout(*elem);
+                (s.saturating_mul(u128::from(*r)).saturating_mul(u128::from(*c)), a)
             }
-            TyKind::Dynamic(_) => (40, 8),
-            TyKind::Map(_, _) => (40, 8),
+            TyKind::Dynamic(_) => fixed(40, 8),
+            TyKind::Map(_, _) => fixed(40, 8),
             TyKind::Optional(inner) => {
                 if self.optional_is_pointer(ty) {
-                    (8, 8)
+                    fixed(8, 8)
                 } else {
-                    let (s, a) = self.layout(*inner);
-                    aggregate(&[(s, a), (1, 1)])
+                    aggregate_wide([self.wide_layout(*inner), (1, 1)])
                 }
             }
-            TyKind::Tuple(elems) => {
-                let parts: Vec<(u64, u64)> = elems.iter().map(|e| self.layout(*e)).collect();
-                aggregate(&parts)
-            }
+            TyKind::Tuple(elems) => aggregate_wide(elems.iter().map(|e| self.wide_layout(*e))),
             TyKind::Struct(id) => {
                 let info = self.struct_info(*id);
-                (info.size, info.align)
+                fixed(info.size, info.align)
             }
             TyKind::Enum(id) => {
                 let b = self.enum_info(*id).backing;
-                (b.size(), b.size())
+                fixed(b.size(), b.size())
             }
             TyKind::Union(id) => {
                 let info = self.union_info(*id);
-                (info.size, info.align)
+                fixed(info.size, info.align)
             }
-            TyKind::Distinct(id) => self.layout(self.distincts[id.0 as usize].base),
-            TyKind::Foreign(name) => self.foreign_layout.get(name).copied().unwrap_or((8, 8)),
+            TyKind::Distinct(id) => self.wide_layout(self.distincts[id.0 as usize].base),
+            TyKind::Foreign(name) => {
+                let (s, a) = self.foreign_layout.get(name).copied().unwrap_or((8, 8));
+                fixed(s, a)
+            }
+        }
+    }
+
+    /// How many bytes a type takes in the generated C, without overflow,
+    /// when that is over [`MAX_TYPE_SIZE`]; `None` when the type fits.
+    pub fn oversize(&self, ty: TyId) -> Option<u128> {
+        let size = self.c_layout(ty).0;
+        (size > u128::from(MAX_TYPE_SIZE)).then_some(size)
+    }
+
+    /// `(size, align)` of a type as C lays out the generated code: those of
+    /// [`TypeTable::wide_layout`], except that the C code gives a struct or
+    /// union without members one byte and an `[0]T` array one element, which
+    /// Wid counts as empty.
+    pub fn c_layout(&self, ty: TyId) -> (u128, u64) {
+        match self.kind(ty) {
+            TyKind::Array(elem, n) => {
+                let (s, a) = self.c_layout(*elem);
+                (s.saturating_mul(u128::from((*n).max(1))), a)
+            }
+            TyKind::Matrix(elem, r, c) => {
+                let (s, a) = self.c_layout(*elem);
+                (s.saturating_mul(u128::from(*r)).saturating_mul(u128::from(*c)), a)
+            }
+            TyKind::Optional(inner) if !self.optional_is_pointer(ty) => aggregate_wide([self.c_layout(*inner), (1, 1)]),
+            TyKind::Tuple(elems) => aggregate_wide(elems.iter().map(|e| self.c_layout(*e))),
+            TyKind::Struct(id) => {
+                let info = self.struct_info(*id);
+                let (size, align) = match info.fields.is_empty() {
+                    true => (1, 1),
+                    false => aggregate_wide(info.fields.iter().map(|f| self.c_layout(f.ty))),
+                };
+                (size.max(u128::from(info.size)), align.max(info.align))
+            }
+            TyKind::Union(id) => {
+                let info = self.union_info(*id);
+                let payload = info
+                    .variants
+                    .iter()
+                    .map(|v| self.c_layout(*v))
+                    .fold((1, 1), |(s, a), (vs, va)| (s.max(vs), a.max(va)));
+                let (size, align) = aggregate_wide([(4, 4), payload]);
+                (size.max(u128::from(info.size)), align.max(info.align))
+            }
+            TyKind::Distinct(id) => self.c_layout(self.distincts[id.0 as usize].base),
+            _ => self.wide_layout(ty),
         }
     }
 
@@ -773,28 +832,53 @@ impl TypeTable {
     }
 }
 
-/// Lays out fields in order with natural alignment, returning `(size, align)`.
-pub fn aggregate(parts: &[(u64, u64)]) -> (u64, u64) {
-    let mut offset = 0u64;
-    let mut align = 1u64;
-    for &(s, a) in parts {
-        let a = a.max(1);
-        offset = offset.div_ceil(a) * a;
-        offset += s;
-        align = align.max(a);
-    }
-    (offset.div_ceil(align) * align, align)
+/// The largest number of bytes a type may take, and of elements an array
+/// may have: `2^61 - 1`. Clang rejects an array of `2^61` bytes or more (it
+/// counts sizes in bits, in 64 bits) and gcc any type over `PTRDIFF_MAX`, so
+/// every type within the limit compiles with both. The checker reports
+/// larger types (E0329).
+pub const MAX_TYPE_SIZE: u64 = (1 << 61) - 1;
+
+/// A size from [`TypeTable::wide_layout`] as a `u64`, `u64::MAX` when it
+/// doesn't fit.
+fn narrow(size: u128) -> u64 {
+    u64::try_from(size).unwrap_or(u64::MAX)
 }
 
-/// Returns the offset of each part when laid out in order.
+/// Rounds `offset` up to a multiple of `align`, saturating.
+fn align_up(offset: u128, align: u64) -> u128 {
+    offset.checked_next_multiple_of(u128::from(align.max(1))).unwrap_or(u128::MAX)
+}
+
+/// Lays out fields in order with natural alignment, returning `(size, align)`.
+/// Sizes saturate instead of overflowing, like [`TypeTable::wide_layout`].
+pub fn aggregate_wide(parts: impl IntoIterator<Item = (u128, u64)>) -> (u128, u64) {
+    let mut offset = 0u128;
+    let mut align = 1u64;
+    for (s, a) in parts {
+        let a = a.max(1);
+        offset = align_up(offset, a).saturating_add(s);
+        align = align.max(a);
+    }
+    (align_up(offset, align), align)
+}
+
+/// Lays out fields in order with natural alignment, returning `(size, align)`.
+/// A size that doesn't fit in a `u64` is `u64::MAX`.
+pub fn aggregate(parts: &[(u64, u64)]) -> (u64, u64) {
+    let (size, align) = aggregate_wide(parts.iter().map(|&(s, a)| (u128::from(s), a)));
+    (narrow(size), align)
+}
+
+/// Returns the offset of each part when laid out in order, saturating at
+/// `u64::MAX`.
 pub fn offsets(parts: &[(u64, u64)]) -> Vec<u64> {
-    let mut offset = 0u64;
+    let mut offset = 0u128;
     let mut out = Vec::with_capacity(parts.len());
     for &(s, a) in parts {
-        let a = a.max(1);
-        offset = offset.div_ceil(a) * a;
-        out.push(offset);
-        offset += s;
+        offset = align_up(offset, a);
+        out.push(narrow(offset));
+        offset = offset.saturating_add(u128::from(s));
     }
     out
 }

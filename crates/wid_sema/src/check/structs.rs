@@ -9,7 +9,7 @@ use super::items::ConstValue;
 use super::ty::TyCtx;
 use super::{Checker, DeclId, DeclKind, mangle_ident};
 use crate::ir::{self, ExprKind};
-use crate::types::{EnumInfo, FieldInfo, IntTy, StructInfo, TyId, TyKind, offsets};
+use crate::types::{EnumInfo, FieldInfo, IntTy, MAX_TYPE_SIZE, StructInfo, TyId, TyKind, aggregate_wide, offsets};
 
 impl<'a> Checker<'a> {
     /// Returns the type of a struct declaration, resolving its fields and
@@ -128,7 +128,6 @@ impl<'a> Checker<'a> {
         }
         self.resolving.pop();
 
-        let mut parts = Vec::new();
         for f in &mut fields {
             if let Some(culprit) = self.by_value_incomplete(f.ty) {
                 let culprit_name = self.types.display(culprit);
@@ -150,8 +149,13 @@ impl<'a> Checker<'a> {
                 );
                 f.ty = self.types.unknown();
             }
-            parts.push(self.types.layout(f.ty));
         }
+        let spans: Vec<Span> = fields
+            .iter()
+            .map(|f| Some(self.field_type_span(s, f.name)).filter(|t| *t != Span::default()).unwrap_or(f.span))
+            .collect();
+        self.check_fields_size(&name, &mut fields, &spans);
+        let parts: Vec<(u64, u64)> = fields.iter().map(|f| self.types.layout(f.ty)).collect();
         let offs = offsets(&parts);
         for (f, off) in fields.iter_mut().zip(offs) {
             f.offset = off;
@@ -212,6 +216,7 @@ impl<'a> Checker<'a> {
                 _ => {}
             }
         }
+        self.check_pending_sizes();
     }
 
     fn field_type_span(&self, s: &ast::StructDecl, name: Name) -> Span {
@@ -694,6 +699,10 @@ impl<'a> Checker<'a> {
                 };
                 self.report(diag);
             }
+            let union_name = self.types.display(ty);
+            if self.variant_too_large(&union_name, vt, v.span) {
+                continue;
+            }
             variants.push(vt);
         }
         let mut payload = (0u64, 1u64);
@@ -716,6 +725,160 @@ impl<'a> Checker<'a> {
         let TyKind::Union(id) = self.types.kind(self.types.base(union_ty)) else { return None };
         self.types.union_info(*id).variants.iter().position(|v| *v == variant).map(|i| i as u32)
     }
+
+    // ----- the size limit ------------------------------------------------------------
+
+    /// Checks the size of a type written at `span` against the limit
+    /// ([`MAX_TYPE_SIZE`]): returns the type, or the unknown type after
+    /// reporting it (E0329). `within` is the generic instance whose fields
+    /// or signature are being resolved. A type that stores a struct whose
+    /// fields aren't resolved yet (an array behind a pointer) is checked
+    /// once they are.
+    pub(super) fn check_type_size(&mut self, ty: TyId, span: Span, within: Option<TyId>) -> TyId {
+        if self.by_value_incomplete(ty).is_some() {
+            self.size_checks.push((ty, span, within));
+            return ty;
+        }
+        if self.report_too_large(ty, span, within) { self.types.unknown() } else { ty }
+    }
+
+    /// Checks the types [`Checker::check_type_size`] left for later whose
+    /// structs are laid out now.
+    pub(super) fn check_pending_sizes(&mut self) {
+        if self.size_checks.is_empty() || !self.resolving.is_empty() || self.shallow != 0 {
+            return;
+        }
+        for (ty, span, within) in std::mem::take(&mut self.size_checks) {
+            if self.by_value_incomplete(ty).is_some() {
+                self.size_checks.push((ty, span, within));
+            } else {
+                self.report_too_large(ty, span, within);
+            }
+        }
+    }
+
+    /// Reports a type over the size limit (E0329) at `span`, where it is
+    /// written, and returns whether it was.
+    pub(super) fn report_too_large(&mut self, ty: TyId, span: Span, within: Option<TyId>) -> bool {
+        let Some(size) = self.types.oversize(ty) else { return false };
+        let shown = self.types.display(ty);
+        let elem = match self.types.kind(ty) {
+            TyKind::Array(elem, _) => Some(*elem),
+            _ => None,
+        };
+        self.too_large_error(format!("`{shown}` would take {size} bytes"), elem, span, within);
+        true
+    }
+
+    /// Reports a call of a generic method whose instance would return a
+    /// type over the size limit (E0329), and returns whether it would.
+    pub(super) fn report_too_large_return(&mut self, ret: TyId, method: Name, span: Span) -> bool {
+        let Some(size) = self.types.oversize(ret) else { return false };
+        let shown = self.types.display(ret);
+        let label = format!("`{method}` would return `{shown}` here, which would take {size} bytes");
+        let mut diag = Diagnostic::error(codes::TYPE_TOO_LARGE, "this type is too large")
+            .primary(span, label)
+            .note(size_limit_note());
+        diag = diag.help(format!("pass a smaller value, or make `{method}` return a pointer or a slice"));
+        self.report(diag);
+        true
+    }
+
+    /// Reports an array type whose length doesn't even fit in a `u64`
+    /// (E0329).
+    pub(super) fn report_long_array(&mut self, elem: TyId, len: i128, span: Span, within: Option<TyId>) {
+        let shown = format!("[{len}]{}", self.types.display(elem));
+        let size = len.unsigned_abs().saturating_mul(self.types.c_layout(elem).0.max(1));
+        self.too_large_error(format!("`{shown}` would take {size} bytes"), Some(elem), span, within);
+    }
+
+    fn too_large_error(&mut self, label: String, elem: Option<TyId>, span: Span, within: Option<TyId>) {
+        let mut diag = Diagnostic::error(codes::TYPE_TOO_LARGE, "this type is too large")
+            .primary(span, label)
+            .note(size_limit_note());
+        if let Some(t) = within {
+            diag = diag.note(format!("in `{}`", self.types.display(t)));
+        }
+        let help = match elem {
+            Some(elem) => {
+                let elem = self.types.display(elem);
+                format!(
+                    "use a smaller length; for data sized at run time, allocate a slice with `alloc([]{elem}, n)` or use a `[dynamic]{elem}`"
+                )
+            }
+            None => "make its parts smaller, or keep large data behind a pointer or in a slice allocated at run time"
+                .to_string(),
+        };
+        self.report(diag.help(help));
+    }
+
+    /// The generic struct or union instance whose fields, variants or
+    /// methods a type context resolves, if it is one.
+    pub(super) fn resolving_instance(&self, self_ty: Option<TyId>) -> Option<TyId> {
+        let ty = self_ty?;
+        let generic = match self.types.kind(ty) {
+            TyKind::Struct(id) => self.struct_args.get(id).is_some_and(|args| !args.is_empty()),
+            TyKind::Union(id) => self.union_args.get(id).is_some_and(|(_, args)| !args.is_empty()),
+            _ => false,
+        };
+        generic.then_some(ty)
+    }
+
+    /// Checks that a struct's fields fit in the size limit together. A
+    /// struct over it is reported (E0329) at the field that takes it over,
+    /// whose type `spans` gives; that field becomes unknown, and so does
+    /// each later one that still goes over, so the struct gets a layout.
+    pub(super) fn check_fields_size(&mut self, name: &str, fields: &mut [FieldInfo], spans: &[Span]) {
+        let limit = u128::from(MAX_TYPE_SIZE);
+        let mut reported = false;
+        loop {
+            let parts: Vec<(u128, u64)> = fields.iter().map(|f| self.types.c_layout(f.ty)).collect();
+            let size_of = |n: usize| aggregate_wide(parts[..n].iter().copied()).0;
+            if size_of(parts.len()) <= limit {
+                return;
+            }
+            let Some(over) = (1..=parts.len()).find(|&n| size_of(n) > limit) else { return };
+            let field = &mut fields[over - 1];
+            if !reported {
+                reported = true;
+                let span = spans.get(over - 1).copied().unwrap_or(field.span);
+                let total = size_of(parts.len());
+                let mut diag = Diagnostic::error(codes::TYPE_TOO_LARGE, format!("`{name}` is too large"))
+                    .primary(span, format!("with this field, `{name}` would take {} bytes", size_of(over)));
+                if total > size_of(over) {
+                    diag = diag.note(format!("all its fields together would take {total} bytes"));
+                }
+                self.report(
+                    diag.note(size_limit_note())
+                        .help("keep large data behind a pointer, or in a slice allocated at run time"),
+                );
+            }
+            field.ty = self.types.unknown();
+        }
+    }
+
+    /// Whether a union variant is too large for a union, with its tag: if
+    /// so, reports it (E0329) at `span`, where the variant is written.
+    fn variant_too_large(&mut self, union_name: &str, variant: TyId, span: Span) -> bool {
+        let size = aggregate_wide([(4, 4), self.types.c_layout(variant)]).0;
+        if size <= u128::from(MAX_TYPE_SIZE) {
+            return false;
+        }
+        self.report(
+            Diagnostic::error(codes::TYPE_TOO_LARGE, format!("`{union_name}` is too large"))
+                .primary(span, format!("with this variant and its tag, `{union_name}` would take {size} bytes"))
+                .note(size_limit_note())
+                .help("store the variant behind a pointer, like `^T`"),
+        );
+        true
+    }
+}
+
+/// The note that says what the size limit is.
+fn size_limit_note() -> String {
+    format!(
+        "a type can take at most {MAX_TYPE_SIZE} bytes (2^61 - 1), the most that every supported C compiler accepts"
+    )
 }
 
 /// The number in a `@[size(n)]` or `@[align(n)]` attribute.

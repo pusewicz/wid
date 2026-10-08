@@ -107,6 +107,9 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `?` binds after `^T` and `[^]T`. Types display a pointer to an optional as
   `^(T?)`.
 - Layout (size, align, field offsets) is computed in sema for 64-bit targets.
+  Sizes saturate instead of overflowing, and no type is over
+  `types::MAX_TYPE_SIZE` (`2^61 - 1` bytes, E0329) once checking succeeds,
+  so codegen never sees a saturated size.
 - Compile-time code (`check/comptime.rs`) is lowered into a function of its
   own (a fresh `Body`, the outer frame's generic bindings, outer locals made
   uncapturable) and run by `crate::interp` over the IR. The interpreter keeps
@@ -863,6 +866,17 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   instead of a Wid bug (#46). `run_step` reads the compiler's output on any
   `-std=c23` step; working compilers are never run an extra time.
   `crates/wid_driver/tests/toolchain.rs` builds with fake compilers.
+- A type over `2^61 - 1` bytes, or an array with more elements, is E0329
+  where it is written, with the size it would take and the limit (#68): the
+  layout panicked on overflow (`[1 << 61]I64`), and types that fit in a
+  `u64` but not in C failed in the C compiler as E0702. Layout arithmetic
+  saturates (`TypeTable::wide_layout` works in `u128`), and
+  `TypeTable::oversize` measures a type as the generated C lays it out
+  (`c_layout`: an empty struct takes a byte there). The checker reports
+  array, optional and tuple types as they are resolved (an array of a
+  struct still being resolved, behind a pointer, once it is), the field or
+  union variant that takes its type over (it becomes unknown), array
+  literals, and generic calls whose instance would return one.
 - Test suite: `tests/run` (clang and gcc-16, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
   `tests/test` (`wid test` reports), `tests/doc` (`wid doc` pages and
