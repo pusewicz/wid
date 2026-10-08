@@ -944,6 +944,13 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   60 more expansions of `ping` and `pong`" (#79; macros calling each
   other to the nesting limit printed all 64 calls, 266 lines). JSON keeps
   every call. `render::shorten_frames`.
+- Macro errors are worded for macros (#79): a variable given to a value
+  parameter (`rep(k)` with `n: Int`) is E0327 "the macro `rep` runs while
+  compiling, so its `Int` parameter `n` needs a constant", with a help to
+  take `Code` (`MacroState::value_arg`, read by `report_capture`); a
+  spliced type used as a value names the type (`` `Int` is a type ``, not
+  `` `#{t}` ``); and `3.twice` with `twice` a macro is E0204 with a label
+  on the macro and the fix `twice(3)` (`Checker::macro_as_method`).
 - A proc parameter whose name a macro splices (`->(#{v}: Int) -> Int {
   #{v} * 2 }`), in a method body or a generated `def`, is the caller's
   name, as a block parameter's is: the proc's body and code spliced from

@@ -821,7 +821,9 @@ impl<'a> Checker<'a> {
             let field = ir::Expr::new(ExprKind::Field { base: Box::new(base), index }, fty);
             return self.field_called(name, field, args, block, span);
         }
-        self.no_member(ty, name.name, name.span, None);
+        if !self.macro_as_method(ty, name, recv_span, args, block.is_some(), span) {
+            self.no_member(ty, name.name, name.span, None);
+        }
         if let Some(args) = args {
             for a in args {
                 self.expr(&a.value, None);

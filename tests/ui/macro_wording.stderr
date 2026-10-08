@@ -1,0 +1,51 @@
+error[E0327]: the macro `rep` runs while compiling, so its `Int` parameter `n` needs a constant
+  --> tests/ui/macro_wording.wid:31:9
+   |
+ 5 | macro def rep(n: Int) -> Code
+   |               ------ `rep` receives `n`'s value while compiling
+...
+31 |   p rep(k)
+   |         ^ `k` is a variable, which only has a value when the program runs
+   = note: a macro's argument for a parameter that isn't `Code`, `Symbol` or `Type` is computed while compiling, like `comptime` code: it can use constants and literals, but not variables
+help: to receive the expression itself, make the parameter `n: Code` and splice it with `#{n}`; the code then runs where `rep` is called
+   = see `wid explain E0327`
+
+error[E0204]: `Int` has no field or method `twice`
+  --> tests/ui/macro_wording.wid:33:7
+   |
+17 | macro def twice(e: Code) -> Code
+   |           ----- `twice` is a macro, defined here
+...
+33 |   p 3.twice
+   |       ^^^^^ not found on `Int`
+   = note: a macro is called with its arguments, like a method without a receiver; `x.name` looks for a field or method of `x`'s type
+help: call the macro with the value as an argument: `twice(3)`
+   |   p twice(3)
+   = see `wid explain E0204`
+
+error[E0204]: `Int` has no field or method `scale`
+  --> tests/ui/macro_wording.wid:35:7
+   |
+23 | macro def scale(e: Code, by: Int) -> Code
+   |           ----- `scale` is a macro, defined here
+...
+35 |   p x.scale(2)
+   |       ^^^^^ not found on `Int`
+   = note: a macro is called with its arguments, like a method without a receiver; `x.name` looks for a field or method of `x`'s type
+help: call the macro with the value as an argument: `scale(x, 2)`
+   |   p scale(x, 2)
+   = see `wid explain E0204`
+
+error[E0323]: `Int` is a type, not a value
+  --> tests/ui/macro_wording.wid:13:7
+   |
+13 |     p #{t}
+   |       ^^^^ `#{t}` inserts the type `Int`, which can't be a value here
+  ::: tests/ui/macro_wording.wid:32:3
+   |
+32 |   show(Int)
+   |   --------- `show` expands here
+help: make a zero value of it with `{}` where `Int` is expected, like `x: Int = {}`
+   = see `wid explain E0323`
+
+error: could not compile due to 4 errors

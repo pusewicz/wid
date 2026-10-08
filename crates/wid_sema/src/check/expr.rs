@@ -182,11 +182,20 @@ impl<'a> Checker<'a> {
                 {
                     return v;
                 }
-                let text = self.source_text(e.span);
+                let written = self.source_text(e.span);
+                // A type a macro spliced (`#{t}`) is named as the type.
+                let (text, label) = match t.kind {
+                    ast::TypeKind::Spliced(id) if (id as usize) < self.types.len() => {
+                        let shown = self.types.display(TyId(id));
+                        let label = format!("`{written}` inserts the type `{shown}`, which can't be a value here");
+                        (shown, label)
+                    }
+                    _ => (written, "a type cannot be used as a value here".to_string()),
+                };
                 let help = self.make_value_help(t, &text);
                 self.report(
                     Diagnostic::error(codes::NOT_A_VALUE, format!("`{text}` is a type, not a value"))
-                        .primary(e.span, "a type cannot be used as a value here")
+                        .primary(e.span, label)
                         .help(help),
                 );
                 ir::Expr::new(ExprKind::Zero, self.types.unknown())

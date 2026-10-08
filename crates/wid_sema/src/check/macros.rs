@@ -195,6 +195,9 @@ pub(crate) struct MacroState {
     /// The code every expansion spliced in from outside it, by the file of
     /// its span.
     pub splices: HashMap<FileId, Vec<Splice>>,
+    /// While a macro's argument runs like `comptime`, which argument, so
+    /// E0327 can word a variable it reads in the macro's terms.
+    pub value_arg: Option<ValueArg>,
     /// For each `@#{name}` an expansion spliced a name into (by the span of
     /// the `@#{name}`, in the expansion's virtual file), the name's span:
     /// where the macro call gave it (see [`Checker::spliced_ivar`]).
@@ -208,6 +211,17 @@ pub(crate) struct MacroState {
     /// the macro's name and the line's keyword, innermost expansion last
     /// (see [`Checker::call_value_note`]).
     pub value_tails: Vec<(Vec<Span>, String, &'static str)>,
+}
+
+/// A macro argument that runs like `comptime`: one for a parameter of
+/// another type than `Code`, `Symbol` or `Type`.
+pub(crate) struct ValueArg {
+    /// The macro as the call names it.
+    pub macro_name: String,
+    /// The parameter, its declaration and its type.
+    pub param: Name,
+    pub param_span: Span,
+    pub ty: TyId,
 }
 
 /// A call of a macro.
@@ -900,7 +914,11 @@ impl<'a> Checker<'a> {
             TyKind::Unknown => None,
             _ => {
                 let loc = self.loc_at(e.span);
-                self.comptime_value(ComptimeCode::Expr(e), Some(ty), loc, e.span, true)
+                let arg = ValueArg { macro_name: call.shown.clone(), param: param.name, param_span: param.span, ty };
+                let outer = self.macros.value_arg.replace(arg);
+                let v = self.comptime_value(ComptimeCode::Expr(e), Some(ty), loc, e.span, true);
+                self.macros.value_arg = outer;
+                v
             }
         }
     }
@@ -1351,6 +1369,81 @@ impl<'a> Checker<'a> {
         };
         self.report(diag);
         true
+    }
+
+    /// Reports `x.name(…)` where `name` is no member of `x`'s type `ty` but
+    /// a macro visible here (E0204), with a note that it is a macro and the
+    /// fix that calls it with `x` as its first argument. Returns whether
+    /// it did.
+    pub(super) fn macro_as_method(
+        &mut self,
+        ty: TyId,
+        name: Ident,
+        recv: Span,
+        args: Option<&[ast::Arg]>,
+        block: bool,
+        span: Span,
+    ) -> bool {
+        let loc = self.loc_at(name.span);
+        let Some(decl) = self.lookup_pkg(loc.pkg, name.name).or_else(|| self.lookup_prelude(name.name)) else {
+            return false;
+        };
+        if !self.is_macro(decl) || self.members_incomplete(ty) {
+            return false;
+        }
+        let (name, name_span) = (name.name, name.span);
+        let shown = self.types.display(ty);
+        let mut parts = vec![self.source_text(recv)];
+        for a in args.unwrap_or_default() {
+            let value = self.source_text(a.value.span);
+            parts.push(match (a.name, a.splat) {
+                (Some(n), _) => format!("{}: {value}", n.name),
+                (None, true) => format!("*{value}"),
+                (None, false) => value,
+            });
+        }
+        let call = format!("{name}({})", parts.join(", "));
+        let at = self.decls[decl.0 as usize].span;
+        let diag = Diagnostic::error(codes::NO_SUCH_MEMBER, format!("`{shown}` has no field or method `{name}`"))
+            .primary(name_span, format!("not found on `{shown}`"))
+            .secondary(at, format!("`{name}` is a macro, defined here"))
+            .note("a macro is called with its arguments, like a method without a receiver; `x.name` looks for a field or method of `x`'s type");
+        let diag = if block || call.contains('\n') || call.chars().count() > 60 {
+            diag.help(format!("call the macro with the value as an argument, like `{name}(x)`"))
+        } else {
+            diag.suggest_replace(
+                format!("call the macro with the value as an argument: `{call}`"),
+                span,
+                call,
+                Applicability::MaybeIncorrect,
+            )
+        };
+        self.report(diag);
+        true
+    }
+
+    /// For a variable that `comptime` code can't use, while a macro's
+    /// argument for a parameter of another type than `Code`, `Symbol` or
+    /// `Type` runs like `comptime` ([`MacroState::value_arg`]): E0327 in
+    /// the macro's terms.
+    pub(super) fn macro_value_capture(&self, name: Name, span: Span) -> Option<Diagnostic> {
+        let arg = self.macros.value_arg.as_ref()?;
+        let ty = self.types.display(arg.ty);
+        let (by, param) = (&arg.macro_name, arg.param);
+        Some(
+            Diagnostic::error(
+                codes::COMPTIME_ONLY,
+                format!("the macro `{by}` runs while compiling, so its `{ty}` parameter `{param}` needs a constant"),
+            )
+            .primary(span, format!("`{name}` is a variable, which only has a value when the program runs"))
+            .secondary(arg.param_span, format!("`{by}` receives `{param}`'s value while compiling"))
+            .note(
+                "a macro's argument for a parameter that isn't `Code`, `Symbol` or `Type` is computed while compiling, like `comptime` code: it can use constants and literals, but not variables",
+            )
+            .help(format!(
+                "to receive the expression itself, make the parameter `{param}: Code` and splice it with `#{{{param}}}`; the code then runs where `{by}` is called"
+            )),
+        )
     }
 
     /// The parameter of a macro named `name`, if it has one: its span.
