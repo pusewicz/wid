@@ -1132,26 +1132,32 @@ impl<'a> Checker<'a> {
                     self.sequenced(l, |this, _| this.expr(rhs, if is_untyped(rhs) { Some(int) } else { None }));
                 return self.pointer_arith(op, l, r, span);
             }
-            if let Some(decl) = self.operator_method(l.ty, op.as_str()) {
+            // `!=` comes from `==`, and `<`, `<=`, `>` and `>=` from `<=>`.
+            let method = match self.operator_method(l.ty, op.as_str()) {
+                Some(decl) => Some((decl, false)),
+                None => self.derived_operator_method(l.ty, op.as_str()).map(|decl| (decl, true)),
+            };
+            if let Some((decl, derived)) = method {
                 let recv = self.address_of(l);
                 let arg = ast::Arg { name: None, value: rhs.clone(), splat: false };
                 let args = std::slice::from_ref(&arg);
-                if let DeclKind::Overload(_) = self.decls[decl.0 as usize].kind {
+                let call = if let DeclKind::Overload(_) = self.decls[decl.0 as usize].kind {
                     let owner = self.types.base(recv.ty);
                     let owner = match self.types.kind(owner) {
                         TyKind::Pointer(t) => *t,
                         _ => owner,
                     };
-                    return self.call_overloaded(decl, Some(recv), Some(owner), args, lhs.span.to(rhs.span), span);
-                }
-                return self.call_fn(decl, Some(recv), args, None, lhs.span.to(rhs.span), span);
+                    self.call_overloaded(decl, Some(recv), Some(owner), args, lhs.span.to(rhs.span), span)
+                } else {
+                    self.call_fn(decl, Some(recv), args, None, lhs.span.to(rhs.span), span)
+                };
+                return if derived { self.derive_comparison(op, call, span) } else { call };
             }
             let rhs_expected =
-                if self.types.is_numeric(l.ty) { None } else { self.package_operand_type(op.as_str(), l.ty, true) };
+                if self.types.is_numeric(l.ty) { None } else { self.package_operand_type_for(op.as_str(), l.ty, true) };
             let (l, r) = self.sequenced(l, |this, l_ty| this.expr(rhs, Some(rhs_expected.unwrap_or(l_ty))));
-            if let Some(decl) = self.package_operator(op.as_str(), l.ty, r.ty) {
-                self.note_ref(span, decl, crate::uses::RefKind::Call);
-                return self.call_operator_fn(decl, l, r);
+            if let Some(found) = self.package_operator_for(op.as_str(), l.ty, r.ty) {
+                return self.call_package_operator(op, found, l, r, span);
             }
             return self.binary_values(op, l, r, lhs.span, rhs.span, span);
         }
@@ -1160,14 +1166,13 @@ impl<'a> Checker<'a> {
             let l_expected = match self.numeric_array_elem(r.ty) {
                 Some(elem) => elem,
                 None if !self.types.is_numeric(r.ty) => {
-                    self.package_operand_type(op.as_str(), r.ty, false).unwrap_or(r.ty)
+                    self.package_operand_type_for(op.as_str(), r.ty, false).unwrap_or(r.ty)
                 }
                 None => r.ty,
             };
             let l = self.expr(lhs, Some(l_expected));
-            if let Some(decl) = self.package_operator(op.as_str(), l.ty, r.ty) {
-                self.note_ref(span, decl, crate::uses::RefKind::Call);
-                return self.call_operator_fn(decl, l, r);
+            if let Some(found) = self.package_operator_for(op.as_str(), l.ty, r.ty) {
+                return self.call_package_operator(op, found, l, r, span);
             }
             (l, r)
         } else {
@@ -1301,10 +1306,13 @@ impl<'a> Checker<'a> {
                     );
                 if !comparable {
                     let (ls, rs) = (self.types.display(l.ty), self.types.display(r.ty));
-                    self.report(
+                    let mut diag =
                         Diagnostic::error(codes::NO_OPERATOR, format!("cannot compare `{ls}` and `{rs}` with `<=>`"))
-                            .primary(span, "`<=>` works on numbers, runes and strings of the same type"),
-                    );
+                            .primary(span, "`<=>` works on numbers, runes and strings of the same type");
+                    if l.ty == r.ty && matches!(self.types.kind(self.types.base(l.ty)), TyKind::Struct(_)) {
+                        diag = super::operators::define_operator_help(diag, op, &ls);
+                    }
+                    self.report(diag);
                     return ir::Expr::new(ExprKind::Zero, int);
                 }
                 let (l, r) = if matches!(self.types.kind(self.types.base(l.ty)), TyKind::String) {
@@ -1418,9 +1426,7 @@ impl<'a> Checker<'a> {
             if matches!(kind, TyKind::String) && op == ast::BinOp::Add {
                 diag = diag.help("build strings with interpolation: `\"#{a}#{b}\"`");
             } else if matches!(kind, TyKind::Struct(_)) {
-                let ret = if op.is_comparison() { "Bool".to_string() } else { shown.clone() };
-                diag = diag
-                    .help(format!("define the operator on `{shown}`: `def {}(other: {shown}) -> {ret}`", op.as_str()));
+                diag = super::operators::define_operator_help(diag, op, &shown);
             }
             self.report(diag);
         }

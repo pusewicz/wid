@@ -15,6 +15,7 @@ mod items;
 mod macros;
 mod matrix;
 mod members;
+mod operators;
 mod overloads;
 mod record;
 mod runtime;

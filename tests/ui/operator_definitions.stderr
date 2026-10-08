@@ -1,0 +1,102 @@
+error[E0331]: the operator `<` can't be defined
+ --> tests/ui/operator_definitions.wid:6:7
+  |
+6 |   def <(other: Money) -> Bool = @cents < other.cents
+  |       ^ `<` comes from `<=>`
+  = note: `<`, `<=`, `>` and `>=` come from `<=>`, so the two can't disagree
+help: define `<=>` instead, which returns an `Int`: negative when `self` comes first, 0 when the two are equal and positive when `other` comes first
+  |   def <=>(other: Money) -> Int = @cents <=> other.cents
+  = see `wid explain E0331`
+
+error[E0331]: the operator `!=` can't be defined
+  --> tests/ui/operator_definitions.wid:8:7
+   |
+ 8 |   def !=(other: Money) -> Bool
+   |       ^^ `!=` comes from `==`
+   = note: `!=` comes from `==`, so the two can't disagree
+help: define `==` instead, which returns `Bool`, true when the two are equal
+   |   def ==(other: Money) -> Bool
+   |     @cents == other.cents
+   = see `wid explain E0331`
+
+error[E0331]: the operator `!` can't be defined
+  --> tests/ui/operator_definitions.wid:12:7
+   |
+12 |   def !
+   |       ^ `!` is not an operator method
+   = note: `!x` is true when `x` is `nil` or `false`, for every type, so no type can change it
+help: give the method a name, and call it by that name
+   |   def not
+   = see `wid explain E0331`
+
+error[E0331]: the operator `>=` can't be defined
+  --> tests/ui/operator_definitions.wid:22:7
+   |
+22 |   def >=(other: Version) -> Bool
+   |       ^^ `>=` comes from `<=>`
+   = note: `<`, `<=`, `>` and `>=` come from `<=>`, so the two can't disagree
+help: remove it: `<=>` gives `>=` already
+   |   def <=>(other: Version) -> Int = @major <=> other.major
+   = see `wid explain E0331`
+
+error[E0331]: the operator `<` can't be defined
+  --> tests/ui/operator_definitions.wid:34:12
+   |
+34 |   overload :<, :lt, :lt_int
+   |            ^^ `<` comes from `<=>`
+   = note: `<`, `<=`, `>` and `>=` come from `<=>`, so the two can't disagree
+help: define `<=>` instead
+   |   overload :<=>, :lt, :lt_int
+   = see `wid explain E0331`
+
+error[E0331]: the operator `<=` can't be defined
+  --> tests/ui/operator_definitions.wid:42:5
+   |
+42 | def <=(a: Int, b: Money) -> Bool = a <= b.cents
+   |     ^^ `<=` comes from `<=>`
+   = note: `<`, `<=`, `>` and `>=` come from `<=>`, so the two can't disagree
+help: define `<=>` instead, which returns an `Int`: negative when `a` comes first, 0 when the two are equal and positive when `b` comes first
+   | def <=>(a: Int, b: Money) -> Int = a <=> b.cents
+   = see `wid explain E0331`
+
+error[E0307]: `>` needs a `<=>` that returns an integer
+  --> tests/ui/operator_definitions.wid:51:5
+   |
+51 |   p Odd.new(1) > Odd.new(2)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^ `>` compares `<=>`'s result with 0, and it returns `Bool` here
+help: make `<=>` return an `Int`: negative, 0 or positive
+   = see `wid explain E0307`
+
+error[E0307]: `!=` needs an `==` that returns `Bool`
+  --> tests/ui/operator_definitions.wid:52:5
+   |
+52 |   p Odd.new(1) != Odd.new(2)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^ `!=` negates `==`, which returns `Int` here
+help: make `==` return `Bool`
+   = see `wid explain E0307`
+
+error[E0307]: `<` is not defined for `Plain`
+  --> tests/ui/operator_definitions.wid:53:5
+   |
+53 |   p Plain.new(1) < Plain.new(2)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ both sides are `Plain`
+help: define `<=>` on `Plain`, which gives `<`, `<=`, `>` and `>=`: `def <=>(other: Plain) -> Int`, returning a negative number, 0 or a positive number
+   = see `wid explain E0307`
+
+error[E0307]: cannot compare `Plain` and `Plain` with `<=>`
+  --> tests/ui/operator_definitions.wid:54:5
+   |
+54 |   p Plain.new(1) <=> Plain.new(2)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `<=>` works on numbers, runes and strings of the same type
+help: define `<=>` on `Plain`, which gives `<`, `<=`, `>` and `>=`: `def <=>(other: Plain) -> Int`, returning a negative number, 0 or a positive number
+   = see `wid explain E0307`
+
+error[E0307]: `!=` is not defined for `Plain`
+  --> tests/ui/operator_definitions.wid:55:5
+   |
+55 |   p Plain.new(1) != Plain.new(2)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ both sides are `Plain`
+help: define `==` on `Plain`, which gives `!=` too: `def ==(other: Plain) -> Bool`
+   = see `wid explain E0307`
+
+error: could not compile due to 11 errors

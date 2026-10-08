@@ -21,7 +21,7 @@ error[E0307]: `<` is not defined for `V`
    |
 19 |   puts a < b
    |        ^^^^^ both sides are `V`
-help: define the operator on `V`: `def <(other: V) -> Bool`
+help: define `<=>` on `V`, which gives `<`, `<=`, `>` and `>=`: `def <=>(other: V) -> Int`, returning a negative number, 0 or a positive number
    = see `wid explain E0307`
 
 error[E0303]: `puts` takes no named arguments

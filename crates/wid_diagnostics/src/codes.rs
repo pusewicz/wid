@@ -102,6 +102,7 @@ codes! {
     UNKNOWN_ATTRIBUTE = "E0328", "unknown or misused attribute";
     TYPE_TOO_LARGE = "E0329", "type is too large";
     PREDICATE_RETURN = "E0330", "`?` method does not return `Bool`";
+    UNDEFINABLE_OPERATOR = "E0331", "operator that can't be defined";
 
     // Errors and control flow.
     IGNORED_ERROR = "E0401", "`Error` result ignored";

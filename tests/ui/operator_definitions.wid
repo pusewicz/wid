@@ -1,0 +1,56 @@
+# `!=`, `<`, `<=`, `>`, `>=` and `!` can't be defined (E0331): they come
+# from `==` and `<=>`, or test for nil. Their uses add no other error.
+struct Money
+  cents: Int
+
+  def <(other: Money) -> Bool = @cents < other.cents
+
+  def !=(other: Money) -> Bool
+    @cents != other.cents
+  end
+
+  def !
+    false
+  end
+end
+
+struct Version
+  major: Int
+
+  def <=>(other: Version) -> Int = @major <=> other.major
+
+  def >=(other: Version) -> Bool
+    @major >= other.major
+  end
+end
+
+struct Odd
+  n: Int
+
+  def <=>(other: Odd) -> Bool = @n == other.n
+  def ==(other: Odd) -> Int = 1
+  def lt(other: Odd) -> Bool = @n < other.n
+  def lt_int(other: Int) -> Bool = @n < other
+  overload :<, :lt, :lt_int
+end
+
+struct Plain
+  n: Int
+  xs: []Int
+end
+
+def <=(a: Int, b: Money) -> Bool = a <= b.cents
+
+def main
+  a = Money.new(1)
+  b = Money.new(2)
+  p a < b
+  p a != b
+  p 1 <= a
+  p Version.new(1) >= Version.new(2)
+  p Odd.new(1) > Odd.new(2)
+  p Odd.new(1) != Odd.new(2)
+  p Plain.new(1) < Plain.new(2)
+  p Plain.new(1) <=> Plain.new(2)
+  p Plain.new(1) != Plain.new(2)
+end

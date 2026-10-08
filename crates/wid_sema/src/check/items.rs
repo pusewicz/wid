@@ -278,6 +278,7 @@ impl<'a> Checker<'a> {
 
     pub(super) fn collect_item(&mut self, item: &'a ast::Item, loc: DeclLoc, owner: Option<DeclId>) {
         self.check_item_attributes(item);
+        self.check_definable_operator(item, owner);
         let (name, span, kind) = match &item.kind {
             ItemKind::Def(f) if f.is_macro && owner.is_some() => {
                 self.report(

@@ -365,8 +365,8 @@ end
   after a space on the constant's line is the same mistake (`Foo { a: 1 }`,
   `geo.Vec2 { … }`), unless it opens a block's `|x|`; after a generic
   instance, a spaced `{` (`Pool(Int, 4) { … }`) is a call's block. `==`
-  compares structs field by field when every field is comparable; define
-  `==` to customize it.
+  and `!=` compare structs field by field when every field is comparable;
+  define `==` to customize both.
 - **Fields are always public**, as in Odin: code reads and writes them
   directly (`hero.hp`, `hero.hp = 3`, `@hp` inside a method). There are no
   getter or setter methods and no accessor macros like Ruby's `attr_reader`,
@@ -383,10 +383,16 @@ end
   may take the same parameter types. A member may be a macro, which expands
   when a call chooses it (see Compile-time).
 - **Operators are methods**, because math-heavy game code needs them. You can
-  define `+ - * / %`, unary `-`, `==`, `<=>` (which gives you `<`, `<=`, `>`
-  and `>=`), `[]` and `[]=`, and `+=`-style forms are derived automatically.
-  When a type needs more than one right-hand type, use an explicit set, as
-  with any other overload:
+  define `+ - * / % **`, the bitwise `& | ~ << >>` (for flag and bit-set
+  types), unary `-` and `~`, `==` (which gives you `!=`), `<=>` (which gives
+  you `<`, `<=`, `>` and `>=` by comparing its result with 0, so it returns
+  an integer: negative, 0 or positive), `[]` and `[]=`. The `+=`-style form
+  of each binary operator is derived automatically. `!=`, `<`, `<=`, `>`,
+  `>=` and `!` can't be defined (E0331, whose fix defines `==` or `<=>`
+  instead): the comparisons come from `==` and `<=>`, so they can't
+  disagree with them, and `!x` tests for `nil` and `false` on every type.
+  The same holds for package-level operators. When a type needs more than
+  one right-hand type, use an explicit set, as with any other overload:
 
   ```ruby
   struct Transform

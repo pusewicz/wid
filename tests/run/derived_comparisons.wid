@@ -1,0 +1,64 @@
+# `!=` comes from `==`, and `<`, `<=`, `>` and `>=` from `<=>` (SPEC "Data
+# and behavior"), for methods, package-level operators and generic code.
+
+struct Money
+  cents: Int
+  # Not compared: two amounts with different notes are equal.
+  note: Int
+
+  def ==(other: Money) -> Bool = @cents == other.cents
+  def <=>(other: Money) -> Int = @cents <=> other.cents
+end
+
+struct Flags
+  bits: U8
+
+  def |(other: Flags) -> Flags = Flags.new(@bits | other.bits)
+  def &(other: Flags) -> Flags = Flags.new(@bits & other.bits)
+  def ~(other: Flags) -> Flags = Flags.new(@bits ~ other.bits)
+  def <<(n: U8) -> Flags = Flags.new(@bits << n)
+  def >>(n: U8) -> Flags = Flags.new(@bits >> n)
+  def ~ -> Flags = Flags.new(~@bits)
+  def **(n: Int) -> Flags = Flags.new(@bits * n.to(U8))
+end
+
+struct Version
+  major: Int
+end
+
+def <=>(a: Int, b: Version) -> Int = a <=> b.major
+def ==(a: Int, b: Version) -> Bool = a == b.major
+
+def largest(a: $T, b: T) -> T = a >= b ? a : b
+
+def main
+  a = Money.new(100, 1)
+  b = Money.new(250, 2)
+  c = Money.new(100, 3)
+  p a == c
+  p a != c
+  p a != b
+  p a <=> b
+  p [a < b, a <= c, a > b, a >= c, b > a, b <= a]
+  p largest(a, b)
+
+  wallet = [b, c, a]
+  p wallet.min
+  p wallet.max
+  wallet.sort!
+  p wallet
+
+  f = Flags.new(1)
+  f |= Flags.new(4)
+  f <<= 1
+  p f
+  p f & Flags.new(8)
+  p f ~ Flags.new(2)
+  p f >> 1
+  p ~f
+  p f ** 2
+
+  p 3 < Version.new(4)
+  p 3 >= Version.new(4)
+  p 4 != Version.new(4)
+end

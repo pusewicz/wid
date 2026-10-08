@@ -1624,6 +1624,22 @@ the language server.
   is an error (E0314, E0330) no longer adds E0324 "must return
   `{unknown}`", nor E0323 for a loop that ends it. `core` had no
   violations.
+- The definable operators and the comparisons they give (#134, SPEC "Data
+  and behavior"): `!=` comes from `==` (it used to compare fields even
+  when `==` was defined), and `<`, `<=`, `>` and `>=` compare `<=>`'s
+  result with 0 (`check/operators.rs`: `binary` falls back to
+  `derived_operator_method` and `package_operator_for`, and
+  `derive_comparison` reports an `==` that doesn't return `Bool` or a
+  `<=>` that doesn't return an integer as E0307 at the use). So generic
+  code (`min`, `max`, `sort!`) orders a struct by its `<=>`. Defining
+  `!=`, `<`, `<=`, `>`, `>=` or `!` (a method, a package-level `def` or an
+  `overload` set) is E0331, reported when the declaration is collected:
+  its fix removes the definition when the type defines `==` or `<=>`
+  already, and otherwise renames it to `==` or `<=>` (with `-> Int` for
+  `-> Bool`), machine-applicable when the body is only `a op b`, whose
+  operator it rewrites too. The definition is kept, so its uses add no
+  error. E0307's help for a missing comparison suggests
+  `def <=>(other: T) -> Int`, and for `!=` `def ==`.
 
 ## Next
 
@@ -1764,7 +1780,6 @@ only on `main` and can run in parallel with the macro stack.
 7. **SPEC conformance audit: done** (at e73c919). Every finding was
    reproduced on main and filed as a GitHub issue, so the open issues are
    now its queue. In order of value:
-   - `<=>` deriving the comparisons, and the definable operator set (#134);
    - `def self.` in an `extend` (#135);
    - gcc-15 `-Werror` at `-o:speed` and `-o:aggressive`, and suite
      coverage of `-o:` (#130);
