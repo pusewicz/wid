@@ -1,0 +1,32 @@
+# Struct literal syntax from Odin, Go, Rust or Zig (`Foo{a: 1}`) is one
+# E0113 each, with a fix that writes the `new` call. The braces are read as
+# that call's arguments, so the values have the struct's type and add no
+# more errors.
+import "./geo"
+
+struct Foo
+  a: Int
+  b: Int
+end
+
+struct Pool($T, $N: Int)
+  items: [N]T
+end
+
+W = Foo{a: 1}
+
+def main
+  w = Foo{a: 1, b: 2}
+  z = Foo{1, 2}
+  o = Foo{a = 1, b = 2}
+  v = geo.Vec2{x: 1.0}
+  g = Pool(Int, 2){}
+  m = Foo{
+    a: 1,
+    b: 2,
+  }
+  p W, w, z, o, v, g, m, Foo{a: 3}.a
+  # Left open before the next line: the one error's fix also closes it.
+  n = Foo{a: 1
+  p n.b
+end

@@ -652,6 +652,17 @@ runs the stages; `wid_cli` is the `wid` binary.
   `FACING: Dir = :north`, `X = 1 / 0` is E0901). The E0327 that remains
   says the compiler can't compute the value, with a note on what a
   constant's value may be.
+- Struct literal syntax from Odin, Go, Rust or Zig, a constant directly
+  followed by `{` (`Foo{a: 1}`, `Foo{1, 2}`, `geo.Vec2{x: 1.0}`,
+  `Pool(Int, 4){}`), is one new E0113 "Wid has no struct literal syntax"
+  at `Foo{`, with a machine-applicable fix that writes `Foo.new(a: 1)`
+  (Odin's `a = 1` becomes `a: 1`; braces over several lines become the
+  call's parentheses) (#60). It was E0323 and E0105 in a method, and E0105
+  alone at the top level. `Parser::parse_struct_literal` reads the braces as
+  the arguments of that `new` call, so the value has the struct's type and
+  adds no more errors; left open before the next line, it is this error
+  alone, whose fix also closes the call. A `{ |x|` after a constant is still
+  a block.
 - Errors in code a macro spliced in from its call site (a `Code` argument,
   a name from a `Symbol`) point at the splice in the `quote` and list the
   calls, in both renderers; a name the macro computed is named in the

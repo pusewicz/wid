@@ -57,6 +57,7 @@ codes! {
     INVALID_SYMBOL = "E0110", "invalid symbol literal";
     SPLICE_OUTSIDE_QUOTE = "E0111", "splice outside `quote`";
     VARIADIC_PARAM = "E0112", "misused `*` parameter";
+    STRUCT_LITERAL = "E0113", "struct literal syntax";
 
     // Names and scopes.
     UNDEFINED_NAME = "E0201", "undefined name";
