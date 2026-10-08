@@ -652,26 +652,43 @@ impl<'a> Checker<'a> {
         let diag = Diagnostic::error(codes::UNDEFINED_NAME, format!("undefined {what} `{name}`"))
             .primary(span, "not found in this scope")
             .note(format!("{note}; a bare name in a method is a variable or a method call, never a field"));
-        let read = format!("read the field with `@{name}`, which means `self.{name}`");
+        // A name a macro spliced in (`#{f}`) is fixed in the `quote`, where
+        // the `@` belongs (`@#{f}`); that changes every call of the macro.
+        let site = match call {
+            None => self.name_splice_site(name, span),
+            Some(c) => self.splice_site(span, c.span),
+        };
+        let (at, field) = match site {
+            Some(site) => (site, format!("@{}", self.source_text(site))),
+            None => (span, format!("@{name}")),
+        };
+        let applicability =
+            if site.is_some() { Applicability::MaybeIncorrect } else { Applicability::MachineApplicable };
+        let read = match site {
+            Some(_) => format!("read the field with `{field}` in the `quote`, which is `self.{name}` here"),
+            None => format!("read the field with `@{name}`, which means `self.{name}`"),
+        };
         let diag = match call {
-            None => diag.suggest_replace(read, span, format!("@{name}"), Applicability::MachineApplicable),
+            None => diag.suggest_replace(read, at, field, applicability),
             // `on_hit(3)` is `@on_hit(3)`, and `on_hit 3` too.
             Some(FieldCall { is_proc: true, block: false, args, parens, span: call_span }) => {
-                let (at, text) = if parens || !args {
-                    (span, format!("@{name}"))
-                } else {
-                    let written = self.source_text(Span { start: span.end, ..call_span });
-                    (call_span, format!("@{name}({})", written.trim()))
+                let written =
+                    self.name_end(span, call_span).map(|end| self.source_text(Span { start: end, ..call_span }));
+                let (at, text) = match written {
+                    Some(written) if args && !parens => {
+                        (Span { start: at.start, ..call_span }, format!("{field}({})", written.trim()))
+                    }
+                    _ => (at, field.clone()),
                 };
-                let help = format!("call the proc the field holds with `@{name}(…)`");
-                diag.suggest_replace(help, at, text, Applicability::MachineApplicable)
+                let help = format!("call the proc the field holds with `{field}(…)`");
+                diag.suggest_replace(help, at, text, applicability)
             }
             Some(FieldCall { is_proc: true, .. }) => {
-                diag.help(format!("call the proc the field holds with `@{name}(…)`, without a block"))
+                diag.help(format!("call the proc the field holds with `{field}(…)`, without a block"))
             }
             // `hp()` reads the field: `@hp`.
-            Some(FieldCall { span, args: false, block: false, .. }) => {
-                diag.suggest_replace(read, span, format!("@{name}"), Applicability::MachineApplicable)
+            Some(FieldCall { span: call_span, args: false, block: false, .. }) => {
+                diag.suggest_replace(read, Span { start: at.start, ..call_span }, field, applicability)
             }
             Some(_) => diag.help(format!("{read}, without arguments or a block")),
         };

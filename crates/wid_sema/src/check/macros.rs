@@ -265,23 +265,13 @@ impl<'a> Checker<'a> {
         let Some(len) = splices.iter().filter(holds).map(|s| s.code.len()).min() else { return diag };
         let found: Vec<&Splice> = splices.iter().filter(holds).filter(|s| s.code.len() == len).collect();
         // Code spliced more than once, or names a macro computed (which all
-        // have the call's span): the name the message mentions, else the
-        // splice in the statement or method being checked, else the latest,
-        // if they are the same name. Computed names come first.
-        let line = self.macros.line;
-        let item = self.body.frames.last().and_then(|f| f.decl).map(|d| self.decls[d.0 as usize].item.span);
+        // have the call's span): the name the message mentions, else as
+        // `pick_splice` picks. Computed names come first.
         let pick = |computed: bool| {
             let tier: Vec<&Splice> = found.iter().copied().filter(|s| s.computed == computed).collect();
             let named =
                 tier.iter().find(|s| computed && s.name.is_some_and(|n| diag.message.contains(&format!("`{n}`"))));
-            named
-                .or_else(|| tier.iter().find(|s| within(s.site, line)))
-                .or_else(|| item.and_then(|item| tier.iter().find(|s| within(s.site, item))))
-                .or_else(|| {
-                    let last = tier.iter().max_by_key(|s| s.site.file)?;
-                    tier.iter().all(|s| s.name == last.name).then_some(last)
-                })
-                .map(|s| **s)
+            named.copied().or_else(|| self.pick_splice(&tier)).copied()
         };
         let picked = pick(true).or_else(|| pick(false));
         if found.iter().any(|s| s.computed) {
@@ -315,6 +305,35 @@ impl<'a> Checker<'a> {
             }
         }
         diag
+    }
+
+    /// Of the splices of one piece of code (or of names that share the
+    /// call's span), the one being checked: in the statement being lowered
+    /// (`MacroState::line`), else in the method being checked, else the
+    /// first in the latest expansion, if they all splice the same name.
+    fn pick_splice<'s>(&self, splices: &[&'s Splice]) -> Option<&'s Splice> {
+        let within =
+            |inner: Span, outer: Span| inner.file == outer.file && outer.start <= inner.start && inner.end <= outer.end;
+        let line = self.macros.line;
+        let item = self.body.frames.last().and_then(|f| f.decl).map(|d| self.decls[d.0 as usize].item.span);
+        splices
+            .iter()
+            .find(|s| within(s.site, line))
+            .or_else(|| item.and_then(|item| splices.iter().find(|s| within(s.site, item))))
+            .or_else(|| {
+                let last = splices.iter().max_by_key(|s| (s.site.file, std::cmp::Reverse(s.site.start)))?;
+                splices.iter().all(|s| s.name == last.name).then_some(last)
+            })
+            .copied()
+    }
+
+    /// For a name at `span` that an expansion spliced in from a `Symbol`,
+    /// the splice in the `quote` that put it into the code being checked
+    /// (see [`Self::pick_splice`]), where a fix to the code goes.
+    pub(super) fn name_splice_site(&self, name: Name, span: Span) -> Option<Span> {
+        let splices = self.macros.splices.get(&span.file)?;
+        let found: Vec<&Splice> = splices.iter().filter(|s| s.code == span && s.name == Some(name)).collect();
+        self.pick_splice(&found).map(|s| s.site)
     }
 
     /// The splice in a `quote` that put the name at `name` into the code

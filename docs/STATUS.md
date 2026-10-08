@@ -922,7 +922,14 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   fixed at the call (`:hp`); a method's fix keeps the splice (`#{name}`,
   `MaybeIncorrect`). The splicer records the name's span for each
   `@#{name}` (`MacroState::ivar_names`), which `Checker::ivar` looks up
-  (`spliced_ivar`).
+  (`spliced_ivar`). Of several splices of one name, the one picked when
+  neither the statement nor the method being checked holds one is the
+  first in the latest expansion (`Checker::pick_splice`).
+- A field's name spliced as a bare name (`#{f}`, `#{f}()`, `#{f}(3)` for
+  a proc field) is fixed at the splice in the `quote` (`@#{f}`,
+  `MaybeIncorrect`), not at the call's argument (#79; the fix was
+  `gen :@hp`, which doesn't parse). `Checker::name_splice_site` finds the
+  splice as `splice_context` does.
 - A proc parameter whose name a macro splices (`->(#{v}: Int) -> Int {
   #{v} * 2 }`), in a method body or a generated `def`, is the caller's
   name, as a block parameter's is: the proc's body and code spliced from
