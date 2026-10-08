@@ -730,7 +730,10 @@ end
     its interface (named arguments use them), so code spliced into its
     body from the call site sees them too. Names that come from splices
     keep their spelling and belong to the caller, so a macro can
-    deliberately bind a caller's name.
+    deliberately bind a caller's name. A use that hygiene hides is E0201,
+    which names the variable it can't see and suggests passing its name as
+    a `Symbol`; so is a `quote` naming one of its macro's parameters
+    without a splice, with the fix `#{name}`.
   - **Errors** in generated code point at the line inside the `quote` and
     at each macro call that led to it, innermost first, in the human and
     JSON output alike: the human output adds a `:::` snippet per call

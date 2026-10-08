@@ -930,6 +930,15 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `MaybeIncorrect`), not at the call's argument (#79; the fix was
   `gen :@hp`, which doesn't parse). `Checker::name_splice_site` finds the
   splice as `splice_context` does.
+- E0201 explains names that macros keep apart (#79; it was a bare
+  "undefined name"): generated code naming a caller's variable says
+  hygiene hides it, with a label on the variable and a help to pass its
+  name as a `Symbol` (`#{name} += 1`); a `quote` naming its macro's
+  parameter says so, with the fix `#{e}`; and code naming a variable a
+  macro's code declared points at it as private to the expansion (no
+  E0203 for it any more). `Checker::explain_macro_name`, called by
+  `undefined_near`, finds the macro through `Expansion::decl` and the
+  hidden variable by its mark (`hidden_var`).
 - A proc parameter whose name a macro splices (`->(#{v}: Int) -> Int {
   #{v} * 2 }`), in a method body or a generated `def`, is the caller's
   name, as a block parameter's is: the proc's body and code spliced from

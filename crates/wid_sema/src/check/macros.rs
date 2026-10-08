@@ -113,6 +113,8 @@ pub(crate) struct Expansion {
     pub name: String,
     /// How many expansions the call is nested in, plus one.
     pub depth: u32,
+    /// The macro that ran.
+    pub decl: DeclId,
 }
 
 /// A template file as one expansion copied it: the file of the spans of
@@ -810,7 +812,12 @@ impl<'a> Checker<'a> {
         }
         let (result, fragments) = self.run_macro(call, values, code.code.len() as u64)?;
         let expansion = self.macros.expansions.len() as u32;
-        self.macros.expansions.push(Expansion { call_site: call.span, name: call.shown.clone(), depth });
+        self.macros.expansions.push(Expansion {
+            call_site: call.span,
+            name: call.shown.clone(),
+            depth,
+            decl: call.decl,
+        });
         self.build_code(expansion, result, &code, &fragments, call)
     }
 
@@ -1281,7 +1288,130 @@ impl<'a> Checker<'a> {
         );
         true
     }
+
+    // ----- names macros keep apart ----------------------------------------------------
+
+    /// Explains a name that code doesn't find because of how macros treat
+    /// names, reporting E0201 (`undefined {what} `name``) with the reason,
+    /// and returns whether it did: code a macro generated that names a
+    /// parameter of the macro without a splice, or a variable of the code
+    /// around it, which hygiene hides; or code that names a variable a
+    /// macro's code declared, which is private to its expansion.
+    pub(super) fn explain_macro_name(&mut self, name: Name, span: Span, what: &str) -> bool {
+        if self.body.frames.is_empty() {
+            return false;
+        }
+        let mark = self.mark_at(span);
+        if let Some(expansion) = mark {
+            let e = &self.macros.expansions[expansion as usize];
+            let (decl, by) = (e.decl, e.name.clone());
+            if let Some(param) = self.macro_param(decl, name) {
+                self.report_unspliced_param(name, span, what, &by, param);
+                return true;
+            }
+        }
+        let Some((var_span, var_mark)) = self.hidden_var(name, mark) else { return false };
+        let diag = Diagnostic::error(codes::UNDEFINED_NAME, format!("undefined {what} `{name}`"));
+        let diag = match mark {
+            // Generated code naming a variable of the code around the call.
+            Some(expansion) => {
+                let by = self.macros.expansions[expansion as usize].name.clone();
+                let owner = match var_mark.and_then(|_| self.declaring_macro(name, var_span)) {
+                    Some(other) => format!("the `{name}` that `{other}`'s code declares"),
+                    None => format!("the caller's `{name}`"),
+                };
+                let line = self.line_with(span, "#{name}").unwrap_or_else(|| "#{name}".to_string());
+                diag.primary(span, format!("`{by}`'s code can't see {owner}"))
+                    .secondary(var_span, format!("{owner} is declared here"))
+                    .note(HYGIENE)
+                    .help(format!(
+                        "to use the caller's variable, pass its name: take a parameter like `name: Symbol`, write `{line}` in the `quote`, and pass `:{name}` to `{by}`"
+                    ))
+            }
+            // Code naming a variable a macro's code declared.
+            None => {
+                let by = self.declaring_macro(name, var_span).unwrap_or_else(|| "the macro".to_string());
+                let line = self.line_with(var_span, "#{name}").unwrap_or_else(|| "#{name} = …".to_string());
+                // The use was meant: the variable isn't also unused.
+                if let Some(var) = self.find_marked_var_at(name, var_span) {
+                    var.read = true;
+                }
+                let call = var_mark.map(|m| self.macros.expansions[m as usize].call_site);
+                let diag = diag.primary(span, "not found in this scope");
+                let diag = match call {
+                    Some(call) if call.file == span.file => diag.secondary(call, format!("`{by}` expands here")),
+                    _ => diag,
+                };
+                diag.secondary(var_span, format!("`{by}`'s code declares its own `{name}` here, private to its expansion"))
+                    .note(HYGIENE)
+                    .help(format!(
+                        "to declare a variable for the caller, take its name as a parameter like `name: Symbol`, write `{line}` in `{by}`'s `quote`, and pass `:{name}` to `{by}`"
+                    ))
+            }
+        };
+        self.report(diag);
+        true
+    }
+
+    /// The parameter of a macro named `name`, if it has one: its span.
+    fn macro_param(&self, decl: DeclId, name: Name) -> Option<Span> {
+        let DeclKind::Fn(f) = self.decls[decl.0 as usize].kind else { return None };
+        f.is_macro.then_some(())?;
+        f.params.iter().find(|p| p.name.name == name).map(|p| p.name.span)
+    }
+
+    /// Reports code that a macro's `quote` generated naming one of the
+    /// macro's parameters, which only a splice reads (E0201), with the fix
+    /// that splices it.
+    fn report_unspliced_param(&mut self, name: Name, span: Span, what: &str, by: &str, param: Span) {
+        self.report(
+            Diagnostic::error(codes::UNDEFINED_NAME, format!("undefined {what} `{name}`"))
+                .primary(span, format!("not found in the code `{by}` generates"))
+                .secondary(param, format!("`{name}` is a parameter of the macro `{by}`"))
+                .note("a macro's parameters hold its arguments while it runs; the code its `quote` builds runs where the macro is called, and reads a parameter only through a splice, `#{…}`")
+                .suggest_replace(
+                    format!("splice the parameter: `#{{{name}}}`"),
+                    span,
+                    format!("#{{{name}}}"),
+                    Applicability::MachineApplicable,
+                ),
+        );
+    }
+
+    /// A variable named `name` that code marked `mark` can't see because
+    /// another expansion's code, or the code around one, declared it: its
+    /// span and mark (see `Var::mark`), innermost first.
+    fn hidden_var(&self, name: Name, mark: Option<u32>) -> Option<(Span, Option<u32>)> {
+        let frame = self.body.frames.last()?;
+        frame
+            .scopes
+            .iter()
+            .rev()
+            .find_map(|s| s.vars.iter().rev().find(|v| v.name == name && v.mark != mark))
+            .map(|v| (v.span, v.mark))
+    }
+
+    /// The variable named `name` declared at `span`.
+    fn find_marked_var_at(&mut self, name: Name, span: Span) -> Option<&mut super::body::Var> {
+        let frame = self.body.frames.last_mut()?;
+        frame.scopes.iter_mut().rev().find_map(|s| s.vars.iter_mut().rev().find(|v| v.name == name && v.span == span))
+    }
+
+    /// The line of code around `span`, with the text at `span` replaced,
+    /// for a help that shows the line rewritten; `None` for a long one.
+    fn line_with(&self, span: Span, replacement: &str) -> Option<String> {
+        let text = self.source_texts.get(&span.file)?;
+        let (start, end) = (span.start as usize, span.end as usize);
+        let first = text.get(..start)?.rfind('\n').map_or(0, |i| i + 1);
+        let last = text.get(end..)?.find('\n').map_or(text.len(), |i| end + i);
+        let line = format!("{}{replacement}{}", text.get(first..start)?, text.get(end..last)?);
+        let line = line.trim();
+        (line.chars().count() <= 48).then(|| line.to_string())
+    }
 }
+
+/// What macro hygiene is, for notes.
+const HYGIENE: &str = "a macro's code keeps the variables it declares apart from the code around the call, and can't see that code's variables either (hygiene); names spliced in from the call belong to the caller";
 
 /// Code that runs apart from the statement around it, not once with it:
 /// maybe not at all, never, or on each test of a loop. The statements a

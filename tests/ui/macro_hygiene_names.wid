@@ -1,0 +1,33 @@
+# Names that macro hygiene keeps apart, and macro parameters read without a
+# splice, are explained: the E0201 says why the name is missing and how to
+# reach it.
+
+# The quote's code can't see the caller's `count`.
+macro def bump -> Code
+  quote do
+    count += 1
+  end
+end
+
+# `e` is the macro's parameter: the quote reads it as `#{e}`.
+macro def dbl(e: Code) -> Code
+  quote do
+    e * 2
+  end
+end
+
+# `hidden` is private to the expansion; it isn't also unused.
+macro def make -> Code
+  quote do
+    hidden = 5
+  end
+end
+
+def main
+  count = 0
+  bump()
+  p count
+  p dbl(3)
+  make()
+  p hidden
+end
