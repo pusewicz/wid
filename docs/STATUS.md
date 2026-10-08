@@ -1683,6 +1683,12 @@ the language server.
   the call ends a statement that assigns it or is the statement, and it
   evaluates to the values before the error, so nothing after it is
   reported.
+- Number methods on every integer type (#140, SPEC "Data and behavior"):
+  `even?`, `odd?`, `times` and `upto` extend the unsigned types too, and
+  `abs` is the value itself for them (`core/builtin/numbers.wid`). `upto`
+  stops at `last` before stepping past it, so `start.upto(255)` on a `U8`
+  ends (it looped forever, and a signed one overflowed at its maximum).
+  `core/builtin/numbers_test.wid` covers them.
 
 ## Next
 

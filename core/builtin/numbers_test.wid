@@ -1,0 +1,50 @@
+import "core:testing"
+
+@[test]
+def counts_with_every_integer_type(t: ^testing.T)
+  u: U8 = 3
+  seen = 0
+  u.times { |i| seen += i.to(Int) }
+  t.expect_eq(seen, 3)
+  big: U64 = 4
+  sum: U64 = 0
+  big.times { |i| sum += i }
+  t.expect_eq(sum, 6)
+  n: I16 = 2
+  steps = 0
+  n.upto(5) { |_i| steps += 1 }
+  t.expect_eq(steps, 4)
+end
+
+@[test]
+def upto_stops_at_the_largest_value(t: ^testing.T)
+  steps = 0
+  last: U8 = 0
+  start: U8 = 253
+  start.upto(255) do |i|
+    steps += 1
+    last = i
+  end
+  t.expect_eq(steps, 3)
+  t.expect_eq(last, 255)
+  high: I8 = 127
+  high.upto(127) { |_i| steps += 1 }
+  t.expect_eq(steps, 4)
+  over: U16 = 9
+  over.upto(3) { |_i| steps += 1 }
+  t.expect_eq(steps, 4)
+end
+
+@[test]
+def parity_and_abs_for_unsigned(t: ^testing.T)
+  u: U32 = 7
+  t.expect(u.odd?)
+  t.expect(!u.even?)
+  t.expect_eq(u.abs, 7)
+  w: UInt = 10
+  t.expect(w.even?)
+  t.expect(w.between?(1, 10))
+  t.expect_eq(w.clamp(0, 5), 5)
+  i: I32 = -4
+  t.expect_eq(i.abs, 4)
+end

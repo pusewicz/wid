@@ -449,10 +449,12 @@ end
   - slices with `each`, `each_with_index`, `reverse_each`, `count`, `any?`,
     `all?`, `none?`, `find`, `find_index`, `include?`, `index`, `sum`, `min`,
     `max`, `reverse!`, `sort!` and `sort_by!`;
-  - numbers with `between?`, `clamp`, `min`, `max`, `zero?`, `abs`, `even?`,
-  `odd?`, `times` and `upto`. Inside a method, `self` is the receiver itself (passed by
-  pointer, so changes are visible to the caller), and a bare method name calls
-  it on `self`.
+  - numbers with `between?`, `clamp`, `min`, `max`, `zero?` and `abs`, and
+    every integer type, signed or unsigned, also with `even?`, `odd?`,
+    `times` and `upto` (which stops at its last value, even the type's
+    largest). Inside a method, `self` is the receiver itself (passed by
+    pointer, so changes are visible to the caller), and a bare method name
+    calls it on `self`.
 - `enum Dir : U8 … end` declares an enum (backed by `Int` when no type is
   given). Members count up from 0 unless written `name = value`; `Dir.north`
   and `:north` both name one, and `.to_i` gives its value. `union Shape =

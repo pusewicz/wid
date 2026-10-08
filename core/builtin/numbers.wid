@@ -25,7 +25,16 @@ extend Int, I8, I16, I32, I64
   # Returns the absolute value. The minimum's doesn't fit, so its `abs`
   # panics in `-debug` builds and is the minimum itself otherwise.
   def abs -> Self = self < 0 ? -self : self
+end
 
+# Methods for unsigned integers.
+extend UInt, U8, U16, U32, U64
+  # Returns the value itself, which is never negative.
+  def abs -> Self = self
+end
+
+# Methods for every integer type, signed or not.
+extend Int, I8, I16, I32, I64, UInt, U8, U16, U32, U64
   # Returns true for even numbers.
   def even? -> Bool = self % 2 == 0
 
@@ -42,22 +51,17 @@ extend Int, I8, I16, I32, I64
   end
 
   # Calls the block with every value from this one up to `last`, inclusive.
+  # It stops at `last` without going past it, so `last` may be the type's
+  # largest value.
   def upto(last: Self, &blk: block(Self))
+    return if self > last
     i = self
-    while i <= last
+    loop do
       yield i
+      break if i == last
       i += 1
     end
   end
-end
-
-# Methods for unsigned integers.
-extend UInt, U8, U16, U32, U64
-  # Returns true for even numbers.
-  def even? -> Bool = self % 2 == 0
-
-  # Returns true for odd numbers.
-  def odd? -> Bool = self % 2 != 0
 end
 
 # Methods for floats.
