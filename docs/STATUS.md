@@ -1406,9 +1406,10 @@ the language server.
   comments and formats idempotently, and each, with its whitespace
   perturbed in ways that keep its tree, formats to the same text.
 - `wid lsp`, part 1 (SPEC "Toolchain and CLI" → "LSP", `wid help lsp`,
-  `docs/editors.md` for Neovim and VS Code): a synchronous server over
-  stdio with `initialize`, `shutdown`, `exit`, full text sync,
-  cancellation of waiting requests, `MethodNotFound` for unknown requests
+  `docs/editors.md` for Neovim, Vim's yegappan/lsp and VS Code): a
+  synchronous server over stdio with `initialize`, `shutdown`, `exit`,
+  full text sync, cancellation of waiting requests, `MethodNotFound` for
+  unknown requests
   and a JSON-RPC error (not an exit) for a malformed message. Open buffers
   are checked, not the files on disk, through an overlay that
   `wid_driver::analyze` takes. Diagnostics for every file of the package

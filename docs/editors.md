@@ -59,6 +59,30 @@ end
 require("lspconfig").wid.setup({})
 ```
 
+## Vim
+
+[yegappan/lsp](https://github.com/yegappan/lsp) is an LSP client for Vim 9.
+The Vim plugin in `extras/vim` sets the `wid` filetype; without it, add
+`autocmd BufRead,BufNewFile *.wid setfiletype wid`. Register the server as the
+client's [configs](https://github.com/yegappan/lsp/blob/main/doc/configs.md)
+do for clangd:
+
+```vim
+call LspAddServer([#{
+      \   name: 'wid',
+      \   filetype: ['wid'],
+      \   path: 'wid',
+      \   args: ['lsp'],
+      \   rootSearch: ['.git/'],
+      \ }])
+```
+
+`path` is looked up in `$PATH`; give the full path to `wid` if it isn't on
+it. A name in `rootSearch` that ends in `/` is a directory. Pass options with
+`initializationOptions: #{collections: #{shared: '../shared'}}`. When a
+plugin manager loads yegappan/lsp after your vimrc, wrap the call in
+`autocmd User LspSetup …` as the client's `:help lsp` shows.
+
 ## VS Code
 
 VS Code needs an extension to start a language server. A generic LSP client
