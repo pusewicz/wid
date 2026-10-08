@@ -1069,10 +1069,15 @@ impl<'a> Checker<'a> {
         }
         let mut value = lower(self);
         // Code that changed the context ends in a block of its own, whose
-        // locals the value can't read after it.
+        // locals the value can't read after it: a value is stored in a
+        // temporary declared before the block, and a call without one runs
+        // inside it.
         let shadowed = self.frame().scopes.last().is_some_and(|s| s.context_shadowed);
         let mut kept = None;
-        if shadowed
+        if shadowed && matches!(self.types.kind(value.ty), TyKind::Void) && !value.is_pure() {
+            self.emit(Stmt::Expr(value));
+            value = ir::Expr::new(ExprKind::Zero, self.types.void());
+        } else if shadowed
             && !value.is_constant()
             && !matches!(self.types.kind(value.ty), TyKind::Void | TyKind::Never | TyKind::Unknown)
         {
@@ -1140,8 +1145,11 @@ impl<'a> Checker<'a> {
             OperandKind::Condition { .. } => format!(
                 "a `defer` runs when its block ends, but {what} runs again on each test of the loop and has no block of its own"
             ),
-            OperandKind::Logical { .. } | OperandKind::LogicalAssign { .. } => format!(
-                "a `defer` runs when its block ends, but {what} {}, so the end of the block around it can't tell whether the `defer` was reached",
+            OperandKind::Logical { .. }
+            | OperandKind::LogicalAssign { .. }
+            | OperandKind::SafeCall
+            | OperandKind::WhenPattern => format!(
+                "a `defer` runs when its block ends, but code in {what} {}, so the end of the block around it can't tell whether the `defer` was reached",
                 operand.runs()
             ),
         };
@@ -1150,7 +1158,10 @@ impl<'a> Checker<'a> {
             Some(e) => {
                 let name = e.name.clone();
                 let help = match operand.kind {
-                    OperandKind::Logical { .. } | OperandKind::LogicalAssign { .. } => format!(
+                    OperandKind::Logical { .. }
+                    | OperandKind::LogicalAssign { .. }
+                    | OperandKind::SafeCall
+                    | OperandKind::WhenPattern => format!(
                         "call `{name}` in a branch of an `if` instead, whose end runs the `defer`; or, if its code may always run, as a statement of its own before this line (`v = {name}(…)`), and use `v` here"
                     ),
                     OperandKind::TypeInfo => format!(
@@ -1231,6 +1242,12 @@ pub(crate) enum OperandKind {
     Logical { or: bool },
     /// The value of `&&=` (`or` false) or `||=`.
     LogicalAssign { or: bool },
+    /// The arguments of a `&.` call, which run only for a receiver that
+    /// isn't nil.
+    SafeCall,
+    /// A `when` pattern after the first of a `case`, which runs only when
+    /// no earlier pattern matched.
+    WhenPattern,
     /// `type_info`'s operand, which is checked but never runs.
     TypeInfo,
     /// A `while` (`until` false) or `until` condition.
@@ -1253,6 +1270,8 @@ impl Operand {
             OperandKind::Logical { or: true } => "the right side of `||`",
             OperandKind::LogicalAssign { or: false } => "the value of `&&=`",
             OperandKind::LogicalAssign { or: true } => "the value of `||=`",
+            OperandKind::SafeCall => "the arguments of a `&.` call",
+            OperandKind::WhenPattern => "a `when` pattern after the first",
             OperandKind::TypeInfo => "`type_info`'s operand",
             OperandKind::Condition { until: false } => "a `while` condition",
             OperandKind::Condition { until: true } => "an `until` condition",
@@ -1267,6 +1286,8 @@ impl Operand {
             OperandKind::Logical { or: true } => "runs only when the left side is false or nil",
             OperandKind::LogicalAssign { or: false } => "runs only when the target is true or holds a value",
             OperandKind::LogicalAssign { or: true } => "runs only when the target is false or nil",
+            OperandKind::SafeCall => "runs only when the receiver isn't nil",
+            OperandKind::WhenPattern => "runs only when no earlier pattern matched",
             OperandKind::TypeInfo => "is checked but never runs",
             OperandKind::Condition { .. } => "runs again on each test of the loop",
         }

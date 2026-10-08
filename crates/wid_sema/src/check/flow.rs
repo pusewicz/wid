@@ -324,13 +324,17 @@ impl<'a> Checker<'a> {
         let tmp = self.spill(v);
         let some = self.is_some(tmp.clone());
         let got = self.opt_get(tmp);
-        self.begin_block();
-        let value = self.value_member(got, recv.span, name, args, None, span, None);
+        // The call, arguments included, runs only for a value.
+        let at = args.and_then(|a| Some(a.first()?.value.span.to(a.last()?.value.span))).unwrap_or(span);
+        let operand = super::macros::Operand { kind: super::macros::OperandKind::SafeCall, span: at };
+        let (stmts, value) =
+            self.lower_operand(operand, |this| this.value_member(got, recv.span, name, args, None, span, None));
         let value_ty = value.ty;
-        let stmts = self.end_block().stmts;
         if matches!(self.types.kind(value_ty), TyKind::Void) {
             let mut then = stmts;
-            then.push(Stmt::Expr(value));
+            if !value.is_pure() {
+                then.push(Stmt::Expr(value));
+            }
             self.emit(Stmt::If { cond: some, then: ir::Block { stmts: then }, else_: ir::Block::default() });
             return ir::Expr::new(ExprKind::Zero, value_ty);
         }

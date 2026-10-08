@@ -1,5 +1,6 @@
 # A macro's code runs in place of the call. In an operand that may not run
-# (the right side of `&&` or `||`, the value of `||=` or `&&=`), that never
+# (the right side of `&&` or `||`, the value of `||=` or `&&=`, the
+# arguments of a `&.` call, a `when` pattern after the first), that never
 # runs (`type_info`'s operand) or that runs on each test (a `while`
 # condition), its statements run with the operand, and the names they
 # declare are the operand's own.
@@ -37,6 +38,25 @@ macro def tens(name: Symbol, counter: Code) -> Code
     found: Int? = nil
     found = #{name} * 10 if #{name} > 0
     found
+  end
+end
+
+# Gives an `Int`.
+macro def counted(name: Symbol, value: Code) -> Code
+  quote do
+    #{name} = #{value}
+    puts "counted #{#{name}}"
+    #{name}
+  end
+end
+
+struct Box
+  v: Int
+
+  def add(x: Int) -> Int = @v + x
+
+  def show(x: Int)
+    puts "show #{@v + x}"
   end
 end
 
@@ -89,6 +109,28 @@ def main
   left = 2
   while got = tens(:now, &left)
     puts "got #{got} from #{now}"
+  end
+
+  # A `&.` call runs its arguments only for a receiver that isn't nil.
+  absent: Box? = nil
+  present: Box? = Box.new(v: 1)
+  p absent&.add(counted(:k, 5)), present&.add(counted(:k, 6))
+  absent&.show(counted(:k, 1))
+  present&.show(counted(:k, 2))
+
+  # A `when` pattern runs only when no earlier pattern matched.
+  for x in [1, 2, 6, 20]
+    case x
+    when 1 then puts "one"
+    when 2, counted(:w, 6) then puts "two or six"
+    else puts "other"
+    end
+  end
+  for x in [5, 50]
+    case
+    when x == 5 then puts "five"
+    when positive(:t, x - 10) then puts "big"
+    end
   end
 
   # `type_info`'s operand is checked, never run.

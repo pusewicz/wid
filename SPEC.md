@@ -350,8 +350,9 @@ end
   Circle | Rect` declares a tagged union, matched with
   `case s when Circle then s.radius`. `s` is narrowed in each branch.
 - `case` over an enum or union must handle every member unless it has an
-  `else`; `when` takes several values, and ranges such as `1..9`. A `case`
-  used as a value needs an `else` unless it is exhaustive. An exhaustive
+  `else`; `when` takes several values, and ranges such as `1..9`. Patterns
+  are tested in order, and testing stops at the first that matches. A
+  `case` used as a value needs an `else` unless it is exhaustive. An exhaustive
   `case` without `else` panics if the value is a nil union or not a valid
   enum member.
 - Polymorphism is explicit: use tagged unions, or structs of `proc` fields.
@@ -620,14 +621,16 @@ end
       value is used (`x = say("hi")`), the last line gives it, so each such
       branch must end with one (E0323 otherwise).
     - In an operand that doesn't run once with the statement around it,
-      the generated statements run with the operand: the right side of
-      `&&` or `||` and the value of `||=` or `&&=` may not run,
-      `type_info`'s operand never runs (it is only checked), and a
-      `while` or `until` condition runs on each test of the loop. The
-      names they declare are visible only in that operand, as in a branch
-      of a ternary or a postfix `if`; using one after it is E0201, with a
-      note that the expansion in the operand declared it. In
-      `while v = …`, the loop's body sees them too, as it sees `v`.
+      the generated statements run with the operand. These operands are:
+      the right side of `&&` or `||`, the value of `||=` or `&&=`, the
+      arguments of a `&.` call and every `when` pattern but a `case`'s
+      first, which may not run; `type_info`'s operand, which never runs
+      (it is only checked); and a `while` or `until` condition, which runs
+      on each test of the loop. The names they declare are visible only in
+      that operand, as in a branch of a ternary or a postfix `if`; using
+      one after it is E0201, with a note that the expansion in the operand
+      declared it. In `while v = …`, the loop's body sees them too, as it
+      sees `v`.
     - A `defer` that such an operand's code generates is an error at the
       call (E0406): a `defer` runs when its block ends, and no block ends
       when the operand's code does. Call the macro in a branch of an `if`,

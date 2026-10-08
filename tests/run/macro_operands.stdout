@@ -27,4 +27,18 @@ until 1
 until 0
 got 20 from 2
 got 10 from 1
+nil
+counted 6
+7
+counted 2
+show 3
+one
+two or six
+counted 6
+two or six
+counted 6
+other
+five
+computed 40
+big
 Bool

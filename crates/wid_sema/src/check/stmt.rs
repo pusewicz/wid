@@ -737,18 +737,22 @@ impl<'a> Checker<'a> {
         } else {
             case.else_.as_deref()
         };
-        let block = self.lower_when_chain(&case.whens, else_body, subject.as_ref(), dest);
+        let block = self.lower_when_chain(&case.whens, else_body, subject.as_ref(), dest, false);
         for s in block.stmts {
             self.emit(s);
         }
     }
 
+    /// Lowers `when` branches as a chain of `if`s. Every pattern but the
+    /// first of the `case` (`later` is false for the chain's first `when`)
+    /// runs only when no earlier one matched, as an operand of its own.
     fn lower_when_chain(
         &mut self,
         whens: &[ast::When],
         else_: Option<&[ast::Stmt]>,
         subject: Option<&ir::Expr>,
         dest: Dest,
+        later: bool,
     ) -> ir::Block {
         let Some((first, rest)) = whens.split_first() else {
             return match else_ {
@@ -758,16 +762,41 @@ impl<'a> Checker<'a> {
         };
         self.begin_block();
         let mut cond: Option<ir::Expr> = None;
-        for p in &first.patterns {
-            let c = self.when_cond(subject, p);
+        let bool_ty = self.types.bool();
+        for (i, p) in first.patterns.iter().enumerate() {
+            if i == 0 && !later {
+                cond = Some(self.when_cond(subject, p));
+                continue;
+            }
+            let operand = Operand { kind: OperandKind::WhenPattern, span: p.span };
+            let (stmts, c) = self.lower_operand(operand, |this| this.when_cond(subject, p));
             cond = Some(match cond {
-                None => c,
+                // This block runs only when no earlier `when` matched.
+                None => {
+                    for s in stmts {
+                        self.emit(s);
+                    }
+                    c
+                }
+                Some(prev) if stmts.is_empty() => ir::Expr::new(
+                    ExprKind::Binary { op: ir::BinaryOp::Or, lhs: Box::new(prev), rhs: Box::new(c), span: p.span },
+                    bool_ty,
+                ),
+                // The pattern needs statements, so test it only when the
+                // earlier ones didn't match.
                 Some(prev) => {
-                    let bool_ty = self.types.bool();
-                    ir::Expr::new(
-                        ExprKind::Binary { op: ir::BinaryOp::Or, lhs: Box::new(prev), rhs: Box::new(c), span: p.span },
-                        bool_ty,
-                    )
+                    let matched = self.new_local(None, bool_ty);
+                    self.emit(Stmt::Let { local: matched, init: Some(prev) });
+                    let matched = ir::Expr::new(ExprKind::Local(matched), bool_ty);
+                    let mut then = stmts;
+                    then.push(Stmt::Assign { target: matched.clone(), value: c });
+                    let unmatched = self.not(matched.clone());
+                    self.emit(Stmt::If {
+                        cond: unmatched,
+                        then: ir::Block { stmts: then },
+                        else_: ir::Block::default(),
+                    });
+                    matched
                 }
             });
         }
@@ -789,7 +818,7 @@ impl<'a> Checker<'a> {
             }
             None => self.lower_branch(&first.body, dest),
         };
-        let else_block = self.lower_when_chain(rest, else_, subject, dest);
+        let else_block = self.lower_when_chain(rest, else_, subject, dest, true);
         self.emit(Stmt::If { cond, then, else_: else_block });
         self.end_block()
     }

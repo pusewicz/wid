@@ -24,7 +24,14 @@ macro def outer -> Code
   end
 end
 
+struct Gate
+  open: Bool
+
+  def check(ok: Bool) -> Bool = @open && ok
+end
+
 def main
+  gate: Gate? = nil
   a = false && decl(:aa)
   b = true || decl(:bb)
   c = false
@@ -33,7 +40,12 @@ def main
   while decl(:ee)
     break
   end
-  p a, b, c, d.name, aa, bb, cc, dd, ee
+  j = gate&.check(decl(:ff))
+  case
+  when a then puts "a"
+  when decl(:gg) then puts "gg"
+  end
+  p a, b, c, d.name, j, aa, bb, cc, dd, ee, ff, gg
 
   e = false && deferred(true)
   f = true || deferred(true)
@@ -46,5 +58,10 @@ def main
   until deferred(true)
   end
   i = false && outer
-  p e, f, g, h.name, i
+  k = gate&.check(deferred(true))
+  case
+  when e then puts "e"
+  when deferred(true) then puts "deferred"
+  end
+  p e, f, g, h.name, i, k
 end
