@@ -1,0 +1,27 @@
+error[E0910]: `make_const` returns `Code`, but it is a `def`, not a `macro def`
+  --> tests/ui/def_returns_code.wid:4:1
+   |
+ 4 | def make_const(name: Symbol) -> Code
+   | ^^^ `make_const` is declared as a method the program runs
+ 5 |   quote do
+   |   -------- a `quote` builds code only inside a `macro def`
+...
+10 | make_const :ONE
+   | --------------- called among declarations, where only a macro call can stand
+   = note: a `macro def` runs while compiling, and the code its `quote` builds replaces each call; `Code` exists only then
+help: make `make_const` a macro
+   | macro def make_const(name: Symbol) -> Code
+   = see `wid explain E0910`
+
+error[E0910]: `gen` returns `Code`, but it is a `def`, not a `macro def`
+  --> tests/ui/def_returns_code.wid:14:3
+   |
+14 |   def gen -> Code
+   |   ^^^ `gen` is declared as a method the program runs
+15 |     quote do
+   |     -------- a `quote` builds code only inside a `macro def`
+   = note: a `macro def` runs while compiling, and the code its `quote` builds replaces each call; `Code` exists only then
+help: declare `gen` as a `macro def` at the top level of the file: macros are package members, not methods of a type
+   = see `wid explain E0910`
+
+error: could not compile due to 2 errors

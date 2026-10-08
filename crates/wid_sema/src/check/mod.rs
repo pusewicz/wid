@@ -704,7 +704,7 @@ impl<'a> Checker<'a> {
     /// `@`. A suggestion is a guess at a misspelling, so its fix is one to
     /// review.
     pub fn undefined_near(&mut self, name: Name, span: Span, candidates: &[&'static str], own: &SelfNames, what: &str) {
-        if self.undefined_explained(name, span) {
+        if self.undefined_explained(name, span) || self.explain_macro_name(name, span, what) {
             return;
         }
         let text = name.as_str();

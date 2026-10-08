@@ -75,6 +75,11 @@ pub fn render(diag: &Diagnostic, sources: &SourceMap, opts: RenderOptions) -> St
 
     let primary = diag.primary_span();
     let frames = diag.chain_span().map(|s| expansion_frames(sources, s)).unwrap_or_default();
+    // A call a secondary label already shows, like the second of two
+    // calls whose code clashes, isn't listed again.
+    let shown = |f: &Frame<'_>| diag.labels.iter().any(|l| !l.primary && l.span == f.span);
+    let frames: Vec<Frame<'_>> = frames.into_iter().filter(|f| f.count > 1 || !shown(f)).collect();
+    let (frames, elided) = shorten_frames(frames);
 
     let mut max_line = 1u32;
     for label in &diag.labels {
@@ -112,7 +117,12 @@ pub fn render(diag: &Diagnostic, sources: &SourceMap, opts: RenderOptions) -> St
     }
 
     // Code a macro generated: each call that led to it, innermost first.
-    for frame in &frames {
+    for (i, frame) in frames.iter().enumerate() {
+        if let Some(elided) = &elided
+            && i == FIRST_FRAMES
+        {
+            let _ = writeln!(out, "{pad}{} {elided}", p.gutter("..."));
+        }
         let file = sources.file(frame.span.file);
         let (line, col) = file.line_col(frame.span.start);
         let _ = writeln!(out, "{pad}{} {}:{line}:{col}", p.gutter(":::"), file.display);
@@ -168,6 +178,32 @@ struct Frame<'a> {
     /// How many nested calls at this same place the frame stands for: a
     /// recursive macro calls itself from one line of its `quote`.
     count: usize,
+}
+
+/// How many of the calls behind generated code a long list shows before
+/// the calls it leaves out; the outermost call is always shown.
+const FIRST_FRAMES: usize = 3;
+/// The most calls listed in full; a longer list, like macros that call
+/// each other until they reach the nesting limit, is shortened.
+const MAX_FRAMES: usize = 6;
+
+/// Shortens a long list of calls to its first few and the outermost, and
+/// says what it left out: "60 more expansions of `ping` and `pong`".
+fn shorten_frames(mut frames: Vec<Frame<'_>>) -> (Vec<Frame<'_>>, Option<String>) {
+    if frames.len() <= MAX_FRAMES {
+        return (frames, None);
+    }
+    let last = frames.len() - 1;
+    let hidden: Vec<Frame<'_>> = frames.drain(FIRST_FRAMES..last).collect();
+    let count: usize = hidden.iter().map(|f| f.count).sum();
+    let mut names: Vec<String> = Vec::new();
+    for f in &hidden {
+        let name = format!("`{}`", f.name);
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    (frames, Some(format!("{count} more expansions of {}", crate::and_list(&names))))
 }
 
 /// The calls that led to code at `span`, innermost first, with runs of
@@ -504,6 +540,29 @@ error[E0301]: expected `Int`, found `String`
         assert_eq!((&chain[2]["file"], &chain[2]["line"]), (&"main.wid".into(), &2.into()));
         let plain = to_json(&error_at(FileId(0)), &sources);
         assert_eq!(plain["expansions"].as_array().map(Vec::len), Some(0));
+    }
+
+    #[test]
+    fn a_long_chain_lists_the_first_calls_and_the_outermost() {
+        // `ping` and `pong` call each other ten deep from `main`.
+        let mut sources = SourceMap::new();
+        let lib = sources.add(PathBuf::from("lib.wid"), "lib.wid".into(), "pong\nping\n");
+        let main = sources.add(PathBuf::from("main.wid"), "main.wid".into(), "def main\n  ping\nend\n");
+        let mut expansions = vec![Expansion { template: lib, call_site: Span::new(main, 11, 15), name: "ping".into() }];
+        for i in 1..10u32 {
+            let (start, name) = if i % 2 == 1 { (0, "pong") } else { (5, "ping") };
+            let call_site = Span::new(FileId::expansion(i - 1), start, start + 4);
+            expansions.push(Expansion { template: lib, call_site, name: name.into() });
+        }
+        sources.set_expansions(expansions);
+        let diag = Diagnostic::error(codes::COMPTIME_LIMIT, "macro expansions nest too deep")
+            .primary(Span::new(FileId::expansion(9), 5, 9), "would expand here");
+        let text = render(&diag, &sources, RenderOptions::default());
+        assert!(text.contains("\n ... 6 more expansions of `ping` and `pong`\n"), "{text}");
+        assert_eq!(text.matches("expands here").count(), 4, "{text}");
+        assert!(text.contains("2 |   ping\n  |   ---- `ping` expands here"), "{text}");
+        // JSON lists every call.
+        assert_eq!(to_json(&diag, &sources)["expansions"].as_array().map(Vec::len), Some(10));
     }
 
     #[test]

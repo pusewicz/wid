@@ -1,0 +1,55 @@
+error[E0201]: undefined name `hp`
+  --> tests/ui/macro_spliced_field.wid:26:12
+   |
+26 |   doubled :hp
+   |            ^^ not found in this scope
+  ::: tests/ui/macro_spliced_field.wid:7:23
+   |
+ 7 |     def dbl2 -> Int = #{f} * 2
+   |                       ---- `hp` is spliced here by `doubled`
+  ::: tests/ui/macro_spliced_field.wid:26:3
+   |
+26 |   doubled :hp
+   |   ----------- `doubled` expands here
+   = note: `hp` is a field of `S`; a bare name in a method is a variable or a method call, never a field
+help: read the field with `@#{f}` in the `quote`, which is `self.hp` here
+   |     def dbl2 -> Int = @#{f} * 2
+   = see `wid explain E0201`
+
+error[E0201]: undefined method `hp`
+  --> tests/ui/macro_spliced_field.wid:27:12
+   |
+27 |   emptied :hp
+   |            ^^ not found in this scope
+  ::: tests/ui/macro_spliced_field.wid:13:26
+   |
+13 |     def read_it -> Int = #{f}()
+   |                          ---- `hp` is spliced here by `emptied`
+  ::: tests/ui/macro_spliced_field.wid:27:3
+   |
+27 |   emptied :hp
+   |   ----------- `emptied` expands here
+   = note: `hp` is a field of `S`; a bare name in a method is a variable or a method call, never a field
+help: read the field with `@#{f}` in the `quote`, which is `self.hp` here
+   |     def read_it -> Int = @#{f}
+   = see `wid explain E0201`
+
+error[E0201]: undefined method `on_hit`
+  --> tests/ui/macro_spliced_field.wid:28:10
+   |
+28 |   fired :on_hit
+   |          ^^^^^^ not found in this scope
+  ::: tests/ui/macro_spliced_field.wid:19:23
+   |
+19 |     def fire -> Int = #{f}(3)
+   |                       ---- `on_hit` is spliced here by `fired`
+  ::: tests/ui/macro_spliced_field.wid:28:3
+   |
+28 |   fired :on_hit
+   |   ------------- `fired` expands here
+   = note: `on_hit` is a field of `S`; a bare name in a method is a variable or a method call, never a field
+help: call the proc the field holds with `@#{f}(…)`
+   |     def fire -> Int = @#{f}(3)
+   = see `wid explain E0201`
+
+error: could not compile due to 3 errors

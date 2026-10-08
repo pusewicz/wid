@@ -229,7 +229,9 @@ end
   declaration) and takes any constant integer: a literal, a named
   constant (`Pool(Ball, MAX)`), constant arithmetic (`Pool(Ball, MAX * 2)`)
   or a `comptime` result; a name there is a constant unless it names a type.
-  Only generic structs take value parameters: a method's `xs: [$N]Int` is
+  A negative argument for a parameter that is a field's array length
+  (`cells: [N]U8`) is E0301 at the argument. Only generic structs take
+  value parameters: a method's `xs: [$N]Int` is
   E0105, and the method takes a slice, `xs: []Int`, with `xs.size` as its
   length, instead.
   - In the struct's fields and methods and in an `extend` of it, a value
@@ -318,7 +320,8 @@ end
   types; an untyped literal matches its default type exactly and converts to
   other number types, so `clamp(5)` picks `clamp_int` and `clamp(0.5)` picks
   `clamp_f32`. If none fits, or several fit equally well, the error lists
-  every member. Members can't take blocks or `$` type parameters, and no two
+  every member, and offers `.to(T)` only where that conversion exists and
+  makes a member fit. Members can't take blocks or `$` type parameters, and no two
   may take the same parameter types. A member may be a macro, which expands
   when a call chooses it (see Compile-time).
 - **Operators are methods**, because math-heavy game code needs them. You can
@@ -555,7 +558,19 @@ end
     constant; when `v` can only be a type (`distinct F64`,
     `proc(Int) -> Int`, `@[c] proc(I32)`), the line is that constant's
     declaration wherever it is, as `NAME = v` is. `quote` works only in a
-    `macro def`, the procs inside it included (E0910).
+    `macro def`, the procs inside it included (E0910). A `def` that
+    returns `Code` was meant to be a macro: it is E0910 at the `def`, with
+    the fix `macro def`, and a call of it among declarations counts as a
+    failed expansion, so the names it would have declared aren't reported
+    missing.
+  - **Nested quotes:** a splice belongs to the innermost `quote` around
+    it. In a `macro def` that a `quote` generates, the inner macro's
+    `quote` is left as written when the outer macro expands; its splices
+    run when the inner macro runs and read the inner macro's names, so
+    they can't read the outer macro's parameters (E0201, which says so).
+    To pass an outer value on, generate a constant in the outer `quote`
+    (`N_VALUE = #{n}`) and use it, or splice the value into the inner
+    macro's own code, outside its `quote` (`v = #{n}`, then `#{v}`).
   - **Splices:** a spliced value is inserted according to its type, and must
     fit where the splice is (E0911, reported at the call):
     - `Code` inserts that code: one expression where a value goes, and any
@@ -730,19 +745,27 @@ end
     its interface (named arguments use them), so code spliced into its
     body from the call site sees them too. Names that come from splices
     keep their spelling and belong to the caller, so a macro can
-    deliberately bind a caller's name.
+    deliberately bind a caller's name. A use that hygiene hides is E0201,
+    which names the variable it can't see and suggests passing its name as
+    a `Symbol`; so is a `quote` naming one of its macro's parameters
+    without a splice, with the fix `#{name}`.
   - **Errors** in generated code point at the line inside the `quote` and
     at each macro call that led to it, innermost first, in the human and
     JSON output alike: the human output adds a `:::` snippet per call
     (`` `m` expands here ``, with nested calls of a macro from one place
-    counted), and each JSON diagnostic has an `expansions` list (the
+    counted; more than six are shortened to the first three and the
+    outermost, with a line counting the rest and naming their macros),
+    and each JSON diagnostic has an `expansions` list of every call (the
     `macro` name and the call's position). Code spliced from the call site
     keeps its own position, and an error in it also points at the splice
     in the `quote` where it landed and at the calls behind that. A name the
     macro computed (`str.to_sym`) has the call's position, and the error
     says which name it is. Panic locations and `-debug` `#line`
-    directives in generated code name the `quote`'s file and line. A macro
-    that fails while it runs is E0901, at the call.
+    directives in generated code name the `quote`'s file and line. Two
+    calls whose code declares the same name (E0202, E0317) show that line
+    of the `quote` once, with both calls. A macro that fails while it runs
+    is E0901, at the call. A macro whose code failed to parse doesn't run,
+    and its calls report nothing more.
   - **Budgets:** each macro run has the `comptime` limits. Expansions may
     nest at most 64 deep (a macro whose code calls a macro), and one build
     runs at most 65,536 expansions. Exceeding either is E0903.

@@ -1,0 +1,20 @@
+error[E0105]: empty splice
+ --> tests/ui/macro_parse_error.wid:6:9
+  |
+6 |     x = #{}
+  |         ^^^ there is nothing to insert here
+help: put the macro value to insert between the braces, like `#{name}`
+  = see `wid explain E0105`
+
+error[E0105]: expected an expression after `+`, found `)`
+  --> tests/ui/macro_parse_error.wid:12:17
+   |
+12 |     LIMIT = (1 +)
+   |                 ^ expected an expression
+   |                - `+` needs a value after it
+help: remove the `+`
+   |     LIMIT = (1)
+help: or write the missing value after `+`
+   = see `wid explain E0105`
+
+error: could not compile due to 2 errors

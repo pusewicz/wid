@@ -1,0 +1,23 @@
+# When no member of an `overload` set takes the arguments, the help offers
+# `.to(T)` only for a conversion that exists, naming the member it makes
+# fit; otherwise it says no conversion helps.
+def from_int(n: Int) -> Int = n
+def from_text(s: String) -> String = s
+overload :pick, :from_int, :from_text
+
+def from_i32(n: I32) -> I32 = n
+def from_u8(n: U8) -> U8 = n
+overload :narrow, :from_i32, :from_u8
+
+def from_pair(a: Int, b: F64) -> F64 = b
+def from_words(s: String, t: String) -> String = s
+overload :pair, :from_pair, :from_words
+
+def main
+  x = 1.5
+  y: F32 = 2.5
+  p pick(true)
+  p pick(x)
+  p narrow(x)
+  p pair(y, y)
+end

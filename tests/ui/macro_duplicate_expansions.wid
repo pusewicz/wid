@@ -1,0 +1,27 @@
+# A macro called twice whose code declares a name as written declares it
+# twice. The error shows the line of the `quote` once, with both calls.
+macro def limits -> Code
+  quote do
+    LIMIT = 1
+  end
+end
+
+macro def helpers -> Code
+  quote do
+    def dup -> Int = 1
+  end
+end
+
+limits()
+limits()
+
+struct Box
+  hp: Int = 1
+  helpers()
+  helpers()
+end
+
+def main
+  p LIMIT
+  p Box.new.dup
+end

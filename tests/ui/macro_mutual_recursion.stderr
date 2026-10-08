@@ -1,0 +1,27 @@
+error[E0903]: macro expansions nest more than 64 deep
+  --> tests/ui/macro_mutual_recursion.wid:12:5
+   |
+12 |     ping(#{n})
+   |     ^^^^^^^^^^ `ping` would expand here, 65 expansions deep
+  ::: tests/ui/macro_mutual_recursion.wid:6:5
+   |
+ 6 |     pong(#{n})
+   |     ---------- `pong` expands here
+  ::: tests/ui/macro_mutual_recursion.wid:12:5
+   |
+12 |     ping(#{n})
+   |     ---------- `ping` expands here
+  ::: tests/ui/macro_mutual_recursion.wid:6:5
+   |
+ 6 |     pong(#{n})
+   |     ---------- `pong` expands here
+  ... 60 more expansions of `ping` and `pong`
+  ::: tests/ui/macro_mutual_recursion.wid:17:5
+   |
+17 |   p ping(1)
+   |     ------- `ping` expands here
+   = note: the code a macro generates may call macros, but no deeper than this
+help: look for a macro whose code calls a macro, maybe itself, with nothing to stop it
+   = see `wid explain E0903`
+
+error: could not compile due to 1 error

@@ -110,9 +110,15 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Lowers `@name`.
+    /// Lowers `@name`. For `@#{name}` in generated code, a missing name is
+    /// reported where the macro call gave it, and fixes to the code keep
+    /// the splice.
     pub fn ivar(&mut self, name: Name, span: Span) -> ir::Expr {
-        match self.ivar_owner(name, span, IvarUse::default()) {
+        let (span, written) = match self.spliced_ivar(span) {
+            Some(at) => (at, IvarUse { site: Some(span), ..IvarUse::default() }),
+            None => (span, IvarUse::default()),
+        };
+        match self.ivar_owner(name, span, written) {
             Some((owner, index, ty)) => ir::Expr::new(ExprKind::Field { base: Box::new(owner), index }, ty),
             None => ir::Expr::new(ExprKind::Zero, self.types.unknown()),
         }
@@ -815,7 +821,9 @@ impl<'a> Checker<'a> {
             let field = ir::Expr::new(ExprKind::Field { base: Box::new(base), index }, fty);
             return self.field_called(name, field, args, block, span);
         }
-        self.no_member(ty, name.name, name.span, None);
+        if !self.macro_as_method(ty, name, recv_span, args, block.is_some(), span) {
+            self.no_member(ty, name.name, name.span, None);
+        }
         if let Some(args) = args {
             for a in args {
                 self.expr(&a.value, None);
@@ -1003,6 +1011,57 @@ impl<'a> Checker<'a> {
             return ir::Expr::new(ExprKind::Float(*i as f64), target);
         }
         ir::Expr::new(ExprKind::Cast { kind: ir::CastKind::Numeric, expr: Box::new(v) }, target)
+    }
+
+    /// Whether `.to(T)` converts a value of type `from` to `to` without an
+    /// error, by the rules of [`Self::convert`] and `convert_view`; false
+    /// when either type is unknown.
+    pub(super) fn converts_with_to(&mut self, from: TyId, to: TyId) -> bool {
+        let u8_ty = self.types.u8();
+        let (fb, tb) = (self.types.base(from), self.types.base(to));
+        let (fk, tk) = (self.types.kind(fb), self.types.kind(tb));
+        if matches!(fk, TyKind::Unknown) || matches!(tk, TyKind::Unknown) {
+            return false;
+        }
+        if fb == tb {
+            return true;
+        }
+        let is_bytes = |k: &TyKind| matches!(k, TyKind::Slice(e) if *e == u8_ty);
+        match (fk, tk) {
+            (TyKind::Array(e, _) | TyKind::Dynamic(e), TyKind::String) if *e == u8_ty => return true,
+            (TyKind::Array(e, _) | TyKind::Dynamic(e), TyKind::Slice(t)) if t == e => return true,
+            (TyKind::String, k) if is_bytes(k) => return true,
+            (k, TyKind::String) if is_bytes(k) => return true,
+            (TyKind::CString, TyKind::String) => return true,
+            (TyKind::String, TyKind::CString) => return false,
+            _ => {}
+        }
+        let multi_elem = match tk {
+            TyKind::MultiPointer(t) => Some(*t),
+            TyKind::Optional(inner) => match self.types.kind(*inner) {
+                TyKind::MultiPointer(t) => Some(*t),
+                _ => None,
+            },
+            _ => None,
+        };
+        if let (TyKind::Array(e, _) | TyKind::Dynamic(e) | TyKind::Slice(e), Some(t)) = (fk, multi_elem)
+            && *e == t
+        {
+            return true;
+        }
+        let address = |k: &TyKind| matches!(k, TyKind::Int(crate::types::IntTy::Int | crate::types::IntTy::UInt));
+        let numeric_like = |t: &TyKind| matches!(t, TyKind::Int(_) | TyKind::Float(_) | TyKind::Enum(_) | TyKind::Rune);
+        match (self.pointer_shape(from), self.pointer_shape(to)) {
+            // A pointer that may be nil doesn't convert to one that can't.
+            (Some(nilable), Some(target_nilable)) => !nilable || target_nilable,
+            (Some(_), None) => address(tk),
+            (None, Some(target_nilable)) => target_nilable && address(fk),
+            (None, None) => {
+                numeric_like(fk)
+                    && numeric_like(tk)
+                    && !(matches!(fk, TyKind::Float(_)) && matches!(tk, TyKind::Enum(_)))
+            }
+        }
     }
 
     /// The pointer shape of a type for `.to(T)`: `Some(nilable)` for

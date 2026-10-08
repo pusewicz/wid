@@ -322,6 +322,13 @@ impl<'a> Checker<'a> {
                 let (args, block, name_span, span) = (parts.args, parts.block, parts.name.span, expr.span);
                 Some(MacroCall { decl, shown, args, block, name_span, span })
             }
+            // A `def` returning `Code` was meant to be a macro: its code
+            // would have declared names the package may use.
+            Some(decl) if self.returns_code(decl) => {
+                self.not_a_macro_def(decl, Some(expr.span), None);
+                self.failed_among_declarations(p);
+                None
+            }
             Some(decl) => {
                 self.call_among_declarations(expr.span, p.owner, Some(decl));
                 None
@@ -519,6 +526,10 @@ impl<'a> Checker<'a> {
             return Some(copy);
         }
         let (chosen, _) = self.choose_for_call(call)?;
+        if self.returns_code(chosen) {
+            self.not_a_macro_def(chosen, Some(call.span), None);
+            return None;
+        }
         if !self.is_macro(chosen) {
             self.call_among_declarations(call.span, p.owner, Some(chosen));
             return None;

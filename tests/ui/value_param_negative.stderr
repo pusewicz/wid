@@ -1,0 +1,37 @@
+error[E0301]: array length cannot be negative
+  --> tests/ui/value_param_negative.wid:10:12
+   |
+ 6 |   cells: [N]U8
+   |          ----- `N` is the length of this array
+...
+10 |   g = Grid(-1).new
+   |            ^^ `N` is -1 here
+   = note: `N` sizes `Grid`'s field `cells: [N]U8`, so it can't be negative
+help: pass a length of 0 or more for `N`
+   = see `wid explain E0301`
+
+error[E0315]: `Grid` takes a constant `Int` for `N`, but `1.5` has type `F64`
+  --> tests/ui/value_param_negative.wid:11:12
+   |
+ 5 | struct Grid($N: Int)
+   |             ------- `N` is a value parameter
+...
+11 |   h = Grid(1.5).new
+   |            ^^^ expected a constant `Int`
+help: convert it explicitly with `.to(Int)`
+   |   h = Grid(1.5.to(Int)).new
+   = see `wid explain E0315`
+
+error[E0301]: array length cannot be negative
+  --> tests/ui/value_param_negative.wid:12:11
+   |
+ 6 |   cells: [N]U8
+   |          ----- `N` is the length of this array
+...
+12 |   k: Grid(-3) = {}
+   |           ^^ `N` is -3 here
+   = note: `N` sizes `Grid`'s field `cells: [N]U8`, so it can't be negative
+help: pass a length of 0 or more for `N`
+   = see `wid explain E0301`
+
+error: could not compile due to 3 errors

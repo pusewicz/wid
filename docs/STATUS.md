@@ -915,6 +915,92 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   field is fixed at the call (`:hp`). `Checker::splice_site` and
   `name_end` find the splice, which also fixes the `()` fix for a field
   called as `self.#{name}()` (it edited unrelated text).
+- `@#{name}` read or assigned without arguments reports a missing field
+  at the name the macro call gave, with the splice and the call, like
+  `@#{name}(…)` (#95; it pointed at the `quote` with no splice label, and
+  its fix replaced the splice with a literal `@hp`). A misspelled field is
+  fixed at the call (`:hp`); a method's fix keeps the splice (`#{name}`,
+  `MaybeIncorrect`). The splicer records the name's span for each
+  `@#{name}` (`MacroState::ivar_names`), which `Checker::ivar` looks up
+  (`spliced_ivar`). Of several splices of one name, the one picked when
+  neither the statement nor the method being checked holds one is the
+  first in the latest expansion (`Checker::pick_splice`).
+- A field's name spliced as a bare name (`#{f}`, `#{f}()`, `#{f}(3)` for
+  a proc field) is fixed at the splice in the `quote` (`@#{f}`,
+  `MaybeIncorrect`), not at the call's argument (#79; the fix was
+  `gen :@hp`, which doesn't parse). `Checker::name_splice_site` finds the
+  splice as `splice_context` does.
+- E0201 explains names that macros keep apart (#79; it was a bare
+  "undefined name"): generated code naming a caller's variable says
+  hygiene hides it, with a label on the variable and a help to pass its
+  name as a `Symbol` (`#{name} += 1`); a `quote` naming its macro's
+  parameter says so, with the fix `#{e}`; and code naming a variable a
+  macro's code declared points at it as private to the expansion (no
+  E0203 for it any more). `Checker::explain_macro_name`, called by
+  `undefined_near`, finds the macro through `Expansion::decl` and the
+  hidden variable by its mark (`hidden_var`).
+- The human renderer shortens a list of more than six macro calls behind
+  an error to the first three and the outermost, with a line like "...
+  60 more expansions of `ping` and `pong`" (#79; macros calling each
+  other to the nesting limit printed all 64 calls, 266 lines). JSON keeps
+  every call. `render::shorten_frames`.
+- Macro errors are worded for macros (#79): a variable given to a value
+  parameter (`rep(k)` with `n: Int`) is E0327 "the macro `rep` runs while
+  compiling, so its `Int` parameter `n` needs a constant", with a help to
+  take `Code` (`MacroState::value_arg`, read by `report_capture`); a
+  spliced type used as a value names the type (`` `Int` is a type ``, not
+  `` `#{t}` ``); and `3.twice` with `twice` a macro is E0204 with a label
+  on the macro and the fix `twice(3)` (`Checker::macro_as_method`).
+- A macro whose body failed to parse (an empty splice `#{}`, say) doesn't
+  run, so its calls report nothing more (#79; it ran and failed with
+  E0901 "a value of type `{unknown}` can't be spliced", reported before
+  the parse error). `check_macro` asks `runtime::body_holds_parse_error`
+  and notes it in `MacroState::unparsed`, which `expand_code` checks;
+  the call counts as a failed expansion, so what it would have declared
+  isn't reported missing.
+- A name that two calls of a macro declare (E0202, E0317) shows the line
+  of the `quote` once, labelled for each expansion, with both calls
+  (`first expansion here`, `second expansion here`) in the human and JSON
+  output, and a help to call the macro once or splice the name (#79; the
+  "first definition" label sat on the same `quote` span as the second,
+  and only the second call appeared). `Checker::repeated_expansion`
+  rewrites the labels in `splice_context`; the human renderer no longer
+  lists a call that a secondary label already shows.
+- A negative argument for a generic struct's value parameter that is a
+  field's array length (`Grid(-1)` with `cells: [N]U8`) is E0301 at the
+  argument, with a label on the array and a note naming the field (#79;
+  it pointed at `[N]U8` with nothing at the call, plus E0203 on the
+  variable holding the value). `check_generic_args` reports it
+  (`sized_field`) and fails, so the instance is unknown; a value argument
+  that was reported (`Grid(1.5)`) fails it too.
+- A splice belongs to the innermost `quote` (SPEC "Compile-time", decided
+  in #79): in a `macro def` a macro generates, the inner `quote`'s `#{n}`
+  reads the inner macro's names. Naming the outer macro's parameter there
+  is E0201 saying so, with a label on the parameter and a help to
+  generate a constant (`N_VALUE = #{n}`) or splice the value into the
+  inner macro's own code (it was a bare "undefined name"). `lower_quote`
+  sets `MacroState::splicing` while it lowers splices, and
+  `explain_macro_name` checks that the macro being lowered came from the
+  name's expansion (`generated_macro`). `tests/run/macro_nested_quote`
+  covers both ways to pass the value.
+- A `def` that returns `Code` is one E0910 at the `def`, "`make_const`
+  returns `Code`, but it is a `def`, not a `macro def`", with labels on
+  its `quote` and on a call among declarations and the machine-applicable
+  fix `macro def` (no fix in a type's body) (#102; a call among
+  declarations gave E0910 at the `quote`, E0108 with the help "move it
+  into `def main`" and E0201 for each name it would have declared).
+  `Checker::returns_code` and `not_a_macro_def` (once per `def`,
+  `MacroState::not_macros`) serve `resolve_item_macro`, `chosen_macro`
+  and `lower_quote`; the call among declarations runs
+  `failed_among_declarations`.
+- E0316 "no member of `pick` takes (…)" offers `.to(T)` only for
+  conversions that exist and make a member fit (#102; it always suggested
+  `.to(T)`, even for a `Bool` and `Int`/`String` members, where
+  `true.to(Int)` is E0308): one such member gets the fix that converts
+  each argument it needs, several are listed (`x.to(I32)` for `from_i32`
+  or `x.to(U8)` for `from_u8`), and none says no conversion helps and to
+  call a member by name. `Checker::converts_with_to` is `convert`'s rule
+  as a predicate.
 - A proc parameter whose name a macro splices (`->(#{v}: Int) -> Int {
   #{v} * 2 }`), in a method body or a generated `def`, is the caller's
   name, as a block parameter's is: the proc's body and code spliced from

@@ -83,7 +83,8 @@ error[E0316]: no member of `show` takes (float literal)
 43 |   puts show(1.5)
    |        ^^^^^^^^^ called with (float literal)
    = note: the members are `show_int(n: Int)`, `show_text(s: String)`
-help: convert an argument with `.to(T)` so that one member's parameter types match
+help: convert the argument to `Int`, which `show_int` takes
+   |   puts show(1.5.to(Int))
    = see `wid explain E0316`
 
 error[E0303]: overloaded calls take positional arguments

@@ -34,7 +34,7 @@ error[E0316]: no member of `pick` takes (Bool)
 42 |   p pick(true)
    |     ^^^^^^^^^^ called with (Bool)
    = note: the members are `from_int(n: Int)`, `from_text(s: String)`
-help: convert an argument with `.to(T)` so that one member's parameter types match
+help: no conversion makes (Bool) fit a member: pass arguments of one member's parameter types, or call a member by name, like `from_int(…)`
    = see `wid explain E0316`
 
 error[E0303]: overloaded calls take positional arguments

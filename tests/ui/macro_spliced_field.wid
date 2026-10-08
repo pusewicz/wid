@@ -1,0 +1,36 @@
+# A field's name spliced into a `quote` as a bare name (`#{f}`) is not a
+# field read. The error points at the name the call gave, and the fix adds
+# the `@` at the splice in the `quote` (`@#{f}`), not at the call's
+# argument, where `:@hp` would not parse.
+macro def doubled(f: Symbol) -> Code
+  quote do
+    def dbl2 -> Int = #{f} * 2
+  end
+end
+
+macro def emptied(f: Symbol) -> Code
+  quote do
+    def read_it -> Int = #{f}()
+  end
+end
+
+macro def fired(f: Symbol) -> Code
+  quote do
+    def fire -> Int = #{f}(3)
+  end
+end
+
+struct S
+  hp: Int = 1
+  on_hit: proc(n: Int) -> Int
+  doubled :hp
+  emptied :hp
+  fired :on_hit
+end
+
+def main
+  s = S.new
+  p s.dbl2
+  p s.read_it
+  p s.fire
+end

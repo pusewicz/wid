@@ -1,0 +1,17 @@
+# A splice in a `quote` nested in generated code belongs to the inner
+# macro: it can't read the outer macro's parameters, and the error says so.
+macro def outer(n: Int) -> Code
+  quote do
+    macro def inner -> Code
+      quote do
+        #{n} + 1
+      end
+    end
+  end
+end
+
+outer(3)
+
+def main
+  p inner()
+end

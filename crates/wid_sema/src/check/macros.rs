@@ -74,7 +74,7 @@ use std::collections::{HashMap, HashSet};
 use wid_diagnostics::{Applicability, Diagnostic, FileId, Span, codes};
 use wid_syntax::ast::{self, ExprKind as E, ItemKind, StmtKind, TypeKind, splice_index};
 use wid_syntax::lexer::{NameShape, name_shape};
-use wid_syntax::visit::{VisitMut, walk_expr, walk_item, walk_stmt, walk_type};
+use wid_syntax::visit::{Visit as _, VisitMut, walk_expr, walk_item, walk_stmt, walk_type};
 use wid_syntax::{Name, ast::Ident};
 
 use super::body::Dest;
@@ -113,6 +113,8 @@ pub(crate) struct Expansion {
     pub name: String,
     /// How many expansions the call is nested in, plus one.
     pub depth: u32,
+    /// The macro that ran.
+    pub decl: DeclId,
 }
 
 /// A template file as one expansion copied it: the file of the spans of
@@ -159,8 +161,14 @@ pub(crate) struct MacroState {
     pub file_locs: HashMap<FileId, DeclLoc>,
     /// Set while a macro body is lowered: `quote` works there.
     pub in_macro: bool,
+    /// Set while the splices of a `quote` are lowered.
+    pub splicing: bool,
     /// Macros whose declarations were checked, and whether they are valid.
     pub checked: HashMap<DeclId, bool>,
+    /// Checked macros whose bodies failed to parse; they never run.
+    pub unparsed: HashSet<DeclId>,
+    /// `def`s that return `Code` reported as not being macros (E0910).
+    pub not_macros: HashSet<DeclId>,
     /// Functions whose bodies had errors; a macro that reaches one never
     /// runs.
     pub failed: HashSet<FnId>,
@@ -193,6 +201,13 @@ pub(crate) struct MacroState {
     /// The code every expansion spliced in from outside it, by the file of
     /// its span.
     pub splices: HashMap<FileId, Vec<Splice>>,
+    /// While a macro's argument runs like `comptime`, which argument, so
+    /// E0327 can word a variable it reads in the macro's terms.
+    pub value_arg: Option<ValueArg>,
+    /// For each `@#{name}` an expansion spliced a name into (by the span of
+    /// the `@#{name}`, in the expansion's virtual file), the name's span:
+    /// where the macro call gave it (see [`Checker::spliced_ivar`]).
+    pub ivar_names: HashMap<Span, Span>,
     /// While the last line of an expansion whose call is a statement is
     /// lowered, that line's span: a macro call that is the whole line is a
     /// statement too (see [`Checker::lower_generated`]).
@@ -202,6 +217,17 @@ pub(crate) struct MacroState {
     /// the macro's name and the line's keyword, innermost expansion last
     /// (see [`Checker::call_value_note`]).
     pub value_tails: Vec<(Vec<Span>, String, &'static str)>,
+}
+
+/// A macro argument that runs like `comptime`: one for a parameter of
+/// another type than `Code`, `Symbol` or `Type`.
+pub(crate) struct ValueArg {
+    /// The macro as the call names it.
+    pub macro_name: String,
+    /// The parameter, its declaration and its type.
+    pub param: Name,
+    pub param_span: Span,
+    pub ty: TyId,
 }
 
 /// A call of a macro.
@@ -248,6 +274,7 @@ impl<'a> Checker<'a> {
     /// is dropped. An error about a value that gives a call's value gets a
     /// note saying so ([`Checker::call_value_note`]).
     pub(super) fn splice_context(&self, diag: Diagnostic) -> Diagnostic {
+        let diag = self.repeated_expansion(diag);
         let mut diag = self.call_value_note(diag);
         if diag.labels.iter().any(|l| l.splice) {
             return diag;
@@ -261,23 +288,13 @@ impl<'a> Checker<'a> {
         let Some(len) = splices.iter().filter(holds).map(|s| s.code.len()).min() else { return diag };
         let found: Vec<&Splice> = splices.iter().filter(holds).filter(|s| s.code.len() == len).collect();
         // Code spliced more than once, or names a macro computed (which all
-        // have the call's span): the name the message mentions, else the
-        // splice in the statement or method being checked, else the latest,
-        // if they are the same name. Computed names come first.
-        let line = self.macros.line;
-        let item = self.body.frames.last().and_then(|f| f.decl).map(|d| self.decls[d.0 as usize].item.span);
+        // have the call's span): the name the message mentions, else as
+        // `pick_splice` picks. Computed names come first.
         let pick = |computed: bool| {
             let tier: Vec<&Splice> = found.iter().copied().filter(|s| s.computed == computed).collect();
             let named =
                 tier.iter().find(|s| computed && s.name.is_some_and(|n| diag.message.contains(&format!("`{n}`"))));
-            named
-                .or_else(|| tier.iter().find(|s| within(s.site, line)))
-                .or_else(|| item.and_then(|item| tier.iter().find(|s| within(s.site, item))))
-                .or_else(|| {
-                    let last = tier.iter().max_by_key(|s| s.site.file)?;
-                    tier.iter().all(|s| s.name == last.name).then_some(last)
-                })
-                .map(|s| **s)
+            named.copied().or_else(|| self.pick_splice(&tier)).copied()
         };
         let picked = pick(true).or_else(|| pick(false));
         if found.iter().any(|s| s.computed) {
@@ -313,6 +330,76 @@ impl<'a> Checker<'a> {
         diag
     }
 
+    /// Rewrites a "defined twice" error (E0202, E0317) whose definitions
+    /// are the same line of one `quote`, generated by two calls of its
+    /// macro: the line is shown once, with both calls (`first expansion
+    /// here`, `second expansion here`), and the help is about the macro.
+    fn repeated_expansion(&self, mut diag: Diagnostic) -> Diagnostic {
+        if diag.code != codes::DUPLICATE_DEFINITION && diag.code != codes::IMPLICIT_OVERLOAD {
+            return diag;
+        }
+        let Some(primary) = diag.primary_span() else { return diag };
+        let Some(second) = self.virtual_file(primary.file) else { return diag };
+        let (template, second) = (second.template, second.expansion);
+        let first = diag.labels.iter().position(|l| {
+            !l.primary
+                && (l.span.start, l.span.end) == (primary.start, primary.end)
+                && self.virtual_file(l.span.file).is_some_and(|v| v.template == template && v.expansion != second)
+        });
+        let Some(first) = first else { return diag };
+        let Some(v) = self.virtual_file(diag.labels[first].span.file) else { return diag };
+        let first_call = self.macros.expansions[v.expansion as usize].call_site;
+        let e = &self.macros.expansions[second as usize];
+        if first_call == e.call_site {
+            return diag;
+        }
+        let name = self.source_text(primary);
+        let by = &e.name;
+        diag.labels.remove(first);
+        for label in diag.labels.iter_mut().filter(|l| l.primary) {
+            label.message = format!("each expansion of `{by}` defines `{name}` here");
+        }
+        diag.notes.clear();
+        diag.helps.clear();
+        diag.secondary(first_call, "first expansion here")
+            .secondary(e.call_site, "second expansion here")
+            .note(format!(
+                "a macro's code is the same for every call, so a name it declares as written is declared again by each call of `{by}`"
+            ))
+            .help(format!(
+                "call `{by}` once, or take the name as a `Symbol` parameter and splice it where it is declared (`#{{name}}`), so each call declares its own"
+            ))
+    }
+
+    /// Of the splices of one piece of code (or of names that share the
+    /// call's span), the one being checked: in the statement being lowered
+    /// (`MacroState::line`), else in the method being checked, else the
+    /// first in the latest expansion, if they all splice the same name.
+    fn pick_splice<'s>(&self, splices: &[&'s Splice]) -> Option<&'s Splice> {
+        let within =
+            |inner: Span, outer: Span| inner.file == outer.file && outer.start <= inner.start && inner.end <= outer.end;
+        let line = self.macros.line;
+        let item = self.body.frames.last().and_then(|f| f.decl).map(|d| self.decls[d.0 as usize].item.span);
+        splices
+            .iter()
+            .find(|s| within(s.site, line))
+            .or_else(|| item.and_then(|item| splices.iter().find(|s| within(s.site, item))))
+            .or_else(|| {
+                let last = splices.iter().max_by_key(|s| (s.site.file, std::cmp::Reverse(s.site.start)))?;
+                splices.iter().all(|s| s.name == last.name).then_some(last)
+            })
+            .copied()
+    }
+
+    /// For a name at `span` that an expansion spliced in from a `Symbol`,
+    /// the splice in the `quote` that put it into the code being checked
+    /// (see [`Self::pick_splice`]), where a fix to the code goes.
+    pub(super) fn name_splice_site(&self, name: Name, span: Span) -> Option<Span> {
+        let splices = self.macros.splices.get(&span.file)?;
+        let found: Vec<&Splice> = splices.iter().filter(|s| s.code == span && s.name == Some(name)).collect();
+        self.pick_splice(&found).map(|s| s.site)
+    }
+
     /// The splice in a `quote` that put the name at `name` into the code
     /// at `within`, in the expansion's virtual file. A name spliced in from
     /// a macro call keeps its span there (see [`Splice`]), so the code
@@ -321,6 +408,14 @@ impl<'a> Checker<'a> {
     pub(super) fn splice_site(&self, name: Span, within: Span) -> Option<Span> {
         let inside = |s: Span| s.file == within.file && within.start <= s.start && s.end <= within.end;
         self.macros.splices.get(&name.file)?.iter().find(|s| s.code == name && inside(s.site)).map(|s| s.site)
+    }
+
+    /// For `@#{name}` at `span` in generated code, the span of the name the
+    /// macro call gave, at the call (see [`MacroState::ivar_names`]).
+    pub(super) fn spliced_ivar(&self, span: Span) -> Option<Span> {
+        // Written code has none.
+        span.file.expansion_index()?;
+        self.macros.ivar_names.get(&span).copied()
     }
 
     /// Where the name at `name` ends in the code of `call`, the call it
@@ -416,7 +511,9 @@ impl<'a> Checker<'a> {
     }
 
     /// Checks what a `macro def` declares, once: it returns `Code` and takes
-    /// neither `$T` parameters nor a block. Returns whether it can run.
+    /// neither `$T` parameters nor a block. Returns whether that holds; a
+    /// macro whose body failed to parse is also noted (`MacroState::
+    /// unparsed`), since it can't run either, though its body is checked.
     pub(super) fn check_macro(&mut self, decl: DeclId) -> bool {
         if let Some(&ok) = self.macros.checked.get(&decl) {
             return ok;
@@ -476,8 +573,72 @@ impl<'a> Checker<'a> {
                 ok = false;
             }
         }
+        // Code that failed to parse (an empty splice, say) was reported, and
+        // what the macro would build from it is unknown: it never runs.
+        if super::runtime::body_holds_parse_error(&f.body) {
+            self.macros.unparsed.insert(decl);
+        }
         self.macros.checked.insert(decl, ok);
         ok
+    }
+
+    /// Whether a declaration is a `def` (not a `macro def`) that returns
+    /// `Code`, which only a macro can use: it was meant to be one.
+    pub(super) fn returns_code(&mut self, decl: DeclId) -> bool {
+        let DeclKind::Fn(f) = self.decls[decl.0 as usize].kind else { return false };
+        if f.is_macro || f.ret.is_none() {
+            return false;
+        }
+        let code = self.types.code();
+        self.fn_sig(decl).ret == code
+    }
+
+    /// Reports a `def` that returns `Code`, which only a `macro def` can
+    /// (E0910), once per `def`, at the `def` with the fix that makes it a
+    /// macro: called among declarations (`call`) or building code with a
+    /// `quote` (`quote`, else the first one in its body).
+    pub(super) fn not_a_macro_def(&mut self, decl: DeclId, call: Option<Span>, quote: Option<Span>) {
+        if !self.macros.not_macros.insert(decl) {
+            return;
+        }
+        let d = &self.decls[decl.0 as usize];
+        let DeclKind::Fn(f) = d.kind else { return };
+        let (name, top_level) = (d.name, d.owner.is_none() && !f.is_static);
+        let def_kw = Span { end: f.sig_span.start + 3, ..f.sig_span };
+        let quote = quote.or_else(|| {
+            let mut find = FindQuote::default();
+            match &f.body {
+                ast::FnBody::Block(stmts) => find.visit_stmts(stmts),
+                ast::FnBody::Expr(e) => find.visit_expr(e),
+            }
+            find.0
+        });
+        let mut diag = Diagnostic::error(
+            codes::QUOTE_OUTSIDE_MACRO,
+            format!("`{name}` returns `Code`, but it is a `def`, not a `macro def`"),
+        )
+        .primary(def_kw, format!("`{name}` is declared as a method the program runs"));
+        if let Some(q) = quote {
+            diag = diag.secondary(q, "a `quote` builds code only inside a `macro def`");
+        }
+        if let Some(c) = call {
+            diag = diag.secondary(c, "called among declarations, where only a macro call can stand");
+        }
+        let diag = diag.note(
+            "a `macro def` runs while compiling, and the code its `quote` builds replaces each call; `Code` exists only then",
+        );
+        let diag = if top_level {
+            diag.suggest(
+                format!("make `{name}` a macro"),
+                vec![wid_diagnostics::Edit { span: def_kw.shrink_to_start(), replacement: "macro ".into() }],
+                Applicability::MachineApplicable,
+            )
+        } else {
+            diag.help(format!(
+                "declare `{name}` as a `macro def` at the top level of the file: macros are package members, not methods of a type"
+            ))
+        };
+        self.report(diag);
     }
 
     /// Where a macro's own code first uses `Self`, if it does. Its `quote`
@@ -561,6 +722,13 @@ impl<'a> Checker<'a> {
     /// records the template, giving a `Code` value.
     pub fn lower_quote(&mut self, quote: &ast::QuoteExpr, span: Span) -> ir::Expr {
         if !self.macros.in_macro {
+            // A `def` that returns `Code` was meant to be a macro.
+            if let Some(decl) = self.body.frames.last().and_then(|f| f.decl)
+                && self.returns_code(decl)
+            {
+                self.not_a_macro_def(decl, None, Some(span));
+                return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+            }
             let diag = Diagnostic::error(codes::QUOTE_OUTSIDE_MACRO, "`quote` only works inside a `macro def`")
                 .primary(span, "this is not inside a macro")
                 .note("a `quote` builds code for a macro to return, and the macro's caller gets that code in place of the call");
@@ -585,7 +753,9 @@ impl<'a> Checker<'a> {
         };
         let mut args = Vec::with_capacity(quote.splices.len());
         for splice in &quote.splices {
+            let outer = std::mem::replace(&mut self.macros.splicing, true);
             let v = self.expr(splice, None);
+            self.macros.splicing = outer;
             if !self.spliceable(v.ty) {
                 let shown = self.types.display(v.ty);
                 self.report(
@@ -756,7 +926,7 @@ impl<'a> Checker<'a> {
             }
             return None;
         }
-        if !self.check_macro(call.decl) {
+        if !self.check_macro(call.decl) || self.macros.unparsed.contains(&call.decl) {
             return None;
         }
         if let Some(b) = call.block {
@@ -779,7 +949,12 @@ impl<'a> Checker<'a> {
         }
         let (result, fragments) = self.run_macro(call, values, code.code.len() as u64)?;
         let expansion = self.macros.expansions.len() as u32;
-        self.macros.expansions.push(Expansion { call_site: call.span, name: call.shown.clone(), depth });
+        self.macros.expansions.push(Expansion {
+            call_site: call.span,
+            name: call.shown.clone(),
+            depth,
+            decl: call.decl,
+        });
         self.build_code(expansion, result, &code, &fragments, call)
     }
 
@@ -862,7 +1037,11 @@ impl<'a> Checker<'a> {
             TyKind::Unknown => None,
             _ => {
                 let loc = self.loc_at(e.span);
-                self.comptime_value(ComptimeCode::Expr(e), Some(ty), loc, e.span, true)
+                let arg = ValueArg { macro_name: call.shown.clone(), param: param.name, param_span: param.span, ty };
+                let outer = self.macros.value_arg.replace(arg);
+                let v = self.comptime_value(ComptimeCode::Expr(e), Some(ty), loc, e.span, true);
+                self.macros.value_arg = outer;
+                v
             }
         }
     }
@@ -977,9 +1156,10 @@ impl<'a> Checker<'a> {
             errors: Vec::new(),
             splices: Vec::new(),
             bad_names: HashSet::new(),
+            ivars: Vec::new(),
         };
         let stmts = ex.code(result, None);
-        let (errors, splices) = (ex.errors, ex.splices);
+        let (errors, splices, ivars) = (ex.errors, ex.splices, ex.ivars);
         self.register_virtual_files(first_file);
         let failed = !errors.is_empty();
         for diag in errors {
@@ -991,6 +1171,7 @@ impl<'a> Checker<'a> {
         for splice in splices {
             self.macros.splices.entry(splice.code.file).or_default().push(splice);
         }
+        self.macros.ivar_names.extend(ivars);
         Some(stmts)
     }
 
@@ -1248,7 +1429,238 @@ impl<'a> Checker<'a> {
         );
         true
     }
+
+    // ----- names macros keep apart ----------------------------------------------------
+
+    /// Explains a name that code doesn't find because of how macros treat
+    /// names, reporting E0201 (`undefined {what} `name``) with the reason,
+    /// and returns whether it did: code a macro generated that names a
+    /// parameter of the macro without a splice, or a variable of the code
+    /// around it, which hygiene hides; or code that names a variable a
+    /// macro's code declared, which is private to its expansion.
+    pub(super) fn explain_macro_name(&mut self, name: Name, span: Span, what: &str) -> bool {
+        if self.body.frames.is_empty() {
+            return false;
+        }
+        let mark = self.mark_at(span);
+        if let Some(expansion) = mark {
+            let e = &self.macros.expansions[expansion as usize];
+            let (decl, by) = (e.decl, e.name.clone());
+            if let Some(param) = self.macro_param(decl, name) {
+                match self.generated_macro(expansion) {
+                    // A splice in a `quote` of a macro this one generated.
+                    Some(inner) if self.macros.splicing => {
+                        self.report_outer_param(name, span, what, &by, param, inner);
+                    }
+                    _ => self.report_unspliced_param(name, span, what, &by, param),
+                }
+                return true;
+            }
+        }
+        let Some((var_span, var_mark)) = self.hidden_var(name, mark) else { return false };
+        let diag = Diagnostic::error(codes::UNDEFINED_NAME, format!("undefined {what} `{name}`"));
+        let diag = match mark {
+            // Generated code naming a variable of the code around the call.
+            Some(expansion) => {
+                let by = self.macros.expansions[expansion as usize].name.clone();
+                let owner = match var_mark.and_then(|_| self.declaring_macro(name, var_span)) {
+                    Some(other) => format!("the `{name}` that `{other}`'s code declares"),
+                    None => format!("the caller's `{name}`"),
+                };
+                let line = self.line_with(span, "#{name}").unwrap_or_else(|| "#{name}".to_string());
+                diag.primary(span, format!("`{by}`'s code can't see {owner}"))
+                    .secondary(var_span, format!("{owner} is declared here"))
+                    .note(HYGIENE)
+                    .help(format!(
+                        "to use the caller's variable, pass its name: take a parameter like `name: Symbol`, write `{line}` in the `quote`, and pass `:{name}` to `{by}`"
+                    ))
+            }
+            // Code naming a variable a macro's code declared.
+            None => {
+                let by = self.declaring_macro(name, var_span).unwrap_or_else(|| "the macro".to_string());
+                let line = self.line_with(var_span, "#{name}").unwrap_or_else(|| "#{name} = …".to_string());
+                // The use was meant: the variable isn't also unused.
+                if let Some(var) = self.find_marked_var_at(name, var_span) {
+                    var.read = true;
+                }
+                let call = var_mark.map(|m| self.macros.expansions[m as usize].call_site);
+                let diag = diag.primary(span, "not found in this scope");
+                let diag = match call {
+                    Some(call) if call.file == span.file => diag.secondary(call, format!("`{by}` expands here")),
+                    _ => diag,
+                };
+                diag.secondary(var_span, format!("`{by}`'s code declares its own `{name}` here, private to its expansion"))
+                    .note(HYGIENE)
+                    .help(format!(
+                        "to declare a variable for the caller, take its name as a parameter like `name: Symbol`, write `{line}` in `{by}`'s `quote`, and pass `:{name}` to `{by}`"
+                    ))
+            }
+        };
+        self.report(diag);
+        true
+    }
+
+    /// Reports `x.name(…)` where `name` is no member of `x`'s type `ty` but
+    /// a macro visible here (E0204), with a note that it is a macro and the
+    /// fix that calls it with `x` as its first argument. Returns whether
+    /// it did.
+    pub(super) fn macro_as_method(
+        &mut self,
+        ty: TyId,
+        name: Ident,
+        recv: Span,
+        args: Option<&[ast::Arg]>,
+        block: bool,
+        span: Span,
+    ) -> bool {
+        let loc = self.loc_at(name.span);
+        let Some(decl) = self.lookup_pkg(loc.pkg, name.name).or_else(|| self.lookup_prelude(name.name)) else {
+            return false;
+        };
+        if !self.is_macro(decl) || self.members_incomplete(ty) {
+            return false;
+        }
+        let (name, name_span) = (name.name, name.span);
+        let shown = self.types.display(ty);
+        let mut parts = vec![self.source_text(recv)];
+        for a in args.unwrap_or_default() {
+            let value = self.source_text(a.value.span);
+            parts.push(match (a.name, a.splat) {
+                (Some(n), _) => format!("{}: {value}", n.name),
+                (None, true) => format!("*{value}"),
+                (None, false) => value,
+            });
+        }
+        let call = format!("{name}({})", parts.join(", "));
+        let at = self.decls[decl.0 as usize].span;
+        let diag = Diagnostic::error(codes::NO_SUCH_MEMBER, format!("`{shown}` has no field or method `{name}`"))
+            .primary(name_span, format!("not found on `{shown}`"))
+            .secondary(at, format!("`{name}` is a macro, defined here"))
+            .note("a macro is called with its arguments, like a method without a receiver; `x.name` looks for a field or method of `x`'s type");
+        let diag = if block || call.contains('\n') || call.chars().count() > 60 {
+            diag.help(format!("call the macro with the value as an argument, like `{name}(x)`"))
+        } else {
+            diag.suggest_replace(
+                format!("call the macro with the value as an argument: `{call}`"),
+                span,
+                call,
+                Applicability::MaybeIncorrect,
+            )
+        };
+        self.report(diag);
+        true
+    }
+
+    /// For a variable that `comptime` code can't use, while a macro's
+    /// argument for a parameter of another type than `Code`, `Symbol` or
+    /// `Type` runs like `comptime` ([`MacroState::value_arg`]): E0327 in
+    /// the macro's terms.
+    pub(super) fn macro_value_capture(&self, name: Name, span: Span) -> Option<Diagnostic> {
+        let arg = self.macros.value_arg.as_ref()?;
+        let ty = self.types.display(arg.ty);
+        let (by, param) = (&arg.macro_name, arg.param);
+        Some(
+            Diagnostic::error(
+                codes::COMPTIME_ONLY,
+                format!("the macro `{by}` runs while compiling, so its `{ty}` parameter `{param}` needs a constant"),
+            )
+            .primary(span, format!("`{name}` is a variable, which only has a value when the program runs"))
+            .secondary(arg.param_span, format!("`{by}` receives `{param}`'s value while compiling"))
+            .note(
+                "a macro's argument for a parameter that isn't `Code`, `Symbol` or `Type` is computed while compiling, like `comptime` code: it can use constants and literals, but not variables",
+            )
+            .help(format!(
+                "to receive the expression itself, make the parameter `{param}: Code` and splice it with `#{{{param}}}`; the code then runs where `{by}` is called"
+            )),
+        )
+    }
+
+    /// The parameter of a macro named `name`, if it has one: its span.
+    fn macro_param(&self, decl: DeclId, name: Name) -> Option<Span> {
+        let DeclKind::Fn(f) = self.decls[decl.0 as usize].kind else { return None };
+        f.is_macro.then_some(())?;
+        f.params.iter().find(|p| p.name.name == name).map(|p| p.name.span)
+    }
+
+    /// The macro whose body is being lowered, if expansion `expansion`
+    /// generated it (a `macro def` in a `quote`): its name.
+    fn generated_macro(&self, expansion: u32) -> Option<Name> {
+        let decl = self.body.frames.last()?.decl?;
+        let d = &self.decls[decl.0 as usize];
+        let generated = self.virtual_file(d.span.file).is_some_and(|v| v.expansion == expansion);
+        (generated && self.is_macro(decl)).then_some(d.name)
+    }
+
+    /// Reports a splice in a `quote` of a macro that another macro
+    /// generated, naming a parameter of the outer macro (E0201): a splice
+    /// belongs to the innermost `quote`, which runs with the inner macro.
+    fn report_outer_param(&mut self, name: Name, span: Span, what: &str, by: &str, param: Span, inner: Name) {
+        let upper = format!("{}_VALUE", name.as_str().to_uppercase());
+        self.report(
+            Diagnostic::error(codes::UNDEFINED_NAME, format!("undefined {what} `{name}`"))
+                .primary(span, format!("splices in `{inner}`'s `quote` read `{inner}`'s names"))
+                .secondary(param, format!("`{name}` is a parameter of `{by}`"))
+                .note(format!(
+                    "a splice belongs to the innermost `quote` around it: this one runs when `{inner}` runs, after `{by}` has finished, so `{by}`'s parameters are gone"
+                ))
+                .help(format!(
+                    "generate a constant in `{by}`'s `quote`, like `{upper} = #{{{name}}}`, and use `{upper}` in `{inner}`; or splice the value into `{inner}`'s own code, outside its `quote` (`v = #{{{name}}}`), and splice `#{{v}}` there"
+                )),
+        );
+    }
+
+    /// Reports code that a macro's `quote` generated naming one of the
+    /// macro's parameters, which only a splice reads (E0201), with the fix
+    /// that splices it.
+    fn report_unspliced_param(&mut self, name: Name, span: Span, what: &str, by: &str, param: Span) {
+        self.report(
+            Diagnostic::error(codes::UNDEFINED_NAME, format!("undefined {what} `{name}`"))
+                .primary(span, format!("not found in the code `{by}` generates"))
+                .secondary(param, format!("`{name}` is a parameter of the macro `{by}`"))
+                .note("a macro's parameters hold its arguments while it runs; the code its `quote` builds runs where the macro is called, and reads a parameter only through a splice, `#{…}`")
+                .suggest_replace(
+                    format!("splice the parameter: `#{{{name}}}`"),
+                    span,
+                    format!("#{{{name}}}"),
+                    Applicability::MachineApplicable,
+                ),
+        );
+    }
+
+    /// A variable named `name` that code marked `mark` can't see because
+    /// another expansion's code, or the code around one, declared it: its
+    /// span and mark (see `Var::mark`), innermost first.
+    fn hidden_var(&self, name: Name, mark: Option<u32>) -> Option<(Span, Option<u32>)> {
+        let frame = self.body.frames.last()?;
+        frame
+            .scopes
+            .iter()
+            .rev()
+            .find_map(|s| s.vars.iter().rev().find(|v| v.name == name && v.mark != mark))
+            .map(|v| (v.span, v.mark))
+    }
+
+    /// The variable named `name` declared at `span`.
+    fn find_marked_var_at(&mut self, name: Name, span: Span) -> Option<&mut super::body::Var> {
+        let frame = self.body.frames.last_mut()?;
+        frame.scopes.iter_mut().rev().find_map(|s| s.vars.iter_mut().rev().find(|v| v.name == name && v.span == span))
+    }
+
+    /// The line of code around `span`, with the text at `span` replaced,
+    /// for a help that shows the line rewritten; `None` for a long one.
+    fn line_with(&self, span: Span, replacement: &str) -> Option<String> {
+        let text = self.source_texts.get(&span.file)?;
+        let (start, end) = (span.start as usize, span.end as usize);
+        let first = text.get(..start)?.rfind('\n').map_or(0, |i| i + 1);
+        let last = text.get(end..)?.find('\n').map_or(text.len(), |i| end + i);
+        let line = format!("{}{replacement}{}", text.get(first..start)?, text.get(end..last)?);
+        let line = line.trim();
+        (line.chars().count() <= 48).then(|| line.to_string())
+    }
 }
+
+/// What macro hygiene is, for notes.
+const HYGIENE: &str = "a macro's code keeps the variables it declares apart from the code around the call, and can't see that code's variables either (hygiene); names spliced in from the call belong to the caller";
 
 /// Code that runs apart from the statement around it, not once with it:
 /// maybe not at all, never, or on each test of a loop. The statements a
@@ -1392,6 +1804,8 @@ struct Expander<'x> {
     /// Names from `Symbol`s reported as not fitting where they were
     /// spliced, so each is reported once.
     bad_names: HashSet<Name>,
+    /// Each `@#{name}` spliced so far: its span and the name's.
+    ivars: Vec<(Span, Span)>,
 }
 
 impl Expander<'_> {
@@ -2191,6 +2605,22 @@ fn enum_member_line(stmt: &ast::Stmt) -> Option<ast::EnumMember> {
     }
 }
 
+/// Finds the first `quote` in a method's body.
+#[derive(Default)]
+struct FindQuote(Option<Span>);
+
+impl wid_syntax::visit::Visit for FindQuote {
+    fn visit_expr(&mut self, e: &ast::Expr) {
+        if self.0.is_some() {
+            return;
+        }
+        match &e.kind {
+            E::Quote(_) => self.0 = Some(e.span),
+            _ => wid_syntax::visit::shared::walk_expr(self, e),
+        }
+    }
+}
+
 /// Finds the first `Self` in a macro's own code: outside its `quote`
 /// bodies, but inside their splices.
 #[derive(Default)]
@@ -2376,7 +2806,14 @@ impl VisitMut for Splicer<'_, '_> {
                 }
                 let place = if matches!(e.kind, E::IVar(_)) { NamePlace::Field } else { NamePlace::Expr };
                 match (self.name_for(i, span, place), &e.kind) {
-                    (Some(name), E::IVar(_)) => e.kind = E::IVar(name),
+                    // `@#{name}` keeps the splice's span, the whole `@…`;
+                    // the name's own span, where the call gave it, is found
+                    // from there (`MacroState::ivar_names`).
+                    (Some(name), E::IVar(_)) => {
+                        let at = self.name_span(name, span);
+                        self.ex.ivars.push((span, at));
+                        e.kind = E::IVar(name);
+                    }
                     (Some(name), _) => *e = name_expr(name, self.name_span(name, span)),
                     (None, _) => e.kind = E::Error,
                 }

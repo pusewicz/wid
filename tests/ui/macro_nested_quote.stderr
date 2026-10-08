@@ -1,0 +1,18 @@
+error[E0201]: undefined name `n`
+  --> tests/ui/macro_nested_quote.wid:7:11
+   |
+ 7 |         #{n} + 1
+   |           ^ splices in `inner`'s `quote` read `inner`'s names
+  ::: tests/ui/macro_nested_quote.wid:3:17
+   |
+ 3 | macro def outer(n: Int) -> Code
+   |                 - `n` is a parameter of `outer`
+  ::: tests/ui/macro_nested_quote.wid:13:1
+   |
+13 | outer(3)
+   | -------- `outer` expands here
+   = note: a splice belongs to the innermost `quote` around it: this one runs when `inner` runs, after `outer` has finished, so `outer`'s parameters are gone
+help: generate a constant in `outer`'s `quote`, like `N_VALUE = #{n}`, and use `N_VALUE` in `inner`; or splice the value into `inner`'s own code, outside its `quote` (`v = #{n}`), and splice `#{v}` there
+   = see `wid explain E0201`
+
+error: could not compile due to 1 error

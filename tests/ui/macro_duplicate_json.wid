@@ -1,0 +1,14 @@
+# The JSON output of a constant that two calls of a macro declare lists
+# both calls as labels.
+macro def limits -> Code
+  quote do
+    LIMIT = 1
+  end
+end
+
+limits()
+limits()
+
+def main
+  p LIMIT
+end

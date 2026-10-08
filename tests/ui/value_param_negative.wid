@@ -1,0 +1,14 @@
+# A negative argument for a value parameter that sizes an array is
+# reported at the argument, naming the field; the instance is poisoned, so
+# the variable holding it isn't also unused. A reported argument of the
+# wrong type poisons it too.
+struct Grid($N: Int)
+  cells: [N]U8
+end
+
+def main
+  g = Grid(-1).new
+  h = Grid(1.5).new
+  k: Grid(-3) = {}
+  p 1
+end

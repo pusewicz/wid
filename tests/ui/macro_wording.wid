@@ -1,0 +1,36 @@
+# Errors about macros are worded for macros: a value parameter given a
+# variable, a spliced type used as a value, and a macro called like a
+# method.
+
+macro def rep(n: Int) -> Code
+  quote do
+    #{n} * 2
+  end
+end
+
+macro def show(t: Type) -> Code
+  quote do
+    p #{t}
+  end
+end
+
+macro def twice(e: Code) -> Code
+  quote do
+    #{e} * 2
+  end
+end
+
+macro def scale(e: Code, by: Int) -> Code
+  quote do
+    #{e} * #{by}
+  end
+end
+
+def main
+  k = 3
+  p rep(k)
+  show(Int)
+  p 3.twice
+  x = 4
+  p x.scale(2)
+end

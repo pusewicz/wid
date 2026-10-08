@@ -1,0 +1,51 @@
+error[E0201]: undefined name `hidden`
+  --> tests/ui/macro_hygiene_names.wid:32:5
+   |
+31 |   make()
+   |   ------ `make` expands here
+32 |   p hidden
+   |     ^^^^^^ not found in this scope
+  ::: tests/ui/macro_hygiene_names.wid:22:5
+   |
+22 |     hidden = 5
+   |     ------ `make`'s code declares its own `hidden` here, private to its expansion
+   = note: a macro's code keeps the variables it declares apart from the code around the call, and can't see that code's variables either (hygiene); names spliced in from the call belong to the caller
+help: to declare a variable for the caller, take its name as a parameter like `name: Symbol`, write `#{name} = 5` in `make`'s `quote`, and pass `:hidden` to `make`
+   = see `wid explain E0201`
+
+error[E0201]: undefined variable `count`
+  --> tests/ui/macro_hygiene_names.wid:8:5
+   |
+ 8 |     count += 1
+   |     ^^^^^ `bump`'s code can't see the caller's `count`
+  ::: tests/ui/macro_hygiene_names.wid:27:3
+   |
+27 |   count = 0
+   |   ----- the caller's `count` is declared here
+  ::: tests/ui/macro_hygiene_names.wid:28:3
+   |
+28 |   bump()
+   |   ------ `bump` expands here
+   = note: a macro's code keeps the variables it declares apart from the code around the call, and can't see that code's variables either (hygiene); names spliced in from the call belong to the caller
+help: to use the caller's variable, pass its name: take a parameter like `name: Symbol`, write `#{name} += 1` in the `quote`, and pass `:count` to `bump`
+   = see `wid explain E0201`
+
+error[E0201]: undefined name `e`
+  --> tests/ui/macro_hygiene_names.wid:15:5
+   |
+15 |     e * 2
+   |     ^ not found in the code `dbl` generates
+  ::: tests/ui/macro_hygiene_names.wid:13:15
+   |
+13 | macro def dbl(e: Code) -> Code
+   |               - `e` is a parameter of the macro `dbl`
+  ::: tests/ui/macro_hygiene_names.wid:30:5
+   |
+30 |   p dbl(3)
+   |     ------ `dbl` expands here
+   = note: a macro's parameters hold its arguments while it runs; the code its `quote` builds runs where the macro is called, and reads a parameter only through a splice, `#{…}`
+help: splice the parameter: `#{e}`
+   |     #{e} * 2
+   = see `wid explain E0201`
+
+error: could not compile due to 3 errors

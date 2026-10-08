@@ -666,12 +666,14 @@ impl<'a> Checker<'a> {
         }
         self.captured.push(name);
         if self.capture_kind == super::comptime::CaptureKind::Comptime {
-            self.report(
+            // A macro's argument says so in the macro's terms.
+            let diag = self.macro_value_capture(name, span).unwrap_or_else(|| {
                 Diagnostic::error(codes::COMPTIME_ONLY, format!("`comptime` code can't use the variable `{name}`"))
                     .primary(span, "this variable only exists when the program runs")
                     .note("`comptime` code runs while compiling, before any variable has a value")
-                    .help("use constants and literals inside `comptime`, or compute the value at run time"),
-            );
+                    .help("use constants and literals inside `comptime`, or compute the value at run time")
+            });
+            self.report(diag);
             return true;
         }
         self.report(

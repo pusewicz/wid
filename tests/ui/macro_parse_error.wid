@@ -1,0 +1,22 @@
+# A macro whose body failed to parse doesn't run: the parse error is the
+# only error, at a call in a method or among declarations, and the names
+# its code would have declared aren't reported missing.
+macro def m(t: Type) -> Code
+  quote do
+    x = #{}
+  end
+end
+
+macro def consts -> Code
+  quote do
+    LIMIT = (1 +)
+  end
+end
+
+consts()
+
+def main
+  m Int
+  p x
+  p LIMIT
+end
