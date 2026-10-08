@@ -466,7 +466,8 @@ fn compile_and_link(dir: &Path, c_path: &Path, program: &Program, out: &Path, op
 
 /// Runs one compiler command, turning a failure into a diagnostic built by
 /// `on_error` from the compiler's output. `generated` marks the step that
-/// compiles Wid's own output.
+/// compiles Wid's own output. A C compiler too old for C23 is reported as
+/// such, whichever step finds out.
 fn run_step(mut cmd: Command, program: &str, generated: bool, on_error: impl FnOnce(String) -> Diagnostic) -> Step {
     let output = cmd.output().map_err(|e| {
         let diag = Diagnostic::error(codes::C_COMPILER_FAILED, format!("cannot run the C compiler `{program}`: {e}"))
@@ -480,5 +481,43 @@ fn run_step(mut cmd: Command, program: &str, generated: bool, on_error: impl FnO
     if text.is_empty() {
         text = String::from_utf8_lossy(&output.stdout).trim_end().to_string();
     }
+    if cmd.get_args().any(|a| a == "-std=c23") && lacks_c23(&text) {
+        return Err(Box::new(StepFailure { diag: no_c23(program, text), generated: false }));
+    }
     Err(Box::new(StepFailure { diag: on_error(text), generated }))
+}
+
+/// Whether a C compiler's output says that it doesn't support C23: it
+/// rejects `-std=c23` (gcc 13, clang 17), or lacks `<stdckdint.h>` or
+/// `#embed`.
+fn lacks_c23(output: &str) -> bool {
+    let lines: Vec<&str> = output.lines().collect();
+    lines.iter().enumerate().any(|(i, line)| {
+        // Only a compiler that rejects the flag names it, in any language
+        // and with any quotes (gcc: "unrecognized command-line option
+        // '-std=c23'", clang: "invalid value 'c23' in '-std=c23'").
+        let rejects_std = line.contains("-std=c23");
+        let no_ckdint = line.contains("stdckdint.h") && (line.contains("No such file") || line.contains("not found"));
+        // clang shows the directive on the source line after the message.
+        let no_embed = line.contains("invalid preprocessing directive")
+            && lines[i..lines.len().min(i + 3)].iter().any(|l| l.contains("#embed"));
+        rejects_std || no_ckdint || no_embed
+    })
+}
+
+/// Reports a C compiler too old for the C23 that Wid generates, with the
+/// version it reports.
+fn no_c23(program: &str, output: String) -> Diagnostic {
+    let mut diag =
+        Diagnostic::error(codes::C_COMPILER_FAILED, format!("the C compiler `{program}` doesn't support C23"))
+            .note(output);
+    let version = Command::new(program).arg("--version").output().ok().filter(|o| o.status.success()).and_then(|o| {
+        let text = String::from_utf8_lossy(&o.stdout).into_owned();
+        text.lines().map(str::trim).find(|l| !l.is_empty()).map(str::to_string)
+    });
+    if let Some(version) = version {
+        diag = diag.note(format!("`{program} --version` says: {version}"));
+    }
+    diag.note("Wid compiles to C23, which needs clang 19 or newer, or gcc 15 or newer")
+        .help("install clang 19+ or gcc 15+, and choose it with `-cc:path` (like `-cc:gcc-15`) or the WID_CC variable")
 }
