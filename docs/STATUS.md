@@ -1496,10 +1496,30 @@ only on `main` and can run in parallel with the macro stack.
    `-target:os_arch` build through clang `--target` with a sysroot. Port
    `core:os`/`core:c` to Windows (LLP64) and make C type sizes
    target-driven.
-7. **SPEC conformance audit** (one agent, a report and no code). List every
-   SPEC.md claim that is unimplemented or behaves differently: CLI flags such
-   as `-vet`, `-sanitize:address`, the `-o:` levels and `-collection:`;
-   `#line` in `-debug`; the prelude list; and so on. Queue each item here.
+7. **SPEC conformance audit: done** (at e73c919). Every finding was
+   reproduced on main and filed as a GitHub issue, so the open issues are
+   now its queue. In order of value:
+   - untyped literals into optionals (#131);
+   - methods ending in an endless loop (#132);
+   - `<=>` deriving the comparisons, and the definable operator set (#134);
+   - `def self.` in an `extend` (#135);
+   - gcc-15 `-Werror` at `-o:speed` and `-o:aggressive`, and suite
+     coverage of `-o:` (#130);
+   - debug builds: `#line` and `-debug` at `-O0` (#141);
+   - three cascades, including spurious E0203 when a package fails to load
+     (#138);
+   - `?` methods return `Bool` (#136);
+   - SPEC's endless-`def` example (#137);
+   - error values (#139);
+   - library and runtime gaps (#140);
+   - CLI flags and tests (#142);
+   - diagnostics without a fix (#145);
+   - type display and wording (#146);
+   - cimport diagnostics (#147).
+
+   `-vet` (#144) has a proposed definition. `Any` and `TypeId` (#143) need
+   the user's decision. So does #121 (whether a type's own `extend` methods
+   win over promoted ones), where the code and SPEC disagree.
 8. **Known gaps** below: one small PR each, in any order.
 9. **Bug hunt after every large feature.** One agent probes with
    `scripts/probe.rb` and `scripts/errdocs_drift.rb` and logs bad
