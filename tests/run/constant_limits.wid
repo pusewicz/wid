@@ -1,0 +1,13 @@
+# Constant arithmetic is exact in 128 bits. `MIN % -1` is 0, as at run
+# time, and a value past every integer type is fine as a float.
+MIN = -170141183460469231731687303715884105727 - 1
+REM = MIN % -1
+BIG: F64 = 2 ** 200
+NEG: F64 = -(-170141183460469231731687303715884105727 - 1)
+
+def main
+  p REM, (-9223372036854775807 - 1) % -1
+  p BIG > 1.0e60, NEG > 1.0e38
+  x: F64 = 2 ** 200
+  p x == BIG
+end

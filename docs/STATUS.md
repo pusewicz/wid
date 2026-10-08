@@ -1198,6 +1198,17 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `c_layout` measure is gone; the interpreter compares `[0]T` arrays by
   their length, as the C does. `tests/run/zero_size_layout` prints the
   layouts next to the run-time tables.
+- Constant arithmetic past the 128 bits it folds in is E0311 (#113):
+  `-(-2^127)` panicked the compiler, `MAX + 1` and `MAX * 2` blamed an
+  operand, and `2 ** 200` fell through to the interpreter, which wrapped it
+  to 0. `Checker::fold_const_for` reports `-`, `+`, `-`, `*`, `/` by -1 and
+  `**` once where they happen ("`2 ** 200` is 2^200, which doesn't fit in
+  any integer type", `Checker::int_overflow`) and folds them to 0; for a
+  float target the value isn't folded, so the interpreter computes it in
+  floating point. `MIN % -1` folds to 0, as at run time. An enum member at
+  the 128-bit limit no longer panics the next one, and a member without a
+  value after one that doesn't fit isn't reported again. The interpreter
+  holds at most 64-bit values in `i128`, so its arithmetic can't overflow.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),

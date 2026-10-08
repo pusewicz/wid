@@ -1,0 +1,26 @@
+# Constant arithmetic is exact in 128 bits. An operation whose value goes
+# past them is E0311, once, at the operation: no integer type holds it.
+MIN = -170141183460469231731687303715884105727 - 1
+MAX = 170141183460469231731687303715884105727
+
+NEG = -(-170141183460469231731687303715884105727 - 1)
+ADD = MAX + 1
+SUB = MIN - 1
+MUL = MAX * 2
+DIV = MIN / -1
+POW = 2 ** 200
+NEG_POW = (-3) ** 81
+SHIFTED: U8 = (MAX + 1) << 2
+
+# The member after one that doesn't fit isn't reported again.
+enum Big
+  top = 170141183460469231731687303715884105727
+  after
+end
+
+def main
+  p NEG, ADD, SUB, MUL, DIV, POW, NEG_POW, SHIFTED
+  p 2 ** 127
+  x: I8 = 170141183460469231731687303715884105727 * 3
+  p x, Big.after
+end

@@ -897,7 +897,11 @@ impl<'a> Checker<'a> {
             E::Unary { op, expr: inner } => {
                 let v = self.fold_const_for(inner, loc, subst, target)?;
                 match (op, v) {
-                    (ast::UnOp::Neg, ConstValue::Int(i)) => ConstValue::Int(-i),
+                    // `-(-2^127)` is past the 128 bits constants fold in.
+                    (ast::UnOp::Neg, ConstValue::Int(i)) => match i.checked_neg() {
+                        Some(n) => ConstValue::Int(n),
+                        None => return self.int_overflow(expr.span, Past::Exactly(power_of_two(1, 127)), target),
+                    },
                     (ast::UnOp::Neg, ConstValue::Float(f)) => ConstValue::Float(-f),
                     (ast::UnOp::Not, ConstValue::Bool(b)) => ConstValue::Bool(!b),
                     (ast::UnOp::BitNot, ConstValue::Int(i)) => ConstValue::Int(!i),
@@ -917,6 +921,11 @@ impl<'a> Checker<'a> {
                 {
                     self.report_shift_overflow(expr.span, *a, *b, target);
                     return Some(ConstValue::Int(0));
+                }
+                if let (ConstValue::Int(a), ConstValue::Int(b)) = (&l, &r)
+                    && let Some(past) = past_128_bits(*op, *a, *b)
+                {
+                    return self.int_overflow(expr.span, past, target);
                 }
                 fold_binary(*op, l, r)?
             }
@@ -987,6 +996,35 @@ impl<'a> Checker<'a> {
         }
         self.report(diag);
         true
+    }
+
+    /// Reports a constant integer operation at `span` whose exact value is
+    /// past the 128 bits constants are folded in, like `2 ** 200` (E0311),
+    /// and folds it to 0 so nothing reports it again. No integer type
+    /// holds such a value, so the error doesn't depend on `target`; for a
+    /// float `target` it isn't folded, and the interpreter computes it in
+    /// floating point.
+    fn int_overflow(&mut self, span: Span, past: Past, target: Option<TyId>) -> Option<ConstValue> {
+        if target.is_some_and(|t| self.types.is_float(t)) {
+            return None;
+        }
+        let shown = match past {
+            Past::Exactly(v) => v,
+            Past::Above => "at least 2^127".to_string(),
+            Past::Below => "less than -2^127".to_string(),
+        };
+        let (lo, _) = crate::types::IntTy::I64.range();
+        let (_, hi) = crate::types::IntTy::U64.range();
+        let text = self.source_text(span);
+        self.report(
+            Diagnostic::error(
+                codes::CONSTANT_OVERFLOW,
+                format!("`{text}` is {shown}, which doesn't fit in any integer type"),
+            )
+            .primary(span, format!("integer types hold values from {lo} to {hi}"))
+            .help("use a value in range; a float type, like `F64`, holds larger values"),
+        );
+        Some(ConstValue::Int(0))
     }
 
     /// Gives an untyped constant its default type.
@@ -1078,6 +1116,8 @@ fn fold_binary(op: ast::BinOp, l: ConstValue, r: ConstValue) -> Option<ConstValu
             B::Sub => Int(a.checked_sub(b)?),
             B::Mul => Int(a.checked_mul(b)?),
             B::Div => Int(a.checked_div(b)?),
+            // `-2^127 % -1` is 0, as at run time.
+            B::Rem if b == -1 => Int(0),
             B::Rem => Int(a.checked_rem(b)?),
             B::Pow => Int(a.checked_pow(u32::try_from(b).ok()?)?),
             B::BitAnd => Int(a & b),
@@ -1125,6 +1165,46 @@ fn shift_value(a: i128, b: i128) -> Option<Option<i128>> {
         _ if b < 128 && a.wrapping_shl(b) >> b == a => Some(a << b),
         _ => None,
     })
+}
+
+/// Where the exact value of a constant integer operation lies when it is
+/// past the 128 bits constants are folded in.
+enum Past {
+    /// A value known exactly, like `2^200`.
+    Exactly(String),
+    /// At least 2^127.
+    Above,
+    /// Less than -2^127.
+    Below,
+}
+
+/// Where the value of a constant `a op b` lies when it is past the 128 bits
+/// constants are folded in, like `2 ** 200`; `None` when it isn't. A
+/// shift is checked by [`shift_value`].
+fn past_128_bits(op: ast::BinOp, a: i128, b: i128) -> Option<Past> {
+    use ast::BinOp as B;
+    let negative = match op {
+        B::Add if a.checked_add(b).is_none() => a < 0,
+        B::Sub if a.checked_sub(b).is_none() => a < 0,
+        B::Mul if a.checked_mul(b).is_none() => (a < 0) != (b < 0),
+        // `-2^127 / -1`
+        B::Div if a == i128::MIN && b == -1 => return Some(Past::Exactly(power_of_two(1, 127))),
+        B::Pow
+            if b >= 0 && a.unsigned_abs() >= 2 && u32::try_from(b).ok().is_none_or(|e| a.checked_pow(e).is_none()) =>
+        {
+            let negative = a < 0 && b % 2 == 1;
+            // `2 ** 200` is 2^200, and `(-4) ** 101` is -2^202.
+            if a.unsigned_abs().is_power_of_two()
+                && let Some(exp) = b.checked_mul(i128::from(a.unsigned_abs().trailing_zeros()))
+            {
+                let sign = if negative { "-" } else { "" };
+                return Some(Past::Exactly(format!("{sign}2^{exp}")));
+            }
+            negative
+        }
+        _ => return None,
+    };
+    Some(if negative { Past::Below } else { Past::Above })
 }
 
 /// `a << b` as a power of two, like `2^200`, `-2^64` or `3 * 2^130`.

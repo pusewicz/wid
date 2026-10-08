@@ -274,6 +274,9 @@ impl<'a> Checker<'a> {
         let (lo, hi) = backing.range();
         let mut members: Vec<(Name, i128)> = Vec::new();
         let mut next = 0i128;
+        // Whether the member before fits; one that follows it without a
+        // value isn't reported again.
+        let mut prev_fits = true;
         for m in &e.members {
             let value = match &m.value {
                 Some(v) => match self.eval_const(v, d.loc) {
@@ -288,7 +291,8 @@ impl<'a> Checker<'a> {
                 },
                 None => next,
             };
-            if value < lo || value > hi {
+            let fits = lo <= value && value <= hi;
+            if !fits && (prev_fits || m.value.is_some()) {
                 self.report(
                     Diagnostic::error(
                         codes::CONSTANT_OVERFLOW,
@@ -311,7 +315,10 @@ impl<'a> Checker<'a> {
                 self.member_names_macro(decl, m, value);
             }
             members.push((m.name.name, value));
-            next = value + 1;
+            prev_fits = fits;
+            // A value past `Int`'s range was reported, so the next one may
+            // stop at the limit of the 128 bits constants are computed in.
+            next = value.saturating_add(1);
         }
         if members.is_empty() {
             self.report(

@@ -499,8 +499,11 @@ end
   untyped (`SIZE = 4 * 64`) and exact, past every integer type in between
   (`(1 << 100) >> 90` is `1024`); a value that doesn't fit its type is
   E0311, which names a shift's value as a power of two (`1 << 200` is
-  2^200), whatever the shift amount. Struct literals, `T.size`, other constants of
-  any type, enum members, indexing other constants and the like evaluate too
+  2^200), whatever the shift amount. Folding is exact in 128 bits; an
+  operation past them (`2 ** 200`, `-(-2^127)`) is E0311 where it happens,
+  unless the value is for a float type, which computes it in floating
+  point. Struct literals, `T.size`, other constants of any type, enum
+  members, indexing other constants and the like evaluate too
   (`ORIGIN = Vec2.new(x: 0.0, y: 0.0)`, `START = ORIGIN`,
   `FACING: Dir = :north`). Calling a method needs `comptime`, so every place
   where code runs at compile time says so (E0327 suggests adding it). A
