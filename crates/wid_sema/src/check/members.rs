@@ -142,20 +142,18 @@ impl<'a> Checker<'a> {
                 {
                     return Receiver::Type(t);
                 }
-                if let Some(t) = self.body.frames.last().and_then(|f| super::generics::lookup(&f.subst, *n)) {
+                // A value parameter, like `N` in `N.times`, is a value.
+                if let Some(t) = self.body.frames.last().and_then(|f| super::generics::lookup(&f.subst, *n))
+                    && !matches!(self.types.kind(t), TyKind::ConstValue(_))
+                {
                     return Receiver::Type(t);
                 }
                 let loc = self.loc_at(recv.span);
                 if let Some(decl) = self.lookup_pkg(loc.pkg, *n).or_else(|| self.lookup_prelude(*n)) {
+                    if self.missing_generic_args(decl, n.as_str(), recv.span) {
+                        return Receiver::Type(self.types.unknown());
+                    }
                     return match self.decls[decl.0 as usize].kind {
-                        DeclKind::Struct(s) if !s.generics.is_empty() => {
-                            let names: Vec<&str> = s.generics.iter().map(|g| g.name.as_str()).collect();
-                            self.report(
-                                Diagnostic::error(codes::GENERIC_ARGS, format!("`{n}` needs type arguments"))
-                                    .primary(recv.span, format!("write it like `{n}({})`", names.join(", "))),
-                            );
-                            Receiver::Type(self.types.unknown())
-                        }
                         DeclKind::Struct(_) | DeclKind::Enum(_) | DeclKind::Union(_) => {
                             Receiver::Type(self.decl_as_type(decl, recv.span))
                         }
@@ -179,26 +177,11 @@ impl<'a> Checker<'a> {
                 let ctx = self.body_ctx();
                 Receiver::Type(self.resolve_type(t, &ctx))
             }
-            E::Call(call) if call.block.is_none() => {
-                let ast::Callee::Name(n) = &call.callee else { return Receiver::Value };
-                if !n.as_str().starts_with(char::is_uppercase) {
-                    return Receiver::Value;
-                }
-                let loc = self.loc_at(recv.span);
-                let Some(decl) = self.lookup_pkg(loc.pkg, n.name).or_else(|| self.lookup_prelude(n.name)) else {
-                    return Receiver::Value;
-                };
-                if !matches!(self.decls[decl.0 as usize].kind, DeclKind::Struct(s) if !s.generics.is_empty()) {
-                    return Receiver::Value;
-                }
-                let args: Vec<TyId> =
-                    call.args.iter().enumerate().map(|(i, a)| self.generic_arg_type(decl, i, &a.value)).collect();
-                let spans: Vec<Span> = call.args.iter().map(|a| a.value.span).collect();
-                if !self.check_generic_args(decl, &args, &spans, recv.span) {
-                    return Receiver::Type(self.types.unknown());
-                }
-                Receiver::Type(self.struct_instance(decl, args, recv.span))
-            }
+            // `Pool(Ball, 64)`, `geo.Grid(Point, 3)` or `Outcome(Int)`.
+            E::Call(call) => match self.generic_instance(call, recv.span) {
+                Some(t) => Receiver::Type(t),
+                None => Receiver::Value,
+            },
             E::Member { recv: inner, name, .. } if name.as_str().starts_with(char::is_uppercase) => {
                 if let Receiver::Package(p) = self.classify_receiver(inner)
                     && let Some(decl) = self.lookup_pkg(p, name.name)
@@ -208,12 +191,36 @@ impl<'a> Checker<'a> {
                     )
                 {
                     self.check_visible(decl, name.span);
+                    let shown = format!("{}.{}", self.source_text(inner.span), name.as_str());
+                    if self.missing_generic_args(decl, &shown, recv.span) {
+                        return Receiver::Type(self.types.unknown());
+                    }
                     return Receiver::Type(self.decl_as_type(decl, recv.span));
                 }
                 Receiver::Value
             }
             _ => Receiver::Value,
         }
+    }
+
+    /// Reports a generic struct or union named without its arguments where
+    /// a type is needed, like `Pool.new` or `geo.Grid.size`, and returns
+    /// true for one.
+    fn missing_generic_args(&mut self, decl: DeclId, shown: &str, span: Span) -> bool {
+        let generics = match self.decls[decl.0 as usize].kind {
+            DeclKind::Struct(s) => &s.generics,
+            DeclKind::Union(u) => &u.generics,
+            _ => return false,
+        };
+        if generics.is_empty() {
+            return false;
+        }
+        let names: Vec<&str> = generics.iter().map(|g| g.name.as_str()).collect();
+        self.report(
+            Diagnostic::error(codes::GENERIC_ARGS, format!("`{shown}` needs type arguments"))
+                .primary(span, format!("write it like `{shown}({})`", names.join(", "))),
+        );
+        true
     }
 
     /// Lowers `recv.name` or `recv.name(args)`.
@@ -275,10 +282,23 @@ impl<'a> Checker<'a> {
             DeclKind::Overload(_) => self.call_overloaded(decl, None, None, args, name.span, span),
             ref other => {
                 let what = other.a_describe();
-                self.report(
+                let mut diag =
                     Diagnostic::error(codes::NOT_A_VALUE, format!("`{}` is {what}, not a value", name.as_str()))
-                        .primary(name.span, "expected a method or constant"),
-                );
+                        .primary(name.span, "expected a method or constant");
+                // `geo.Grid(Int, 3)` names a type of the package.
+                if let DeclKind::Struct(s) = other
+                    && !s.generics.is_empty()
+                    && !args.is_empty()
+                {
+                    let text = self.source_text(span);
+                    diag = diag.suggest_replace(
+                        format!("`{text}` is a type: build a value of it with `new`"),
+                        span,
+                        format!("{text}.new"),
+                        Applicability::MachineApplicable,
+                    );
+                }
+                self.report(diag);
                 ir::Expr::new(ExprKind::Zero, self.types.unknown())
             }
         }
@@ -936,7 +956,7 @@ impl Checker<'_> {
             return t;
         }
         if let ast::ExprKind::Int(_) | ast::ExprKind::Unary { .. } | ast::ExprKind::Binary { .. } = e.kind
-            && let Some(super::items::ConstValue::Int(v)) = self.fold_const(e, self.loc())
+            && let Some(super::items::ConstValue::Int(v)) = self.fold_const_in(e, self.loc(), &ctx.subst)
         {
             return self.types.intern(TyKind::ConstValue(v));
         }

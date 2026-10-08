@@ -1,0 +1,12 @@
+error[E0107]: cannot assign to this expression
+ --> tests/ui/value_param_assign.wid:6:5
+  |
+6 |     N = N + 1
+  |     ^ this is a constant
+  |       - assignment here
+  = note: constants get their value once, where they are declared
+help: use a variable instead, like `n`
+  |     n = N + 1
+  = see `wid explain E0107`
+
+error: could not compile due to 1 error

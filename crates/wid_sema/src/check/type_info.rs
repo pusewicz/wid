@@ -100,7 +100,8 @@ impl<'a> Checker<'a> {
             E::Const(n) => {
                 let frame = self.frame();
                 if (n.as_str() == "Self" && frame.self_ty.is_some())
-                    || super::generics::lookup(&frame.subst, *n).is_some()
+                    || super::generics::lookup(&frame.subst, *n)
+                        .is_some_and(|t| !matches!(self.types.kind(t), TyKind::ConstValue(_)))
                 {
                     true
                 } else {
@@ -156,13 +157,16 @@ impl<'a> Checker<'a> {
     /// The instance a call like `Pool(Ball, 64)` or `geo.Pool(Ball, 64)`
     /// names, or `None` when the callee is not a generic struct or union.
     /// Wrong type arguments are reported and give the unknown type.
-    fn generic_instance(&mut self, call: &ast::Call, span: Span) -> Option<TyId> {
+    pub(super) fn generic_instance(&mut self, call: &ast::Call, span: Span) -> Option<TyId> {
         if call.block.is_some() {
             return None;
         }
         let loc = self.loc();
         let (decl, name) = match &call.callee {
-            ast::Callee::Name(n) => (self.lookup_pkg(loc.pkg, n.name).or_else(|| self.lookup_prelude(n.name))?, *n),
+            ast::Callee::Name(n) => {
+                let loc = self.loc_at(n.span);
+                (self.lookup_pkg(loc.pkg, n.name).or_else(|| self.lookup_prelude(n.name))?, *n)
+            }
             ast::Callee::Method { recv, name, safe: false } => {
                 let pkg = match recv.kind {
                     E::Ident(p) if self.find_var_at(p, recv.span).is_none() => {

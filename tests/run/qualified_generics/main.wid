@@ -1,0 +1,35 @@
+# Type-level calls on a generic struct or union of another package:
+# `geo.Box(Int).new`, `def self.` methods, `.size` and `.align`.
+import "./geo"
+
+BOX_SIZE = comptime geo.Box(I32).size
+
+def describe(o: geo.Outcome(Int)) -> String
+  case o
+  when geo.Failure then "failed with #{o.code}"
+  when Int then "ok: #{o}"
+  else "nothing"
+  end
+end
+
+def main
+  p geo.Box(Int).new.value
+  p geo.Box(Int).new(7).get
+  p geo.Box(Int).new(value: 8).value
+  puts geo.Box(String).of("hi").value
+  p geo.Box(geo.Box(Int)).new.value.value
+  p geo.Box(F64).size
+  p geo.Box(U8).align
+  p BOX_SIZE
+
+  g = geo.Grid(Int, 3).new
+  g.cells[2] = 5
+  p g.cells
+  p geo.Grid(U8, 4).size
+  p geo.Grid(geo.Box(I16), 2).new.cells.size
+
+  p geo.Outcome(Int).size == size_of(geo.Outcome(Int))
+  p geo.Outcome(Int).align
+  puts describe(4)
+  puts describe(geo.Failure.new(2))
+end

@@ -1,0 +1,9 @@
+struct Box($T)
+  value: T
+end
+
+union Either($T) = T | Bool
+
+private struct Hidden($T)
+  value: T
+end

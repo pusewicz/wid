@@ -1,0 +1,13 @@
+# A generic struct's value parameter is a constant in its methods.
+struct Pool($T, $N: Int)
+  items: [N]T
+
+  def grow
+    N = N + 1
+  end
+end
+
+def main
+  x: Pool(Int, 4) = {}
+  x.grow
+end

@@ -250,7 +250,7 @@ impl<'a> Checker<'a> {
                     return self.types.unknown();
                 }
                 let loc = self.virtual_file(len.span.file).map_or(ctx.loc, |v| v.loc);
-                match bound.or_else(|| self.eval_const(len, loc)) {
+                match bound.or_else(|| self.eval_const_in(len, loc, &ctx.subst)) {
                     Some(ConstValue::Int(n)) if n >= 0 => self.types.intern(TyKind::Array(elem, n as u64)),
                     Some(ConstValue::Int(_)) => {
                         self.report(
@@ -454,7 +454,7 @@ impl<'a> Checker<'a> {
                         },
                         ast::GenericArg::Expr(e) => match self.value_generic_arg(decl, i, e, ctx.loc, &ctx.subst) {
                             Some(ty) => ty,
-                            None => self.generic_expr_arg(e, ctx.loc),
+                            None => self.generic_expr_arg(e, ctx),
                         },
                     })
                     .collect();
@@ -552,8 +552,8 @@ impl<'a> Checker<'a> {
     /// A generic argument written as an expression for a parameter that
     /// takes a type, or of a declaration that isn't generic: its constant
     /// integer value, which the caller reports as misplaced.
-    fn generic_expr_arg(&mut self, e: &ast::Expr, loc: DeclLoc) -> TyId {
-        match self.eval_const(e, loc) {
+    fn generic_expr_arg(&mut self, e: &ast::Expr, ctx: &TyCtx) -> TyId {
+        match self.eval_const_in(e, ctx.loc, &ctx.subst) {
             Some(ConstValue::Int(v)) => self.types.intern(TyKind::ConstValue(v)),
             _ => {
                 self.report(

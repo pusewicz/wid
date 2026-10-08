@@ -1,0 +1,14 @@
+# Generic types of another package need their arguments, and private ones
+# stay private.
+import "./geo"
+
+def main
+  p geo.Hidden(Int).new.value
+  p geo.Hidden(Int).size
+  p geo.Box.new.value
+  p geo.Either.size
+  p geo.Box(Int, 3).new
+  p geo.Box(4).new
+  b = geo.Box(Int)
+  p b
+end

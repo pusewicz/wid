@@ -172,13 +172,23 @@ end
   data pointer.
 - **Generics:** a `$T` in a parameter introduces a type parameter
   (`def max(a: $T, b: T) -> T`). Generic structs are written
-  `struct Pool($T, $N: Int)` and used as `Pool(Ball, 64)`. A value
+  `struct Pool($T, $N: Int)` and used as `Pool(Ball, 64)`, or as
+  `geo.Pool(Ball, 64)` from another package. An instance is a type like any
+  other: `Pool(Ball, 64).new`, `.size` and `def self.` methods work on it,
+  while `Pool.new` without arguments is an error. A value
   parameter like `$N: Int` takes any constant integer: a literal, a named
   constant (`Pool(Ball, MAX)`), constant arithmetic (`Pool(Ball, MAX * 2)`)
   or a `comptime` result; a name there is a constant unless it names a type.
   Only generic structs take value parameters: a method's `xs: [$N]Int` is
   E0105, and the method takes a slice, `xs: []Int`, with `xs.size` as its
   length, instead.
+  - In the struct's methods and in an `extend` of it, a value parameter is
+    a constant of the instance: in `Pool(Ball, 64)`, `N` is `64` wherever
+    a constant integer fits (`def cap -> Int = N`, `buf: [N + 1]U8`,
+    `comptime N * 2`, `Pool(T, N * 2).new`, `N.times`). Like a constant
+    declared without a type (`MAX = 64`), it takes its type from where it
+    is used and is an `Int` otherwise. It can't be assigned. Methods of an
+    included module don't see the struct's generic parameters.
   - Type arguments are inferred from the arguments. A `[N]T` or `[dynamic]T`
     argument matches a `[]$T` parameter.
   - Generic code is checked once per set of type arguments, like a template:
