@@ -63,6 +63,11 @@ pub fn edit_distance(a: &str, b: &str) -> usize {
 }
 
 /// Picks the closest candidate to `name`, if any is close enough to suggest.
+///
+/// Among equally close candidates the shorter one wins, then the one that
+/// comes first in `candidates`. Callers pass candidates in an order that is
+/// the same on every run (sorted, or in the order names resolve), never in a
+/// hash map's iteration order, so the suggestion is too.
 pub fn did_you_mean<'a>(name: &str, candidates: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
     // One edit turns a one- or two-letter name into an unrelated one, so
     // short names only match when they differ in case.
@@ -96,6 +101,13 @@ mod tests {
         assert_eq!(did_you_mean("xyz", ["test", "export"]), None);
         assert_eq!(did_you_mean("d", ["p", "e"]), None);
         assert_eq!(did_you_mean("X", ["x"]), Some("x"));
+    }
+
+    #[test]
+    fn ties_go_to_the_shorter_then_the_first_candidate() {
+        assert_eq!(did_you_mean("fooe", ["food", "fooa", "foob"]), Some("food"));
+        assert_eq!(did_you_mean("fooe", ["fooa", "food", "foob"]), Some("fooa"));
+        assert_eq!(did_you_mean("fooe", ["fooes", "fooa"]), Some("fooa"));
     }
 
     #[test]

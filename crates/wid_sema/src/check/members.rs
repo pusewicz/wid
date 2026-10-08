@@ -1025,7 +1025,11 @@ impl<'a> Checker<'a> {
             && let Some(d) = decl
             && let Some(m) = self.members.get(&d)
         {
-            candidates.extend(m.keys().map(|n| n.as_str()));
+            // Fields come first, in declaration order, then the methods
+            // sorted, since ties in a suggestion go to the first.
+            let mut methods: Vec<&'static str> = m.keys().map(|n| n.as_str()).collect();
+            methods.sort_unstable();
+            candidates.extend(methods);
         }
         let what = if is_ivar { "field" } else { "field or method" };
         let shown_name = if is_ivar { format!("@{name}") } else { name.as_str().to_string() };

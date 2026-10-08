@@ -900,6 +900,10 @@ help: unwrap it and handle the nil case
   problem and at least one concrete fix. Fixes are machine-applicable where
   possible, and "did you mean" candidates are included. The compiler recovers
   and reports every error, not just the first one.
+- The same program gets the same diagnostics on every run. Among equally
+  close "did you mean" candidates the shorter one wins, then the one the name
+  would resolve to first (a variable, a method of `self`, a package name, a
+  field), then the first alphabetically.
 - `-json-errors` produces the same diagnostics with structured fix-its.
   `wid explain <code>` gives the long-form explanation with examples.
 - `wid query` answers questions about a package in JSON: `outline`,

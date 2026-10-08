@@ -1,0 +1,34 @@
+# Equally close names: the suggestion is the same on every run, the first
+# in sorted order.
+def fooa -> Int = 1
+def foob -> Int = 2
+def fooc -> Int = 3
+def food -> Int = 4
+
+LIMA = 1
+LIMB = 2
+LIMC = 3
+
+struct Boxa
+end
+struct Boxb
+end
+struct Boxc
+end
+
+struct Bag
+  def gota -> Int = 1
+  def gotb -> Int = 2
+  def gotc -> Int = 3
+
+  def mixa(x: Int) -> Int = x
+  def mixb(x: F64) -> Int = 0
+  overload :combine, :mixb, :mixc
+end
+
+def main
+  p fooe
+  p LIMD
+  b: Boxd = Boxa.new
+  p Bag.new.gotd
+end

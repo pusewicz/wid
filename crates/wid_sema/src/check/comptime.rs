@@ -1303,8 +1303,11 @@ pub(super) fn produces_value(stmt: &ast::Stmt) -> bool {
 fn similar_file(path: &std::path::Path) -> Option<String> {
     let dir = path.parent()?;
     let name = path.file_name()?.to_string_lossy().into_owned();
-    let siblings: Vec<String> =
+    let mut siblings: Vec<String> =
         std::fs::read_dir(dir).ok()?.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    // A directory lists its files in no fixed order; ties in a suggestion
+    // go to the first.
+    siblings.sort_unstable();
     wid_diagnostics::did_you_mean(&name, siblings.iter().map(String::as_str)).map(str::to_string)
 }
 

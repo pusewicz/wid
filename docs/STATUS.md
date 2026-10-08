@@ -750,6 +750,14 @@ runs the stages; `wid_cli` is the `wid` binary.
   field called by bare name (`on_hit(3)`) gets the fix `@on_hit(3)`
   instead of `@on_hit.call(3)`, and a call close to a proc field's name
   suggests `@on_hit`.
+- "Did you mean" picks the same name on every run (#64; `fooe` among
+  `fooa`…`food` suggested a different one each run). `did_you_mean` gives
+  ties to the shorter candidate, then the first, and every caller now passes
+  candidates in a fixed order: package names (`Checker::package_names`), a
+  type's methods, an overload set's scope, a file's imports and a header's
+  records sorted, as are the files and directories a missing `embed` file
+  or import path is compared with; "known collections" lists the
+  `-collection:` names sorted. `tests/ui/suggestion_ties.wid` covers ties.
 - A C compiler without C23 (one that rejects `-std=c23`, like gcc 13 or
   clang 17, or lacks `<stdckdint.h>` or `#embed`) is E0702 "the C compiler
   `cc` doesn't support C23", with the first line of its `--version`, the

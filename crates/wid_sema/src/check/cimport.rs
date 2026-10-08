@@ -100,7 +100,9 @@ impl<'a> Checker<'a> {
         let ctx = TyCtx { loc: DeclLoc { pkg: origin_pkg, file }, self_ty: None, subst: Default::default() };
         for entry in entries {
             let Some(wid_name) = binding.record_names.get(&entry.key) else {
-                let candidates: Vec<&str> = binding.record_names.keys().map(String::as_str).collect();
+                let mut candidates: Vec<&str> = binding.record_names.keys().map(String::as_str).collect();
+                // Ties in a suggestion go to the first.
+                candidates.sort_unstable();
                 let mut diag = Diagnostic::error(
                     codes::CIMPORT_OPTION,
                     format!("`{}` is not a struct or union in `{}`", entry.key, c.header),

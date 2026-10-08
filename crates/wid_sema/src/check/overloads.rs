@@ -154,13 +154,17 @@ impl Checker<'_> {
     }
 
     /// Method names declared in a type, or names in a package, for "did you
-    /// mean" hints.
+    /// mean" hints, sorted, since ties in a suggestion go to the first.
     fn scope_method_names(&self, owner: Option<DeclId>, pkg: crate::input::PackageId) -> Vec<&'static str> {
-        let names: Vec<Name> = match owner {
-            Some(o) => self.members.get(&o).map(|m| m.keys().copied().collect()).unwrap_or_default(),
-            None => self.pkg_scopes[pkg.0 as usize].keys().copied().collect(),
-        };
-        names.into_iter().map(|n| n.as_str()).collect()
+        match owner {
+            Some(o) => {
+                let mut names: Vec<&'static str> =
+                    self.members.get(&o).map(|m| m.keys().map(|n| n.as_str()).collect()).unwrap_or_default();
+                names.sort_unstable();
+                names
+            }
+            None => self.package_names(pkg),
+        }
     }
 
     /// The bindings a member of an overload set is instantiated with: the
