@@ -1,0 +1,16 @@
+# Ruby's `::` is one error with the fix that writes `.`, and the line goes
+# on as if `.` were written: the constant, the method and its arguments are
+# checked as `Pool.CAP` and `Pool.make(2)` would be.
+struct Pool
+  CAP = 4
+  n: Int
+
+  def self.make(n: Int) -> Pool = Pool.new(n: n)
+end
+
+def main
+  a = 1
+  p a, Pool::CAP
+  pool = Pool::make(Pool::CAP - a)
+  p pool.n + Pool::CAP
+end

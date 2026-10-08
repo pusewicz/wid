@@ -1,0 +1,41 @@
+error[E0105]: Wid writes `.` where Ruby writes `::`
+  --> tests/ui/ruby_scope_operator.wid:13:12
+   |
+13 |   p a, Pool::CAP
+   |            ^^ Ruby's scope operator
+   = note: a type's constants and methods, and a package's members, are reached with `.`, as in `Pool.CAP`
+help: write `.`
+   |   p a, Pool.CAP
+   = see `wid explain E0105`
+
+error[E0105]: Wid writes `.` where Ruby writes `::`
+  --> tests/ui/ruby_scope_operator.wid:14:14
+   |
+14 |   pool = Pool::make(Pool::CAP - a)
+   |              ^^ Ruby's scope operator
+   = note: a type's constants and methods, and a package's members, are reached with `.`, as in `Pool.make`
+help: write `.`
+   |   pool = Pool.make(Pool::CAP - a)
+   = see `wid explain E0105`
+
+error[E0105]: Wid writes `.` where Ruby writes `::`
+  --> tests/ui/ruby_scope_operator.wid:14:25
+   |
+14 |   pool = Pool::make(Pool::CAP - a)
+   |                         ^^ Ruby's scope operator
+   = note: a type's constants and methods, and a package's members, are reached with `.`, as in `Pool.CAP`
+help: write `.`
+   |   pool = Pool::make(Pool.CAP - a)
+   = see `wid explain E0105`
+
+error[E0105]: Wid writes `.` where Ruby writes `::`
+  --> tests/ui/ruby_scope_operator.wid:15:18
+   |
+15 |   p pool.n + Pool::CAP
+   |                  ^^ Ruby's scope operator
+   = note: a type's constants and methods, and a package's members, are reached with `.`, as in `Pool.CAP`
+help: write `.`
+   |   p pool.n + Pool.CAP
+   = see `wid explain E0105`
+
+error: could not compile due to 4 errors

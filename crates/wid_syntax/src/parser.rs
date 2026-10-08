@@ -5099,15 +5099,20 @@ impl<'a> Parser<'a> {
     fn parse_postfix(&mut self, mut expr: Expr, cmd: bool) -> Expr {
         loop {
             let tok = self.peek();
+            // `Pool::CAP`: Ruby's scope operator, read as the `.` Wid writes.
+            let scope = tok.kind == T::Colon && self.scope_operator_ahead();
             match tok.kind {
-                T::Dot | T::SafeNav => {
+                T::Dot | T::SafeNav | T::Colon if tok.kind != T::Colon || scope => {
                     let safe = tok.kind == T::SafeNav;
                     self.bump();
-                    self.skip_newlines();
+                    if !scope {
+                        self.skip_newlines();
+                    }
                     let name_tok = self.peek();
-                    let glued = self.glued_name().map(|(name, _)| name);
+                    let glued = if scope { None } else { self.glued_name().map(|(name, _)| name) };
                     let name = match (glued, name_tok.kind) {
                         (Some(name), _) => name,
+                        (None, T::Symbol) => self.scope_operator(expr.span, tok, name_tok),
                         (None, T::Ident | T::Const) => {
                             self.bump();
                             Ident { name: Name::new(self.text_of(name_tok.span)), span: name_tok.span }
@@ -5201,6 +5206,40 @@ impl<'a> Parser<'a> {
             }
         }
         expr
+    }
+
+    /// Whether a `::` written right after an expression, and followed
+    /// directly by a name, starts here (`Pool::CAP`, `Foo::bar(1)`): Ruby's
+    /// scope operator. The lexer reads it as a `:` and the symbol `:CAP`.
+    fn scope_operator_ahead(&self) -> bool {
+        let (colon, sym) = (self.peek(), self.nth(1));
+        if colon.space_before || sym.kind != T::Symbol || sym.span.start != colon.span.end {
+            return false;
+        }
+        let name = &self.text_of(sym.span)[1..];
+        let base = name.strip_suffix(['?', '!']).unwrap_or(name);
+        base.starts_with(|c: char| c.is_alphabetic() || c == '_')
+            && base.chars().all(|c| c.is_alphanumeric() || c == '_')
+    }
+
+    /// Reports Ruby's `::` after the expression at `recv` (the `:` at
+    /// `colon`, just consumed, and the symbol `sym` after it) with the fix
+    /// that writes Wid's `.`, and consumes the symbol: the name after `::`,
+    /// read as a member.
+    fn scope_operator(&mut self, recv: Span, colon: Token, sym: Token) -> Ident {
+        self.bump();
+        let ops = Span { end: sym.span.start + 1, ..colon.span };
+        let name = Ident { name: Name::new(&self.text_of(sym.span)[1..]), span: Span { start: ops.end, ..sym.span } };
+        let written = format!("{}.{}", self.text_of(recv), name.name);
+        self.report(
+            Diagnostic::error(codes::UNEXPECTED_TOKEN, "Wid writes `.` where Ruby writes `::`")
+                .primary(ops, "Ruby's scope operator")
+                .note(format!(
+                    "a type's constants and methods, and a package's members, are reached with `.`, as in `{written}`"
+                ))
+                .suggest_replace("write `.`", ops, ".", Applicability::MachineApplicable),
+        );
+        name
     }
 
     fn parse_cond(&mut self) -> Cond {
@@ -6401,6 +6440,7 @@ end
                 "def f(v: Int?) -> Int\n  guard x = v else |e| return 0 end\n  x\nend\n",
                 "def f(v: Int?) -> Int\n  guard x = v else |e|\n    return 0\n  end\n  x\nend\n",
             ),
+            ("X = Pool::CAP + 1\n", "X = Pool.CAP + 1\n"),
         ] {
             let src = format!("{src}def main\nend\n");
             let (messages, out) = fix_all(&src);
@@ -6419,6 +6459,27 @@ end
             let given: Vec<_> = call.args.iter().map(|a| a.name.map(|n| n.as_str())).collect();
             assert_eq!(given, names.map(Some));
         }
+    }
+
+    #[test]
+    fn ruby_scope_operator_reads_as_a_dot() {
+        // Each `::` is one error whose fix writes `.`, and the rest of the
+        // line parses as it would with the `.`.
+        let src = "def main\n  x = geo::Grid::make 2\n  p x\nend\n";
+        let (messages, out) = fix_all(src);
+        assert_eq!(messages, ["Wid writes `.` where Ruby writes `::`"; 2]);
+        assert_eq!(out, "def main\n  x = geo.Grid.make 2\n  p x\nend\n");
+        let (file, _) = parse_file(FileId(0), src);
+        let ItemKind::Def(def) = &file.items[0].kind else { panic!("a def") };
+        let FnBody::Block(body) = &def.body else { panic!("a block body") };
+        let StmtKind::Assign { values, .. } = &body[0].kind else { panic!("an assignment") };
+        let ExprKind::Call(call) = &values[0].kind else { panic!("a call") };
+        let Callee::Method { recv, name, .. } = &call.callee else { panic!("a method call") };
+        assert_eq!((name.as_str(), call.args.len()), ("make", 1));
+        assert!(matches!(&recv.kind, ExprKind::Member { name, .. } if name.as_str() == "Grid"));
+        // A conditional's `:` before a symbol, and a symbol argument, are
+        // not `::`.
+        parse_ok("def main\n  x = n ? A : :b\n  f :a, x\nend\n");
     }
 
     #[test]

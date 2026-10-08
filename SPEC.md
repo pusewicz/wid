@@ -119,6 +119,10 @@ end
   - `for x in xs`, `for &x in xs` and `for x, i in xs` iterate.
   - `^` only builds pointer types (`^T`) and dereferences (`p^`). Bitwise xor
     is `~`, as in Odin.
+  - `.` reaches a type's constants and methods and a package's members:
+    `Pool.CAP`, `Vec2.zero`, `geo.Vec2`. Ruby's `::` is not Wid syntax;
+    `Pool::CAP` is E0105, read as `Pool.CAP`, with the fix that writes
+    `.`.
   - `&x` takes an address.
   - `{…}` literals must be empty.
   - Enum members are lowercase. Inside an `enum`, `struct`, `enum` or

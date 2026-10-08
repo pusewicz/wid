@@ -1349,6 +1349,13 @@ the language server.
 - A variable declared at package level (`buf: [4]U8 = ---`) is one E0108
   (#123): `collect_item` records its name in `Checker::package_vars`, and
   `undefined_explained` keeps its uses from being E0201 at each one.
+- Ruby's `::` (`Pool::CAP`, `Pool::make(2)`) is one E0105 "Wid writes `.`
+  where Ruby writes `::`" with the machine-applicable fix `.` (#123); it
+  was a parse error at the `:` and E0323 for the bare `Pool`. The lexer
+  reads `::CAP` as a `:` and the symbol `:CAP`; `parse_postfix` takes a
+  `:` written right after an expression and followed directly by such a
+  symbol (`Parser::scope_operator_ahead`) as the `.` it means, so the rest
+  of the line parses and checks as `Pool.CAP` would.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
