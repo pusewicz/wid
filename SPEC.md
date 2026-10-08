@@ -551,7 +551,13 @@ end
   fixed-chunk `Pool` and a `Tracker`, plus `copy`, `set`, `zero` and
   `compare`. In `-debug` builds the heap is wrapped in a tracking allocator
   that reports leaks with their allocation sites when `main` returns, and a
-  double free (or a free with the wrong allocator) panics with both sites.
+  double free or a free with the wrong allocator panics with both sites:
+  where the memory was allocated and where it is freed. For the wrong
+  allocator, the allocation site is the one a tracking allocator knows: the
+  memory's own, when another tracker handed it out, or, for memory an
+  allocator like an arena hands out in pieces of a block, where it took
+  that block from a tracker. A tracker remembers its 32 latest frees, and
+  a pointer no tracker knows panics with the free's site alone.
 - Functions in `core` that build new strings or slices (`s.split`,
   `s.upcase`, `fmt.int`, …) take `allocator:`, which defaults to
   `context.temp_allocator` like interpolation does; pass another allocator to

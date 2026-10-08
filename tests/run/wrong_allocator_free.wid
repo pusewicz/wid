@@ -1,0 +1,16 @@
+# A free with the wrong allocator panics in `-debug` builds with both sites
+# (SPEC "Memory"): the memory came from an arena, whose block the tracking
+# heap handed out where the arena's first allocation was made.
+import "core:mem"
+
+struct Ball
+  x: Int
+end
+
+def main
+  arena = mem.Arena.create
+  defer arena.destroy
+  b = alloc(Ball, allocator: arena.allocator)
+  puts "allocated"
+  free(b)
+end

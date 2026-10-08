@@ -1,0 +1,16 @@
+# A free with the wrong allocator panics in `-debug` builds with both sites
+# (SPEC "Memory"): the memory came from another tracking allocator, which
+# knows where it was allocated.
+import "core:mem"
+
+struct Ball
+  x: Int
+end
+
+def main
+  tracker = mem.Tracker.create(backing: mem.heap_allocator)
+  defer tracker.destroy
+  b = alloc(Ball, allocator: tracker.allocator)
+  puts "allocated"
+  free(b)
+end

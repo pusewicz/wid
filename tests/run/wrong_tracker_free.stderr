@@ -1,0 +1,3 @@
+panic: free with the wrong allocator: another allocator handed out this memory
+  8 bytes allocated at tests/run/wrong_tracker_free.wid:13:7
+  at tests/run/wrong_tracker_free.wid:15:3 in `main`

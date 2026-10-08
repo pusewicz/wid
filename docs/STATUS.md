@@ -1705,6 +1705,14 @@ the language server.
   struct with its own `==`) is E0332 where the map type is written,
   checked once types are complete (`check/map_keys.rs`), with the instance
   or call that uses a generic one.
+- A free with the wrong allocator reports both sites (#140, SPEC
+  "Memory"): the runtime keeps a list of the live trackers, and a pointer
+  a tracker didn't hand out (and didn't free lately) is looked up in the
+  others (`wid_track_foreign_`): "another allocator handed out this
+  memory", with where it was allocated, or, when the pointer lies inside a
+  block a tracker handed out, as an arena's allocations do, where that
+  block was taken (an arena takes one at its first allocation, so that is
+  the site). Only a pointer no tracker knows gets the free's site alone.
 
 ## Next
 
@@ -1850,7 +1858,6 @@ only on `main` and can run in parallel with the macro stack.
    - debug builds: `#line` and `-debug` at `-O0` (#141);
    - three cascades, including spurious E0203 when a package fails to load
      (#138);
-   - library and runtime gaps (#140);
    - CLI flags and tests (#142);
    - diagnostics without a fix (#145);
    - type display and wording (#146);

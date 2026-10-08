@@ -1261,7 +1261,9 @@ void wid_mem_set(void *dst, uint8_t byte, wid_Int n) {
 wid_Int wid_mem_compare(const void *a, const void *b, wid_Int n) { return n > 0 ? memcmp(a, b, (size_t)n) : 0; }
 
 /* A tracking allocator: an open-addressing table of live blocks keyed by
- * address, plus a ring of recently freed blocks for double-free reports. */
+ * address, plus a ring of recently freed blocks for double-free reports.
+ * The live trackers form a list, so a free with the wrong allocator can say
+ * where the memory came from. */
 typedef struct wid_TrackedBlock_ {
     void *ptr;
     wid_Int size;
@@ -1279,7 +1281,11 @@ typedef struct wid_Tracker_ {
     wid_Int freed_next;
     wid_TrackedBlock_ *snapshot;
     wid_Int snapshot_len;
+    struct wid_Tracker_ *next_live;
 } wid_Tracker_;
+
+/* The live trackers, newest first. Like the trackers, not thread-safe. */
+static wid_Tracker_ *wid_live_trackers_;
 
 static wid_Int wid_track_home_(const wid_Tracker_ *t, const void *ptr) {
     uint64_t h = (uint64_t)(uintptr_t)ptr * UINT64_C(0x9E3779B97F4A7C15);
@@ -1338,6 +1344,40 @@ static void wid_track_remove_(wid_Tracker_ *t, wid_Int i) {
     }
 }
 
+/* The live block of `t` that holds the address `ptr`, or null: memory that
+ * another allocator, like an arena, took from `t` and hands out in pieces. */
+static const wid_TrackedBlock_ *wid_track_holding_(const wid_Tracker_ *t, const void *ptr) {
+    uintptr_t at = (uintptr_t)ptr;
+    for (wid_Int i = 0; i < t->cap; i++) {
+        const wid_TrackedBlock_ *b = &t->slots[i];
+        uintptr_t start = (uintptr_t)b->ptr;
+        if (b->ptr && at > start && at < start + (uintptr_t)b->size) return b;
+    }
+    return nullptr;
+}
+
+/* Panics for a pointer `t` didn't hand out, with where it came from when a
+ * tracking allocator knows: another tracker handed it out, or it lies in a
+ * block a tracker handed out to an allocator that hands out pieces of it. */
+[[noreturn]] static void wid_track_foreign_(const wid_Tracker_ *t, const void *ptr, wid_Location loc, const char *what) {
+    for (const wid_Tracker_ *o = wid_live_trackers_; o; o = o->next_live) {
+        wid_Int j = o == t ? -1 : wid_track_find_(o, ptr);
+        if (j < 0) continue;
+        const wid_TrackedBlock_ *b = &o->slots[j];
+        wid_panicf(loc, "%s with the wrong allocator: another allocator handed out this memory\n  %lld bytes allocated at %s:%d:%d",
+                   what, (long long)b->size, b->loc.file ? b->loc.file : "?", (int)b->loc.line, (int)b->loc.column);
+    }
+    for (const wid_Tracker_ *o = wid_live_trackers_; o; o = o->next_live) {
+        const wid_TrackedBlock_ *b = wid_track_holding_(o, ptr);
+        if (!b) continue;
+        wid_panicf(loc,
+                   "%s with the wrong allocator: another allocator, like an arena, handed out this memory\n"
+                   "  it lies in %lld bytes allocated at %s:%d:%d, which that allocator hands out in pieces",
+                   what, (long long)b->size, b->loc.file ? b->loc.file : "?", (int)b->loc.line, (int)b->loc.column);
+    }
+    wid_panicf(loc, "%s of a pointer this allocator did not hand out (freed twice, or with the wrong allocator)", what);
+}
+
 /* Takes a block out of the table for a free or resize, panicking with both
  * sites when the pointer was already freed or never came from this tracker. */
 static wid_TrackedBlock_ wid_track_take_(wid_Tracker_ *t, void *ptr, wid_Location loc, const char *what) {
@@ -1355,7 +1395,7 @@ static wid_TrackedBlock_ wid_track_take_(wid_Tracker_ *t, void *ptr, wid_Locatio
                    what, (long long)f->size, f->loc.file ? f->loc.file : "?", (int)f->loc.line, (int)f->loc.column,
                    at->file ? at->file : "?", (int)at->line, (int)at->column);
     }
-    wid_panicf(loc, "%s of a pointer this allocator did not hand out (freed twice, or with the wrong allocator)", what);
+    wid_track_foreign_(t, ptr, loc, what);
 }
 
 static void wid_track_forget_(wid_Tracker_ *t, wid_TrackedBlock_ block, wid_Location loc) {
@@ -1402,12 +1442,20 @@ void *wid_tracker_new(wid_Allocator backing) {
     wid_Tracker_ *t = calloc(1, sizeof *t);
     if (!t) wid_panicf((wid_Location){}, "out of memory creating a tracking allocator");
     t->backing = backing.proc ? backing : wid_heap_allocator();
+    t->next_live = wid_live_trackers_;
+    wid_live_trackers_ = t;
     return t;
 }
 
 void wid_tracker_delete(void *tracker) {
     wid_Tracker_ *t = tracker;
     if (!t) return;
+    for (wid_Tracker_ **at = &wid_live_trackers_; *at; at = &(*at)->next_live) {
+        if (*at == t) {
+            *at = t->next_live;
+            break;
+        }
+    }
     free(t->slots);
     free(t->snapshot);
     free(t);
