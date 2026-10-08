@@ -348,6 +348,17 @@ pub(super) fn holds_parse_error(e: &ast::Expr) -> bool {
     find.0
 }
 
+/// Whether any part of a method's body failed to parse (see
+/// [`holds_parse_error`]), its `quote`s and their splices included.
+pub(super) fn body_holds_parse_error(body: &ast::FnBody) -> bool {
+    let mut find = FindParseError(false);
+    match body {
+        ast::FnBody::Block(stmts) => find.visit_stmts(stmts),
+        ast::FnBody::Expr(e) => find.visit_expr(e),
+    }
+    find.0
+}
+
 /// Sets its flag at the first node that failed to parse.
 struct FindParseError(bool);
 

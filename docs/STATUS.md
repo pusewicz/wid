@@ -951,6 +951,13 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   spliced type used as a value names the type (`` `Int` is a type ``, not
   `` `#{t}` ``); and `3.twice` with `twice` a macro is E0204 with a label
   on the macro and the fix `twice(3)` (`Checker::macro_as_method`).
+- A macro whose body failed to parse (an empty splice `#{}`, say) doesn't
+  run, so its calls report nothing more (#79; it ran and failed with
+  E0901 "a value of type `{unknown}` can't be spliced", reported before
+  the parse error). `check_macro` asks `runtime::body_holds_parse_error`
+  and notes it in `MacroState::unparsed`, which `expand_code` checks;
+  the call counts as a failed expansion, so what it would have declared
+  isn't reported missing.
 - A proc parameter whose name a macro splices (`->(#{v}: Int) -> Int {
   #{v} * 2 }`), in a method body or a generated `def`, is the caller's
   name, as a block parameter's is: the proc's body and code spliced from

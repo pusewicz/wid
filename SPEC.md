@@ -747,7 +747,8 @@ end
     macro computed (`str.to_sym`) has the call's position, and the error
     says which name it is. Panic locations and `-debug` `#line`
     directives in generated code name the `quote`'s file and line. A macro
-    that fails while it runs is E0901, at the call.
+    that fails while it runs is E0901, at the call. A macro whose code
+    failed to parse doesn't run, and its calls report nothing more.
   - **Budgets:** each macro run has the `comptime` limits. Expansions may
     nest at most 64 deep (a macro whose code calls a macro), and one build
     runs at most 65,536 expansions. Exceeding either is E0903.

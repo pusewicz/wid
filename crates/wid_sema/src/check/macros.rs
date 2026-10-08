@@ -163,6 +163,8 @@ pub(crate) struct MacroState {
     pub in_macro: bool,
     /// Macros whose declarations were checked, and whether they are valid.
     pub checked: HashMap<DeclId, bool>,
+    /// Checked macros whose bodies failed to parse; they never run.
+    pub unparsed: HashSet<DeclId>,
     /// Functions whose bodies had errors; a macro that reaches one never
     /// runs.
     pub failed: HashSet<FnId>,
@@ -463,7 +465,9 @@ impl<'a> Checker<'a> {
     }
 
     /// Checks what a `macro def` declares, once: it returns `Code` and takes
-    /// neither `$T` parameters nor a block. Returns whether it can run.
+    /// neither `$T` parameters nor a block. Returns whether that holds; a
+    /// macro whose body failed to parse is also noted (`MacroState::
+    /// unparsed`), since it can't run either, though its body is checked.
     pub(super) fn check_macro(&mut self, decl: DeclId) -> bool {
         if let Some(&ok) = self.macros.checked.get(&decl) {
             return ok;
@@ -522,6 +526,11 @@ impl<'a> Checker<'a> {
                 self.report(diag);
                 ok = false;
             }
+        }
+        // Code that failed to parse (an empty splice, say) was reported, and
+        // what the macro would build from it is unknown: it never runs.
+        if super::runtime::body_holds_parse_error(&f.body) {
+            self.macros.unparsed.insert(decl);
         }
         self.macros.checked.insert(decl, ok);
         ok
@@ -803,7 +812,7 @@ impl<'a> Checker<'a> {
             }
             return None;
         }
-        if !self.check_macro(call.decl) {
+        if !self.check_macro(call.decl) || self.macros.unparsed.contains(&call.decl) {
             return None;
         }
         if let Some(b) = call.block {
