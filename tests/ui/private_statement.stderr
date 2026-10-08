@@ -1,0 +1,21 @@
+error[E0105]: `private` applies only to declarations
+ --> tests/ui/private_statement.wid:6:5
+  |
+6 |     private hp: Int
+  |     ^^^^^^^ this line of the `quote` reads as a statement
+  = note: `private` hides a method outside its type, or a type, constant or macro outside its package; fields are always public, and a local variable is visible only in its method
+help: remove `private`
+  |     hp: Int
+  = see `wid explain E0105`
+
+error[E0105]: `private` applies only to declarations
+  --> tests/ui/private_statement.wid:18:3
+   |
+18 |   private x = 1
+   |   ^^^^^^^ this line is a statement
+   = note: `private` hides a method outside its type, or a type, constant or macro outside its package; a local variable is visible only in its method anyway
+help: remove `private`
+   |   x = 1
+   = see `wid explain E0105`
+
+error: could not compile due to 2 errors

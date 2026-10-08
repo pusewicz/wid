@@ -42,7 +42,12 @@ runs the stages; `wid_cli` is the `wid` binary.
   method's owner). Fields are always public: `private` on a field in a
   struct body (a `using` one, or one inside a `quote`'s struct, too) is
   E0105 from the parser (`Parser::private_field`), with a fix that removes
-  it; the field is kept, and the item's `private` flag cleared.
+  it; the field is kept, and the item's `private` flag cleared. The parser
+  reports `private` the same way wherever else it hides nothing: before an
+  `import`, `cimport`, `include`, `extend`, `comptime if` or a splice
+  standing alone (`nameless_item`), an enum member, or a statement
+  (`Parser::private_statement`); what follows is parsed as if it weren't
+  there.
 - Overload resolution works on lowered argument values
   (`call_with_values`), so compound assignments and `[]=` reuse it without
   re-evaluating operands. Module and generic-struct members of a set are
@@ -415,6 +420,26 @@ runs the stages; `wid_cli` is the `wid` binary.
   only `MaybeIncorrect`.
 - `private` on a struct field is E0105 (fields are always public), once per
   field, with a machine-applicable fix that removes it (#9).
+- `private` where it hides nothing is one E0105 with a machine-applicable
+  fix that removes it (#28): before an `import`, `cimport`, `include`,
+  `extend`, `comptime if` or a splice among declarations (which ignored it),
+  before an enum member (which became an undefined macro call), and before
+  a statement in a method or a `quote` (which cascaded; the line is now
+  parsed as if `private` weren't there, so `private x = 1` declares `x`).
+  Keywords in parser messages are in backticks (`found `end``).
+- An unclosed `(` in an expression (`X = (1 + 2`, `E = ([]`) is one E0105
+  at the end of its line, with a machine-applicable fix that adds the `)`,
+  when the expression is complete and the next line isn't its `)`; the
+  next line is parsed on its own, so a `def main` after it is no longer
+  lost (#33). A `(` that ends its line before a declaration or an `end`
+  (`X = (`) is one "expected an expression" there.
+- A `?` right after a type's name or its closing `)` (`t = Int?`,
+  `rl.Color?`, `Pool(Ball, 64)?`, `(proc(Int) -> Int)?`) ends the type,
+  written in place in any expression, unless a conditional's `:` follows
+  (on the line, or spaced on the next one, as in `f(FLAG?` / `1 : 2)`):
+  `t = Int?` is one E0323 with the `nil` help instead of a conditional that
+  ran past the line end (#34). `names_type` is shared with the
+  `size_of(Int ?)` check.
 - Any type written where a `Type` is expected, or in `comptime` code, is a
   `Type` value: constructors (`name_of([]Int)`, `name_of(Int?)`,
   `name_of(^Node)`, `name_of((proc(Int) -> Int)?)`), generic instances and

@@ -1,0 +1,41 @@
+error[E0105]: an `import` can't be `private`
+ --> tests/ui/private_nameless.wid:4:1
+  |
+4 | private import "core:strings"
+  | ^^^^^^^ `private` has nothing to hide here
+  = note: an import is visible only in the file that writes it, never in other packages
+help: remove `private`
+  | import "core:strings"
+  = see `wid explain E0105`
+
+error[E0105]: an `include` can't be `private`
+  --> tests/ui/private_nameless.wid:11:3
+   |
+11 |   private include Greet
+   |   ^^^^^^^ `private` has nothing to hide here
+   = note: `include` mixes a module's methods into this type; the ones the module declares with `private def` stay private
+help: remove `private`
+   |   include Greet
+   = see `wid explain E0105`
+
+error[E0105]: an `extend` can't be `private`
+  --> tests/ui/private_nameless.wid:15:1
+   |
+15 | private extend Hero
+   | ^^^^^^^ `private` has nothing to hide here
+   = note: `extend` adds methods to a type declared elsewhere; write `private def` on the ones to hide
+help: remove `private`
+   | extend Hero
+   = see `wid explain E0105`
+
+error[E0105]: a `comptime if` can't be `private`
+  --> tests/ui/private_nameless.wid:19:1
+   |
+19 | private comptime if true
+   | ^^^^^^^ `private` has nothing to hide here
+   = note: write `private` on the declarations in its branches that should be hidden
+help: remove `private`
+   | comptime if true
+   = see `wid explain E0105`
+
+error: could not compile due to 4 errors

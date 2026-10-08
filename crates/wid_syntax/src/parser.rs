@@ -488,6 +488,31 @@ impl<'a> Parser<'a> {
         );
     }
 
+    /// Reports a line that ends with the `(` at `open` (just consumed) when
+    /// the next line starts a declaration or the `end` of a block, as in
+    /// `X = (` followed by `def main`: the expression is missing. The lexer
+    /// joined the lines, because a newline after `(` continues the line;
+    /// the line end is restored, so the next line is parsed on its own.
+    fn empty_paren_line(&mut self, open: Span) -> bool {
+        let restored = self.at(T::Newline);
+        let next = self.tokens[self.pos..].iter().find(|t| t.kind != T::Newline).copied();
+        let Some(next) = next else { return false };
+        if !starts_declaration(next.kind) || self.line_of(next.span.start) == self.line_of(open.start) {
+            return false;
+        }
+        let at = open.shrink_to_end();
+        self.report(
+            Diagnostic::error(codes::UNEXPECTED_TOKEN, "expected an expression, found end of line")
+                .primary(at, "expected an expression")
+                .secondary(open, "this `(` is never closed")
+                .help("write the value after the `(`, and close it on the same line"),
+        );
+        if !restored {
+            self.tokens.insert(self.pos, Token { kind: T::Newline, span: at, space_before: false });
+        }
+        true
+    }
+
     /// Whether what follows the `(`s here can only start a type: `proc`,
     /// `block`, `distinct`, `map[`, `matrix[`, `^`, `@[`, `$T`, `[]T`,
     /// `[^]` or `[dynamic]`. Used where no local can have those names.
@@ -1132,10 +1157,7 @@ impl<'a> Parser<'a> {
         let doc = self.doc_before(start.start);
         let attrs = self.parse_attrs();
         // `private` and the space after it, for the fix on a field.
-        let private_kw = self.at_kw(K::Private).then(|| {
-            let kw = self.bump().span;
-            (kw, kw.to(self.peek().span.shrink_to_start()))
-        });
+        let private_kw = self.at_kw(K::Private).then(|| self.bump_private());
         let mut private = private_kw.is_some();
         let kind = match self.kind() {
             T::Kw(K::Import) => self.parse_import(),
@@ -1257,8 +1279,60 @@ impl<'a> Parser<'a> {
             self.private_field(kw, removal, f);
             private = false;
         }
+        // `private` hides a declaration by its name; these have none.
+        if let Some((kw, removal)) = private_kw
+            && let Some((what, why)) = nameless_item(&kind)
+        {
+            self.report(
+                Diagnostic::error(codes::UNEXPECTED_TOKEN, format!("{what} can't be `private`"))
+                    .primary(kw, "`private` has nothing to hide here")
+                    .note(why)
+                    .suggest(
+                        "remove `private`",
+                        vec![Edit { span: removal, replacement: String::new() }],
+                        Applicability::MachineApplicable,
+                    ),
+            );
+            private = false;
+        }
         let span = start.to(self.prev_span());
         Some(Item { kind, span, attrs, private, doc })
+    }
+
+    /// `private` and the space after it, consumed, for a fix that removes
+    /// both.
+    fn bump_private(&mut self) -> (Span, Span) {
+        let kw = self.bump().span;
+        (kw, kw.to(self.peek().span.shrink_to_start()))
+    }
+
+    /// Reports `private` written before a statement (E0105), at `kw` (with
+    /// the space after it, `removal`). The statement after it is parsed as
+    /// if it weren't there.
+    fn private_statement(&mut self, kw: Span, removal: Span) {
+        let (label, note) = if self.quotes.is_empty() {
+            (
+                "this line is a statement",
+                "`private` hides a method outside its type, or a type, constant or macro outside its package; \
+                 a local variable is visible only in its method anyway",
+            )
+        } else {
+            (
+                "this line of the `quote` reads as a statement",
+                "`private` hides a method outside its type, or a type, constant or macro outside its package; \
+                 fields are always public, and a local variable is visible only in its method",
+            )
+        };
+        self.report(
+            Diagnostic::error(codes::UNEXPECTED_TOKEN, "`private` applies only to declarations")
+                .primary(kw, label)
+                .note(note)
+                .suggest(
+                    "remove `private`",
+                    vec![Edit { span: removal, replacement: String::new() }],
+                    Applicability::MachineApplicable,
+                ),
+        );
     }
 
     /// Reports `private` written on a struct field (E0105): fields are
@@ -1960,20 +2034,23 @@ impl<'a> Parser<'a> {
             if matches!(self.kind(), T::Eof | T::SpliceEnd | T::Kw(K::End)) {
                 break;
             }
-            // A splice is a member when a value or another member follows;
-            // standing alone it is an `ItemKind::Splice`. `struct`, `enum`
-            // and `union` standing alone are members (`TypeKind.struct`).
-            let member = match self.name_len(0) {
-                Some(n) if self.at(T::Ident) => {
-                    matches!(self.nth(n).kind, T::Newline | T::Eq | T::Comma | T::Kw(K::End))
-                }
-                Some(n) => matches!(self.nth(n).kind, T::Eq | T::Comma),
-                None => {
-                    is_keyword_member(self.kind())
-                        && matches!(self.nth(1).kind, T::Newline | T::Eq | T::Comma | T::Kw(K::End))
-                }
-            };
-            if member {
+            // Members are always public, like fields.
+            if self.at_kw(K::Private) && (self.enum_member_at(1) || self.upper_member_at(1)) {
+                let (kw, removal) = self.bump_private();
+                self.report(
+                    Diagnostic::error(codes::UNEXPECTED_TOKEN, "an enum member can't be `private`")
+                        .primary(kw, "enum members are always public")
+                        .note(
+                            "any code that can name the enum can select its members; `private` applies to methods and other declarations",
+                        )
+                        .suggest(
+                            "remove `private`",
+                            vec![Edit { span: removal, replacement: String::new() }],
+                            Applicability::MachineApplicable,
+                        ),
+                );
+            }
+            if self.enum_member_at(0) {
                 loop {
                     let member = self.parse_enum_member();
                     let value = if self.eat(T::Eq) { Some(self.parse_expr()) } else { None };
@@ -1983,7 +2060,7 @@ impl<'a> Parser<'a> {
                     }
                     self.skip_newlines();
                 }
-            } else if self.at(T::Const) && matches!(self.nth(1).kind, T::Newline | T::Comma | T::Kw(K::End)) {
+            } else if self.upper_member_at(0) {
                 let tok = self.bump();
                 let text = self.text_of(tok.span);
                 let lower = to_snake_case(text);
@@ -2006,6 +2083,29 @@ impl<'a> Parser<'a> {
         }
         self.expect_end();
         ItemKind::Enum(Box::new(EnumDecl { name, backing, members, body }))
+    }
+
+    /// Whether the token `n` ahead starts an enum member. A splice is a
+    /// member when a value or another member follows; standing alone it is
+    /// an `ItemKind::Splice`. `struct`, `enum` and `union` standing alone
+    /// are members (`TypeKind.struct`).
+    fn enum_member_at(&self, n: usize) -> bool {
+        match self.name_len(n) {
+            Some(len) if self.nth(n).kind == T::Ident => {
+                matches!(self.nth(n + len).kind, T::Newline | T::Eq | T::Comma | T::Kw(K::End))
+            }
+            Some(len) => matches!(self.nth(n + len).kind, T::Eq | T::Comma),
+            None => {
+                is_keyword_member(self.nth(n).kind)
+                    && matches!(self.nth(n + 1).kind, T::Newline | T::Eq | T::Comma | T::Kw(K::End))
+            }
+        }
+    }
+
+    /// Whether the token `n` ahead is an uppercase name standing as an enum
+    /// member, which is reported.
+    fn upper_member_at(&self, n: usize) -> bool {
+        self.nth(n).kind == T::Const && matches!(self.nth(n + 1).kind, T::Newline | T::Comma | T::Kw(K::End))
     }
 
     /// An enum member's name: an identifier, a splice, or `struct`, `enum`
@@ -2549,6 +2649,16 @@ impl<'a> Parser<'a> {
 
     fn parse_stmt(&mut self) -> Stmt {
         let attrs = self.parse_attrs();
+        let decl_kw = |kind| {
+            matches!(
+                kind,
+                T::Kw(K::Def | K::Struct | K::Enum | K::Union | K::Module | K::Extend | K::Overload | K::Macro)
+            )
+        };
+        if self.at_kw(K::Private) && !decl_kw(self.nth(1).kind) {
+            let (kw, removal) = self.bump_private();
+            self.private_statement(kw, removal);
+        }
         let start = self.peek().span;
         let kind = match self.kind() {
             T::Kw(K::Return) => {
@@ -2577,7 +2687,7 @@ impl<'a> Parser<'a> {
                 }
             }
             T::Kw(K::Guard) => self.parse_guard(),
-            T::Kw(K::Def | K::Struct | K::Enum | K::Union | K::Module | K::Extend | K::Overload | K::Macro) => {
+            kind if decl_kw(kind) || kind == T::Kw(K::Private) => {
                 let item = self.parse_item(ItemCtx::Struct);
                 match item {
                     Some(item) => StmtKind::Item(Box::new(item)),
@@ -2848,9 +2958,30 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expr_bp(&mut self, min_bp: u8, cmd: bool) -> Expr {
-        let mut lhs = self.parse_prefix(cmd);
+        let (start, splices, errors) = (self.pos, self.splice_mark(), self.diags.len());
+        let mut lhs = match self.paren_optional_type() {
+            Some(ty) => Expr { span: ty.span, kind: ExprKind::Type(Box::new(ty)) },
+            None => self.parse_prefix(cmd),
+        };
         loop {
             let tok = self.peek();
+            // `t = Int?`: a conditional needs a space before its `?`, so one
+            // right after a type's name (`Int`, `rl.Color`, `Pool(Ball, 64)`)
+            // ends the type, unless a conditional's `:` follows, as in
+            // `N? a : b`. The type is written in place, like a call
+            // argument's (`parse_type_arg`).
+            if tok.kind == T::Question
+                && !tok.space_before
+                && names_type(&lhs)
+                && self.diags.len() == errors
+                && !self.conditional_colon_ahead()
+            {
+                if let Some(ty) = self.reparse_as_type(start, splices) {
+                    lhs = Expr { span: ty.span, kind: ExprKind::Type(Box::new(ty)) };
+                    continue;
+                }
+                lhs = self.parse_prefix(cmd);
+            }
             if tok.kind == T::Caret && tok.space_before {
                 self.report(
                     Diagnostic::error(codes::UNEXPECTED_TOKEN, "`^` is not an operator in Wid")
@@ -2911,24 +3042,91 @@ impl<'a> Parser<'a> {
         lhs
     }
 
+    /// Whether the `?` here is followed by a conditional's `:` outside
+    /// brackets: on the rest of its line, or, when the `?` ends its line, on
+    /// the next line with a space before it (`f(FLAG?` then `1 : 2)`; a
+    /// declaration like `hp: Int` has none).
+    fn conditional_colon_ahead(&self) -> bool {
+        let next_line = self.nth(1).kind == T::Newline;
+        let mut depth = 0usize;
+        for tok in &self.tokens[self.pos + usize::from(next_line) + 1..] {
+            match tok.kind {
+                T::LParen | T::LBracket | T::LBrace | T::AtBracket | T::StrBegin | T::SpliceBegin => depth += 1,
+                T::RParen | T::RBracket | T::RBrace | T::StrEnd | T::SpliceEnd if depth > 0 => depth -= 1,
+                T::Colon if depth == 0 => return !next_line || tok.space_before,
+                T::Newline | T::Eof | T::RParen | T::RBracket | T::RBrace | T::SpliceEnd => return false,
+                _ => {}
+            }
+        }
+        false
+    }
+
+    /// Parses a parenthesized type made optional, like
+    /// `(proc(Int) -> Int)?`, written in place: a `(` whose `)` is followed
+    /// directly by `?`, with no conditional's `:` after it, that parses as
+    /// a type ending in that `?`. Returns `None`, with nothing consumed,
+    /// otherwise, as for `(a > b)? x : y`.
+    fn paren_optional_type(&mut self) -> Option<TypeExpr> {
+        if !self.at(T::LParen) {
+            return None;
+        }
+        let mut depth = 0usize;
+        let mut close = None;
+        for (i, tok) in self.tokens[self.pos..].iter().enumerate() {
+            match tok.kind {
+                T::LParen => depth += 1,
+                T::RParen if depth == 1 => {
+                    close = Some(self.pos + i);
+                    break;
+                }
+                T::RParen => depth -= 1,
+                T::Eof => return None,
+                _ => {}
+            }
+        }
+        let question = close? + 1;
+        let after = *self.tokens.get(question)?;
+        if after.kind != T::Question || after.space_before {
+            return None;
+        }
+        let save = (self.pos, self.splice_mark());
+        self.pos = question;
+        let colon = self.conditional_colon_ahead();
+        self.pos = save.0;
+        if colon {
+            return None;
+        }
+        let ty = self.try_parse_type()?;
+        if matches!(ty.kind, TypeKind::Optional(_)) && self.only_type(&ty) {
+            return Some(ty);
+        }
+        self.pos = save.0;
+        self.rewind_splices(save.1);
+        None
+    }
+
+    /// Parses again, as a type, the expression that starts at token `start`
+    /// and ends before the `?` here (with the splice list at `splices`
+    /// before it), when the type goes on through that `?`. Otherwise
+    /// returns `None` with the position back at `start`.
+    fn reparse_as_type(&mut self, start: usize, splices: usize) -> Option<TypeExpr> {
+        let question = self.pos;
+        self.pos = start;
+        self.rewind_splices(splices);
+        let ty = self.try_parse_type();
+        if ty.is_some() && self.pos > question {
+            return ty;
+        }
+        self.pos = start;
+        self.rewind_splices(splices);
+        None
+    }
+
     /// Reports `Int ?` before `)` or `,`, where the `?` (just consumed) reads
     /// as an unfinished `x ? a : b` but a type's `?` was likely meant: one
     /// after a space is a conditional's.
     fn spaced_optional(&mut self, lhs: &Expr, q: Token) -> bool {
-        let upper = |name: &Ident| name.as_str().starts_with(|c: char| c.is_ascii_uppercase());
-        let package = |recv: &Expr| matches!(recv.kind, ExprKind::Ident(_) | ExprKind::Const(_));
-        // `Int`, `rl.Color`, `Pool(Ball, 64)`, `geo.Pool(Ball, 64)`.
-        let names_type = match &lhs.kind {
-            ExprKind::Const(_) => true,
-            ExprKind::Member { recv, name, safe: false } => package(recv) && upper(name),
-            ExprKind::Call(call) if call.block.is_none() => match &call.callee {
-                Callee::Name(name) => upper(name),
-                Callee::Method { recv, name, safe: false } => package(recv) && upper(name),
-                Callee::Method { .. } => false,
-            },
-            _ => false,
-        };
-        if !names_type || !q.space_before || !matches!(self.kind(), T::RParen | T::Comma) {
+        if !names_type(lhs) || !q.space_before || !matches!(self.kind(), T::RParen | T::Comma) {
             return false;
         }
         let gap = Span::new(self.file, lhs.span.end, q.span.start);
@@ -3362,13 +3560,28 @@ impl<'a> Parser<'a> {
             }
             T::LParen => {
                 self.bump();
+                if self.empty_paren_line(span) {
+                    return Expr { kind: ExprKind::Error, span };
+                }
                 let saved = self.no_do;
                 self.no_do = false;
                 self.skip_newlines();
                 let inner = self.parse_expr_cmd();
-                self.skip_newlines();
                 self.no_do = saved;
-                self.expect(T::RParen, "`)`");
+                // The expression is complete: newlines may only lead to its
+                // `)`. Anything else on the next line (a `def`, another
+                // statement) is not part of it, so the `(` was left open at
+                // the end of this line.
+                let (last, before) = (self.prev_span(), self.pos);
+                self.skip_newlines();
+                if !self.eat(T::RParen) {
+                    if self.pos > before || self.at(T::Eof) {
+                        self.pos = before;
+                        self.unclosed_paren(span, last);
+                    } else {
+                        self.error_expected("`)`");
+                    }
+                }
                 Expr { kind: ExprKind::Paren(Box::new(inner)), span: span.to(self.prev_span()) }
             }
             T::Arrow => self.parse_lambda(),
@@ -4077,6 +4290,74 @@ fn is_keyword_member(kind: TokenKind) -> bool {
     matches!(kind, T::Kw(Keyword::Struct | Keyword::Enum | Keyword::Union))
 }
 
+/// Whether an expression reads as the name of a type that a `?` could make
+/// optional: `Int`, `rl.Color`, `Pool(Ball, 64)`, `geo.Pool(Ball, 64)`, one
+/// of those in parentheses, or a type parsed in place (`[]Int`).
+fn names_type(e: &Expr) -> bool {
+    let upper = |name: &Ident| name.as_str().starts_with(|c: char| c.is_ascii_uppercase());
+    let package = |recv: &Expr| matches!(recv.kind, ExprKind::Ident(_) | ExprKind::Const(_));
+    match &e.kind {
+        ExprKind::Const(_) | ExprKind::Type(_) => true,
+        ExprKind::Paren(inner) => names_type(inner),
+        ExprKind::Member { recv, name, safe: false } => package(recv) && upper(name),
+        ExprKind::Call(call) if call.block.is_none() => match &call.callee {
+            Callee::Name(name) => upper(name),
+            Callee::Method { recv, name, safe: false } => package(recv) && upper(name),
+            Callee::Method { .. } => false,
+        },
+        _ => false,
+    }
+}
+
+/// Whether a line starting with this token can't continue an expression
+/// from the line before: a declaration, or the `end` of a block.
+fn starts_declaration(kind: TokenKind) -> bool {
+    matches!(
+        kind,
+        T::Kw(
+            K::Def
+                | K::Macro
+                | K::Struct
+                | K::Enum
+                | K::Union
+                | K::Module
+                | K::Extend
+                | K::Overload
+                | K::Import
+                | K::Cimport
+                | K::Private
+                | K::End
+        )
+    )
+}
+
+/// For a declaration-level line that declares no name `private` could
+/// hide, what it is and why `private` means nothing there.
+fn nameless_item(kind: &ItemKind) -> Option<(&'static str, &'static str)> {
+    Some(match kind {
+        ItemKind::Include(_) => (
+            "an `include`",
+            "`include` mixes a module's methods into this type; the ones the module declares with `private def` stay private",
+        ),
+        ItemKind::Import(_) => {
+            ("an `import`", "an import is visible only in the file that writes it, never in other packages")
+        }
+        ItemKind::Cimport(_) => (
+            "a `cimport`",
+            "with `as:`, the C declarations are visible only in this file; without it, they join this package's own declarations, which other packages see",
+        ),
+        ItemKind::Extend(_) => (
+            "an `extend`",
+            "`extend` adds methods to a type declared elsewhere; write `private def` on the ones to hide",
+        ),
+        ItemKind::ComptimeIf(_) => {
+            ("a `comptime if`", "write `private` on the declarations in its branches that should be hidden")
+        }
+        ItemKind::Splice(_) => ("a splice", "write `private` on the declarations in the code that is spliced in"),
+        _ => return None,
+    })
+}
+
 fn to_snake_case(text: &str) -> String {
     let mut out = String::new();
     let mut prev: Option<char> = None;
@@ -4450,6 +4731,176 @@ end
             ["E0105"]
         );
         assert!(codes_of("module M\n  private hp: Int\nend\n").is_empty());
+    }
+
+    /// The messages of the diagnostics for `src`, and `src` with the edits
+    /// of every first fix applied.
+    fn fix_all(src: &str) -> (Vec<String>, String) {
+        let (_, diags) = parse_file(FileId(0), src);
+        let mut edits: Vec<_> = diags
+            .iter()
+            .filter_map(|d| d.helps.first())
+            .filter(|h| h.applicability == Applicability::MachineApplicable)
+            .flat_map(|h| h.edits.iter())
+            .map(|e| (e.span.start as usize, e.span.end as usize, e.replacement.clone()))
+            .collect();
+        edits.sort_by_key(|e| std::cmp::Reverse(e.0));
+        let mut fixed = src.to_string();
+        for (start, end, replacement) in edits {
+            fixed.replace_range(start..end, &replacement);
+        }
+        (diags.iter().map(|d| d.message.clone()).collect(), fixed)
+    }
+
+    #[test]
+    fn private_where_it_does_not_apply() {
+        // Before a declaration without a name of its own: one error each,
+        // whose fix removes `private `.
+        let src = "private import \"core:strings\"\nprivate cimport \"a.h\", as: :a\n\
+                   struct Hero\n  private include M\nend\n\
+                   private extend Hero\n  def heal -> Int = 1\nend\n\
+                   private comptime if true\n  def f -> Int = 1\nend\n";
+        let (messages, fixed) = fix_all(src);
+        assert_eq!(
+            messages,
+            [
+                "an `import` can't be `private`",
+                "a `cimport` can't be `private`",
+                "an `include` can't be `private`",
+                "an `extend` can't be `private`",
+                "a `comptime if` can't be `private`",
+            ]
+        );
+        assert_eq!(fixed, src.replace("private ", ""));
+        let (file, _) = parse_file(FileId(0), src);
+        assert!(file.items.iter().all(|item| !item.private));
+        // A splice standing alone among declarations, in a `quote`.
+        let (messages, _) =
+            fix_all("macro def m -> Code\n  quote do\n    struct S\n      private #{x}\n    end\n  end\nend\n");
+        assert_eq!(messages, ["a splice can't be `private`"]);
+        // Declarations and macro calls keep it, without an error.
+        assert!(
+            codes_of("private def f -> Int = 1\nprivate X = 1\nprivate struct S\nend\nprivate make :x\n").is_empty()
+        );
+
+        // An enum member is parsed as one, after the error.
+        let src = "enum E\n  private a\n  private b = 2, c\n  private struct\n  private helpers()\nend\n";
+        let (messages, fixed) = fix_all(src);
+        assert_eq!(messages, ["an enum member can't be `private`"; 3]);
+        assert_eq!(fixed, src.replacen("private ", "", 3));
+        let (file, _) = parse_file(FileId(0), src);
+        let ItemKind::Enum(e) = &file.items[0].kind else { panic!() };
+        let names: Vec<_> = e.members.iter().map(|m| m.name.as_str()).collect();
+        assert_eq!(names, ["a", "b", "c", "struct"]);
+        // `private` before a macro call in an enum body is the call's.
+        assert!(matches!(e.body[0].kind, ItemKind::MacroCall(_)) && e.body[0].private);
+
+        // A statement is parsed as if `private` weren't there, so `x` is
+        // declared and nothing cascades.
+        let src = "def main\n  private x = 1\n  p x\nend\n";
+        let (messages, fixed) = fix_all(src);
+        assert_eq!(messages, ["`private` applies only to declarations"]);
+        assert_eq!(fixed, "def main\n  x = 1\n  p x\nend\n");
+        let (messages, fixed) = fix_all("macro def m -> Code\n  quote do\n    private hp: Int\n  end\nend\n");
+        assert_eq!(messages, ["`private` applies only to declarations"]);
+        assert_eq!(fixed, "macro def m -> Code\n  quote do\n    hp: Int\n  end\nend\n");
+        // A declaration in a method keeps it; nesting is the checker's error.
+        assert!(codes_of("def main\n  private def f -> Int = 1\nend\n").is_empty());
+    }
+
+    #[test]
+    fn unclosed_paren_ends_at_the_line_end() {
+        // The `)` goes at the end of the line, and `main` is still parsed.
+        for value in ["(1 + 2", "([]"] {
+            let src = format!("X = {value}\ndef main\n  p X\nend\n");
+            let (messages, fixed) = fix_all(&src);
+            assert_eq!(messages, ["expected `)`, found end of line"], "{value}");
+            assert_eq!(fixed, src.replacen('\n', ")\n", 1));
+            assert_eq!(parse_file(FileId(0), &src).0.items.len(), 2);
+        }
+        let src = "def main\n  x = (1 + 2\n  p x\nend\n";
+        let (messages, fixed) = fix_all(src);
+        assert_eq!(messages, ["expected `)`, found end of line"]);
+        assert_eq!(fixed, "def main\n  x = (1 + 2)\n  p x\nend\n");
+        // At the end of the file.
+        assert_eq!(fix_all("X = (1 + 2").1, "X = (1 + 2)");
+        // A `(` with nothing after it, before a declaration or an `end`.
+        for src in ["X = (\ndef main\nend\n", "def main\n  x = (\nend\n"] {
+            let (file, diags) = parse_file(FileId(0), src);
+            let messages: Vec<_> = diags.iter().map(|d| d.message.as_str()).collect();
+            assert_eq!(messages, ["expected an expression, found end of line"], "{src:?}");
+            assert!(matches!(file.items.last().map(|i| &i.kind), Some(ItemKind::Def(_))));
+        }
+        // Newlines inside parentheses still work where the expression goes
+        // on, and before the `)`.
+        parse_ok(
+            "def main\n  a = (1 +\n    2)\n  b = (\n    3 * 4\n  )\n  c = (a > 1 ?\n    5 : 6)\n\
+             \x20 d = ([1, 2]\n    .size)\n  e = foo(a,\n    b)\n  f = (xs.map do |x|\n    x\n  end)\n\
+             \x20 g = (if a > 1\n    1\n  else\n    2\n  end)\n  h = ((a +\n    b))\nend\n",
+        );
+        // A token that doesn't continue it on the same line is reported there.
+        let (messages, _) = fix_all("def main\n  x = (1 + 2 3)\nend\n");
+        assert_eq!(messages, ["expected `)`, found `3`"]);
+    }
+
+    #[test]
+    fn optional_type_written_in_place() {
+        // The value of each `x = …` in `main`, by shape.
+        let shapes = |body: &str| -> Vec<String> {
+            let file = parse_ok(&format!("def main\n{body}end\n"));
+            let ItemKind::Def(f) = &file.items[0].kind else { panic!() };
+            let FnBody::Block(body) = &f.body else { panic!() };
+            body.iter()
+                .filter_map(|s| match &s.kind {
+                    StmtKind::Assign { values, .. } => Some(match &values[0].kind {
+                        ExprKind::Type(t) if matches!(t.kind, TypeKind::Optional(_)) => "optional".to_string(),
+                        ExprKind::Ternary { .. } => "ternary".to_string(),
+                        ExprKind::Binary { rhs, .. } if matches!(rhs.kind, ExprKind::Type(_)) => {
+                            "binary with type".to_string()
+                        }
+                        other => format!("{other:?}"),
+                    }),
+                    _ => None,
+                })
+                .collect()
+        };
+        // A `?` right after a type's name ends the type when no
+        // conditional's `:` follows.
+        assert_eq!(
+            shapes(
+                "  a = Int?\n  b = rl.Color?\n  c = Pool(Ball, 64)?\n  d = geo.Pool(Ball, 64)?\n\
+                 \x20 e = (Int)?\n  f = (proc(Int) -> Int)?\n  g = Int??\n  h = 1 + Int?\n  i = Int?\n  hp: Int\n"
+            ),
+            [&["optional"; 7][..], &["binary with type", "optional"]].concat()
+        );
+        // Before a modifier too.
+        parse_ok("def main\n  t = Int? if ready\nend\n");
+        // Conditionals parse as before: with spaces, after a predicate
+        // name, or with the `:` after it (on the line, or on the next one).
+        assert_eq!(
+            shapes(
+                "  a = c ? 1 : 2\n  b = xs.empty? ? 1 : 2\n  c = empty? ? 1 : 2\n  d = N? 1 : 2\n\
+                 \x20 e = (a > b)? 1 : 2\n  f = N?\n    1 : 2\n  g = (Int)? 1 : 2\n"
+            ),
+            ["ternary"; 7]
+        );
+        // A predicate call stays one, and a type in a call argument too.
+        let file = parse_ok("def main\n  p foo?, xs.empty?\n  p f(Int?), size_of(Int?)\nend\n");
+        let ItemKind::Def(f) = &file.items[0].kind else { panic!() };
+        let FnBody::Block(body) = &f.body else { panic!() };
+        let StmtKind::Expr(e) = &body[1].kind else { panic!() };
+        let ExprKind::Call(call) = &e.kind else { panic!() };
+        assert!(call.args.iter().all(|a| matches!(&a.value.kind, ExprKind::Call(c) if matches!(
+            c.args[0].value.kind, ExprKind::Type(_)
+        ))));
+        // `t = Int?` is one expression: nothing runs past the line end.
+        assert!(codes_of("def main\n  t = Int?\nend\n").is_empty());
+    }
+
+    #[test]
+    fn keywords_are_quoted_in_messages() {
+        let (messages, _) = fix_all("def main\n  x = def\nend\n");
+        assert_eq!(messages, ["expected an expression, found `def`"]);
     }
 
     #[test]

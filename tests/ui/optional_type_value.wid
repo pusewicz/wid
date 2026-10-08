@@ -1,0 +1,15 @@
+# A `?` right after a type's name, with no space before it, ends the type:
+# a conditional needs spaces around its `?`. So `t = Int?` is one E0323,
+# whose help says how to make an empty optional, and the line ends there.
+struct Pool($T, $N: Int)
+  items: [N]T
+end
+
+def main
+  t = Int?
+  u = Pool(Int, 4)?
+  v = (proc(Int) -> Int)?
+  ready = true
+  n = ready ? 1 : 2
+  p t, u, v, n
+end

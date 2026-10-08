@@ -1,0 +1,20 @@
+# `private` before a statement is one error. The rest of the line is parsed
+# as if it weren't there, so `x` is declared, and in the `quote` `hp: Int`
+# is still the field it splices into `Hero`.
+macro def hero -> Code
+  f = quote do
+    private hp: Int
+  end
+  quote do
+    struct Hero
+      #{f}
+    end
+  end
+end
+
+hero
+
+def main
+  private x = 1
+  p x, Hero.new(hp: 3).hp
+end

@@ -82,7 +82,12 @@ end
     type for methods: a private method can only be called from methods of the
     same type, including ones mixed in with `include` or added by `extend`.
     Fields are always public, so `private` can't be written on a field,
-    `using` ones and those in a `quote` included (E0105).
+    `using` ones and those in a `quote` included (E0105). Nor on an enum
+    member, which is public too, or where nothing is declared by name: an
+    `import` or `cimport` (`as:` keeps its names in the file), an
+    `include`, an `extend`, a `comptime if` (write it on the declarations
+    in the branches), a splice standing alone among declarations, or a
+    statement (E0105).
   - `loop do … end` loops forever.
   - `for x in xs`, `for &x in xs` and `for x, i in xs` iterate.
   - `^` only builds pointer types (`^T`) and dereferences (`p^`). Bitwise xor
@@ -104,6 +109,10 @@ end
   - A line that ends with an operator or `,`, or a next line that starts with
     `.method`, continues the statement.
   - `x ? a : b` needs spaces around `?`, because `x?` is a predicate name.
+    So a `?` written right after a type's name or its closing `)`
+    (`Int?`, `rl.Color?`, `Pool(Ball, 64)?`, `(proc(Int) -> Int)?`) ends
+    that type, written in place, unless a conditional's `:` follows it:
+    `t = Int?` is the type `Int?` (a value goes there, E0323).
   - A call argument is a type when no expression reads the same way and
     `,` or `)` follows it (in a call without parentheses, also the end of
     the statement or an `if`/`unless` modifier, as in `n = size_of Int?`):

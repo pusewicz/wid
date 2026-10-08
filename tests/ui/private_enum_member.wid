@@ -1,0 +1,13 @@
+# Enum members are always public: `private` before one is one error, and
+# the member is still declared, so `:a` and `:c` select it.
+enum E
+  private a
+  b
+  private c = 5
+end
+
+def main
+  x: E = :a
+  y: E = :c
+  p x, y
+end

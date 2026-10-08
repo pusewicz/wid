@@ -1,0 +1,21 @@
+error[E0105]: an enum member can't be `private`
+ --> tests/ui/private_enum_member.wid:4:3
+  |
+4 |   private a
+  |   ^^^^^^^ enum members are always public
+  = note: any code that can name the enum can select its members; `private` applies to methods and other declarations
+help: remove `private`
+  |   a
+  = see `wid explain E0105`
+
+error[E0105]: an enum member can't be `private`
+ --> tests/ui/private_enum_member.wid:6:3
+  |
+6 |   private c = 5
+  |   ^^^^^^^ enum members are always public
+  = note: any code that can name the enum can select its members; `private` applies to methods and other declarations
+help: remove `private`
+  |   c = 5
+  = see `wid explain E0105`
+
+error: could not compile due to 2 errors

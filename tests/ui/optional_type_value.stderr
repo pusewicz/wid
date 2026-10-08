@@ -1,0 +1,25 @@
+error[E0323]: `Int?` is a type, not a value
+ --> tests/ui/optional_type_value.wid:9:7
+  |
+9 |   t = Int?
+  |       ^^^^ a type cannot be used as a value here
+help: for an empty `Int?`, write `nil` where `Int?` is expected
+  = see `wid explain E0323`
+
+error[E0323]: `Pool(Int, 4)?` is a type, not a value
+  --> tests/ui/optional_type_value.wid:10:7
+   |
+10 |   u = Pool(Int, 4)?
+   |       ^^^^^^^^^^^^^ a type cannot be used as a value here
+help: for an empty `Pool(Int, 4)?`, write `nil` where `Pool(Int, 4)?` is expected
+   = see `wid explain E0323`
+
+error[E0323]: `(proc(Int) -> Int)?` is a type, not a value
+  --> tests/ui/optional_type_value.wid:11:7
+   |
+11 |   v = (proc(Int) -> Int)?
+   |       ^^^^^^^^^^^^^^^^^^^ a type cannot be used as a value here
+help: for an empty `(proc(Int) -> Int)?`, write `nil` where `(proc(Int) -> Int)?` is expected
+   = see `wid explain E0323`
+
+error: could not compile due to 3 errors

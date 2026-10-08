@@ -1,0 +1,27 @@
+# `private` hides a declaration by its name. An `import`, an `include`, an
+# `extend` and a `comptime if` declare no name of their own, so `private`
+# there is one error each, with a fix that removes it.
+private import "core:strings"
+
+module Greet
+  def hi -> Int = 1
+end
+
+struct Hero
+  private include Greet
+  hp: Int
+end
+
+private extend Hero
+  def heal -> Int = 2
+end
+
+private comptime if true
+  def answer -> Int = 42
+end
+
+def main
+  hero = Hero.new
+  b = strings.Builder.create
+  p hero.hi, hero.heal, answer, b.size
+end
