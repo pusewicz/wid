@@ -582,8 +582,10 @@ impl<'a> Checker<'a> {
             TyKind::Proc(sig) => Some(sig.clone()),
             _ => None,
         });
+        // A parameter is declared at its name, which decides the code that
+        // sees it: a name spliced into a macro's code is the caller's.
         let params: Vec<(Name, TyId, Span)> =
-            lambda.params.iter().map(|p| (p.name.name, self.resolve_type(&p.ty, &ctx), p.span)).collect();
+            lambda.params.iter().map(|p| (p.name.name, self.resolve_type(&p.ty, &ctx), p.name.span)).collect();
         let ret = match &lambda.ret {
             Some(r) => self.resolve_type(r, &ctx),
             None => expected_sig.as_ref().map_or_else(|| self.types.void(), |s| s.ret),

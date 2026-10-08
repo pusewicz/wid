@@ -234,7 +234,9 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
     `find_var` matches the site's mark and `find_var_at(name, span)` the
     span's, so the quote's own locals and the caller's never see each
     other, while spliced code and names (call-site spans) do. Lambdas
-    inherit the site. Parameters of a generated method (`declare_param`,
+    inherit the site; like block parameters, their parameters are declared
+    at their names' spans, so a spliced name gets the caller's mark.
+    Parameters of a generated method (`declare_param`,
     and inlined block methods) are `open`: also visible to code with the
     mark of the expansion's call site.
   - Budgets: depth comes from the call span's virtual file (parent depth +
@@ -807,6 +809,11 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   field is fixed at the call (`:hp`). `Checker::splice_site` and
   `name_end` find the splice, which also fixes the `()` fix for a field
   called as `self.#{name}()` (it edited unrelated text).
+- A proc parameter whose name a macro splices (`->(#{v}: Int) -> Int {
+  #{v} * 2 }`), in a method body or a generated `def`, is the caller's
+  name, as a block parameter's is: the proc's body and code spliced from
+  the call site see it (#73; it was E0201). `lower_lambda` declares each
+  parameter at its name's span instead of the whole parameter's.
 - A C compiler without C23 (one that rejects `-std=c23`, like gcc 13 or
   clang 17, or lacks `<stdckdint.h>` or `#embed`) is E0702 "the C compiler
   `cc` doesn't support C23", with the first line of its `--version`, the
