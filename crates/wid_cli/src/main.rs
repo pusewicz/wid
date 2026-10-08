@@ -137,10 +137,10 @@ fn doc(parsed: &Parsed) -> ExitCode {
 /// would change.
 fn fmt(parsed: &Parsed) -> ExitCode {
     let opts = options(parsed);
-    let out = wid_driver::fmt::fmt(&opts, parsed.check);
-    let printed = wid_driver::fmt::print(&out, parsed.json_errors, color_stderr());
-    eprint!("{}", printed.stderr);
-    print!("{}", printed.stdout);
+    let formatted = wid_driver::fmt::fmt(&opts, parsed.check);
+    let printed = wid_driver::fmt::print(&formatted, parsed.json_errors, color_stderr());
+    err(&printed.stderr);
+    out(&printed.stdout);
     if printed.success { ExitCode::SUCCESS } else { ExitCode::from(1) }
 }
 

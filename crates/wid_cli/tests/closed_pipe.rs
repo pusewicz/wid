@@ -76,6 +76,7 @@ fn every_command_with_stdout_closed() {
     for args in [
         "help",
         "help query",
+        "help fmt",
         "version",
         "explain",
         "explain E0101",
@@ -94,6 +95,9 @@ fn every_command_with_stdout_closed() {
     assert_eq!(stdout_closed(&format!("build {file} -file -json-errors"), 1), "");
     // The report of failing tests.
     stdout_closed("test tests/test/sample -cc:clang", 1);
+    // The files `wid fmt -check` would change, and its JSON.
+    assert_eq!(stdout_closed("fmt tests/fmt/spacing.wid -file -check", 1), "");
+    assert_eq!(stdout_closed("fmt tests/fmt/parse_error.wid -file -check -json-errors", 1), "");
     let _ = std::fs::remove_dir_all(broken.parent().expect("the scratch directory"));
 }
 
@@ -108,6 +112,7 @@ fn every_command_with_stderr_closed() {
     let broken = broken_file("stderr");
     let file = broken.display();
     stderr_closed(&format!("check {file} -file"), 1);
+    stderr_closed("fmt tests/fmt/parse_error.wid -file -check", 1);
     stderr_closed(&format!("run {file} -file"), 1);
     stderr_closed(&format!("test {} -cc:clang", broken.parent().expect("the scratch directory").display()), 1);
     // The page still goes to stdout when the diagnostics can't.
