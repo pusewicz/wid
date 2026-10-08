@@ -1,0 +1,26 @@
+# In a `-debug` build, negation panics when the result doesn't fit: every
+# signed type negates its maximum and `MIN + 1`, but not `MIN`.
+Meters = distinct I32
+
+def flip(x: Int) -> Int = -x
+
+def main
+  a: I8 = 127
+  b: I16 = -32767
+  c: I32 = 2147483647
+  d: I64 = -9223372036854775807
+  e: Int = 0
+  m: Meters = -5
+  f: F64 = 1.5
+  puts(-a)
+  puts(-b)
+  puts(-c)
+  puts(-d)
+  puts(-e)
+  puts((-m).to(I32))
+  puts(-f)
+  puts flip(-9223372036854775807)
+  low: I8 = -128
+  puts(-low)
+  puts "unreachable"
+end

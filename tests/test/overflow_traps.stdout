@@ -1,0 +1,230 @@
+running 20 tests
+test neg_i8 ... PANICKED
+test neg_i16 ... PANICKED
+test neg_i32 ... PANICKED
+test neg_i64 ... PANICKED
+test neg_int ... PANICKED
+test abs_i8 ... PANICKED
+test abs_i16 ... PANICKED
+test abs_i32 ... PANICKED
+test abs_i64 ... PANICKED
+test abs_int ... PANICKED
+test pow_i8 ... PANICKED
+test pow_i16 ... PANICKED
+test pow_i32 ... PANICKED
+test pow_i64 ... PANICKED
+test pow_int ... PANICKED
+test pow_u8 ... PANICKED
+test pow_u16 ... PANICKED
+test pow_u32 ... PANICKED
+test pow_u64 ... PANICKED
+test pow_uint ... PANICKED
+
+failures:
+
+error[E0802]: test `neg_i8` panicked: integer overflow in unary `-`
+ --> tests/test/overflow_traps/traps_test.wid:8:8
+  |
+4 | def neg_i8(t: ^testing.T)
+  |     ------ in this test
+...
+8 |   puts(-x)
+  |        ^^^ panicked here
+  = see `wid explain E0802`
+
+error[E0802]: test `neg_i16` panicked: integer overflow in unary `-`
+  --> tests/test/overflow_traps/traps_test.wid:16:8
+   |
+12 | def neg_i16(t: ^testing.T)
+   |     ------- in this test
+...
+16 |   puts(-x)
+   |        ^^^ panicked here
+   = see `wid explain E0802`
+
+error[E0802]: test `neg_i32` panicked: integer overflow in unary `-`
+  --> tests/test/overflow_traps/traps_test.wid:24:8
+   |
+20 | def neg_i32(t: ^testing.T)
+   |     ------- in this test
+...
+24 |   puts(-x)
+   |        ^^^ panicked here
+   = see `wid explain E0802`
+
+error[E0802]: test `neg_i64` panicked: integer overflow in unary `-`
+  --> tests/test/overflow_traps/traps_test.wid:32:8
+   |
+28 | def neg_i64(t: ^testing.T)
+   |     ------- in this test
+...
+32 |   puts(-x)
+   |        ^^^ panicked here
+   = see `wid explain E0802`
+
+error[E0802]: test `neg_int` panicked: integer overflow in unary `-`
+  --> tests/test/overflow_traps/traps_test.wid:40:8
+   |
+36 | def neg_int(t: ^testing.T)
+   |     ------- in this test
+...
+40 |   puts(-x)
+   |        ^^^ panicked here
+   = see `wid explain E0802`
+
+error[E0802]: test `abs_i8` panicked: integer overflow in unary `-`
+  --> core/builtin/numbers.wid:27:32
+   |
+27 |   def abs -> Self = self < 0 ? -self : self
+   |                                ^^^^^^^^^^^^ panicked here
+  ::: tests/test/overflow_traps/traps_test.wid:44:5
+   |
+44 | def abs_i8(t: ^testing.T)
+   |     ------ in this test
+   = see `wid explain E0802`
+
+error[E0802]: test `abs_i16` panicked: integer overflow in unary `-`
+  --> core/builtin/numbers.wid:27:32
+   |
+27 |   def abs -> Self = self < 0 ? -self : self
+   |                                ^^^^^^^^^^^^ panicked here
+  ::: tests/test/overflow_traps/traps_test.wid:52:5
+   |
+52 | def abs_i16(t: ^testing.T)
+   |     ------- in this test
+   = see `wid explain E0802`
+
+error[E0802]: test `abs_i32` panicked: integer overflow in unary `-`
+  --> core/builtin/numbers.wid:27:32
+   |
+27 |   def abs -> Self = self < 0 ? -self : self
+   |                                ^^^^^^^^^^^^ panicked here
+  ::: tests/test/overflow_traps/traps_test.wid:60:5
+   |
+60 | def abs_i32(t: ^testing.T)
+   |     ------- in this test
+   = see `wid explain E0802`
+
+error[E0802]: test `abs_i64` panicked: integer overflow in unary `-`
+  --> core/builtin/numbers.wid:27:32
+   |
+27 |   def abs -> Self = self < 0 ? -self : self
+   |                                ^^^^^^^^^^^^ panicked here
+  ::: tests/test/overflow_traps/traps_test.wid:68:5
+   |
+68 | def abs_i64(t: ^testing.T)
+   |     ------- in this test
+   = see `wid explain E0802`
+
+error[E0802]: test `abs_int` panicked: integer overflow in unary `-`
+  --> core/builtin/numbers.wid:27:32
+   |
+27 |   def abs -> Self = self < 0 ? -self : self
+   |                                ^^^^^^^^^^^^ panicked here
+  ::: tests/test/overflow_traps/traps_test.wid:76:5
+   |
+76 | def abs_int(t: ^testing.T)
+   |     ------- in this test
+   = see `wid explain E0802`
+
+error[E0802]: test `pow_i8` panicked: integer overflow in `**`
+  --> tests/test/overflow_traps/traps_test.wid:87:8
+   |
+84 | def pow_i8(t: ^testing.T)
+   |     ------ in this test
+...
+87 |   puts x ** 8
+   |        ^^^^^^ panicked here
+   = see `wid explain E0802`
+
+error[E0802]: test `pow_i16` panicked: integer overflow in `**`
+  --> tests/test/overflow_traps/traps_test.wid:94:8
+   |
+91 | def pow_i16(t: ^testing.T)
+   |     ------- in this test
+...
+94 |   puts x ** 16
+   |        ^^^^^^^ panicked here
+   = see `wid explain E0802`
+
+error[E0802]: test `pow_i32` panicked: integer overflow in `**`
+   --> tests/test/overflow_traps/traps_test.wid:101:8
+    |
+ 98 | def pow_i32(t: ^testing.T)
+    |     ------- in this test
+...
+101 |   puts x ** 32
+    |        ^^^^^^^ panicked here
+    = see `wid explain E0802`
+
+error[E0802]: test `pow_i64` panicked: integer overflow in `**`
+   --> tests/test/overflow_traps/traps_test.wid:108:8
+    |
+105 | def pow_i64(t: ^testing.T)
+    |     ------- in this test
+...
+108 |   puts x ** 64
+    |        ^^^^^^^ panicked here
+    = see `wid explain E0802`
+
+error[E0802]: test `pow_int` panicked: integer overflow in `**`
+   --> tests/test/overflow_traps/traps_test.wid:115:8
+    |
+112 | def pow_int(t: ^testing.T)
+    |     ------- in this test
+...
+115 |   puts x ** 40
+    |        ^^^^^^^ panicked here
+    = see `wid explain E0802`
+
+error[E0802]: test `pow_u8` panicked: integer overflow in `**`
+   --> tests/test/overflow_traps/traps_test.wid:122:8
+    |
+119 | def pow_u8(t: ^testing.T)
+    |     ------ in this test
+...
+122 |   puts x ** 8
+    |        ^^^^^^ panicked here
+    = see `wid explain E0802`
+
+error[E0802]: test `pow_u16` panicked: integer overflow in `**`
+   --> tests/test/overflow_traps/traps_test.wid:129:8
+    |
+126 | def pow_u16(t: ^testing.T)
+    |     ------- in this test
+...
+129 |   puts x ** 16
+    |        ^^^^^^^ panicked here
+    = see `wid explain E0802`
+
+error[E0802]: test `pow_u32` panicked: integer overflow in `**`
+   --> tests/test/overflow_traps/traps_test.wid:136:8
+    |
+133 | def pow_u32(t: ^testing.T)
+    |     ------- in this test
+...
+136 |   puts x ** 32
+    |        ^^^^^^^ panicked here
+    = see `wid explain E0802`
+
+error[E0802]: test `pow_u64` panicked: integer overflow in `**`
+   --> tests/test/overflow_traps/traps_test.wid:143:8
+    |
+140 | def pow_u64(t: ^testing.T)
+    |     ------- in this test
+...
+143 |   puts x ** 64
+    |        ^^^^^^^ panicked here
+    = see `wid explain E0802`
+
+error[E0802]: test `pow_uint` panicked: integer overflow in `**`
+   --> tests/test/overflow_traps/traps_test.wid:150:8
+    |
+147 | def pow_uint(t: ^testing.T)
+    |     -------- in this test
+...
+150 |   puts x ** 41
+    |        ^^^^^^^ panicked here
+    = see `wid explain E0802`
+
+test result: FAILED. 0 passed; 20 failed; 0 filtered out

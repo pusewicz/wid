@@ -1,0 +1,56 @@
+# Compile-time code runs with the checks of a `-debug` build, so negation,
+# `abs` and `**` that overflow fail at every integer width. The results that
+# fit (`FITS_*`) are no errors.
+def neg(x: $T) -> T = -x
+def pow(x: $T, n: T) -> T = x ** n
+
+MIN_I8: I8 = -128
+MIN_I16: I16 = -32768
+MIN_I32: I32 = -2147483648
+MIN_I64: I64 = -9223372036854775807 - 1
+MIN_INT: Int = -9223372036854775807 - 1
+TWO_I8: I8 = -2
+TWO_I16: I16 = -2
+TWO_I32: I32 = -2
+TWO_I64: I64 = -2
+TWO_U8: U8 = 2
+TWO_U16: U16 = 2
+TWO_U32: U32 = 2
+TWO_U64: U64 = 2
+TWO_UINT: UInt = 2
+TWELVE_I8: I8 = 12
+
+NEG_I8 = comptime neg(MIN_I8)
+NEG_I16 = comptime neg(MIN_I16)
+NEG_I32 = comptime neg(MIN_I32)
+NEG_I64 = comptime neg(MIN_I64)
+NEG_INT = comptime neg(MIN_INT)
+FITS_NEG = comptime neg(MIN_I8 + 1)
+
+ABS_I8 = comptime MIN_I8.abs
+ABS_I16 = comptime MIN_I16.abs
+ABS_I32 = comptime MIN_I32.abs
+ABS_I64 = comptime MIN_I64.abs
+ABS_INT = comptime MIN_INT.abs
+FITS_ABS = comptime (MIN_INT + 1).abs
+
+POW_I8 = comptime pow(TWO_I8, 8)
+POW_I16 = comptime pow(TWO_I16, 16)
+POW_I32 = comptime pow(TWO_I32, 32)
+POW_I64 = comptime pow(TWO_I64, 64)
+POW_U8 = comptime pow(TWO_U8, 8)
+POW_U16 = comptime pow(TWO_U16, 16)
+POW_U32 = comptime pow(TWO_U32, 32)
+POW_U64 = comptime pow(TWO_U64, 64)
+POW_UINT = comptime pow(TWO_UINT, 64)
+FITS_POW_I8 = comptime pow(TWO_I8, 7)
+FITS_POW_ONE = comptime pow(TWELVE_I8, 1)
+FITS_POW_U64 = comptime pow(TWO_U64, 63)
+
+def main
+  puts FITS_NEG
+  puts FITS_ABS
+  puts FITS_POW_I8
+  puts FITS_POW_ONE
+  puts FITS_POW_U64
+end

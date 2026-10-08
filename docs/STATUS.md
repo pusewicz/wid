@@ -32,8 +32,10 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
 - Evaluation order is left to right: when a later operand or argument has
   side effects or needs statements, earlier impure ones are spilled first.
 - Integer arithmetic wraps (`-fwrapv`); `-debug` builds trap on overflow via
-  `ckd_*`. Division always checks for zero. `%` truncates toward zero, as in C
-  and Odin.
+  `ckd_*`: `wid_add_*`, `wid_sub_*` and `wid_mul_*`, `wid_neg_*` (signed
+  types only) and `wid_pow_checked_*`. The interpreter checks the same
+  operations always. Division always checks for zero. `%` truncates toward
+  zero, as in C and Odin.
 - `E0001` and `E0902` are reserved and have no uses: their pages say so and
   start with `<!-- drift: skip … -->`. Any feature the compiler doesn't
   implement yet gets its own code with a workaround.
@@ -476,6 +478,9 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   fields, enum members, methods, constants, overload sets and extensions.
   Other file headers describe their file. `wid_driver/tests/core_docs.rs`
   checks both.
+- `wid_cli` writes through `output::out` and `output::err`, never `print!`
+  or `eprint!`, which panic when the reader of a pipe has gone. The
+  compiler crates return text and never print.
 
 ## Done
 
@@ -1258,12 +1263,32 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   (`wid check README.md`) says it is neither; and a directory with only
   `_test.wid` files suggests `wid test`. `crates/wid_cli/tests/package_target.rs`
   runs them.
+- `-debug` builds and compile-time code panic when negation or `**`
+  overflows (#124), as they did for `+`, `-` and `*`: "integer overflow in
+  unary `-`" for `-x` (and so `x.abs`) of a signed type's minimum, and
+  "integer overflow in `**`". The IR's `Unary` has a span for the
+  location. The emitter calls `wid_neg_*` and `wid_pow_checked_*`, which
+  square the base only while bits of the exponent remain, so `12 ** 1` in
+  `I8` fits; the interpreter mirrors both. Release builds still wrap, and
+  `-x` of an `I8` or `I16` now casts back to its type, so `-MIN` is `MIN`
+  (it printed 128 for `I8`). `tests/test` packages take build flags from
+  `NAME.flags`; `tests/test/overflow_traps` panics at every width.
+- A closed stdout or stderr no longer panics `wid` (#125): `wid query
+  outline | head -c 10`, `wid explain E0101` with its reader gone, or a
+  usage error with `2>&1 | head -1` exited with status 101 and Rust's
+  "failed printing to stdout". Every command writes through
+  `output::out`/`err`, which drop output to a closed pipe (`BrokenPipe`,
+  on every platform and without `unsafe`), so the command finishes and
+  exits with its own status (SPEC "Toolchain and CLI"); another write
+  error ends `wid` with status 1 and a message. `wid_cli/tests/closed_pipe.rs`
+  closes stdout, or stderr, before each command writes, and stops reading
+  `wid query outline` after 10 bytes.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
-  `tests/test` (`wid test` reports), `tests/doc` (`wid doc` pages and
-  errors), `tests/query` (`wid query` documents and errors) and every
-  `core/` package's `_test.wid` files.
+  `tests/test` (`wid test` reports, built with the flags in `NAME.flags`),
+  `tests/doc` (`wid doc` pages and errors), `tests/query` (`wid query`
+  documents and errors) and every `core/` package's `_test.wid` files.
 - `wid doc [package] [symbol]` (SPEC "Toolchain and CLI"): package
   overviews (the package doc, then every public declaration by section with
   the first paragraph of its doc), and pages for types (fields, promoted

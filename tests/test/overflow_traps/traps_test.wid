@@ -1,0 +1,151 @@
+import "core:testing"
+
+@[test]
+def neg_i8(t: ^testing.T)
+  x: I8 = -127
+  t.expect_eq(-x, 127)
+  x -= 1
+  puts(-x)
+end
+
+@[test]
+def neg_i16(t: ^testing.T)
+  x: I16 = -32767
+  t.expect_eq(-x, 32767)
+  x -= 1
+  puts(-x)
+end
+
+@[test]
+def neg_i32(t: ^testing.T)
+  x: I32 = -2147483647
+  t.expect_eq(-x, 2147483647)
+  x -= 1
+  puts(-x)
+end
+
+@[test]
+def neg_i64(t: ^testing.T)
+  x: I64 = -9223372036854775807
+  t.expect_eq(-x, 9223372036854775807)
+  x -= 1
+  puts(-x)
+end
+
+@[test]
+def neg_int(t: ^testing.T)
+  x = -9223372036854775807
+  t.expect_eq(-x, 9223372036854775807)
+  x -= 1
+  puts(-x)
+end
+
+@[test]
+def abs_i8(t: ^testing.T)
+  x: I8 = -127
+  t.expect_eq(x.abs, 127)
+  x -= 1
+  puts x.abs
+end
+
+@[test]
+def abs_i16(t: ^testing.T)
+  x: I16 = -32767
+  t.expect_eq(x.abs, 32767)
+  x -= 1
+  puts x.abs
+end
+
+@[test]
+def abs_i32(t: ^testing.T)
+  x: I32 = -2147483647
+  t.expect_eq(x.abs, 2147483647)
+  x -= 1
+  puts x.abs
+end
+
+@[test]
+def abs_i64(t: ^testing.T)
+  x: I64 = -9223372036854775807
+  t.expect_eq(x.abs, 9223372036854775807)
+  x -= 1
+  puts x.abs
+end
+
+@[test]
+def abs_int(t: ^testing.T)
+  x = -9223372036854775807
+  t.expect_eq(x.abs, 9223372036854775807)
+  x -= 1
+  puts x.abs
+end
+
+@[test]
+def pow_i8(t: ^testing.T)
+  x: I8 = -2
+  t.expect_eq(x ** 7, -128)
+  puts x ** 8
+end
+
+@[test]
+def pow_i16(t: ^testing.T)
+  x: I16 = -2
+  t.expect_eq(x ** 15, -32768)
+  puts x ** 16
+end
+
+@[test]
+def pow_i32(t: ^testing.T)
+  x: I32 = -2
+  t.expect_eq(x ** 31, -2147483648)
+  puts x ** 32
+end
+
+@[test]
+def pow_i64(t: ^testing.T)
+  x: I64 = -2
+  t.expect_eq(x ** 63, -9223372036854775807 - 1)
+  puts x ** 64
+end
+
+@[test]
+def pow_int(t: ^testing.T)
+  x = 3
+  t.expect_eq(x ** 39, 4052555153018976267)
+  puts x ** 40
+end
+
+@[test]
+def pow_u8(t: ^testing.T)
+  x: U8 = 2
+  t.expect_eq(x ** 7, 128)
+  puts x ** 8
+end
+
+@[test]
+def pow_u16(t: ^testing.T)
+  x: U16 = 2
+  t.expect_eq(x ** 15, 32768)
+  puts x ** 16
+end
+
+@[test]
+def pow_u32(t: ^testing.T)
+  x: U32 = 2
+  t.expect_eq(x ** 31, 2147483648)
+  puts x ** 32
+end
+
+@[test]
+def pow_u64(t: ^testing.T)
+  x: U64 = 2
+  t.expect_eq(x ** 63, 9223372036854775808)
+  puts x ** 64
+end
+
+@[test]
+def pow_uint(t: ^testing.T)
+  x: UInt = 3
+  t.expect_eq(x ** 40, 12157665459056928801)
+  puts x ** 41
+end

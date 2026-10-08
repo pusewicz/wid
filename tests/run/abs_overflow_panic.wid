@@ -1,0 +1,17 @@
+# In a `-debug` build, `abs` of a signed type's minimum panics like negating
+# it does; every other value has an absolute value that fits.
+def main
+  a: I8 = -127
+  b: I16 = -32767
+  c: I32 = -2147483647
+  d: I64 = -9223372036854775807
+  e: Int = 5
+  puts a.abs
+  puts b.abs
+  puts c.abs
+  puts d.abs
+  puts e.abs
+  x = -9223372036854775807 - 1
+  p x.abs
+  puts "unreachable"
+end

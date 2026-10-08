@@ -1,0 +1,43 @@
+# In a `-debug` build, integer `**` panics when the result doesn't fit. Every
+# result here fits its type, including ones where one more squaring of the
+# base would not (`12 ** 1` in `I8`), until `3 ** 50` overflows `Int`.
+def main
+  i8: I8 = -2
+  i8b: I8 = 12
+  puts i8 ** 7
+  puts i8b ** 1
+  puts i8b ** 0
+  i16: I16 = -2
+  i16b: I16 = 181
+  puts i16 ** 15
+  puts i16b ** 2
+  i32: I32 = -2
+  i32b: I32 = 46340
+  puts i32 ** 31
+  puts i32b ** 2
+  i64: I64 = -2
+  i64b: I64 = 3
+  puts i64 ** 63
+  puts i64b ** 39
+  one: Int = -1
+  zero: Int = 0
+  puts one ** 1000001
+  puts zero ** 0
+  u8: U8 = 2
+  u8b: U8 = 16
+  puts u8 ** 7
+  puts u8b ** 1
+  u16: U16 = 255
+  puts u16 ** 2
+  u32: U32 = 65535
+  puts u32 ** 2
+  u64: U64 = 3
+  puts u64 ** 40
+  uint: UInt = 4294967295
+  puts uint ** 2
+  b = 3
+  b **= 2
+  puts b
+  puts b ** 25
+  puts "unreachable"
+end

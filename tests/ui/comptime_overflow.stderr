@@ -1,0 +1,215 @@
+error[E0901]: `comptime` code failed: integer overflow in unary `-`
+  --> tests/ui/comptime_overflow.wid:4:23
+   |
+ 4 | def neg(x: $T) -> T = -x
+   |                       ^^ failed here
+...
+23 | NEG_I8 = comptime neg(MIN_I8)
+   |          -------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in unary `-`
+  --> tests/ui/comptime_overflow.wid:4:23
+   |
+ 4 | def neg(x: $T) -> T = -x
+   |                       ^^ failed here
+...
+24 | NEG_I16 = comptime neg(MIN_I16)
+   |           --------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in unary `-`
+  --> tests/ui/comptime_overflow.wid:4:23
+   |
+ 4 | def neg(x: $T) -> T = -x
+   |                       ^^ failed here
+...
+25 | NEG_I32 = comptime neg(MIN_I32)
+   |           --------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in unary `-`
+  --> tests/ui/comptime_overflow.wid:4:23
+   |
+ 4 | def neg(x: $T) -> T = -x
+   |                       ^^ failed here
+...
+26 | NEG_I64 = comptime neg(MIN_I64)
+   |           --------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in unary `-`
+  --> tests/ui/comptime_overflow.wid:4:23
+   |
+ 4 | def neg(x: $T) -> T = -x
+   |                       ^^ failed here
+...
+27 | NEG_INT = comptime neg(MIN_INT)
+   |           --------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in `**`
+  --> tests/ui/comptime_overflow.wid:5:29
+   |
+ 5 | def pow(x: $T, n: T) -> T = x ** n
+   |                             ^^^^^^ failed here
+...
+37 | POW_I8 = comptime pow(TWO_I8, 8)
+   |          ----------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in `**`
+  --> tests/ui/comptime_overflow.wid:5:29
+   |
+ 5 | def pow(x: $T, n: T) -> T = x ** n
+   |                             ^^^^^^ failed here
+...
+38 | POW_I16 = comptime pow(TWO_I16, 16)
+   |           ------------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in `**`
+  --> tests/ui/comptime_overflow.wid:5:29
+   |
+ 5 | def pow(x: $T, n: T) -> T = x ** n
+   |                             ^^^^^^ failed here
+...
+39 | POW_I32 = comptime pow(TWO_I32, 32)
+   |           ------------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in `**`
+  --> tests/ui/comptime_overflow.wid:5:29
+   |
+ 5 | def pow(x: $T, n: T) -> T = x ** n
+   |                             ^^^^^^ failed here
+...
+40 | POW_I64 = comptime pow(TWO_I64, 64)
+   |           ------------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in `**`
+  --> tests/ui/comptime_overflow.wid:5:29
+   |
+ 5 | def pow(x: $T, n: T) -> T = x ** n
+   |                             ^^^^^^ failed here
+...
+41 | POW_U8 = comptime pow(TWO_U8, 8)
+   |          ----------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in `**`
+  --> tests/ui/comptime_overflow.wid:5:29
+   |
+ 5 | def pow(x: $T, n: T) -> T = x ** n
+   |                             ^^^^^^ failed here
+...
+42 | POW_U16 = comptime pow(TWO_U16, 16)
+   |           ------------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in `**`
+  --> tests/ui/comptime_overflow.wid:5:29
+   |
+ 5 | def pow(x: $T, n: T) -> T = x ** n
+   |                             ^^^^^^ failed here
+...
+43 | POW_U32 = comptime pow(TWO_U32, 32)
+   |           ------------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in `**`
+  --> tests/ui/comptime_overflow.wid:5:29
+   |
+ 5 | def pow(x: $T, n: T) -> T = x ** n
+   |                             ^^^^^^ failed here
+...
+44 | POW_U64 = comptime pow(TWO_U64, 64)
+   |           ------------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in `**`
+  --> tests/ui/comptime_overflow.wid:5:29
+   |
+ 5 | def pow(x: $T, n: T) -> T = x ** n
+   |                             ^^^^^^ failed here
+...
+45 | POW_UINT = comptime pow(TWO_UINT, 64)
+   |            -------------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in unary `-`
+  --> core/builtin/numbers.wid:27:32
+   |
+27 |   def abs -> Self = self < 0 ? -self : self
+   |                                ^^^^^ failed here
+  ::: tests/ui/comptime_overflow.wid:30:10
+   |
+30 | ABS_I8 = comptime MIN_I8.abs
+   |          ------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in unary `-`
+  --> core/builtin/numbers.wid:27:32
+   |
+27 |   def abs -> Self = self < 0 ? -self : self
+   |                                ^^^^^ failed here
+  ::: tests/ui/comptime_overflow.wid:31:11
+   |
+31 | ABS_I16 = comptime MIN_I16.abs
+   |           -------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in unary `-`
+  --> core/builtin/numbers.wid:27:32
+   |
+27 |   def abs -> Self = self < 0 ? -self : self
+   |                                ^^^^^ failed here
+  ::: tests/ui/comptime_overflow.wid:32:11
+   |
+32 | ABS_I32 = comptime MIN_I32.abs
+   |           -------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in unary `-`
+  --> core/builtin/numbers.wid:27:32
+   |
+27 |   def abs -> Self = self < 0 ? -self : self
+   |                                ^^^^^ failed here
+  ::: tests/ui/comptime_overflow.wid:33:11
+   |
+33 | ABS_I64 = comptime MIN_I64.abs
+   |           -------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in unary `-`
+  --> core/builtin/numbers.wid:27:32
+   |
+27 |   def abs -> Self = self < 0 ? -self : self
+   |                                ^^^^^ failed here
+  ::: tests/ui/comptime_overflow.wid:34:11
+   |
+34 | ABS_INT = comptime MIN_INT.abs
+   |           -------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error: could not compile due to 19 errors

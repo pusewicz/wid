@@ -502,9 +502,24 @@ impl<'p> Gen<'p> {
                 format!("(({c}) ? (void)0 : wid_nil_panic({loc}), {c}({}))", parts.join(", "))
             }
             ExprKind::Builtin { op, args, span } => self.builtin(*op, args, *span, e.ty),
-            ExprKind::Unary { op, expr } => {
+            ExprKind::Unary { op, expr, span } => {
                 let v = self.expr(expr);
                 match op {
+                    // Only signed integers negate; `-MIN` overflows.
+                    ir::UnaryOp::Neg
+                        if self.p.checks.overflow
+                            && matches!(self.p.types.kind(self.p.types.base(e.ty)), TyKind::Int(_)) =>
+                    {
+                        let s = self.int_suffix(e.ty);
+                        let loc = self.location(*span);
+                        format!("wid_neg_{s}({}, {loc})", strip_parens(&v))
+                    }
+                    // Narrow integer types promote to `int` in C; cast back,
+                    // so `-MIN` wraps to `MIN`.
+                    ir::UnaryOp::Neg if self.int_kind(e.ty).is_some_and(|i| i.size() < 4) => {
+                        let ty = self.c_type(e.ty);
+                        format!("(({ty})(-{v}))")
+                    }
                     ir::UnaryOp::Neg => format!("(-{v})"),
                     ir::UnaryOp::Not => format!("(!{v})"),
                     ir::UnaryOp::BitNot => {
@@ -724,7 +739,8 @@ impl<'p> Gen<'p> {
                 _ => {
                     let s = self.int_suffix(lhs.ty);
                     let loc = self.location(span);
-                    format!("wid_pow_{s}({}, {}, {loc})", strip_parens(&l), strip_parens(&r))
+                    let checked = if self.p.checks.overflow { "checked_" } else { "" };
+                    format!("wid_pow_{checked}{s}({}, {}, {loc})", strip_parens(&l), strip_parens(&r))
                 }
             };
         }

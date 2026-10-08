@@ -1,0 +1,2 @@
+panic: integer overflow in unary `-`
+  at core/builtin/numbers.wid:27:32 in `Int#abs`

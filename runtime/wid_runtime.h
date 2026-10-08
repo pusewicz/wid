@@ -223,6 +223,20 @@ static inline void wid_slice_check(wid_Int lo, wid_Int hi, wid_Int len, wid_Loca
             exp = (T)(exp >> 1);                                                                     \
         }                                                                                            \
         return result;                                                                               \
+    }                                                                                                \
+    /* `**` in debug builds. The base is squared only while bits of the */                           \
+    /* exponent remain, so a square overflows only when the result does. */                          \
+    static inline T wid_pow_checked_##S(T base, T exp, wid_Location loc) {                            \
+        if (wid_negative_##S(exp)) wid_panicf(loc, "negative exponent in integer `**`");           \
+        T result = 1;                                                                                \
+        while (exp > 0) {                                                                            \
+            if ((exp & 1) && ckd_mul(&result, result, base)) goto overflow;                          \
+            exp = (T)(exp >> 1);                                                                     \
+            if (exp > 0 && ckd_mul(&base, base, base)) goto overflow;                                \
+        }                                                                                            \
+        return result;                                                                               \
+    overflow:                                                                                        \
+        wid_panicf(loc, "integer overflow in `**`");                                                 \
     }
 
 static inline bool wid_negative_i8(int8_t v) { return v < 0; }
@@ -242,6 +256,19 @@ WID_INT_OPS(uint8_t, u8, 0)
 WID_INT_OPS(uint16_t, u16, 0)
 WID_INT_OPS(uint32_t, u32, 0)
 WID_INT_OPS(uint64_t, u64, 0)
+
+/* Checked negation (debug builds), for the signed types, which have it: `-MIN` overflows. */
+#define WID_NEG_OP(T, S)                                                                             \
+    static inline T wid_neg_##S(T a, wid_Location loc) {                                              \
+        T r;                                                                                         \
+        if (ckd_sub(&r, (T)0, a)) wid_panicf(loc, "integer overflow in unary `-`");                  \
+        return r;                                                                                    \
+    }
+
+WID_NEG_OP(int8_t, i8)
+WID_NEG_OP(int16_t, i16)
+WID_NEG_OP(int32_t, i32)
+WID_NEG_OP(int64_t, i64)
 
 /* Shifts by at least the bit width produce 0 (or -1 for negative values shifted right). */
 #define WID_SHIFT_OPS(T, U, S, BITS)                                                                 \

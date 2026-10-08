@@ -1,0 +1,3 @@
+# Built with `-debug` (`tests/test/overflow_traps.flags`): each test in
+# `traps_test.wid` checks a negation, `abs` or `**` that fits, then panics
+# on one that overflows, at every integer width that has the operation.
