@@ -299,7 +299,8 @@ end
   `self` as `^Self`, and the call site takes the address for you. `T.new(…)`
   builds a value and **never allocates**. It takes fields by position (in
   declaration order) or by name; missing fields use their declared default or
-  zero. `new` is reserved for this, so name custom constructors otherwise
+  zero. A default is checked against its field's type whether or not a `new`
+  takes it, and runs at each `new` that does. `new` is reserved for this, so name custom constructors otherwise
   (`def self.create`). There is no struct literal syntax: a type followed
   directly by `{` (`Vec2{x: 1.0}`, `geo.Vec2{1.0, 2.0}`, `Pool(Int, 4){}`,
   as in Odin, Go, Rust or Zig) is E0113, with a fix that writes the `new`
@@ -355,10 +356,15 @@ end
 - `module Name … end` holds methods and constants (no fields). `include Name`
   in a struct, enum, module or `extend` mixes its methods in at compile time.
   Module methods are generic over `Self`, checked for each type that includes
-  them, and `@field` reads that type's fields.
+  them, and `@field` reads that type's fields. A module that nothing includes
+  is never checked.
 - `extend T1, T2 … end` adds methods to existing types. That includes builtin
   types and patterns such as `[]$T`. Extensions apply program-wide, and two
-  extensions that define the same method for a type are an error. A method
+  extensions that define the same method for a type are an error. The
+  methods of an `extend` of concrete types (`extend P`, `extend Int, F64`)
+  are checked for each type it lists, whether or not anything calls them,
+  like a struct's own; those of an `extend` over a pattern are generic,
+  checked for each type a call uses them with. A method
   call looks for a field, then the type's own methods, then included modules,
   then members promoted by `using`, then builtin methods (`size`, `push`,
   `to_s`, …), then extensions. For arrays and dynamic arrays it also looks
@@ -495,6 +501,15 @@ end
   as anywhere (`X = five`, `[five]Int`, an enum member's `a = five`). The
   value's names resolve as in a method: an undefined one is E0201 with a
   did-you-mean.
+- **What is checked.** Every concrete declaration is checked whether or not
+  anything uses it: package-level methods, the methods of a struct or enum
+  that isn't generic, those of an `extend` of concrete types (for each type
+  it lists), field defaults and constants. Generic code is checked per use,
+  like a template: methods with `$T` parameters, the methods of a generic
+  struct, of an `extend` over a pattern (`extend []$T`) and of a module
+  (for each type that includes it). Generic code that nothing uses, like a
+  module nothing includes, is never checked; a future `-vet` could check
+  it.
 - `comptime` code can use constants, literals and any Wid method, but not the
   variables around it, which have no value yet. It can allocate:
   `context.allocator` is a compile-time heap. `puts` and `p` show their output

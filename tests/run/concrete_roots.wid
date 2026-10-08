@@ -1,0 +1,46 @@
+# Every concrete declaration is checked whether or not anything uses it:
+# field defaults and the methods of an `extend` of concrete types too. The
+# code doesn't change: a default still runs at each `new` that takes it, and
+# an extension method still runs where it is called.
+def next_id(tag: String) -> Int
+  puts "default for #{tag}"
+  7
+end
+
+struct Ship
+  id: Int = next_id("ship")
+  hp: Int = 3
+end
+
+struct Unused
+  id: Int = next_id("unused")
+end
+
+struct P
+  hp: Int
+end
+
+extend P
+  def doubled -> Int = @hp * 2
+  def unused -> Int = @hp
+  def each_point(&blk: block(Int))
+    yield @hp
+    yield @hp + 1
+  end
+end
+
+extend Int, String
+  def tagged -> String = "<#{self}>"
+end
+
+def main
+  a = Ship.new
+  b = Ship.new(id: 1)
+  c = Ship.new(hp: 5)
+  p a.id, b.id, c.id + c.hp
+  pl = P.new(4)
+  p pl.doubled
+  pl.each_point { |n| p n }
+  puts 5.tagged
+  puts "x".tagged
+end

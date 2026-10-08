@@ -1,0 +1,15 @@
+error[E0301]: expected `Int`, found `String`
+ --> tests/ui/field_default_unused.wid:4:12
+  |
+4 |   x: Int = "s"
+  |            ^^^ this has type `String`
+  = see `wid explain E0301`
+
+error[E0301]: expected `Int`, found `Bool`
+ --> tests/ui/field_default_unused.wid:9:13
+  |
+9 |   hp: Int = true
+  |             ^^^^ this has type `Bool`
+  = see `wid explain E0301`
+
+error: could not compile due to 2 errors

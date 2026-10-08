@@ -1,0 +1,40 @@
+# The methods of an `extend` of concrete types are checked whether or not
+# anything calls them, as a struct's own methods are, with `Self` as each
+# target. A call adds nothing.
+struct P
+  hp: Int
+end
+
+extend P
+  def bad -> Int = "x"
+  def called -> Int = @hp + "1"
+  def each_hp(&blk: block(Int))
+    yield "no"
+  end
+end
+
+extend String
+  def worse -> Int = "y"
+end
+
+extend Int, F64
+  def twice -> Int = self * 2
+end
+
+# Generic code is checked for each use: an `extend` over a pattern, a method
+# with `$` parameters, and a module nothing includes.
+extend []$T
+  def pattern -> Int = "pattern"
+end
+
+extend P
+  def generic(x: $T) -> Int = "generic"
+end
+
+module Unincluded
+  def m -> Int = "module"
+end
+
+def main
+  p P.new(1).called
+end

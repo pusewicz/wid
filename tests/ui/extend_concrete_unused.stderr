@@ -1,0 +1,44 @@
+error[E0301]: expected `Int`, found `String`
+ --> tests/ui/extend_concrete_unused.wid:9:20
+  |
+9 |   def bad -> Int = "x"
+  |                    ^^^ this has type `String`
+  = see `wid explain E0301`
+
+error[E0307]: cannot apply `+` to `Int` and `String`
+  --> tests/ui/extend_concrete_unused.wid:10:23
+   |
+10 |   def called -> Int = @hp + "1"
+   |                       ^^^^^^^^^ `Int` + `String`
+   |                       --- `Int`
+   |                             --- `String`
+   = see `wid explain E0307`
+
+error[E0301]: expected `Int`, found `String`
+  --> tests/ui/extend_concrete_unused.wid:12:11
+   |
+12 |     yield "no"
+   |           ^^^^ this has type `String`
+   = see `wid explain E0301`
+
+error[E0301]: expected `Int`, found `String`
+  --> tests/ui/extend_concrete_unused.wid:17:22
+   |
+17 |   def worse -> Int = "y"
+   |                      ^^^ this has type `String`
+   = see `wid explain E0301`
+
+error[E0301]: expected `Int`, found `F64`
+  --> tests/ui/extend_concrete_unused.wid:21:22
+   |
+20 | extend Int, F64
+   |             --- `twice` is checked with `Self` as `F64` here
+21 |   def twice -> Int = self * 2
+   |                      ^^^^^^^^ this has type `F64`
+   = note: Wid never converts between numeric types implicitly
+   = note: `extend` adds `twice` to each type it lists, and it is checked for each
+help: convert it explicitly with `.to(Int)`
+   |   def twice -> Int = (self * 2).to(Int)
+   = see `wid explain E0301`
+
+error: could not compile due to 5 errors

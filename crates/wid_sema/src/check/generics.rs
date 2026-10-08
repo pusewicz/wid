@@ -873,6 +873,54 @@ impl<'a> Checker<'a> {
         None
     }
 
+    /// Whether `decl` is a method of an `extend` whose targets are all
+    /// concrete types (`extend P`, `extend Int, String`), with no `$`
+    /// parameters of its own: a method of each target, which only `Self`
+    /// tells apart, rather than generic code. A method of an `extend` over a
+    /// pattern (`extend []$T`) or with `$` parameters is generic.
+    pub(super) fn is_concrete_extension(&self, decl: DeclId) -> bool {
+        let Some(owner) = self.decls[decl.0 as usize].owner else { return false };
+        let DeclKind::Extend(e) = self.decls[owner.0 as usize].kind else { return false };
+        let mut params = Vec::new();
+        for t in &e.targets {
+            collect_params(t, &mut params);
+        }
+        params.is_empty() && self.generic_names(decl) == [Name::new("Self")]
+    }
+
+    /// For a method of an `extend` of concrete types, the bindings of
+    /// `Self` to each target that resolved, which it is checked with
+    /// whether or not anything calls it; empty for any other method.
+    pub(super) fn concrete_extension_substs(&mut self, decl: DeclId) -> Vec<Subst> {
+        if !self.is_concrete_extension(decl) {
+            return Vec::new();
+        }
+        let Some(owner) = self.decls[decl.0 as usize].owner else { return Vec::new() };
+        let targets = self.extend_targets(owner);
+        let mut substs: Vec<Subst> = Vec::new();
+        for t in targets {
+            let known = !matches!(self.types.kind(t), TyKind::Unknown) && !self.has_params(t);
+            if known && !substs.iter().any(|s| s[0].1 == t) {
+                substs.push(Rc::new(vec![(Name::new("Self"), t)]));
+            }
+        }
+        substs
+    }
+
+    /// For a method of an `extend` of several concrete types checked with
+    /// `Self` bound by `subst`: that type, as shown, and where the `extend`
+    /// line names it, which errors in the method point at.
+    pub(super) fn extension_target_site(&mut self, decl: DeclId, subst: &[(Name, TyId)]) -> Option<(String, Span)> {
+        let owner = self.decls[decl.0 as usize].owner?;
+        let DeclKind::Extend(e) = self.decls[owner.0 as usize].kind else { return None };
+        if e.targets.len() < 2 {
+            return None;
+        }
+        let self_ty = lookup(subst, Name::new("Self"))?;
+        let at = self.extend_targets(owner).iter().position(|t| *t == self_ty)?;
+        Some((self.types.display(self_ty), e.targets.get(at)?.span))
+    }
+
     /// Records the `extend` declarations of all packages.
     pub fn register_extend(&mut self, decl: DeclId) {
         self.extends.push(decl);

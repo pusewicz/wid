@@ -5,7 +5,7 @@ use wid_diagnostics::{Applicability, Diagnostic, Edit, Span, codes};
 use wid_syntax::Name;
 use wid_syntax::ast;
 
-use super::{Checker, DeclId, DeclKind, DeclLoc, mangle_ident};
+use super::{Checker, DeclId, DeclKind, DeclLoc, InstanceOf, mangle_ident};
 use crate::ir::{self, LabelId, LocalId, Stmt};
 use crate::types::{TyId, TyKind};
 
@@ -558,13 +558,22 @@ impl<'a> Checker<'a> {
             func.params = params;
             return func;
         }
-        let generic_context = !subst.is_empty();
-        if generic_context {
-            let body_span = self.decls[decl.0 as usize].item.span;
-            let macro_self = super::generics::lookup(&subst, Name::new("Self"))
-                .filter(|_| f.is_macro)
-                .map(|t| self.types.display(t));
-            self.instance_stack.push((display.clone(), origin, body_span, macro_self));
+        let body_span = self.decls[decl.0 as usize].item.span;
+        let context = if self.is_concrete_extension(decl) {
+            self.extension_target_site(decl, &subst)
+                .map(|(shown, site)| (f.name.as_str().to_string(), site, body_span, InstanceOf::Target(shown)))
+        } else if !subst.is_empty() {
+            let of = match super::generics::lookup(&subst, Name::new("Self")).filter(|_| f.is_macro) {
+                Some(t) => InstanceOf::MacroSelf(self.types.display(t)),
+                None => InstanceOf::Generic,
+            };
+            Some((display.clone(), origin, body_span, of))
+        } else {
+            None
+        };
+        let generic_context = context.is_some();
+        if let Some(context) = context {
+            self.instance_stack.push(context);
         }
         let saved = std::mem::take(&mut self.body);
         let saved_macro = std::mem::replace(&mut self.macros.in_macro, f.is_macro);

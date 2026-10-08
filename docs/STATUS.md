@@ -1317,6 +1317,18 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `wid_driver/tests/core_docs.rs`. `OS` and `ARCH` have a doc each, and the
   prelude declares them when it is the package itself
   (`wid doc core:builtin OS`).
+- Every concrete declaration is checked whether or not anything uses it
+  (#111, SPEC "Compile-time"): a struct's field defaults are checked once
+  against their fields' types (`check_field_defaults`; each `new` that
+  takes one still lowers it where it is called), and the methods of an
+  `extend` of concrete types once for each type it lists, with `Self`
+  bound to it (`concrete_extension_substs`); the call reuses that
+  instance, so its errors are reported once. An error that only one of
+  several types hits points at that type in the `extend` line. Generic
+  code (`$T` methods, generic structs, an `extend` over a pattern,
+  modules) is still checked per use, so the code that nothing lowers, and
+  that `wid query` can record nothing for, is only generic code nothing
+  uses.
 
 ## Next
 
