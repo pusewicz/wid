@@ -1,0 +1,32 @@
+struct A
+  hp: Int = 1
+end
+
+struct B
+  hp: Int = 2
+end
+
+struct D
+  hp: Int = 3
+end
+
+struct C
+  using a: A
+  using b: B
+  using d: D
+end
+
+def pick_i16(x: I16) -> I16 = x
+def pick_i32(x: I32) -> I32 = x
+def pick_i64(x: I64) -> I64 = x
+overload :pick, :pick_i16, :pick_i32, :pick_i64
+
+def main
+  p C.new.hp
+  p pick(5)
+  a = 1
+  b = 2
+  c = 3
+  a, b, c += 1
+  p a, b, c
+end

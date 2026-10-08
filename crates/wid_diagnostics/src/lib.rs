@@ -25,6 +25,19 @@ pub fn explained_codes() -> impl Iterator<Item = &'static str> {
     explanations::EXPLANATIONS.iter().map(|(c, _)| *c)
 }
 
+/// Joins items into an English list for a message: `a`, `a and b`, or
+/// `a, b and c`.
+pub fn and_list<S: AsRef<str>>(items: &[S]) -> String {
+    match items {
+        [] => String::new(),
+        [one] => one.as_ref().to_string(),
+        [rest @ .., last] => {
+            let rest: Vec<&str> = rest.iter().map(AsRef::as_ref).collect();
+            format!("{} and {}", rest.join(", "), last.as_ref())
+        }
+    }
+}
+
 /// Computes the edit distance between two strings, for "did you mean" hints.
 /// Insertions, deletions, substitutions and swaps of two neighbouring
 /// characters each cost one, so `pirnt` is one edit from `print`.
@@ -66,7 +79,7 @@ pub fn did_you_mean<'a>(name: &str, candidates: impl IntoIterator<Item = &'a str
 
 #[cfg(test)]
 mod tests {
-    use super::{did_you_mean, edit_distance};
+    use super::{and_list, did_you_mean, edit_distance};
 
     #[test]
     fn transpositions_cost_one_edit() {
@@ -83,5 +96,13 @@ mod tests {
         assert_eq!(did_you_mean("xyz", ["test", "export"]), None);
         assert_eq!(did_you_mean("d", ["p", "e"]), None);
         assert_eq!(did_you_mean("X", ["x"]), Some("x"));
+    }
+
+    #[test]
+    fn lists_read_as_english() {
+        assert_eq!(and_list::<&str>(&[]), "");
+        assert_eq!(and_list(&["`a`"]), "`a`");
+        assert_eq!(and_list(&["`a`", "`b`"]), "`a` and `b`");
+        assert_eq!(and_list(&["`a`", "`b`", "`d`"]), "`a`, `b` and `d`");
     }
 }

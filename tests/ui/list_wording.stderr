@@ -1,0 +1,29 @@
+error[E0204]: `hp` is ambiguous in `C`
+  --> tests/ui/list_wording.wid:25:11
+   |
+25 |   p C.new.hp
+   |           ^^ `a`, `b` and `d` all provide `hp`
+   = note: `using` promotes the members of several fields here, and more than one has this name
+help: name the field to read it through, like `.a.hp`
+   |   p C.new.a.hp
+   = see `wid explain E0204`
+
+error[E0316]: several members of `pick` take (integer literal)
+  --> tests/ui/list_wording.wid:26:5
+   |
+26 |   p pick(5)
+   |     ^^^^^^^ `pick_i16`, `pick_i32` and `pick_i64` fit equally well
+   = note: the members are `pick_i16(x: I16)`, `pick_i32(x: I32)`, `pick_i64(x: I64)`
+help: convert the argument to `I16`
+   |   p pick(5.to(I16))
+   = see `wid explain E0316`
+
+error[E0107]: `+=` updates one target at a time
+  --> tests/ui/list_wording.wid:30:3
+   |
+30 |   a, b, c += 1
+   |   ^^^^^^^^^^^^ 3 targets
+help: write `a += 1`, `b += 1` and `c += 1` as separate statements
+   = see `wid explain E0107`
+
+error: could not compile due to 3 errors

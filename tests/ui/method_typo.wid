@@ -1,0 +1,35 @@
+module Healing
+  def mend(n: Int) -> Int = n
+end
+
+struct Mob
+  def regen(n: Int) -> Int = n
+end
+
+struct P
+  include Healing
+  using mob: Mob
+  heap: Int = 0
+
+  def heal(n: Int) -> Int = n
+  def self.make -> P = P.new
+
+  def own -> Int = heall(1)
+  def bare -> Int = heall
+  def mixed_in -> Int = mendd(1)
+  def promoted -> Int = regenn(1)
+  def extended -> Int = boostt(1)
+  def near_both -> Int = hea
+  def field -> Int = heapp
+  def self.build -> P = makee
+end
+
+extend P
+  def boost(n: Int) -> Int = n
+end
+
+def main
+  pl = P.new
+  p pl.own + pl.bare + pl.mixed_in + pl.promoted + pl.extended + pl.near_both + pl.field
+  p P.build
+end

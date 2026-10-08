@@ -1,6 +1,6 @@
 //! Lowering statements.
 
-use wid_diagnostics::{Applicability, Diagnostic, Span, codes};
+use wid_diagnostics::{Applicability, Diagnostic, Span, and_list, codes};
 use wid_syntax::ast::{self, ExprKind as E, StmtKind as S};
 
 use super::Checker;
@@ -229,7 +229,7 @@ impl<'a> Checker<'a> {
                         format!("`{op_text}` updates one target at a time"),
                     )
                     .primary(span, format!("{} targets", targets.len()))
-                    .help(format!("write {} as separate statements", lines.join(" and "))),
+                    .help(format!("write {} as separate statements", and_list(&lines))),
                 );
                 for t in targets {
                     self.begin_block();

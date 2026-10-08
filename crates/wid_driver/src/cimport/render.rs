@@ -171,10 +171,11 @@ impl Renderer<'_> {
         for (wid, list) in collided {
             for (c_name, location) in list {
                 let others: Vec<String> = list.iter().filter(|(c, _)| c != c_name).map(|(c, _)| c.clone()).collect();
+                let quoted: Vec<String> = others.iter().map(|c| format!("`{c}`")).collect();
                 self.skipped.push(CSkipped {
                     c_name: c_name.clone(),
                     wid_name: wid.clone(),
-                    reason: format!("has the same Wid name as `{}`", others.join("`, `")),
+                    reason: format!("has the same Wid name as {}", wid_diagnostics::and_list(&quoted)),
                     location: location.clone(),
                     collides_with: others,
                 });

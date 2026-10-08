@@ -1,0 +1,73 @@
+error[E0201]: undefined method `heall`
+  --> tests/ui/method_typo.wid:17:20
+   |
+17 |   def own -> Int = heall(1)
+   |                    ^^^^^ not found in this scope
+help: a similar name exists: `heal`
+   |   def own -> Int = heal(1)
+   = see `wid explain E0201`
+
+error[E0201]: undefined name `heall`
+  --> tests/ui/method_typo.wid:18:21
+   |
+18 |   def bare -> Int = heall
+   |                     ^^^^^ not found in this scope
+help: a similar name exists: `heal`
+   |   def bare -> Int = heal
+   = see `wid explain E0201`
+
+error[E0201]: undefined method `mendd`
+  --> tests/ui/method_typo.wid:19:25
+   |
+19 |   def mixed_in -> Int = mendd(1)
+   |                         ^^^^^ not found in this scope
+help: a similar name exists: `mend`
+   |   def mixed_in -> Int = mend(1)
+   = see `wid explain E0201`
+
+error[E0201]: undefined method `regenn`
+  --> tests/ui/method_typo.wid:20:25
+   |
+20 |   def promoted -> Int = regenn(1)
+   |                         ^^^^^^ not found in this scope
+help: a similar name exists: `regen`
+   |   def promoted -> Int = regen(1)
+   = see `wid explain E0201`
+
+error[E0201]: undefined method `boostt`
+  --> tests/ui/method_typo.wid:21:25
+   |
+21 |   def extended -> Int = boostt(1)
+   |                         ^^^^^^ not found in this scope
+help: a similar name exists: `boost`
+   |   def extended -> Int = boost(1)
+   = see `wid explain E0201`
+
+error[E0201]: undefined name `hea`
+  --> tests/ui/method_typo.wid:22:26
+   |
+22 |   def near_both -> Int = hea
+   |                          ^^^ not found in this scope
+help: a similar name exists: `heal`
+   |   def near_both -> Int = heal
+   = see `wid explain E0201`
+
+error[E0201]: undefined name `heapp`
+  --> tests/ui/method_typo.wid:23:22
+   |
+23 |   def field -> Int = heapp
+   |                      ^^^^^ not found in this scope
+help: a similar name exists: `@heap`
+   |   def field -> Int = @heap
+   = see `wid explain E0201`
+
+error[E0201]: undefined name `makee`
+  --> tests/ui/method_typo.wid:24:25
+   |
+24 |   def self.build -> P = makee
+   |                         ^^^^^ not found in this scope
+help: a similar name exists: `make`
+   |   def self.build -> P = make
+   = see `wid explain E0201`
+
+error: could not compile due to 8 errors

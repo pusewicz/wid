@@ -9,6 +9,7 @@ typedef struct lib_Flags { unsigned on : 1; int count; } lib_Flags;
 
 double lib_log(double x);
 void lib_Log(const char *message);
+int lib_LOG(int level);
 int lib_print(const char *fmt, ...);
 lib_Handle *lib_open(void);
 
