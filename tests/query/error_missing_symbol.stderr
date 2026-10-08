@@ -1,0 +1,2 @@
+error: `wid query def` needs a symbol path, like `wid query def Ball.update`
+run `wid help query` for usage

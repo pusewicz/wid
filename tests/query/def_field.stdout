@@ -1,0 +1,45 @@
+{
+  "package": {
+    "doc": "Shapes for a small 2D game: balls, players and the methods that move\nthem.\n\nA second paragraph, which only the overview shows.",
+    "name": "shapes",
+    "path": "."
+  },
+  "query": "def",
+  "results": [
+    {
+      "attributes": [],
+      "doc": "Hit points; 0 is dead.",
+      "kind": "field",
+      "location": {
+        "column": 3,
+        "end_column": 5,
+        "end_line": 50,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 50
+      },
+      "name": "hp",
+      "origin": {
+        "kind": "using",
+        "location": null,
+        "via": "using base: Entity"
+      },
+      "owner": {
+        "kind": "struct",
+        "name": "Entity"
+      },
+      "package": ".",
+      "path": "Entity.hp",
+      "private": false,
+      "promoted_into": "Player",
+      "signature": "hp: Int = 100",
+      "span": {
+        "column": 3,
+        "end_column": 16,
+        "end_line": 50,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 50
+      }
+    }
+  ],
+  "symbol": "Player.hp"
+}

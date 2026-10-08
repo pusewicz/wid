@@ -1,0 +1,37 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0601",
+      "column": 19,
+      "expansions": [],
+      "explain": "wid explain E0601",
+      "file": "command line",
+      "helps": [
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [],
+          "message": "name the file with `-in:`, like `wid query outline -in:main.wid -file`"
+        }
+      ],
+      "labels": [
+        {
+          "column": 19,
+          "end": 23,
+          "end_column": 24,
+          "end_line": 1,
+          "file": "command line",
+          "line": 1,
+          "message": "no file is named",
+          "primary": true,
+          "start": 18
+        }
+      ],
+      "line": 1,
+      "message": "`-file` needs a file to read",
+      "notes": [],
+      "severity": "error"
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}

@@ -1,0 +1,40 @@
+{
+  "package": {
+    "doc": "Shapes for a small 2D game: balls, players and the methods that move\nthem.\n\nA second paragraph, which only the overview shows.",
+    "name": "shapes",
+    "path": "."
+  },
+  "query": "def",
+  "results": [
+    {
+      "attributes": [],
+      "doc": "Only the player's own methods call this.",
+      "kind": "method",
+      "location": {
+        "column": 15,
+        "end_column": 21,
+        "end_line": 86,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 86
+      },
+      "name": "secret",
+      "owner": {
+        "kind": "struct",
+        "name": "Player"
+      },
+      "package": ".",
+      "path": "Player.secret",
+      "private": true,
+      "signature": "def secret",
+      "span": {
+        "column": 3,
+        "end_column": 6,
+        "end_line": 87,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 86
+      },
+      "static": false
+    }
+  ],
+  "symbol": "Player.secret"
+}

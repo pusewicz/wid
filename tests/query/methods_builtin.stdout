@@ -1,0 +1,55 @@
+{
+  "package": {
+    "doc": "Shapes for a small 2D game: balls, players and the methods that move\nthem.\n\nA second paragraph, which only the overview shows.",
+    "name": "shapes",
+    "path": "."
+  },
+  "query": "methods",
+  "results": [
+    {
+      "methods": [
+        {
+          "attributes": [],
+          "doc": "The size, shouted.",
+          "kind": "method",
+          "location": {
+            "column": 7,
+            "end_column": 15,
+            "end_line": 154,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 154
+          },
+          "name": "loudness",
+          "owner": {
+            "kind": "extension",
+            "name": "extend String"
+          },
+          "package": ".",
+          "path": "loudness",
+          "private": false,
+          "signature": "def loudness -> Int",
+          "span": {
+            "column": 3,
+            "end_column": 38,
+            "end_line": 154,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 154
+          },
+          "static": false
+        }
+      ],
+      "origin": {
+        "kind": "extend",
+        "location": {
+          "column": 8,
+          "end_column": 14,
+          "end_line": 152,
+          "file": "tests/doc/shapes/shapes.wid",
+          "line": 152
+        },
+        "via": "extend String"
+      }
+    }
+  ],
+  "symbol": "String"
+}

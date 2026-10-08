@@ -1,0 +1,61 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0603",
+      "column": 19,
+      "expansions": [],
+      "explain": "wid explain E0603",
+      "file": "command line",
+      "helps": [
+        {
+          "applicability": "machine_applicable",
+          "edits": [
+            {
+              "column": 11,
+              "end": 17,
+              "end_column": 18,
+              "end_line": 1,
+              "file": "command line",
+              "line": 1,
+              "replacement": "def",
+              "start": 10
+            }
+          ],
+          "message": "ask for the declaration of `MAX_BALLS` instead"
+        }
+      ],
+      "labels": [
+        {
+          "column": 19,
+          "end": 27,
+          "end_column": 28,
+          "end_line": 1,
+          "file": "command line",
+          "line": 1,
+          "message": "`MAX_BALLS` is a constant, not a type",
+          "primary": true,
+          "start": 18
+        },
+        {
+          "column": 1,
+          "end": 196,
+          "end_column": 10,
+          "end_line": 9,
+          "file": "tests/doc/shapes/shapes.wid",
+          "line": 9,
+          "message": "constant `MAX_BALLS` is declared here",
+          "primary": false,
+          "start": 187
+        }
+      ],
+      "line": 1,
+      "message": "`MAX_BALLS` has no methods",
+      "notes": [
+        "`wid query methods` lists the methods of a struct, an enum, a union, a module, a type alias of one, or a builtin type"
+      ],
+      "severity": "error"
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}

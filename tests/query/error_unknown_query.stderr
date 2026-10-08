@@ -1,0 +1,2 @@
+error: unknown query `defs`; did you mean `def`?
+run `wid help query` for usage

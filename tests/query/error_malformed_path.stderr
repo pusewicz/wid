@@ -1,0 +1,37 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0602",
+      "column": 15,
+      "expansions": [],
+      "explain": "wid explain E0602",
+      "file": "command line",
+      "helps": [
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [],
+          "message": "write a name, a type and its member, or an import name first: `Ball`, `Ball.update`, `rl.draw_circle_v`"
+        }
+      ],
+      "labels": [
+        {
+          "column": 15,
+          "end": 21,
+          "end_column": 22,
+          "end_line": 1,
+          "file": "command line",
+          "line": 1,
+          "message": "a name is missing around a `.`",
+          "primary": true,
+          "start": 14
+        }
+      ],
+      "line": 1,
+      "message": "`Player.` is not a symbol path",
+      "notes": [],
+      "severity": "error"
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}

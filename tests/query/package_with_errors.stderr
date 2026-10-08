@@ -1,0 +1,53 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0307",
+      "column": 3,
+      "expansions": [],
+      "explain": "wid explain E0307",
+      "file": "tests/doc/broken/broken.wid",
+      "helps": [],
+      "labels": [
+        {
+          "column": 3,
+          "end": 151,
+          "end_column": 12,
+          "end_line": 6,
+          "file": "tests/doc/broken/broken.wid",
+          "line": 6,
+          "message": "`Int` + `String`",
+          "primary": true,
+          "start": 142
+        },
+        {
+          "column": 3,
+          "end": 143,
+          "end_column": 4,
+          "end_line": 6,
+          "file": "tests/doc/broken/broken.wid",
+          "line": 6,
+          "message": "`Int`",
+          "primary": false,
+          "start": 142
+        },
+        {
+          "column": 7,
+          "end": 151,
+          "end_column": 12,
+          "end_line": 6,
+          "file": "tests/doc/broken/broken.wid",
+          "line": 6,
+          "message": "`String`",
+          "primary": false,
+          "start": 146
+        }
+      ],
+      "line": 6,
+      "message": "cannot apply `+` to `Int` and `String`",
+      "notes": [],
+      "severity": "error"
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}

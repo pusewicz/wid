@@ -1,0 +1,50 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0603",
+      "column": 25,
+      "expansions": [],
+      "explain": "wid explain E0603",
+      "file": "command line",
+      "helps": [
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [
+            {
+              "column": 24,
+              "end": 25,
+              "end_column": 26,
+              "end_line": 1,
+              "file": "command line",
+              "line": 1,
+              "replacement": "",
+              "start": 23
+            }
+          ],
+          "message": "ask about `MAX_BALLS` itself"
+        }
+      ],
+      "labels": [
+        {
+          "column": 25,
+          "end": 25,
+          "end_column": 26,
+          "end_line": 1,
+          "file": "command line",
+          "line": 1,
+          "message": "`MAX_BALLS` is a constant, so nothing can follow it",
+          "primary": true,
+          "start": 24
+        }
+      ],
+      "line": 1,
+      "message": "`MAX_BALLS` has no members",
+      "notes": [
+        "only structs, enums, unions, modules and the type aliases of them have members"
+      ],
+      "severity": "error"
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}

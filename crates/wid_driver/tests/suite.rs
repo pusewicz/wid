@@ -18,6 +18,12 @@
 //!   `-in:DIR`, for the forms that document the package in `.`). Its stdout
 //!   must match `NAME.stdout` and its stderr `NAME.stderr`; a missing file
 //!   expects nothing. The directories there are the packages they document.
+//! - `tests/query/NAME.args` holds the arguments of a `wid query` command,
+//!   run from the repository root, so packages are named like
+//!   `-in:tests/doc/shapes`. Its stdout must match `NAME.stdout` and its
+//!   stderr `NAME.stderr`, as for `tests/doc`; a malformed command line
+//!   expects the usage error the CLI prints. The directories there are
+//!   packages too.
 //!
 //! Set `WID_BLESS=1` to rewrite expectations, `WID_TEST_FILTER=text` to run a
 //! subset, and `WID_TEST_CC=clang,gcc-16` to choose compilers.
@@ -55,6 +61,11 @@ enum Case {
     },
     /// `wid doc` with the arguments in `args`.
     Doc {
+        name: String,
+        args: PathBuf,
+    },
+    /// `wid query` with the arguments in `args`.
+    Query {
         name: String,
         args: PathBuf,
     },
@@ -112,6 +123,15 @@ fn collect(root: &Path, filter: &str) -> Vec<Case> {
             }
         }
     }
+    if let Ok(rd) = std::fs::read_dir(root.join("tests/query")) {
+        for entry in rd.flatten() {
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e == "args") {
+                let name = path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+                cases.push(Case::Query { name: format!("query/{name}"), args: path });
+            }
+        }
+    }
     if let Ok(rd) = std::fs::read_dir(root.join("core")) {
         for entry in rd.flatten() {
             let path = entry.path();
@@ -130,7 +150,11 @@ fn collect(root: &Path, filter: &str) -> Vec<Case> {
 
 fn name_of(c: &Case) -> &str {
     match c {
-        Case::Run { name, .. } | Case::Ui { name, .. } | Case::Test { name, .. } | Case::Doc { name, .. } => name,
+        Case::Run { name, .. }
+        | Case::Ui { name, .. }
+        | Case::Test { name, .. }
+        | Case::Doc { name, .. }
+        | Case::Query { name, .. } => name,
     }
 }
 
@@ -265,10 +289,41 @@ fn run_doc(args: &Path, root: &Path, bless: bool) -> Vec<String> {
     failures
 }
 
+/// Runs the `wid query` command in an args file (see the module docs).
+fn run_query(args: &Path, root: &Path, bless: bool) -> Vec<String> {
+    let mut failures = Vec::new();
+    let text = std::fs::read_to_string(args).expect("read the args file");
+    let mut opts = Options::new(".");
+    opts.wid_root = Some(root.to_path_buf());
+    let (mut positional, mut package) = (Vec::new(), None);
+    for arg in text.split_whitespace() {
+        match arg {
+            "-file" => opts.file_mode = true,
+            "-json-errors" => {}
+            _ if arg.starts_with("-in:") => package = Some(arg[4..].to_string()),
+            _ if arg.starts_with('-') => panic!("unknown flag `{arg}` in {}", args.display()),
+            _ => positional.push(arg.to_string()),
+        }
+    }
+    let (stdout, stderr) = match wid_driver::query::Query::parse(&positional) {
+        Ok(query) => {
+            let request = wid_driver::query::QueryRequest { query, package, dir: root.to_path_buf() };
+            let printed = wid_driver::query::print(&wid_driver::query::query(&opts, &request));
+            (printed.stdout, printed.stderr)
+        }
+        // What the CLI prints for a malformed command line.
+        Err(message) => (String::new(), format!("error: {message}\nrun `wid help query` for usage\n")),
+    };
+    compare_optional("stdout", &args.with_extension("stdout"), &normalize(&stdout, root), bless, &mut failures);
+    compare_optional("stderr", &args.with_extension("stderr"), &normalize(&stderr, root), bless, &mut failures);
+    failures
+}
+
 fn run_case(case: &Case, root: &Path, ccs: &[String], bless: bool) -> Vec<String> {
     let mut failures = Vec::new();
     match case {
         Case::Doc { args, .. } => return run_doc(args, root, bless),
+        Case::Query { args, .. } => return run_query(args, root, bless),
         Case::Ui { file, .. } => {
             let mut opts = Options::new(file);
             opts.file_mode = !file.is_dir();
@@ -364,12 +419,12 @@ fn run_case(case: &Case, root: &Path, ccs: &[String], bless: bool) -> Vec<String
     failures
 }
 
-/// Every error code that appears in a UI (or `wid doc`) expectation must
-/// be documented.
+/// Every error code that appears in a UI (or `wid doc` or `wid query`)
+/// expectation must be documented.
 fn check_code_docs(root: &Path) -> (Vec<String>, Vec<String>) {
     let mut errors = Vec::new();
     let mut covered = std::collections::HashSet::new();
-    for dir in ["tests/ui", "tests/doc"] {
+    for dir in ["tests/ui", "tests/doc", "tests/query"] {
         let Ok(rd) = std::fs::read_dir(root.join(dir)) else { continue };
         for entry in rd.flatten() {
             let path = entry.path();

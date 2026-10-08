@@ -1,0 +1,37 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0601",
+      "column": 1,
+      "expansions": [],
+      "explain": "wid explain E0601",
+      "file": "command line",
+      "helps": [
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [],
+          "message": "run `wid query` in a package directory, or name a package with `-in:`, like `wid query outline -in:core:fmt`"
+        }
+      ],
+      "labels": [
+        {
+          "column": 1,
+          "end": 9,
+          "end_column": 10,
+          "end_line": 1,
+          "file": "command line",
+          "line": 1,
+          "message": "`wid query` reads the package in `.` unless `-in:` names one",
+          "primary": true,
+          "start": 0
+        }
+      ],
+      "line": 1,
+      "message": "there is no package in the current directory",
+      "notes": [],
+      "severity": "error"
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}

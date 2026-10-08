@@ -1,0 +1,39 @@
+{
+  "package": {
+    "doc": "Shapes for a small 2D game: balls, players and the methods that move\nthem.\n\nA second paragraph, which only the overview shows.",
+    "name": "shapes",
+    "path": "."
+  },
+  "query": "def",
+  "results": [
+    {
+      "attributes": [],
+      "doc": "Values can skip ahead.",
+      "kind": "enum_member",
+      "location": {
+        "column": 3,
+        "end_column": 7,
+        "end_line": 25,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 25
+      },
+      "name": "east",
+      "owner": {
+        "kind": "enum",
+        "name": "Dir"
+      },
+      "package": ".",
+      "path": "Dir.east",
+      "private": false,
+      "signature": "east = 4",
+      "span": {
+        "column": 3,
+        "end_column": 11,
+        "end_line": 25,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 25
+      }
+    }
+  ],
+  "symbol": "Dir.east"
+}

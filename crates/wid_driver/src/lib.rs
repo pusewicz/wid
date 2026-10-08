@@ -2,8 +2,10 @@
 //! code generation, and invokes the host C compiler.
 
 mod cimport;
+mod cmdline;
 pub mod doc;
 mod loader;
+pub mod query;
 mod test;
 
 use std::collections::HashMap;
@@ -221,6 +223,24 @@ pub fn check(opts: &Options) -> Checked {
     diags.sort();
     let program = if diags.has_errors() { None } else { Some(program) };
     Checked { sources, diags, input: Some(input), program }
+}
+
+/// Loads and checks a package for the tools that read it rather than build
+/// it (`wid doc`, `wid query`, and the LSP later): as a library, so it needs
+/// no `def main`, and without generating code. The result holds the
+/// diagnostics and every declaration the checker collected, even when the
+/// package has errors. Like every stage, it is a pure function of the
+/// options and the files on disk, so a long-lived caller reruns it when a
+/// file changes.
+pub fn analyze(opts: &Options) -> wid_query::Analysis {
+    let mut opts = opts.clone();
+    opts.library = true;
+    opts.check_all_packages = false;
+    let (sources, input, diags) = load_program(&opts);
+    match input {
+        Some(input) => wid_query::Analysis::check(&input, sources, diags),
+        None => wid_query::Analysis::unloaded(sources, diags),
+    }
 }
 
 /// The result of building an executable.

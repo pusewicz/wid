@@ -108,10 +108,10 @@ codes! {
     LOOP_CONTROL_OUTSIDE_LOOP = "E0404", "`break` or `next` outside a loop";
     EXIT_IN_DEFER = "E0405", "control flow leaves a `defer`";
 
-    // Tools: `wid doc`.
-    DOC_UNKNOWN_PACKAGE = "E0601", "package to document not found";
-    DOC_UNKNOWN_SYMBOL = "E0602", "symbol to document not found";
-    DOC_NO_MEMBER = "E0603", "no member with that name to document";
+    // Tools: `wid doc` and `wid query`.
+    DOC_UNKNOWN_PACKAGE = "E0601", "package to document or query not found";
+    DOC_UNKNOWN_SYMBOL = "E0602", "symbol to document or query not found";
+    DOC_NO_MEMBER = "E0603", "no member with that name to document or query";
     DOC_PRIVATE = "E0604", "symbol to document is private";
 
     // Packages and C interop.

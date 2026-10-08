@@ -1,0 +1,40 @@
+{
+  "package": {
+    "doc": "Shapes for a small 2D game: balls, players and the methods that move\nthem.\n\nA second paragraph, which only the overview shows.",
+    "name": "shapes",
+    "path": "."
+  },
+  "query": "def",
+  "results": [
+    {
+      "attributes": [],
+      "doc": null,
+      "kind": "method",
+      "location": {
+        "column": 12,
+        "end_column": 17,
+        "end_line": 73,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 73
+      },
+      "name": "kills",
+      "owner": {
+        "kind": "struct",
+        "name": "Player"
+      },
+      "package": ".",
+      "path": "Player.kills",
+      "private": false,
+      "signature": "def kills -> Int",
+      "span": {
+        "column": 3,
+        "end_column": 17,
+        "end_line": 73,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 73
+      },
+      "static": false
+    }
+  ],
+  "symbol": "Player.kills"
+}

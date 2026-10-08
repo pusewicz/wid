@@ -1,0 +1,44 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0603",
+      "column": 22,
+      "expansions": [],
+      "explain": "wid explain E0603",
+      "file": "command line",
+      "helps": [],
+      "labels": [
+        {
+          "column": 22,
+          "end": 26,
+          "end_column": 27,
+          "end_line": 1,
+          "file": "command line",
+          "line": 1,
+          "message": "not a field, member or method of struct `Player`",
+          "primary": true,
+          "start": 21
+        },
+        {
+          "column": 8,
+          "end": 1139,
+          "end_column": 14,
+          "end_line": 68,
+          "file": "tests/doc/shapes/shapes.wid",
+          "line": 68,
+          "message": "struct `Player` is declared here",
+          "primary": false,
+          "start": 1133
+        }
+      ],
+      "line": 1,
+      "message": "struct `Player` has no member `helth`",
+      "notes": [
+        "its members are `base`, `boost`, `create`, `greet`, `heal`, `hp`, `kills`, `move`, `name`, `pos` and `secret`"
+      ],
+      "severity": "error"
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}
