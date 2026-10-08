@@ -1,0 +1,84 @@
+error[E0323]: loops do not produce a value
+  --> tests/ui/loop_value.wid:7:3
+   |
+ 7 |   loop do
+   |   ^^^^^^^ the last line gives the value, but a loop has none
+ 8 |     break if i * i >= n
+   |     ----- `break` leaves the loop here, and the code after it runs
+   = note: only a loop that never finishes, like `loop do` without a `break`, may end a method or a branch without a value after it
+help: give the value on a line after the loop
+   |   end
+   |   …
+   = see `wid explain E0323`
+
+error[E0323]: loops do not produce a value
+  --> tests/ui/loop_value.wid:15:3
+   |
+15 |   while true
+   |   ^^^^^^^^^^ the last line gives the value, but a loop has none
+...
+17 |       break
+   |       ----- `break` leaves the loop here, and the code after it runs
+   = note: only a loop that never finishes, like `loop do` without a `break`, may end a method or a branch without a value after it
+help: give the value on a line after the loop
+   |   end
+   |   …
+   = see `wid explain E0323`
+
+error[E0323]: loops do not produce a value
+  --> tests/ui/loop_value.wid:25:3
+   |
+25 |   while i < n
+   |   ^^^^^^^^^^^ the last line gives the value, but a loop has none
+   |         ----- the loop ends when this is false, and the code after it runs
+   = note: only a loop that never finishes, like `loop do` without a `break`, may end a method or a branch without a value after it
+help: give the value on a line after the loop
+   |   end
+   |   …
+   = see `wid explain E0323`
+
+error[E0323]: loops do not produce a value
+  --> tests/ui/loop_value.wid:31:3
+   |
+31 |   for x in xs
+   |   ^^^^^^^^^^^ the last line gives the value, but a loop has none
+   |            -- the loop ends after the last of these, and the code after it runs
+   = note: only a loop that never finishes, like `loop do` without a `break`, may end a method or a branch without a value after it
+help: give the value on a line after the loop
+   |   end
+   |   …
+   = see `wid explain E0323`
+
+error[E0323]: loops do not produce a value
+  --> tests/ui/loop_value.wid:40:5
+   |
+40 |     until n > 3
+   |     ^^^^^^^^^^^ the last line gives the value, but a loop has none
+   |           ----- the loop ends when this is true, and the code after it runs
+   = note: only a loop that never finishes, like `loop do` without a `break`, may end a method or a branch without a value after it
+help: give the value on a line after the loop
+   |     end
+   |     …
+   = see `wid explain E0323`
+
+error[E0323]: loops do not produce a value
+  --> tests/ui/loop_value.wid:48:7
+   |
+48 |   y = while true
+   |       ^^^^^^^^^^ used as a value here
+49 |     break
+   |     ----- `break` leaves the loop here, and the code after it runs
+   = note: only a loop that never finishes, like `loop do` without a `break`, may end a method or a branch without a value after it
+help: assign the value to a variable inside the loop, and use the variable after it
+   = see `wid explain E0323`
+
+error[E0323]: loops do not produce a value
+  --> tests/ui/loop_value.wid:51:7
+   |
+51 |   z = loop do
+   |       ^^^^^^^ used as a value here
+   = note: a loop that never finishes may end a method or a branch in place of its value, but it is no value anywhere else
+help: write the loop as a statement of its own: nothing after it runs, so it needs no value
+   = see `wid explain E0323`
+
+error: could not compile due to 7 errors

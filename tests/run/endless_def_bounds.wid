@@ -1,0 +1,11 @@
+# A call of an endless `def` without a return type may lower the method
+# early, to learn whether it failed E0310 (#137). It is lowered as the
+# queue would: the caller's `@[no_bounds_check]` statement doesn't turn
+# off the checks in `show`, so its out-of-bounds read panics.
+
+def main
+  xs = [1, 2]
+  @[no_bounds_check] show(xs)
+end
+
+def show(xs: []Int) = puts xs[5]

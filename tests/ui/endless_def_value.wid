@@ -1,0 +1,28 @@
+# An endless `def` without `-> T` returns nothing, so its value is thrown
+# away (E0310, #137). The fix writes the type when it is known: as a
+# type parameter in generic code, and with a placeholder for `nil` or a
+# symbol. A call of such a method adds no "has no value" error.
+
+def sep = "/"
+def none = nil
+def facing = :north
+def ident(v: $T) = v
+
+struct Counter
+  n: Int
+
+  def twice = @n * 2
+end
+
+extend Int
+  def half = self / 2
+end
+
+def main
+  puts sep
+  path = "a" + sep
+  c = Counter.new(3)
+  t = c.twice
+  h = 8.half
+  p path, t, h, none, facing, ident(4)
+end

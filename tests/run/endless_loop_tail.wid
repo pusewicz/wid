@@ -1,0 +1,68 @@
+# A loop that no `break` leaves never finishes, so it can end a method or a
+# branch whose value is wanted, as `panic` can (#132).
+
+def root(n: Int) -> Int
+  i = 0
+  loop do
+    return i if i * i >= n
+    i += 1
+  end
+end
+
+def first_even(xs: []Int) -> Int
+  i = 0
+  while true
+    return xs[i] if xs[i] % 2 == 0
+    i += 1
+  end
+end
+
+def countdown(n: Int) -> String
+  until false
+    return "liftoff" if n == 0
+    n -= 1
+  end
+end
+
+# A `break` in a nested loop, or in a block, doesn't leave the outer loop.
+def nested(limit: Int) -> Int
+  total = 0
+  loop do
+    while true
+      break
+    end
+    [1, 2, 3].each { |x| break if x > 1 }
+    total += 1
+    return total if total >= limit
+  end
+end
+
+def describe(n: Int) -> String
+  if n < 0
+    "negative"
+  else
+    loop do
+      return "small" if n < 10
+      n /= 10
+    end
+  end
+end
+
+def name(n: Int) -> String
+  case n
+  when 0 then "zero"
+  else
+    loop do
+      return "some"
+    end
+  end
+end
+
+def main
+  p root(10)
+  p first_even([3, 5, 8, 9])
+  p countdown(3)
+  p nested(4)
+  p describe(-1), describe(1234)
+  p name(0), name(7)
+end

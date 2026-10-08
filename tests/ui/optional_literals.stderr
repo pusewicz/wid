@@ -1,0 +1,53 @@
+error[E0311]: `300` does not fit in `U8`
+ --> tests/ui/optional_literals.wid:6:14
+  |
+6 | LIMIT: U8? = 300
+  |              ^^^ `U8` holds values from 0 to 255
+help: use a wider type like `U16`, or a value in range
+  = see `wid explain E0311`
+
+error[E0301]: expected 2 elements for `[2]F32`, found 3
+  --> tests/ui/optional_literals.wid:15:10
+   |
+15 |   return [1.0, 2.0, 3.0]
+   |          ^^^^^^^^^^^^^^^ this literal has 3 elements
+   = see `wid explain E0301`
+
+error[E0311]: `256` does not fit in `U8`
+  --> tests/ui/optional_literals.wid:23:12
+   |
+23 |   y: U8? = 256
+   |            ^^^ `U8` holds values from 0 to 255
+help: use a wider type like `U16`, or a value in range
+   = see `wid explain E0311`
+
+error[E0301]: expected 2 elements for `[2]F32`, found 3
+  --> tests/ui/optional_literals.wid:24:14
+   |
+24 |   v: Vec2? = [1.0, 2.0, 3.0]
+   |              ^^^^^^^^^^^^^^^ this literal has 3 elements
+   = see `wid explain E0301`
+
+error[E0301]: expected `F32?`, found `String`
+  --> tests/ui/optional_literals.wid:25:22
+   |
+25 |   w: [2]F32? = [1.0, "s"]
+   |                      ^^^ this has type `String`
+   = see `wid explain E0301`
+
+error[E0301]: expected `F32`, found `Bool`
+  --> tests/ui/optional_literals.wid:26:27
+   |
+26 |   b = Body.new(pos: [1.0, true])
+   |                           ^^^^ this has type `Bool`
+   = see `wid explain E0301`
+
+error[E0204]: `Dir` has no member `west`
+  --> tests/ui/optional_literals.wid:27:13
+   |
+27 |   d: Dir? = :west
+   |             ^^^^^ not a member of `Dir`
+   = note: members: :north
+   = see `wid explain E0204`
+
+error: could not compile due to 7 errors

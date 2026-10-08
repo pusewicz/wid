@@ -51,8 +51,22 @@ end
 - Wid keeps Ruby's surface: `def … end`, endless `def f = expr`,
   `if/unless/elsif`, postfix `if`/`unless`, `while/until/loop`, `case/when`,
   implicit return, `#{}` interpolation, ranges `0..n`/`0...n`, `# ` comments
-  and no semicolons (outside a string, `#{` starts a macro splice). `?`
-  methods must return `Bool`. Source files use the `.wid` extension.
+  and no semicolons (outside a string, `#{` starts a macro splice). Source
+  files use the `.wid` extension.
+- **`?` methods return `Bool`:** a name ending in `?` asks a yes-or-no
+  question, so a method named so declares `-> Bool` (E0330, at the return
+  type, or at the name when there is none): at package level, in a type
+  (`def self.` too), a module or an `extend`, generic or not. A `macro def`
+  always returns `Code`, so its name can't end in `?` (E0330); a method
+  that returns `Bool` can call it. Calls of a method that breaks the rule
+  report nothing more. `!` methods have no such rule.
+- **Return types are explicit,** as in Odin, so every caller knows a
+  method's type without reading its body. An endless `def` declares one
+  like any other (`def sep -> String = "/"`); without `-> T` it returns
+  nothing, and a value there is thrown away (E0310, whose fix writes the
+  value's type when Wid can: `-> T` for a type parameter's, a
+  placeholder for `nil` or a symbol). A call of such a method adds no
+  error of its own: what it was meant to return is unknown.
 - **Blocks** can be written `do |x| … end` or `{ |x| … }`. A `{` right after a
   call opens a block; anywhere else, `{}` is the zero-value literal. A type
   never takes a block: `Vec2{…}` and `Vec2 {…}` are struct literal syntax,
@@ -187,7 +201,11 @@ end
   operators. Untyped literals convert to it; typed values convert with `.to`
   in either direction (`f.to(Meters)`, `m.to(F64)`), never implicitly.
 - **Optionals:** `T?`, whose empty value is `nil`. A `T` converts to `T?`
-  implicitly; the reverse needs an unwrap. Pointers can't be nil
+  implicitly; the reverse needs an unwrap. An untyped literal where a `T?`
+  is expected (a number, string, symbol or array literal, in a declaration,
+  a field, an argument, a return or an element) converts to `T` and then
+  to `T?`: `x: F32? = 1.0`, `v: Vec2? = [1.0, 2.0]`,
+  `w: [2]F32? = [1.0, nil]`, `d: Dir? = :north`. Pointers can't be nil
   unless written `^T?` (the `?` after `^T` or `[^]T` makes the pointer
   nil-able; `^(T?)` points at an optional). Use `x || default` to unwrap with a fallback, `x&.f` to
   chain, `if v = maybe … end` to bind, and `while v = maybe … end` to loop
@@ -227,6 +245,14 @@ end
   `os.exit`. Their body must end in `panic`, an endless loop or another
   `-> Never` call, and a call to one ends the code path, so it satisfies
   `guard … else`.
+- **Loops are statements:** a loop has no value (E0323), except that a loop
+  no `break` leaves (`loop do`, `while true`, `until false`) never
+  finishes, so it is `Never`-typed at the end of a method or a branch
+  whose value is wanted, as `panic` is: `def find(n: Int) -> Int` may end
+  in a `loop do` that `return`s. A `break` in a nested loop or in a block
+  doesn't leave the outer loop. A loop that can finish there is E0323,
+  which points at the `break`, the condition or the iterated value that
+  ends it and offers to add the value on a line after the loop.
 - **`caller_location`** is a `Location` (`file`, `line`, `column`, `proc`).
   As a parameter default, `loc: Location = caller_location`, it is the
   location of the call, which is how `t.expect` and allocators report where
@@ -500,9 +526,9 @@ LEVEL = config(:level, 1)             # -define:level=3
 FONT = embed("assets/font.ttf")       # []U8, through C23 #embed
 
 comptime if OS == :windows
-  def path_sep = "\\"
+  def path_sep -> String = "\\"
 else
-  def path_sep = "/"
+  def path_sep -> String = "/"
 end
 ```
 
@@ -583,9 +609,9 @@ end
       takes `flags :READ, :WRITE, :EXEC` and can generate a constant for
       each name. It can't have a default. Only macros take one; other
       methods take a `[]T` and an array literal (E0112).
-    - A macro always returns `Code` and says so (`-> Code`, E0310). It
-      takes no `$T` parameters (E0315, take a `Type`) and no block (E0319,
-      take a `Code`).
+    - A macro always returns `Code` and says so (`-> Code`, E0310), so
+      its name can't end in `?` (E0330). It takes no `$T` parameters
+      (E0315, take a `Type`) and no block (E0319, take a `Code`).
   - **`Code` and `Symbol`** values exist only while compiling, like `Type`;
     a method the program runs can't use them (E0906). A macro body can keep
     them in variables and collections (`[dynamic]Code`, `[]Symbol`),

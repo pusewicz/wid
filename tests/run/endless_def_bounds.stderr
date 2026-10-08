@@ -1,0 +1,2 @@
+panic: index 5 is out of bounds for length 2
+  at tests/run/endless_def_bounds.wid:11:28 in `show`

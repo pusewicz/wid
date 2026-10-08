@@ -567,6 +567,10 @@ impl<'a> Checker<'a> {
         for i in 0..count {
             let decl = &self.decls[i];
             let check = decl.loc.pkg == PackageId(0) || self.input.options.check_all_packages;
+            if check && matches!(decl.kind, DeclKind::Fn(_)) {
+                self.check_predicate_return(DeclId(i as u32));
+            }
+            let decl = &self.decls[i];
             if check && matches!(decl.kind, DeclKind::Fn(f) if f.is_macro) {
                 // A macro's body is checked even if nothing calls it, except
                 // one that uses `Self`: it is checked at each call, for the

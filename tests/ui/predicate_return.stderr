@@ -1,0 +1,132 @@
+error[E0330]: `ok?` returns `Int`, but a method whose name ends in `?` must return `Bool`
+ --> tests/ui/predicate_return.wid:7:12
+  |
+7 | def ok? -> Int = 1
+  |            ^^^ this should be `Bool`
+  = note: a name ending in `?` asks a yes-or-no question, so callers expect a `Bool`
+help: return a `Bool`
+  | def ok? -> Bool = 1
+help: or, if it isn't a yes-or-no question, drop the `?` and call it `ok`
+  | def ok -> Int = 1
+  = see `wid explain E0330`
+
+error[E0330]: `ready?` has no return type, but a method whose name ends in `?` must return `Bool`
+ --> tests/ui/predicate_return.wid:8:5
+  |
+8 | def ready? = true
+  |     ^^^^^^ the `?` promises a `Bool`
+  = note: a name ending in `?` asks a yes-or-no question, so callers expect a `Bool`
+help: declare that it returns a `Bool`
+  | def ready? -> Bool = true
+help: or, if it isn't a yes-or-no question, drop the `?` and call it `ready`
+  | def ready = true
+  = see `wid explain E0330`
+
+error[E0330]: `empty?` has no return type, but a method whose name ends in `?` must return `Bool`
+  --> tests/ui/predicate_return.wid:9:5
+   |
+ 9 | def empty?(xs: []Int)
+   |     ^^^^^^ the `?` promises a `Bool`
+   = note: a name ending in `?` asks a yes-or-no question, so callers expect a `Bool`
+help: declare that it returns a `Bool`
+   | def empty?(xs: []Int) -> Bool
+help: or, if it isn't a yes-or-no question, drop the `?` and call it `empty`
+   | def empty(xs: []Int)
+   = see `wid explain E0330`
+
+error[E0330]: `same?` returns `T`, but a method whose name ends in `?` must return `Bool`
+  --> tests/ui/predicate_return.wid:12:27
+   |
+12 | def same?(a: $T, b: T) -> T = a
+   |                           ^ this should be `Bool`
+   = note: a name ending in `?` asks a yes-or-no question, so callers expect a `Bool`
+help: return a `Bool`
+   | def same?(a: $T, b: T) -> Bool = a
+help: or, if it isn't a yes-or-no question, drop the `?` and call it `same`
+   | def same(a: $T, b: T) -> T = a
+   = see `wid explain E0330`
+
+error[E0330]: `done?` has no return type, but a method whose name ends in `?` must return `Bool`
+  --> tests/ui/predicate_return.wid:16:5
+   |
+16 | def done?(n: Int)
+   |     ^^^^^ the `?` promises a `Bool`
+   = note: a name ending in `?` asks a yes-or-no question, so callers expect a `Bool`
+help: declare that it returns a `Bool`
+   | def done?(n: Int) -> Bool
+help: or, if it isn't a yes-or-no question, drop the `?` and call it `done`
+   | def done(n: Int)
+   = see `wid explain E0330`
+
+error[E0330]: `scan?` has no return type, but a method whose name ends in `?` must return `Bool`
+  --> tests/ui/predicate_return.wid:22:5
+   |
+22 | def scan?(n: Int)
+   |     ^^^^^ the `?` promises a `Bool`
+   = note: a name ending in `?` asks a yes-or-no question, so callers expect a `Bool`
+help: declare that it returns a `Bool`
+   | def scan?(n: Int) -> Bool
+help: or, if it isn't a yes-or-no question, drop the `?` and call it `scan`
+   | def scan(n: Int)
+   = see `wid explain E0330`
+
+error[E0330]: `alive?` returns `Int`, but a method whose name ends in `?` must return `Bool`
+  --> tests/ui/predicate_return.wid:31:17
+   |
+31 |   def alive? -> Int = @hp
+   |                 ^^^ this should be `Bool`
+   = note: a name ending in `?` asks a yes-or-no question, so callers expect a `Bool`
+help: return a `Bool`
+   |   def alive? -> Bool = @hp
+help: or, if it isn't a yes-or-no question, drop the `?` and call it `alive`
+   |   def alive -> Int = @hp
+   = see `wid explain E0330`
+
+error[E0330]: `default?` returns `Int`, but a method whose name ends in `?` must return `Bool`
+  --> tests/ui/predicate_return.wid:32:24
+   |
+32 |   def self.default? -> Int = 1
+   |                        ^^^ this should be `Bool`
+   = note: a name ending in `?` asks a yes-or-no question, so callers expect a `Bool`
+help: return a `Bool`
+   |   def self.default? -> Bool = 1
+help: or, if it isn't a yes-or-no question, drop the `?` and call it `default`
+   |   def self.default -> Int = 1
+   = see `wid explain E0330`
+
+error[E0330]: `named?` returns `String`, but a method whose name ends in `?` must return `Bool`
+  --> tests/ui/predicate_return.wid:36:17
+   |
+36 |   def named? -> String = "x"
+   |                 ^^^^^^ this should be `Bool`
+   = note: a name ending in `?` asks a yes-or-no question, so callers expect a `Bool`
+help: return a `Bool`
+   |   def named? -> Bool = "x"
+help: or, if it isn't a yes-or-no question, drop the `?` and call it `named`
+   |   def named -> String = "x"
+   = see `wid explain E0330`
+
+error[E0330]: `big?` returns `Int`, but a method whose name ends in `?` must return `Bool`
+  --> tests/ui/predicate_return.wid:40:15
+   |
+40 |   def big? -> Int = self
+   |               ^^^ this should be `Bool`
+   = note: a name ending in `?` asks a yes-or-no question, so callers expect a `Bool`
+help: return a `Bool`
+   |   def big? -> Bool = self
+help: or, if it isn't a yes-or-no question, drop the `?` and call it `big`
+   |   def big -> Int = self
+   = see `wid explain E0330`
+
+error[E0330]: `debug?` is a macro, so it returns `Code`, but a name ending in `?` promises a `Bool`
+  --> tests/ui/predicate_return.wid:43:11
+   |
+43 | macro def debug? -> Code
+   |           ^^^^^^ a macro's name can't end in `?`
+   = note: a name ending in `?` asks a yes-or-no question, so callers expect a `Bool`
+help: for a yes-or-no question, write a method that returns `Bool` (it may call the macro)
+help: or, if it isn't a yes-or-no question, drop the `?` and call it `debug`
+   | macro def debug -> Code
+   = see `wid explain E0330`
+
+error: could not compile due to 11 errors

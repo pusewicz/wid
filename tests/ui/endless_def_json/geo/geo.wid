@@ -1,0 +1,3 @@
+struct Vec
+  x: Int
+end

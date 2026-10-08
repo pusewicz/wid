@@ -1,0 +1,29 @@
+# An untyped literal where a `T?` is expected is checked as a `T` (#131):
+# each error names `T`'s rule, and nothing else is reported.
+
+Vec2 = [2]F32
+
+LIMIT: U8? = 300
+
+struct Body
+  pos: Vec2?
+end
+
+def first(v: Vec2?) -> Vec2? = v
+
+def spawn -> Vec2?
+  return [1.0, 2.0, 3.0]
+end
+
+enum Dir
+  north
+end
+
+def main
+  y: U8? = 256
+  v: Vec2? = [1.0, 2.0, 3.0]
+  w: [2]F32? = [1.0, "s"]
+  b = Body.new(pos: [1.0, true])
+  d: Dir? = :west
+  p y, v, w, b, d, first([1.0, 2.0]), spawn, LIMIT
+end

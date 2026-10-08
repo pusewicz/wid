@@ -101,6 +101,7 @@ codes! {
     COMPTIME_ONLY = "E0327", "value is not a compile-time constant";
     UNKNOWN_ATTRIBUTE = "E0328", "unknown or misused attribute";
     TYPE_TOO_LARGE = "E0329", "type is too large";
+    PREDICATE_RETURN = "E0330", "`?` method does not return `Bool`";
 
     // Errors and control flow.
     IGNORED_ERROR = "E0401", "`Error` result ignored";

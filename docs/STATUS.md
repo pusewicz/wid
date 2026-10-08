@@ -1517,6 +1517,48 @@ the language server.
   current directory" (a `cimport` line's keep `include_dirs:`,
   `pkg_config:` and `define:`), and the help for a missing pkg-config no
   longer offers `link:`. Tested by `crates/wid_driver/tests/cimport_dump.rs`.
+- Untyped literals into optionals (#131, SPEC "Types"): where a `T?` is
+  expected, `const_with_expected` and `typed_const` (constants) convert a
+  number or string literal to `T` and wrap it, `array_literal` builds a
+  `T` array, matrix or slice and wraps it, and a symbol selects a member
+  of an expected `Dir?`. So `x: F32? = 1.0`, `y: U8? = 3`,
+  `v: Vec2? = [1.0, 2.0]`, `[2]F32? = [1.0, nil]` and `H: F32? = 0.5`
+  work in declarations, fields, arguments and returns, and an error in
+  the literal names `T`'s rule (`300` doesn't fit in `U8`).
+- A method or branch may end in a loop that never finishes (#132, SPEC
+  "Types"): `loop_value` (`check/stmt.rs`) lowers a loop where a value
+  goes as a statement, and at the end of a body whose value is wanted
+  (`lower_tail`), a loop whose `Stmt::Loop` diverges (no `break` to it,
+  and a constant condition) is `Never`, as `-> Never` bodies already
+  checked. Anywhere else, or when it can finish, it is E0323, which now
+  points at what ends it (the `break`, found by `loop_break` outside
+  nested loops, blocks and procs; the condition; the iterated value) and
+  offers the value on a line after the loop. The loop is lowered either
+  way, so the locals it reads aren't E0203.
+- Endless defs keep explicit return types (#137, SPEC "Syntax"): SPEC's
+  `comptime if` example declares `def path_sep -> String`. E0310 for
+  `def sep = "/"` (`discarded_value` in `check/body.rs`) notes that a
+  method returns only what it declares, and its fix writes the value's
+  type: machine-applicable when `nameable_in` says the type is builtin or
+  the package's own (`-> T` or `-> Self` for a type a parameter is bound
+  to), `MaybeIncorrect` for another package's type, a placeholder for
+  `nil` or a symbol. A body that failed to parse isn't E0310. A call of
+  an endless def without a return type whose body failed (E0310 or any
+  other error; `poisoned_call`, which lowers a still-queued callee first
+  with `lower_queued`) has the unknown type, so it adds no E0323.
+- `?` methods return `Bool` (#136, SPEC "Syntax"): E0330
+  (`check_predicate_return` in `check/body.rs`, run from
+  `check_all_roots` once per declaration, generic and module methods
+  included) at the return type, or at the name without one, with fixes
+  that return a `Bool` (machine-applicable when `body_gives_bool` sees a
+  `Bool` value and `Bool` returns) or drop the `?`. A `macro def` returns
+  `Code`, so its name can't end in `?` (decided; E0330 too). Such a
+  method's body is checked against no return type, and its calls are
+  poisoned (`poisoned_call`), so neither adds an error; E0330 replaces
+  E0310 for an endless `?` def without a type. A method whose return type
+  is an error (E0314, E0330) no longer adds E0324 "must return
+  `{unknown}`", nor E0323 for a loop that ends it. `core` had no
+  violations.
 
 ## Next
 
@@ -1657,8 +1699,6 @@ only on `main` and can run in parallel with the macro stack.
 7. **SPEC conformance audit: done** (at e73c919). Every finding was
    reproduced on main and filed as a GitHub issue, so the open issues are
    now its queue. In order of value:
-   - untyped literals into optionals (#131);
-   - methods ending in an endless loop (#132);
    - `<=>` deriving the comparisons, and the definable operator set (#134);
    - `def self.` in an `extend` (#135);
    - gcc-15 `-Werror` at `-o:speed` and `-o:aggressive`, and suite
@@ -1666,8 +1706,6 @@ only on `main` and can run in parallel with the macro stack.
    - debug builds: `#line` and `-debug` at `-O0` (#141);
    - three cascades, including spurious E0203 when a package fails to load
      (#138);
-   - `?` methods return `Bool` (#136);
-   - SPEC's endless-`def` example (#137);
    - error values (#139);
    - library and runtime gaps (#140);
    - CLI flags and tests (#142);
@@ -1690,6 +1728,9 @@ before anyone starts them.
 
 ## Known gaps
 
+- E0330 covers methods and macros named with `?`, not `overload` sets: in
+  `overload :within?, :within_int, :within_f32` the members may return any
+  type, so `within?(3)` can give an `Int`.
 - An untyped array literal does not take its type from the other operand of
   a binary operator or from an overload set's parameters (`xf * [1.0, 0.0]`
   needs a typed `Vec2`); `[1.0, 1.0] * m` likewise needs a typed vector.

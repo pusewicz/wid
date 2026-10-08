@@ -1075,6 +1075,9 @@ impl<'a> Checker<'a> {
             if e.ty == ty || matches!(self.types.kind(e.ty), TyKind::Unknown) {
                 return Some(e);
             }
+            if self.optional_inner(ty) == Some(e.ty) {
+                return Some(self.opt_some(e, ty));
+            }
             return match ConstValue::from_typed(e.clone()) {
                 ConstValue::Typed(_) => {
                     let (want, found) = (self.types.display(ty), self.types.display(e.ty));
@@ -1087,7 +1090,9 @@ impl<'a> Checker<'a> {
                 scalar => self.typed_const(scalar, ty, span),
             };
         }
-        let base = self.types.base(ty);
+        // Where a `T?` is expected, an untyped constant is a `T`, then a `T?`.
+        let target = self.optional_inner(ty).unwrap_or(ty);
+        let base = self.types.base(target);
         let kind = self.types.kind(base).clone();
         let ok = match (&v, &kind) {
             (ConstValue::Int(i), TyKind::Int(it)) => {
@@ -1119,7 +1124,8 @@ impl<'a> Checker<'a> {
             _ => None,
         };
         match ok {
-            Some(kind) => Some(ir::Expr::new(kind, ty)),
+            Some(kind) if target == ty => Some(ir::Expr::new(kind, ty)),
+            Some(kind) => Some(self.opt_some(ir::Expr::new(kind, target), ty)),
             None => {
                 let found = self.default_const(v.clone());
                 let found_name = self.types.display(found.ty);
@@ -1128,8 +1134,9 @@ impl<'a> Checker<'a> {
                     Diagnostic::error(codes::TYPE_MISMATCH, format!("expected `{want}`, found `{found_name}`"))
                         .primary(span, format!("this has type `{found_name}`"));
                 if matches!(v, ConstValue::Float(_)) && matches!(kind, TyKind::Int(_)) {
+                    let target = self.types.display(target);
                     diag = diag
-                        .help(format!("floats don't convert to integers implicitly; use `.to({want})` to truncate"));
+                        .help(format!("floats don't convert to integers implicitly; use `.to({target})` to truncate"));
                 }
                 self.report(diag);
                 None
