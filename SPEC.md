@@ -956,7 +956,7 @@ end
   `-out:`, `-o:none|minimal|size|speed|aggressive`, `-debug`, `-vet`,
   `-define:NAME=val`, `-collection:name=path`, `-target:os_arch`, `-file`,
   `-sanitize:address`, `-filter:` (for `test`), `-json` and `-private` (for
-  `doc`), `-in:` (for `query`) and `-json-errors`.
+  `doc`), `-in:` (for `query`), `-check` (for `fmt`) and `-json-errors`.
 - `-file` makes the target a single `.wid` file instead of a package
   directory, so it needs one: `wid check main.wid -file` (for `doc` and
   `query`, a collection path can name it: `core:fmt/fmt.wid`). Naming no
@@ -1021,6 +1021,75 @@ end
     `extend` or `using`; `via`, as written; `location`). `-json-errors`
     prints the diagnostics as JSON, on stderr. `wid query` reuses this
     shape.
+- **Formatting.** `wid fmt [dir|file] [-check]` rewrites the `.wid` files
+  of the package in `dir` (default `.`, its `_test.wid` files included),
+  or one `.wid` file (any file with `-file`), in Wid's canonical style, and
+  lists the files it changed, one per line. The style has no options.
+  - Only the whitespace between tokens changes, plus a list's trailing
+    `,`. Every token keeps its text: strings and their interpolations,
+    numbers, symbols and splices (`#{…}`) are never changed. The author's
+    line breaks stay: no line is split or joined, and nothing is wrapped
+    to a width.
+  - Indentation is two spaces per block. `end` and closing brackets line
+    up with the line that opened them, `else` and `elsif` with their `if`,
+    `when` and `else` with their `case`; the branches of `x = case y` go
+    one step in. A line that continues a statement (after an operator or
+    `,`, or starting with `.method`) goes one step past the statement's
+    first line, and the lines of a bracketed list one step past the line
+    that opens it. In a block's header, where the body follows, a
+    continued line and a list that closes on its last item's line
+    (`def f(a: Int,` then `b: Int)`) go two steps. A `\` that ends a line
+    stays.
+  - One space around binary operators, assignments, the `=` of a default,
+    a constant or `def f = expr`, `->`, a union's `|`, a ternary's `?` and
+    `:`, and the `:` of `enum Dir : U8`; after `,` and after a keyword
+    (`return (x)`, but `yield(x)` and `yield (x)` differ and stay); after
+    a name's `:` (`x: Int`, `name: value`), with none before it. None
+    inside `( )`, `[ ]` and `@[ ]`, around `.`, `&.`, `..` and `...`,
+    after a unary operator or a prefix `&`, `*` or `^` (`-x`, `&x`, `*xs`,
+    `^T`), before a call's or a parameter list's `(`, a type's `?` or a
+    dereference's `^`, or between a type's `]` and its element (`[]Int`,
+    `[4]F32`). A `{ }` block has a space inside its braces,
+    `{ |x| x * 2 }` (an empty one is `{}`), and block parameters are
+    written `|a, &b|`. Where a space decides how the line parses
+    (`foo -1`, `foo [1]`, `foo (x)`), it stays as written.
+  - A call, array or parameter list whose closer is on a line of its own
+    ends with `,` (except after `...`); one that closes on its last item's
+    line has no trailing `,`.
+  - Blocks keep the form they were written in, `do |x| … end` or
+    `{ |x| … }`, and so do one-liners: `def f = expr`, `x if c` and
+    `if c then a else b end`.
+  - At most one blank line in a row, and none at the start or end of the
+    file or of a block (after a line that opens one, next to `else`,
+    `elsif` and `when`, or before a closer). A declaration that spans
+    several lines has one blank line before it (above its doc comment) and
+    after it, at the top of a file and in a type's body; between one-line
+    declarations the author's choice stays.
+  - Every comment is kept where it is. A trailing comment is one space
+    after the code at least; trailing comments on consecutive lines with
+    the same indentation line up one space after the longest code. An
+    own-line comment takes the indentation of the line after it, except
+    that before `end`, `else`, `elsif`, `when` or a closing bracket it
+    takes the body's when it was written deeper than that line. A comment
+    starts with `# ` (a space is added after `#`), except a `#!` line that
+    opens the file. Doc comments stay directly above their declarations.
+  - Lines end with `\n`, the file with exactly one. Indentation and the
+    space between tokens are spaces, and trailing blanks go (strings keep
+    theirs).
+  - Only a file that parses without errors is formatted. Otherwise its
+    errors are reported, as `wid check` reports them, and the file is left
+    as it is; the exit status is 1. A file is rewritten only when the
+    result parses to the same syntax tree with the same comments, and
+    formatting it again changes nothing; a file that can't be formatted so
+    is left as it is and reported as a bug in `wid fmt`.
+  - `-check` changes nothing: it lists the files that would change and
+    exits with 1 when there are any. `-json-errors` prints one JSON
+    document on stdout instead: `changed` (the files), `errors`,
+    `warnings` and `diagnostics`.
+  - Formatting reads only syntax: it never loads imports, type-checks or
+    generates code. The formatter is `wid_syntax::fmt::format`, a pure
+    function of a file's text and its syntax tree, which the LSP's
+    formatting request calls too.
 - **Query.** `wid query <query> [argument] [flags]` answers a question
   about a package with JSON, for editors, scripts and LLMs.
   - The engine is the `wid_query` crate, which `wid lsp` shares: a pure
@@ -1162,7 +1231,8 @@ help: unwrap it and handle the nil case
   `def <sym>`, `refs <sym>`, `calls <sym>`, `type <file:line:col>` and
   `methods <Type>`. It shares an engine with `wid lsp` (see "Toolchain and
   CLI").
-- `wid fmt` is canonical and has no configuration. `p`/`inspect` works on every
+- `wid fmt` is canonical and has no configuration (see "Toolchain and
+  CLI"). `p`/`inspect` works on every
   type, and the tracking allocator reports leaks.
 
 ## Open

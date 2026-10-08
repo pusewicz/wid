@@ -1,0 +1,5 @@
+# With `-json-errors`, `wid fmt` prints one JSON document: the files that
+# changed (none here), the error counts and the diagnostics.
+def main
+  x = [1,
+end

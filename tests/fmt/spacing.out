@@ -1,0 +1,31 @@
+# Spaces around binary operators, `=`, `->` and a ternary's `?` and `:`;
+# after `,` and a name's `:`; none inside `( )` and `[ ]`, around `.`,
+# `..` and `...`, or after a unary operator. Where a space decides how a
+# line parses (`show -1`, `show [1]`, `show (2)`), it stays as written.
+Vec2 = [2]F32
+LIMIT: Int = 10
+
+def show(x: Int) -> Int
+  x
+end
+
+def scale(v: Vec2, by: F32) -> Vec2 = v * by
+
+def main
+  a = 1 + 2 * 3 - 4 / 2 % 3
+  b = a ** 2 << 1
+  c = a < b && b >= a || !(a == b)
+  d = a & 3 | ~a
+  flag = a > 1 ? "big" : "small"
+  r = 0...a
+  s = [1, 2, 3][0..1]
+  t = -a
+  show -1
+  show [1][0]
+  show (2)
+  show(3)
+  p a, b, c
+  p d, flag, r, s, t
+  v = scale([1.0, 2.0], by: 2.0)
+  p v[0]
+end

@@ -1,0 +1,47 @@
+# Blocks keep the form they were written in, `do |x| … end` or
+# `{ |x| … }`, with a space inside the braces. Bodies are indented two
+# spaces; `else`, `elsif` and `when` line up with their `if` or `case`,
+# and the branches of `x = case y` are indented.
+def main
+xs = [1, 2, 3]
+xs.each {|x| p x}
+xs.each   do|x|
+p x
+end
+ys = xs.map{ |&x|x * 2 }
+total = 0
+    for x, i in ys
+          total += x * i
+    end
+if total > 10
+puts "big"
+elsif total > 5
+puts "medium"
+else
+puts "small"
+end
+kind = case total
+when 0 then "none"
+when 1..9
+"few"
+else
+"many"
+end
+case kind
+when "none", "few" then puts kind
+else puts "lots"
+end
+n = 0
+loop do
+n += 1
+break if n >= 3
+end
+while n > 0
+n -= 1
+end
+f = ->(x: Int) -> Int {x + 1}
+g = ->(x: Int) -> Int do
+x * 2
+end
+p f.call(1), g.call(2) unless n > 0
+end

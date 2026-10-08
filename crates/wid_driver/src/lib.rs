@@ -4,6 +4,7 @@
 mod cimport;
 mod cmdline;
 pub mod doc;
+pub mod fmt;
 mod loader;
 pub mod query;
 mod test;

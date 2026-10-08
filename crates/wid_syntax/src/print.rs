@@ -5,7 +5,9 @@
 //! The output reads like the source and depends only on the tree, plus the
 //! source text of literals when a [`Context`] gives it (so `0xFF` and `'a'`
 //! stay as written), which makes it stable enough for tools: `wid doc`
-//! shows signatures with it, and `wid fmt` is meant to build on it.
+//! shows signatures with it. `wid fmt` doesn't: the tree drops what a
+//! formatter must keep (a proc type's parameter names, a block's form,
+//! comments), so [`crate::fmt`] reprints the tokens instead.
 //! Statement bodies are not printed: a construct that holds statements
 //! (`if`, `case`, a block, `comptime do`) prints as its keywords around `…`,
 //! unless its body is one expression that fits on the line.

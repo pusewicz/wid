@@ -1,0 +1,11 @@
+error[E0105]: expected `)`, found end of line
+ --> tests/fmt/parse_error.wid:3:15
+  |
+3 |   x = (1 +   2
+  |               ^ expected `)`
+  |       - this `(` is never closed
+help: close it
+  |   x = (1 +   2)
+  = see `wid explain E0105`
+
+error: could not format due to 1 error

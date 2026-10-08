@@ -1,0 +1,36 @@
+# The author's line breaks in lists are kept. A list whose closer is on a
+# line of its own ends with `,`; one that closes after its last item
+# doesn't. Items go one step past the line that opens the list, or two in
+# a block's header, where the body follows.
+def area(
+     width: Int,
+     height: Int
+) -> Int
+  width * height
+end
+
+def volume(width: Int,
+                  height: Int, depth: Int,) -> Int
+  width * height * depth
+end
+
+def main
+  sizes = [
+1, 2,
+    3
+  ]
+  pairs = [[1, 2],
+           [3, 4],]
+  p area(
+    3,
+    4
+  ), volume(1, 2, 3,)
+  p sizes, pairs
+  if sizes.include?(area(1,
+       2))
+    p sizes
+  end
+  empty = [
+  ]
+  p empty.size
+end

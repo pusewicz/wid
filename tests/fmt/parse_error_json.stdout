@@ -1,0 +1,60 @@
+{
+  "changed": [],
+  "diagnostics": [
+    {
+      "code": "E0105",
+      "column": 10,
+      "expansions": [],
+      "explain": "wid explain E0105",
+      "file": "tests/fmt/parse_error_json.wid",
+      "helps": [
+        {
+          "applicability": "machine_applicable",
+          "edits": [
+            {
+              "column": 10,
+              "end": 153,
+              "end_column": 10,
+              "end_line": 4,
+              "file": "tests/fmt/parse_error_json.wid",
+              "line": 4,
+              "replacement": "]",
+              "start": 153
+            }
+          ],
+          "message": "close it"
+        }
+      ],
+      "labels": [
+        {
+          "column": 10,
+          "end": 153,
+          "end_column": 10,
+          "end_line": 4,
+          "file": "tests/fmt/parse_error_json.wid",
+          "line": 4,
+          "message": "expected `]`",
+          "primary": true,
+          "start": 153
+        },
+        {
+          "column": 7,
+          "end": 151,
+          "end_column": 8,
+          "end_line": 4,
+          "file": "tests/fmt/parse_error_json.wid",
+          "line": 4,
+          "message": "this `[` is never closed",
+          "primary": false,
+          "start": 150
+        }
+      ],
+      "line": 4,
+      "message": "expected `]` to close the array, found end of line",
+      "notes": [],
+      "severity": "error"
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}

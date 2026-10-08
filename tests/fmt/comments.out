@@ -1,0 +1,37 @@
+#!/usr/bin/env wid
+# The package doc: a `#!` line is kept as written, and every other comment
+# gets a space after its `#`.
+
+# Doc for `Pair`, kept directly above it.
+struct Pair
+  # Doc for `a`.
+  a: Int  # trailing comments on consecutive lines line up
+  bb: Int # one space after the longest code
+  # an own-line comment between fields
+
+  #     indented text in a comment stays as written
+  c: Int
+  # a comment before `end`, written deeper: the body's indentation
+end
+
+def main # after the signature
+  pair = Pair.new(a: 1, # in a call
+    bb: 2,
+    # before the last argument
+    c: 3)
+  xs = [
+    1,  # one
+    22, # twenty-two
+    # after the last item
+  ]
+  if pair.a > 0
+  # alone in a branch
+  else
+    p xs # in the else branch
+  # a comment before `end`, written shallower: `end`'s indentation
+  end
+  xs.each do |x| # after `do |x|`
+    p x
+  end
+end
+# At the end of the file.

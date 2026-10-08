@@ -1,0 +1,53 @@
+# One blank line around every declaration that spans several lines, at
+# the top of the file and in a type's body; single-line declarations keep
+# the author's choice. At most one blank line in a row, and none at the
+# start or end of a block. Attributes are written `@[a, b(1)]`.
+
+import "core:fmt"
+import "core:strings"
+SIZE = 4
+Grid = [SIZE][SIZE]U8
+
+enum Dir : U8
+  north
+  east = 2
+end
+
+union Shape = Grid | Dir
+
+struct Ball
+  pos: [2]F32
+  radius: F32 = 8.0
+  def area -> F32 = 3.14 * @radius * @radius
+
+  def grow(by: F32)
+    @radius += by
+  end
+
+  def self.unit -> Ball = Ball.new
+end
+
+module Named
+  def name -> String = "named"
+end
+
+extend Ball
+  include Named
+end
+
+@[extern("wid_mem_copy")]
+def copy(dst: RawPtr, src: RawPtr, n: Int)
+end
+
+@[test] def check(t: ^Int)
+  p t
+end
+
+def main
+  p fmt.int(SIZE), strings.Builder, Ball.unit.area
+  @[no_bounds_check]
+  for i in 0...SIZE
+    p i
+  end
+  @[no_bounds_check] p SIZE
+end

@@ -1,0 +1,5 @@
+# With `-check`, `wid fmt` changes nothing and lists the files that
+# would change.
+def main
+    p   1
+end
