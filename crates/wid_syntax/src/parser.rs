@@ -1586,19 +1586,27 @@ impl<'a> Parser<'a> {
                 let value = self.parse_const_value();
                 ItemKind::Const(Box::new(ConstDecl { name, ty: None, value }))
             }
-            // Alone, or a macro call (`make_#{name}(1)`).
-            _ if glued.is_some() => {
-                let expr = self.parse_expr_cmd();
-                match expr.kind {
-                    ExprKind::Splice(index) => ItemKind::Splice(index),
-                    _ if is_macro_call(&expr) => ItemKind::MacroCall(Box::new(expr)),
-                    _ => ItemKind::Error,
-                }
-            }
+            // Alone, or a macro call (`make_#{name}(1)`, `#{name}(1)`,
+            // `#{name} :hp`).
+            Some((T::LParen, false)) => self.splice_item_call(),
+            Some((_, true)) if after.is_some_and(|t| self.can_start_command_arg(t)) => self.splice_item_call(),
+            _ if glued.is_some() => self.splice_item_call(),
             _ => match self.parse_splice().0 {
                 Some(index) => ItemKind::Splice(index),
                 None => ItemKind::Error,
             },
+        }
+    }
+
+    /// A line among declarations, inside a `quote`, that starts with a
+    /// splice and isn't a field or a constant: the splice alone, or a
+    /// macro call whose name it gives.
+    fn splice_item_call(&mut self) -> ItemKind {
+        let expr = self.parse_expr_cmd();
+        match expr.kind {
+            ExprKind::Splice(index) => ItemKind::Splice(index),
+            _ if is_macro_call(&expr) => ItemKind::MacroCall(Box::new(expr)),
+            _ => ItemKind::Error,
         }
     }
 
@@ -4325,6 +4333,19 @@ impl<'a> Parser<'a> {
                     // `#{name}(args)` calls the method the splice names.
                     let name = Ident { name: splice_name(index), span };
                     return self.parse_call_with_parens(Callee::Name(name), span);
+                }
+                // `#{name} args` and `#{name} do … end` too, as for a name
+                // that isn't a local.
+                let name = Ident { name: splice_name(index), span };
+                if self.can_start_command_arg(self.peek()) {
+                    if cmd {
+                        return self.parse_command_call(Callee::Name(name), span);
+                    }
+                    return self.parse_nested_command_call(Callee::Name(name), span, span);
+                }
+                if let Some(block) = self.parse_block_arg() {
+                    let call = Call { callee: Callee::Name(name), args: Vec::new(), block: Some(block), parens: false };
+                    return Expr { span: span.to(self.prev_span()), kind: ExprKind::Call(Box::new(call)) };
                 }
                 Expr { kind: ExprKind::Splice(index), span }
             }

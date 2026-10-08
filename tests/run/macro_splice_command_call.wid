@@ -1,0 +1,70 @@
+# A splice that names a method calls it without parentheses, as the name
+# would: `#{f} 4` is `show 4` when `f` is `:show`, with any arguments a
+# call without parentheses takes, and a block.
+def show(n: Int)
+  p n
+end
+
+def pair(a: Int, b: Int, label: String = "pair")
+  puts "#{label}: #{a}, #{b}"
+end
+
+def each_twice(&blk: block(Int))
+  yield 1
+  yield 2
+end
+
+macro def call_it(f: Symbol) -> Code
+  quote do
+    #{f} 4
+  end
+end
+
+macro def call_pair(f: Symbol, a: Code) -> Code
+  quote do
+    #{f} #{a}, 2, label: "sum"
+  end
+end
+
+macro def run_block(f: Symbol) -> Code
+  quote do
+    #{f} do |x|
+      p x * 10
+    end
+  end
+end
+
+# Among declarations too, in a generated type's body and at package level.
+macro def getter(name: Symbol, value: Int = 7) -> Code
+  quote do
+    def #{name} -> Int = #{value}
+  end
+end
+
+macro def entity(name: Symbol, m: Symbol) -> Code
+  quote do
+    struct #{name}
+      hp: Int
+      #{m} :seven
+      #{m}(:eight, 8)
+    end
+  end
+end
+
+entity :Hero, :getter
+
+macro def at_top(m: Symbol) -> Code
+  quote do
+    #{m} :nine, 9
+  end
+end
+
+at_top :getter
+
+def main
+  call_it :show
+  call_pair :pair, 1 + 1
+  run_block :each_twice
+  hero = Hero.new(hp: 1)
+  p hero.seven, hero.eight, nine
+end

@@ -1783,6 +1783,12 @@ impl<'a> Checker<'a> {
             let call = MacroCall { decl, shown: fname.to_string(), args, block, name_span, span };
             return self.call_macro(call, None);
         }
+        // E0910 at the `def` explains the call: the code a macro would have
+        // generated here, and what it reads and declares, are unknown.
+        if self.meant_as_macro(decl) {
+            self.failed_expansion(span);
+            return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+        }
         let sig = self.fn_sig(decl);
         if let Some(init) = self.const_init {
             self.report(

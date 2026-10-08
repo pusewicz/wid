@@ -626,10 +626,13 @@ end
     `proc(Int) -> Int`, `@[c] proc(I32)`), the line is that constant's
     declaration wherever it is, as `NAME = v` is. `quote` works only in a
     `macro def`, the procs inside it included (E0910). A `def` that
-    returns `Code` was meant to be a macro: it is E0910 at the `def`, with
-    the fix `macro def`, and a call of it among declarations counts as a
-    failed expansion, so the names it would have declared aren't reported
-    missing.
+    returns `Code` and builds it with a `quote`, or is called among
+    declarations, was meant to be a macro: it is E0910 at the `def`, with
+    the fix `macro def`, and each call of it, among declarations or in a
+    method, counts as a failed expansion, so its arguments aren't checked
+    and the names it would have declared aren't reported missing. (A
+    `def` that returns `Code` without a `quote` is a helper that macros
+    call while compiling.)
   - **Nested quotes:** a splice belongs to the innermost `quote` around
     it. In a `macro def` that a `quote` generates, the inner macro's
     `quote` is left as written when the outer macro expands; its splices
@@ -652,7 +655,12 @@ end
       (`def #{name}`, `x.#{name}`), a field (`@#{name}`, or
       `@#{name}(args)` to call the proc it holds) or a parameter name. In
       an expression it is that identifier (a constant's, if capitalized),
-      and where a type goes, the type of that name.
+      and where a type goes, the type of that name. A splice followed by
+      arguments calls what it names, as a name that isn't a local does:
+      `#{name}(args)` anywhere, and `#{name} args` or `#{name} do … end`
+      as the outermost call of a statement (inside another expression it
+      is E0109, whose fix adds the parentheses). Among declarations,
+      `#{name}(args)` and `#{name} args` are macro calls.
       `:#{name}` inserts a symbol literal; its value must be a `Symbol`.
       In a list, a `[]Symbol` inserts one identifier (or, written
       `:#{names}`, one symbol literal) per name. A `Symbol` may hold any

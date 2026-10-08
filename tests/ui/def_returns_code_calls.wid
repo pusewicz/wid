@@ -1,0 +1,21 @@
+# Calls of a `def` that returns `Code` and builds it with a `quote` stand
+# for code a macro would have generated: the E0910 at the `def` explains
+# them, so nothing is reported for their arguments, for the names their
+# code would have declared, or for calling compile-time code at run time.
+def main
+  p twice(3)
+  declare :hits
+  p hits
+end
+
+def twice(e: Code) -> Code
+  quote do
+    #{e} * 2
+  end
+end
+
+def declare(name: Symbol) -> Code
+  quote do
+    #{name} = 1
+  end
+end

@@ -1318,6 +1318,16 @@ the language server.
   error ends `wid` with status 1 and a message. `wid_cli/tests/closed_pipe.rs`
   closes stdout, or stderr, before each command writes, and stops reading
   `wid query outline` after 10 bytes.
+- A splice that names a method calls it without parentheses, as a name
+  that isn't a local does (#118): `#{f} 4` and `#{f} do … end` as a
+  statement, and `#{f} args` or `#{f}(args)` as a macro call among
+  declarations, in a type's body too (`Parser::splice_item_call`); inside
+  another expression it is E0109 with the `#{f}(4)` fix. A call of a
+  `def` that returns `Code` and builds it with a `quote` counts as a
+  failed expansion (`Checker::meant_as_macro`, from `call_fn`): the E0910
+  at the `def` explains it, so its arguments, the run-time call of
+  compile-time code (E0906) and the names its code would have declared
+  aren't reported.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
@@ -1609,7 +1619,7 @@ only on `main` and can run in parallel with the macro stack.
        members). In every name position (method, field, parameter, local,
        block-parameter, loop-variable, type and enum-member names, `x.#{m}`,
        `@#{f}`, `:#{s}`, named arguments, `#{name}(args)`,
-       `@#{f}(args)`) it is an
+       `#{name} args`, `@#{f}(args)`) it is an
        `Ident`, `IVar` or `Symbol` named `#{i}` (`ast::splice_name`,
        `Ident::splice_index`), spanning the whole `#{…}`. A splice in a
        generic argument list is a `GenericArg::Expr`.
