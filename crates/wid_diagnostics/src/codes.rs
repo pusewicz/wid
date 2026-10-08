@@ -25,7 +25,7 @@ impl std::fmt::Display for Code {
 pub struct CodeInfo {
     /// The code.
     pub code: Code,
-    /// A short title used by `wid explain --list`.
+    /// A short title, which `wid explain` without a code lists.
     pub title: &'static str,
 }
 

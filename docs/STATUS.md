@@ -957,6 +957,10 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   at the MSRV (1.88). Ubuntu doesn't package raylib, so `vendor:raylib` and
   `examples/taste` are covered on macOS only. `cimport` keeps doc comments
   from system headers, which is where Linux installs libraries.
+- Unknown-flag hints come from the flags the command takes: a double-dash
+  flag is offered its one-dash form only when the command takes it,
+  another command's flag says which command takes it, and `wid explain`
+  (which takes none) says to run it with no code to list every code.
 
 ## Next
 
