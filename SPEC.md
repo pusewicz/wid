@@ -109,6 +109,10 @@ end
   - A line that ends with an operator or `,`, or a next line that starts with
     `.method`, continues the statement.
   - `x ? a : b` needs spaces around `?`, because `x?` is a predicate name.
+    So a `?` written right after a type's name or its closing `)`
+    (`Int?`, `rl.Color?`, `Pool(Ball, 64)?`, `(proc(Int) -> Int)?`) ends
+    that type, written in place, unless a conditional's `:` follows it:
+    `t = Int?` is the type `Int?` (a value goes there, E0323).
   - A call argument is a type when no expression reads the same way and
     `,` or `)` follows it (in a call without parentheses, also the end of
     the statement or an `if`/`unless` modifier, as in `n = size_of Int?`):

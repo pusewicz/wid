@@ -433,6 +433,13 @@ runs the stages; `wid_cli` is the `wid` binary.
   next line is parsed on its own, so a `def main` after it is no longer
   lost (#33). A `(` that ends its line before a declaration or an `end`
   (`X = (`) is one "expected an expression" there.
+- A `?` right after a type's name or its closing `)` (`t = Int?`,
+  `rl.Color?`, `Pool(Ball, 64)?`, `(proc(Int) -> Int)?`) ends the type,
+  written in place in any expression, unless a conditional's `:` follows
+  (on the line, or spaced on the next one, as in `f(FLAG?` / `1 : 2)`):
+  `t = Int?` is one E0323 with the `nil` help instead of a conditional that
+  ran past the line end (#34). `names_type` is shared with the
+  `size_of(Int ?)` check.
 - Any type written where a `Type` is expected, or in `comptime` code, is a
   `Type` value: constructors (`name_of([]Int)`, `name_of(Int?)`,
   `name_of(^Node)`, `name_of((proc(Int) -> Int)?)`), generic instances and

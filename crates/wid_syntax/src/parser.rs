@@ -2958,9 +2958,30 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expr_bp(&mut self, min_bp: u8, cmd: bool) -> Expr {
-        let mut lhs = self.parse_prefix(cmd);
+        let (start, splices, errors) = (self.pos, self.splice_mark(), self.diags.len());
+        let mut lhs = match self.paren_optional_type() {
+            Some(ty) => Expr { span: ty.span, kind: ExprKind::Type(Box::new(ty)) },
+            None => self.parse_prefix(cmd),
+        };
         loop {
             let tok = self.peek();
+            // `t = Int?`: a conditional needs a space before its `?`, so one
+            // right after a type's name (`Int`, `rl.Color`, `Pool(Ball, 64)`)
+            // ends the type, unless a conditional's `:` follows, as in
+            // `N? a : b`. The type is written in place, like a call
+            // argument's (`parse_type_arg`).
+            if tok.kind == T::Question
+                && !tok.space_before
+                && names_type(&lhs)
+                && self.diags.len() == errors
+                && !self.conditional_colon_ahead()
+            {
+                if let Some(ty) = self.reparse_as_type(start, splices) {
+                    lhs = Expr { span: ty.span, kind: ExprKind::Type(Box::new(ty)) };
+                    continue;
+                }
+                lhs = self.parse_prefix(cmd);
+            }
             if tok.kind == T::Caret && tok.space_before {
                 self.report(
                     Diagnostic::error(codes::UNEXPECTED_TOKEN, "`^` is not an operator in Wid")
@@ -3021,24 +3042,91 @@ impl<'a> Parser<'a> {
         lhs
     }
 
+    /// Whether the `?` here is followed by a conditional's `:` outside
+    /// brackets: on the rest of its line, or, when the `?` ends its line, on
+    /// the next line with a space before it (`f(FLAG?` then `1 : 2)`; a
+    /// declaration like `hp: Int` has none).
+    fn conditional_colon_ahead(&self) -> bool {
+        let next_line = self.nth(1).kind == T::Newline;
+        let mut depth = 0usize;
+        for tok in &self.tokens[self.pos + usize::from(next_line) + 1..] {
+            match tok.kind {
+                T::LParen | T::LBracket | T::LBrace | T::AtBracket | T::StrBegin | T::SpliceBegin => depth += 1,
+                T::RParen | T::RBracket | T::RBrace | T::StrEnd | T::SpliceEnd if depth > 0 => depth -= 1,
+                T::Colon if depth == 0 => return !next_line || tok.space_before,
+                T::Newline | T::Eof | T::RParen | T::RBracket | T::RBrace | T::SpliceEnd => return false,
+                _ => {}
+            }
+        }
+        false
+    }
+
+    /// Parses a parenthesized type made optional, like
+    /// `(proc(Int) -> Int)?`, written in place: a `(` whose `)` is followed
+    /// directly by `?`, with no conditional's `:` after it, that parses as
+    /// a type ending in that `?`. Returns `None`, with nothing consumed,
+    /// otherwise, as for `(a > b)? x : y`.
+    fn paren_optional_type(&mut self) -> Option<TypeExpr> {
+        if !self.at(T::LParen) {
+            return None;
+        }
+        let mut depth = 0usize;
+        let mut close = None;
+        for (i, tok) in self.tokens[self.pos..].iter().enumerate() {
+            match tok.kind {
+                T::LParen => depth += 1,
+                T::RParen if depth == 1 => {
+                    close = Some(self.pos + i);
+                    break;
+                }
+                T::RParen => depth -= 1,
+                T::Eof => return None,
+                _ => {}
+            }
+        }
+        let question = close? + 1;
+        let after = *self.tokens.get(question)?;
+        if after.kind != T::Question || after.space_before {
+            return None;
+        }
+        let save = (self.pos, self.splice_mark());
+        self.pos = question;
+        let colon = self.conditional_colon_ahead();
+        self.pos = save.0;
+        if colon {
+            return None;
+        }
+        let ty = self.try_parse_type()?;
+        if matches!(ty.kind, TypeKind::Optional(_)) && self.only_type(&ty) {
+            return Some(ty);
+        }
+        self.pos = save.0;
+        self.rewind_splices(save.1);
+        None
+    }
+
+    /// Parses again, as a type, the expression that starts at token `start`
+    /// and ends before the `?` here (with the splice list at `splices`
+    /// before it), when the type goes on through that `?`. Otherwise
+    /// returns `None` with the position back at `start`.
+    fn reparse_as_type(&mut self, start: usize, splices: usize) -> Option<TypeExpr> {
+        let question = self.pos;
+        self.pos = start;
+        self.rewind_splices(splices);
+        let ty = self.try_parse_type();
+        if ty.is_some() && self.pos > question {
+            return ty;
+        }
+        self.pos = start;
+        self.rewind_splices(splices);
+        None
+    }
+
     /// Reports `Int ?` before `)` or `,`, where the `?` (just consumed) reads
     /// as an unfinished `x ? a : b` but a type's `?` was likely meant: one
     /// after a space is a conditional's.
     fn spaced_optional(&mut self, lhs: &Expr, q: Token) -> bool {
-        let upper = |name: &Ident| name.as_str().starts_with(|c: char| c.is_ascii_uppercase());
-        let package = |recv: &Expr| matches!(recv.kind, ExprKind::Ident(_) | ExprKind::Const(_));
-        // `Int`, `rl.Color`, `Pool(Ball, 64)`, `geo.Pool(Ball, 64)`.
-        let names_type = match &lhs.kind {
-            ExprKind::Const(_) => true,
-            ExprKind::Member { recv, name, safe: false } => package(recv) && upper(name),
-            ExprKind::Call(call) if call.block.is_none() => match &call.callee {
-                Callee::Name(name) => upper(name),
-                Callee::Method { recv, name, safe: false } => package(recv) && upper(name),
-                Callee::Method { .. } => false,
-            },
-            _ => false,
-        };
-        if !names_type || !q.space_before || !matches!(self.kind(), T::RParen | T::Comma) {
+        if !names_type(lhs) || !q.space_before || !matches!(self.kind(), T::RParen | T::Comma) {
             return false;
         }
         let gap = Span::new(self.file, lhs.span.end, q.span.start);
@@ -4202,6 +4290,25 @@ fn is_keyword_member(kind: TokenKind) -> bool {
     matches!(kind, T::Kw(Keyword::Struct | Keyword::Enum | Keyword::Union))
 }
 
+/// Whether an expression reads as the name of a type that a `?` could make
+/// optional: `Int`, `rl.Color`, `Pool(Ball, 64)`, `geo.Pool(Ball, 64)`, one
+/// of those in parentheses, or a type parsed in place (`[]Int`).
+fn names_type(e: &Expr) -> bool {
+    let upper = |name: &Ident| name.as_str().starts_with(|c: char| c.is_ascii_uppercase());
+    let package = |recv: &Expr| matches!(recv.kind, ExprKind::Ident(_) | ExprKind::Const(_));
+    match &e.kind {
+        ExprKind::Const(_) | ExprKind::Type(_) => true,
+        ExprKind::Paren(inner) => names_type(inner),
+        ExprKind::Member { recv, name, safe: false } => package(recv) && upper(name),
+        ExprKind::Call(call) if call.block.is_none() => match &call.callee {
+            Callee::Name(name) => upper(name),
+            Callee::Method { recv, name, safe: false } => package(recv) && upper(name),
+            Callee::Method { .. } => false,
+        },
+        _ => false,
+    }
+}
+
 /// Whether a line starting with this token can't continue an expression
 /// from the line before: a declaration, or the `end` of a block.
 fn starts_declaration(kind: TokenKind) -> bool {
@@ -4734,6 +4841,60 @@ end
         // A token that doesn't continue it on the same line is reported there.
         let (messages, _) = fix_all("def main\n  x = (1 + 2 3)\nend\n");
         assert_eq!(messages, ["expected `)`, found `3`"]);
+    }
+
+    #[test]
+    fn optional_type_written_in_place() {
+        // The value of each `x = …` in `main`, by shape.
+        let shapes = |body: &str| -> Vec<String> {
+            let file = parse_ok(&format!("def main\n{body}end\n"));
+            let ItemKind::Def(f) = &file.items[0].kind else { panic!() };
+            let FnBody::Block(body) = &f.body else { panic!() };
+            body.iter()
+                .filter_map(|s| match &s.kind {
+                    StmtKind::Assign { values, .. } => Some(match &values[0].kind {
+                        ExprKind::Type(t) if matches!(t.kind, TypeKind::Optional(_)) => "optional".to_string(),
+                        ExprKind::Ternary { .. } => "ternary".to_string(),
+                        ExprKind::Binary { rhs, .. } if matches!(rhs.kind, ExprKind::Type(_)) => {
+                            "binary with type".to_string()
+                        }
+                        other => format!("{other:?}"),
+                    }),
+                    _ => None,
+                })
+                .collect()
+        };
+        // A `?` right after a type's name ends the type when no
+        // conditional's `:` follows.
+        assert_eq!(
+            shapes(
+                "  a = Int?\n  b = rl.Color?\n  c = Pool(Ball, 64)?\n  d = geo.Pool(Ball, 64)?\n\
+                 \x20 e = (Int)?\n  f = (proc(Int) -> Int)?\n  g = Int??\n  h = 1 + Int?\n  i = Int?\n  hp: Int\n"
+            ),
+            [&["optional"; 7][..], &["binary with type", "optional"]].concat()
+        );
+        // Before a modifier too.
+        parse_ok("def main\n  t = Int? if ready\nend\n");
+        // Conditionals parse as before: with spaces, after a predicate
+        // name, or with the `:` after it (on the line, or on the next one).
+        assert_eq!(
+            shapes(
+                "  a = c ? 1 : 2\n  b = xs.empty? ? 1 : 2\n  c = empty? ? 1 : 2\n  d = N? 1 : 2\n\
+                 \x20 e = (a > b)? 1 : 2\n  f = N?\n    1 : 2\n  g = (Int)? 1 : 2\n"
+            ),
+            ["ternary"; 7]
+        );
+        // A predicate call stays one, and a type in a call argument too.
+        let file = parse_ok("def main\n  p foo?, xs.empty?\n  p f(Int?), size_of(Int?)\nend\n");
+        let ItemKind::Def(f) = &file.items[0].kind else { panic!() };
+        let FnBody::Block(body) = &f.body else { panic!() };
+        let StmtKind::Expr(e) = &body[1].kind else { panic!() };
+        let ExprKind::Call(call) = &e.kind else { panic!() };
+        assert!(call.args.iter().all(|a| matches!(&a.value.kind, ExprKind::Call(c) if matches!(
+            c.args[0].value.kind, ExprKind::Type(_)
+        ))));
+        // `t = Int?` is one expression: nothing runs past the line end.
+        assert!(codes_of("def main\n  t = Int?\nend\n").is_empty());
     }
 
     #[test]
