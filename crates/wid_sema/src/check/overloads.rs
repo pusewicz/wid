@@ -104,6 +104,7 @@ impl Checker<'_> {
                 self.report(diag);
                 continue;
             };
+            self.note_ref(m.span, decl, crate::uses::RefKind::Read);
             let DeclKind::Fn(f) = self.decls[decl.0 as usize].kind else {
                 let what = self.decls[decl.0 as usize].kind.a_describe();
                 let def_span = self.decls[decl.0 as usize].span;
@@ -295,6 +296,7 @@ impl Checker<'_> {
         (name_span, span): (Span, Span),
         expected: Option<TyId>,
     ) -> ir::Expr {
+        self.note_ref(name_span, set, crate::uses::RefKind::Call);
         if !self.set_has_macros(set) {
             return self.call_overloaded(set, None, None, args, name_span, span);
         }
@@ -510,6 +512,7 @@ impl Checker<'_> {
         name_span: Span,
         span: Span,
     ) -> ir::Expr {
+        self.note_ref(name_span, decl, crate::uses::RefKind::Call);
         if values.iter().any(|v| matches!(self.types.kind(v.ty), TyKind::Unknown)) {
             return ir::Expr::new(ExprKind::Zero, self.types.unknown());
         }
@@ -589,6 +592,7 @@ impl Checker<'_> {
             lowered.push(v);
         }
         self.check_visible(chosen, name_span);
+        self.note_ref(name_span, chosen, crate::uses::RefKind::Call);
         if let Some(owner) = owner {
             self.check_private_method(chosen, owner, name_span);
         }
@@ -621,6 +625,7 @@ impl Checker<'_> {
             return self.call_with_values(decl, Some(recv), Some(owner), &[rhs], vec![r], lhs_span, span);
         }
         if let Some(decl) = self.package_operator(op.as_str(), l.ty, r.ty) {
+            self.note_ref(span, decl, crate::uses::RefKind::Call);
             return self.call_operator_fn(decl, l, r);
         }
         self.binary_values(op, l, r, lhs_span, rhs.span, span)
@@ -962,6 +967,7 @@ impl Checker<'_> {
                         return;
                     }
                     self.check_visible_from(m, loc.pkg, t.span);
+                    self.note_ref(segments.last().map_or(t.span, |s| s.span), m, crate::uses::RefKind::Type);
                     self.includes.entry(decl).or_default().push(m);
                 }
                 Some(m) => {

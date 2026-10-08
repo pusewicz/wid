@@ -1,0 +1,157 @@
+{
+  "package": {
+    "doc": "A small game that `wid query refs`, `calls` and `type` read.",
+    "name": "game",
+    "path": "."
+  },
+  "query": "type",
+  "results": [
+    {
+      "kind": "type",
+      "location": {
+        "column": 17,
+        "end_column": 21,
+        "end_line": 80,
+        "file": "tests/query/game/game.wid",
+        "line": 80
+      },
+      "refers_to": {
+        "attributes": [],
+        "doc": "A fixed number of things.",
+        "fields": [
+          {
+            "attributes": [],
+            "doc": null,
+            "kind": "field",
+            "location": {
+              "column": 3,
+              "end_column": 8,
+              "end_line": 49,
+              "file": "tests/query/game/game.wid",
+              "line": 49
+            },
+            "name": "items",
+            "origin": {
+              "kind": "own",
+              "location": null,
+              "via": null
+            },
+            "owner": {
+              "kind": "struct",
+              "name": "Pool"
+            },
+            "package": ".",
+            "path": "Pool.items",
+            "private": false,
+            "signature": "items: [N]T",
+            "span": {
+              "column": 3,
+              "end_column": 14,
+              "end_line": 49,
+              "file": "tests/query/game/game.wid",
+              "line": 49
+            }
+          },
+          {
+            "attributes": [],
+            "doc": null,
+            "kind": "field",
+            "location": {
+              "column": 3,
+              "end_column": 8,
+              "end_line": 50,
+              "file": "tests/query/game/game.wid",
+              "line": 50
+            },
+            "name": "count",
+            "origin": {
+              "kind": "own",
+              "location": null,
+              "via": null
+            },
+            "owner": {
+              "kind": "struct",
+              "name": "Pool"
+            },
+            "package": ".",
+            "path": "Pool.count",
+            "private": false,
+            "signature": "count: Int",
+            "span": {
+              "column": 3,
+              "end_column": 13,
+              "end_line": 50,
+              "file": "tests/query/game/game.wid",
+              "line": 50
+            }
+          }
+        ],
+        "kind": "struct",
+        "location": {
+          "column": 8,
+          "end_column": 12,
+          "end_line": 48,
+          "file": "tests/query/game/game.wid",
+          "line": 48
+        },
+        "methods": [
+          {
+            "attributes": [],
+            "doc": null,
+            "kind": "method",
+            "location": {
+              "column": 7,
+              "end_column": 11,
+              "end_line": 52,
+              "file": "tests/query/game/game.wid",
+              "line": 52
+            },
+            "name": "push",
+            "origin": {
+              "kind": "own",
+              "location": null,
+              "via": null
+            },
+            "owner": {
+              "kind": "struct",
+              "name": "Pool"
+            },
+            "package": ".",
+            "path": "Pool.push",
+            "private": false,
+            "signature": "def push(item: T)",
+            "span": {
+              "column": 3,
+              "end_column": 6,
+              "end_line": 55,
+              "file": "tests/query/game/game.wid",
+              "line": 52
+            },
+            "static": false
+          }
+        ],
+        "name": "Pool",
+        "package": ".",
+        "path": "Pool",
+        "private": false,
+        "signature": "struct Pool($T, $N: Int)",
+        "span": {
+          "column": 1,
+          "end_column": 4,
+          "end_line": 56,
+          "file": "tests/query/game/game.wid",
+          "line": 48
+        }
+      },
+      "span": {
+        "column": 17,
+        "end_column": 32,
+        "end_line": 80,
+        "file": "tests/query/game/game.wid",
+        "line": 80
+      },
+      "type": "Pool(Player, 4)"
+    }
+  ],
+  "symbol": "tests/query/game/game.wid:80:17"
+}

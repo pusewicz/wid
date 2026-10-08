@@ -318,6 +318,7 @@ impl<'a> Checker<'a> {
             // in (`expand_among_declarations`).
             Some(decl) if self.is_macro(decl) || self.set_has_macros(decl) => {
                 self.check_visible(decl, parts.name.span);
+                self.note_ref(parts.name.span, decl, crate::uses::RefKind::Call);
                 let (args, block, name_span, span) = (parts.args, parts.block, parts.name.span, expr.span);
                 Some(MacroCall { decl, shown, args, block, name_span, span })
             }
@@ -522,6 +523,7 @@ impl<'a> Checker<'a> {
             self.call_among_declarations(call.span, p.owner, Some(chosen));
             return None;
         }
+        self.note_ref(call.name_span, chosen, crate::uses::RefKind::Call);
         Some(self.chosen_macro_call(copy, chosen))
     }
 

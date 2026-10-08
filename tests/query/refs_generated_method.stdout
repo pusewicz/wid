@@ -1,0 +1,34 @@
+{
+  "package": {
+    "doc": "A small game that `wid query refs`, `calls` and `type` read.",
+    "name": "game",
+    "path": "."
+  },
+  "query": "refs",
+  "results": [
+    {
+      "context": "Player",
+      "kind": "declaration",
+      "location": {
+        "column": 3,
+        "end_column": 21,
+        "end_line": 44,
+        "file": "tests/query/game/game.wid",
+        "line": 44
+      },
+      "via_macro": "full_heal_method"
+    },
+    {
+      "context": "main",
+      "kind": "call",
+      "location": {
+        "column": 8,
+        "end_column": 17,
+        "end_line": 107,
+        "file": "tests/query/game/game.wid",
+        "line": 107
+      }
+    }
+  ],
+  "symbol": "Player.full_heal"
+}

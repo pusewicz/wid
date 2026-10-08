@@ -757,7 +757,7 @@ Hero = Player
         };
         let options = CheckOptions { library: true, ..CheckOptions::default() };
         let input = ProgramInput { packages: vec![package], options, prelude: None };
-        let (_, diags, index) = crate::check_program_indexed(&input);
+        let (_, diags, index, _) = crate::check_program_indexed(&input);
         assert!(!diags.has_errors(), "{diags:?}");
         index
     }

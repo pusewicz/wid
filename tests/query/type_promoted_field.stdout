@@ -1,0 +1,57 @@
+{
+  "package": {
+    "doc": "A small game that `wid query refs`, `calls` and `type` read.",
+    "name": "game",
+    "path": "."
+  },
+  "query": "type",
+  "results": [
+    {
+      "kind": "field",
+      "location": {
+        "column": 25,
+        "end_column": 28,
+        "end_line": 99,
+        "file": "tests/query/game/game.wid",
+        "line": 99
+      },
+      "refers_to": {
+        "attributes": [],
+        "doc": null,
+        "kind": "field",
+        "location": {
+          "column": 3,
+          "end_column": 6,
+          "end_line": 22,
+          "file": "tests/query/game/game.wid",
+          "line": 22
+        },
+        "name": "pos",
+        "owner": {
+          "kind": "struct",
+          "name": "Entity"
+        },
+        "package": ".",
+        "path": "Entity.pos",
+        "private": false,
+        "signature": "pos: geo.Vec",
+        "span": {
+          "column": 3,
+          "end_column": 15,
+          "end_line": 22,
+          "file": "tests/query/game/game.wid",
+          "line": 22
+        }
+      },
+      "span": {
+        "column": 25,
+        "end_column": 28,
+        "end_line": 99,
+        "file": "tests/query/game/game.wid",
+        "line": 99
+      },
+      "type": "Vec"
+    }
+  ],
+  "symbol": "tests/query/game/game.wid:99:25"
+}

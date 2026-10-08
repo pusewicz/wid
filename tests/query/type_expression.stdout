@@ -1,0 +1,29 @@
+{
+  "package": {
+    "doc": "A small game that `wid query refs`, `calls` and `type` read.",
+    "name": "game",
+    "path": "."
+  },
+  "query": "type",
+  "results": [
+    {
+      "kind": "expression",
+      "location": {
+        "column": 33,
+        "end_column": 38,
+        "end_line": 86,
+        "file": "tests/query/game/game.wid",
+        "line": 86
+      },
+      "span": {
+        "column": 33,
+        "end_column": 38,
+        "end_line": 86,
+        "file": "tests/query/game/game.wid",
+        "line": 86
+      },
+      "type": "Bool"
+    }
+  ],
+  "symbol": "tests/query/game/game.wid:86:35"
+}

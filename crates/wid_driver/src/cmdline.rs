@@ -1,13 +1,14 @@
 //! What `wid doc` and `wid query` share about their requests: the command
 //! line as a source that errors point into (so fixes show the corrected
 //! command), finding the package a request names, and the errors for a
-//! symbol path that doesn't resolve (E0601–E0604).
+//! symbol path that doesn't resolve (E0601–E0604) or a position where
+//! `wid query type` finds nothing (E0605).
 
 use std::path::{Path, PathBuf};
 
 use wid_diagnostics::{Applicability, Code, Diagnostic, Edit, FileId, SourceMap, Span, and_list, codes, did_you_mean};
-use wid_query::Failure;
 use wid_query::item::kind_words;
+use wid_query::{Failure, PositionError};
 use wid_sema::PackageId;
 use wid_sema::index::{Index, PathErrorKind, Target};
 
@@ -513,6 +514,7 @@ impl ErrorContext<'_> {
                     .help("write a name, a type and its member, or an import name first: `Ball`, `Ball.update`, `rl.draw_circle_v`");
             }
             Failure::NotAType(target) => return self.not_a_type(&target),
+            Failure::Position(error) => return self.position(error),
             Failure::Path(error) => error,
         };
         let span = self.segment(error.segment);
@@ -717,6 +719,112 @@ impl ErrorContext<'_> {
                 Applicability::MachineApplicable,
             ),
             None => diag,
+        }
+    }
+
+    /// The span of part `i` of a position argument: 0 the file, 1 the
+    /// line, 2 the column.
+    fn position_part(&self, i: usize) -> Span {
+        let base = self.cmd.span(self.file, self.arg);
+        let mut cuts = self.symbol.rmatch_indices(':').map(|(at, _)| base.start + at as u32);
+        let (Some(second), Some(first)) = (cuts.next(), cuts.next()) else { return base };
+        match i {
+            0 => Span::new(self.file, base.start, first),
+            1 => Span::new(self.file, first + 1, second),
+            _ => Span::new(self.file, second + 1, base.end),
+        }
+    }
+
+    /// `wid query type` at a position where nothing is (E0605).
+    fn position(&self, error: PositionError) -> Diagnostic {
+        let text = self.symbol;
+        let arg = self.cmd.span(self.file, self.arg);
+        let file = self.symbol.rsplitn(3, ':').nth(2).unwrap_or(text);
+        let code = codes::QUERY_NO_POSITION;
+        match error {
+            PositionError::Malformed => {
+                let mut diag = Diagnostic::error(code, format!("`{text}` is not a position"))
+                    .primary(arg, "a position is `file:line:column`")
+                    .help("write the file as diagnostics show it, then the line and the column, counted from 1: `main.wid:12:5`");
+                let symbol_like = !text.is_empty()
+                    && text.split('.').all(|s| {
+                        s.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_')
+                            && s.chars().all(|c| c.is_alphanumeric() || c == '_')
+                    });
+                if symbol_like && let Some(query) = self.query_arg {
+                    diag = diag
+                        .note("`wid query type` reads a position; a symbol's declaration is what `def` gives")
+                        .suggest(
+                            format!("ask for the declaration of `{text}` instead"),
+                            vec![Edit { span: self.cmd.span(self.file, query), replacement: "def".to_string() }],
+                            Applicability::MaybeIncorrect,
+                        );
+                }
+                diag
+            }
+            PositionError::UnknownFile { candidates } => {
+                let span = self.position_part(0);
+                let mut diag = Diagnostic::error(code, format!("no file `{file}` in the program"))
+                    .primary(span, "not a file this query read");
+                let names = candidates.iter().map(|c| {
+                    (Path::new(c).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), c)
+                });
+                let by_name: Vec<(String, &String)> = names.collect();
+                let wanted = Path::new(file).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                let best =
+                    did_you_mean(file, candidates.iter().map(String::as_str)).map(str::to_string).or_else(|| {
+                        did_you_mean(&wanted, by_name.iter().map(|(n, _)| n.as_str()))
+                            .and_then(|n| by_name.iter().find(|(m, _)| m == n).map(|(_, c)| c.to_string()))
+                    });
+                match best {
+                    Some(best) => {
+                        diag = diag.suggest_replace(
+                            format!("a similar file exists: `{best}`"),
+                            span,
+                            best,
+                            Applicability::MaybeIncorrect,
+                        )
+                    }
+                    None if !candidates.is_empty() => {
+                        diag = diag.note(format!("the package's files are {}", list_names(&candidates)))
+                    }
+                    None => {}
+                }
+                diag.help("name the file as diagnostics show it (relative to the current directory), and the package it belongs to with `-in:`")
+            }
+            PositionError::NoLine { lines } => {
+                let s = if lines == 1 { "" } else { "s" };
+                Diagnostic::error(code, format!("`{file}` has {lines} line{s}"))
+                    .primary(self.position_part(1), "past the end of the file")
+                    .help("lines are counted from 1, as in diagnostics")
+            }
+            PositionError::NoColumn { last } => {
+                let line = self.symbol.rsplit(':').nth(1).unwrap_or_default();
+                let chars = last - 1;
+                let s = if chars == 1 { "" } else { "s" };
+                Diagnostic::error(code, format!("line {line} of `{file}` has {chars} character{s}"))
+                    .primary(self.position_part(2), "past the end of the line")
+                    .help("columns are counted from 1, in characters, as in diagnostics")
+            }
+            PositionError::Nothing { nearest } => {
+                let mut diag = Diagnostic::error(code, format!("nothing at `{text}` has a type"))
+                    .primary(arg, "no expression, name, binding or written type is here");
+                for (i, n) in nearest.iter().enumerate() {
+                    diag = diag.secondary(n.span, if i == 0 { "the nearest code" } else { "nearby code" });
+                }
+                diag = diag.note(
+                    "`wid query type` answers for the code the checker checked: expressions, names, bindings, parameters, written types and the names in declarations; blank space, comments and keywords have no type, and neither has code the checker never reaches, like a generic method that nothing instantiates",
+                );
+                if let Some(n) = nearest.first() {
+                    diag = diag.suggest_replace(
+                        format!("ask about the nearest code, `{}`", n.text),
+                        arg,
+                        format!("{file}:{}:{}", n.line, n.column),
+                        Applicability::MaybeIncorrect,
+                    );
+                }
+                diag
+            }
         }
     }
 

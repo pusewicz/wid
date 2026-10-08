@@ -1,0 +1,2 @@
+error: `wid query type` needs a position, like `wid query type main.wid:12:5`
+run `wid help query` for usage

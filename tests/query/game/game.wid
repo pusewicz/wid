@@ -1,0 +1,111 @@
+# A small game that `wid query refs`, `calls` and `type` read.
+
+import "./geo"
+
+# The hit points everything starts with.
+MAX_HP = 100
+
+# A compass direction.
+enum Dir
+  north
+  south
+end
+
+# Says hello.
+module Greeter
+  def greet -> Int = 1
+end
+
+# What everything that moves has.
+struct Entity
+  hp: Int = MAX_HP
+  pos: geo.Vec
+
+  def hurt(amount: Int)
+    @hp -= amount
+  end
+
+  def alive? -> Bool = @hp > 0
+end
+
+# Someone playing.
+struct Player
+  using base: Entity
+  name: String
+  facing: Dir = :north
+  include Greeter
+
+  def heal(amount: Int) -> Int
+    total = @hp + amount
+    @hp = total
+    total
+  end
+
+  full_heal_method()
+end
+
+# A fixed number of things.
+struct Pool($T, $N: Int)
+  items: [N]T
+  count: Int
+
+  def push(item: T)
+    @items[@count] = item
+    @count += 1
+  end
+end
+
+# Twice the starting hit points: code that reads `MAX_HP` where it is
+# called.
+macro def double_hp -> Code
+  quote do
+    MAX_HP * 2
+  end
+end
+
+# A method that sets `hp` back to `MAX_HP`, for a type that has one.
+macro def full_heal_method -> Code
+  quote do
+    def full_heal
+      @hp = MAX_HP
+    end
+  end
+end
+
+def area_int(side: Int) -> Int = side * side
+def area_f64(side: F64) -> F64 = side * side
+overload :area, :area_int, :area_f64
+
+# Fills a pool with copies of a player.
+def fill(pool: ^Pool(Player, 4), hero: Player)
+  while pool.count < 4
+    pool.push(hero)
+  end
+end
+
+def larger(a: $T, b: $T) -> T = a > b ? a : b
+
+def twice(x: Int) -> Int = x * 2
+
+def main
+  hero = Player.new(name: "Ayla")
+  hero.hp = double_hp
+  hero.heal(5)
+  hero.hurt(3)
+  if hero.alive?
+    puts hero.greet
+  end
+  hero.pos = geo.make(1.0, 2.0)
+  puts geo.length2(hero.pos)
+  d: Dir = :south
+  if d == Dir.north || hero.facing == :north
+    puts "north"
+  end
+  pool = Pool(Player, 4).new
+  pool.push(hero)
+  fill(&pool, hero)
+  hero.full_heal
+  f = method(:twice)
+  p f(larger(2, 3)), larger(1.5, 0.5), twice(MAX_HP)
+  p area(3), area(1.5), area_int(2)
+end

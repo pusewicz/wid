@@ -1017,19 +1017,66 @@ end
     itself, `include`, `extend`, `using`), and each group is
     `{"origin": …, "methods": […]}`, with `origin` as `wid doc` writes it.
     The builtin methods of builtin types are described here, not listed.
-  - `refs <symbol>` gives every use of a declaration, call sites included,
-    and `type <file:line:col>` the type and the declaration at a position.
-    Both read what the checker records as it resolves names inside bodies.
+  - `refs <symbol>` lists every use of what a symbol path names (read as
+    for `def`) in the package and the packages it loads, private ones too,
+    sorted by file, line and column. Each use is `{"location", "kind",
+    "context"}`. `kind` is `declaration` (the name where it is declared;
+    for an import name, the `import` or `cimport` that binds it), `read`,
+    `write` (the target of `=`, `+=` or `||=`, or a named argument of
+    `T.new`), `call` (a method, macro or operator method called; calling
+    an overload set calls the set and the member it chose), `type` (written
+    in a type, or as `T.new`, `T.method`, `include` or `extend` names it) or
+    `import` (an import name before a dot: `geo` in `geo.Vec`). `context`
+    is the path of the declaration the use is in (`Player.heal`), or `null`
+    at the top level of a file. A use in code a macro generated is
+    reported at the macro call that generated it (the outermost, which is
+    in a file) with `"via_macro"`: the macro as the call names it. Code
+    checked more than once, like a generic method for each instance or a
+    block method at each call, counts once. `method(:f)` and an `overload`
+    list read `f`. A field `using` promotes is its declaring struct's, so
+    `Player.hp` and `Entity.hp` have the same uses; a builtin type's uses
+    are the places it is written as a type.
+  - `calls <symbol>` is `refs` keeping only the `call` uses: the call
+    sites.
+  - `type <file:line:column>` says what is at a position: the innermost
+    expression, name, binding, parameter, written type or declaration name
+    there. Lines and columns count from 1, as in diagnostics, and the file
+    is named as diagnostics show it (relative to the current directory).
+    Without `-in:`, the package is the one that holds the file. The result
+    is `{"location", "span", "type", "kind"}`: `location` is the name or
+    code at the position, `span` what the type is of (the whole call, for a
+    method's name in one), `type` the type as Wid displays it (`^Ball?`, or
+    `proc(Int) -> Int` for a method's name; `null` for a package, module,
+    macro or overload set), and `kind` one of `expression`, `call`,
+    `local`, `parameter`, `field`, `type`, `declaration` (the name in a
+    method's, constant's or type's own declaration) or `package` (an import
+    name). When the position names a declaration, field, enum member,
+    package or variable, `refers_to` is its `def` item (a `local` or
+    `parameter` item for a variable). In code checked for several generic
+    instances, `type` is the first instance's and `instances` lists each
+    instance's type. A position where nothing is, like a comment or blank
+    space, is E0605, which points at the code nearest to it and suggests
+    asking about the nearest; so is a malformed position, a file the
+    program doesn't hold, or a line or column past the end.
+  - `refs`, `calls` and `type` read what the checker records as it
+    resolves names and lowers code, only when it checks for a query, so
+    they cover the code it checks: the package's methods and the code of
+    other packages that the package reaches. A generic method that no call
+    instantiates (methods of `extend` blocks and modules are generic over
+    `Self`), and a field default that no `T.new` uses, have nothing
+    recorded.
   - stdout always holds one JSON document with `query` (`outline`, `def`,
-    `methods`), `symbol` (the argument, or `null`), `package` (`name`,
-    `path`, `doc`, or `null` when it can't be loaded) and `results`, which
-    is empty when the request fails. A `location` is where a declaration's
-    name is and a `span` the whole declaration, from its attributes (or
-    `private`) to its last token. Both have `file`, `line`, `column`,
+    `methods`, `refs`, `calls`, `type`), `symbol` (the argument: a symbol
+    path or a position, or `null`), `package` (`name`, `path`, `doc`, or
+    `null` when it can't be loaded) and `results`, which is empty when the
+    request fails. In an item, a `location` is where a declaration's name
+    is and a `span` the whole declaration, from its attributes (or
+    `private`) to its last token; both are `null` for C declarations and
+    packages. Every location and span has `file`, `line`, `column`,
     `end_line` and `end_column`, 1-based with an exclusive end, as in
-    diagnostics. Both are `null` for C declarations and packages. Keys are
-    sorted, and lists keep source or lookup order, so the same program
-    always gives the same document.
+    diagnostics. Keys are sorted, and lists keep source or lookup order (or
+    file order, for uses), so the same program always gives the same
+    document.
   - Diagnostics go to stderr as one JSON document, the one `-json-errors`
     prints, whenever there are any. A package with errors is still
     answered from what the checker collected, as with `wid doc`. An unknown
@@ -1037,10 +1084,10 @@ end
     pointing into the command line `wid query …`, with did-you-mean fixes.
     A member named without its type gets one fix for each type that has
     it, and `methods` of something that isn't a type (E0603) gets a fix
-    that asks for its `def`. The exit status is 1 when the request fails or
-    the package has errors. A malformed command line, like an unknown query
-    or a missing argument, is a usage error (status 2), as for every
-    command.
+    that asks for its `def`; a position where `type` finds nothing is
+    E0605. The exit status is 1 when the request fails or the package has
+    errors. A malformed command line, like an unknown query or a missing
+    argument, is a usage error (status 2), as for every command.
 
 ## Built for humans and LLMs
 
@@ -1070,12 +1117,14 @@ help: unwrap it and handle the nil case
   `run`, `check` and `test`, `could not import the header due to …` for
   `cimport`, and for `wid doc` `could not write the documentation due to …`,
   or `the documentation may be incomplete due to …` when it still prints a
-  page. With only warnings it is `warning: 2 warnings emitted`.
+  page. With only warnings it is `warning: 2 warnings emitted`. `wid query`
+  prints its diagnostics as JSON, with no summary line.
 - `-json-errors` produces the same diagnostics with structured fix-its.
   `wid explain <code>` gives the long-form explanation with examples.
 - `wid query` answers questions about a package in JSON: `outline`,
-  `def <sym>`, `refs <sym>`, `type <file:line:col>` and `methods <Type>`. It
-  shares an engine with `wid lsp` (see "Toolchain and CLI").
+  `def <sym>`, `refs <sym>`, `calls <sym>`, `type <file:line:col>` and
+  `methods <Type>`. It shares an engine with `wid lsp` (see "Toolchain and
+  CLI").
 - `wid fmt` is canonical and has no configuration. `p`/`inspect` works on every
   type, and the tracking allocator reports leaks.
 

@@ -1,0 +1,89 @@
+{
+  "package": {
+    "doc": "A small game that `wid query refs`, `calls` and `type` read.",
+    "name": "game",
+    "path": "."
+  },
+  "query": "refs",
+  "results": [
+    {
+      "context": "Entity",
+      "kind": "declaration",
+      "location": {
+        "column": 3,
+        "end_column": 5,
+        "end_line": 21,
+        "file": "tests/query/game/game.wid",
+        "line": 21
+      }
+    },
+    {
+      "context": "Entity.hurt",
+      "kind": "write",
+      "location": {
+        "column": 5,
+        "end_column": 8,
+        "end_line": 25,
+        "file": "tests/query/game/game.wid",
+        "line": 25
+      }
+    },
+    {
+      "context": "Entity.alive?",
+      "kind": "read",
+      "location": {
+        "column": 24,
+        "end_column": 27,
+        "end_line": 28,
+        "file": "tests/query/game/game.wid",
+        "line": 28
+      }
+    },
+    {
+      "context": "Player.heal",
+      "kind": "read",
+      "location": {
+        "column": 13,
+        "end_column": 16,
+        "end_line": 39,
+        "file": "tests/query/game/game.wid",
+        "line": 39
+      }
+    },
+    {
+      "context": "Player.heal",
+      "kind": "write",
+      "location": {
+        "column": 5,
+        "end_column": 8,
+        "end_line": 40,
+        "file": "tests/query/game/game.wid",
+        "line": 40
+      }
+    },
+    {
+      "context": "Player",
+      "kind": "write",
+      "location": {
+        "column": 3,
+        "end_column": 21,
+        "end_line": 44,
+        "file": "tests/query/game/game.wid",
+        "line": 44
+      },
+      "via_macro": "full_heal_method"
+    },
+    {
+      "context": "main",
+      "kind": "write",
+      "location": {
+        "column": 8,
+        "end_column": 10,
+        "end_line": 92,
+        "file": "tests/query/game/game.wid",
+        "line": 92
+      }
+    }
+  ],
+  "symbol": "Player.hp"
+}

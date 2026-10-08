@@ -1,0 +1,44 @@
+{
+  "package": {
+    "doc": "A small game that `wid query refs`, `calls` and `type` read.",
+    "name": "game",
+    "path": "."
+  },
+  "query": "refs",
+  "results": [
+    {
+      "context": null,
+      "kind": "declaration",
+      "location": {
+        "column": 8,
+        "end_column": 12,
+        "end_line": 48,
+        "file": "tests/query/game/game.wid",
+        "line": 48
+      }
+    },
+    {
+      "context": "fill",
+      "kind": "type",
+      "location": {
+        "column": 17,
+        "end_column": 21,
+        "end_line": 80,
+        "file": "tests/query/game/game.wid",
+        "line": 80
+      }
+    },
+    {
+      "context": "main",
+      "kind": "type",
+      "location": {
+        "column": 10,
+        "end_column": 14,
+        "end_line": 104,
+        "file": "tests/query/game/game.wid",
+        "line": 104
+      }
+    }
+  ],
+  "symbol": "Pool"
+}

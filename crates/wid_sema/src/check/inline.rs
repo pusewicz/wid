@@ -618,6 +618,7 @@ impl<'a> Checker<'a> {
         self.begin_block();
         self.push_scope();
         for (name, ty, pspan) in &params {
+            self.note_param(*pspan);
             let local = self.declare_var(*name, *ty, *pspan, true);
             func.params.push(local);
         }
@@ -713,6 +714,7 @@ impl<'a> Checker<'a> {
             self.undefined(name, arg.value.span, candidates, "method");
             return ir::Expr::new(ExprKind::Zero, unknown);
         };
+        self.note_ref(arg.value.span, decl, crate::uses::RefKind::Read);
         if self.is_macro(decl) {
             self.report(
                 Diagnostic::error(codes::NOT_A_VALUE, format!("the macro `{name}` cannot be used as a proc"))

@@ -1,6 +1,7 @@
 //! `wid query`: answers about a package, as JSON (SPEC "Toolchain and
 //! CLI"). The engine in `wid_query` answers; this module finds the package
-//! the request names, loads and checks it with [`crate::analyze`], and
+//! the request names (for `type` without `-in:`, the one that holds the
+//! position's file), loads and checks it with [`crate::analyze`], and
 //! turns a failed request into a diagnostic that points into the command
 //! line, like `wid doc`'s. It never generates code.
 
@@ -10,7 +11,7 @@ use wid_diagnostics::{Diagnostics, SourceMap};
 pub use wid_query::{Answer, PackageInfo, Query};
 
 use crate::Options;
-use crate::cmdline::{CommandLine, ErrorContext, PackageArg, Tool, package_target};
+use crate::cmdline::{CommandLine, ErrorContext, PackageArg, Tool, has_wid_files, package_target};
 pub use crate::doc::Printed;
 
 /// What `wid query` was asked.
@@ -52,6 +53,11 @@ pub fn query(opts: &Options, request: &QueryRequest) -> QueryOutput {
         cmd.flag("-file");
     }
     let dir = if request.dir.as_os_str().is_empty() { Path::new(".") } else { request.dir.as_path() };
+    let holder = match (&request.query, package_arg, symbol_arg) {
+        (Query::Type(position), None, Some(arg)) => position_package(opts, dir, position).map(|p| (p, arg)),
+        _ => None,
+    };
+    let package_arg = package_arg.or(holder.as_ref().map(|(p, arg)| (p.as_str(), *arg)));
     let failed = |sources: SourceMap, diags: Diagnostics| QueryOutput {
         sources,
         diags,
@@ -91,7 +97,7 @@ pub fn query(opts: &Options, request: &QueryRequest) -> QueryOutput {
                 query_arg: Some(query_arg),
                 symbol: request.query.symbol().unwrap_or_default(),
                 read_as_symbol: false,
-                package_arg: request.package.as_deref(),
+                package_arg: package_arg.map(|(p, _)| p),
             };
             let diag = ctx.report(failure);
             analysis.diags.push(diag);
@@ -100,6 +106,18 @@ pub fn query(opts: &Options, request: &QueryRequest) -> QueryOutput {
     };
     analysis.diags.sort();
     QueryOutput { sources: analysis.sources, diags: analysis.diags, query: request.query.clone(), package, answer }
+}
+
+/// For `type` without `-in:`, the package that holds the position's file:
+/// its directory, or with `-file`, the file itself. `None` when that is
+/// the package in `dir` or holds no package.
+fn position_package(opts: &Options, dir: &Path, position: &str) -> Option<String> {
+    let file = wid_query::Position::parse(position)?.file;
+    if opts.file_mode {
+        return dir.join(&file).is_file().then_some(file);
+    }
+    let parent = Path::new(&file).parent().filter(|p| !p.as_os_str().is_empty())?;
+    has_wid_files(&dir.join(parent)).then(|| parent.to_string_lossy().into_owned())
 }
 
 /// Renders a result the way `wid query` prints it: the JSON document on

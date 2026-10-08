@@ -115,6 +115,7 @@ codes! {
     DOC_UNKNOWN_SYMBOL = "E0602", "symbol to document or query not found";
     DOC_NO_MEMBER = "E0603", "no member with that name to document or query";
     DOC_PRIVATE = "E0604", "symbol to document is private";
+    QUERY_NO_POSITION = "E0605", "position to query not found";
 
     // Packages and C interop.
     CIMPORT_FAILED = "E0701", "C header import failed";

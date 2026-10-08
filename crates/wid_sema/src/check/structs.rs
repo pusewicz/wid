@@ -376,6 +376,7 @@ impl<'a> Checker<'a> {
         let TyKind::Enum(id) = *self.types.kind(ty) else { unreachable!("enum_member on a non-enum") };
         let info = self.types.enum_info(id).clone();
         if let Some((_, v)) = info.members.iter().find(|(n, _)| *n == name) {
+            self.note_member(span, ty, name);
             return ir::Expr::new(ExprKind::Int(*v), ty);
         }
         let names: Vec<&'static str> = info.members.iter().map(|(n, _)| n.as_str()).collect();
@@ -480,6 +481,9 @@ impl<'a> Checker<'a> {
                     )
                     .primary(arg.value.span, "second value"),
                 );
+            }
+            if let Some(n) = arg.name {
+                self.note_field(n.span, ty, n.name, crate::uses::RefKind::Write);
             }
             slots[idx] = Some(&arg.value);
         }

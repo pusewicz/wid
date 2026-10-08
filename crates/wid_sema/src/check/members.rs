@@ -160,6 +160,7 @@ impl<'a> Checker<'a> {
             return None;
         }
         if let Some((index, ty)) = self.field_index(base.ty, name) {
+            self.note_field(span, base.ty, name, crate::uses::RefKind::Read);
             return Some((base, index, ty));
         }
         let hits = self.using_hits(base.ty, name);
@@ -198,6 +199,7 @@ impl<'a> Checker<'a> {
             }
         }
         if let Some((index, ty)) = self.field_index(inner.ty, name) {
+            self.note_field(span, inner.ty, name, crate::uses::RefKind::Read);
             return Some((inner, index, ty));
         }
         // A method that `using` promotes, unless the type's own, mixed-in
@@ -349,6 +351,7 @@ impl<'a> Checker<'a> {
                     )
                 {
                     self.check_visible(decl, name.span);
+                    self.note_package(inner.span, p);
                     let shown = format!("{}.{}", self.source_text(inner.span), name.as_str());
                     if self.missing_generic_args(decl, &shown, recv.span) {
                         return Receiver::Type(self.types.unknown());
@@ -467,6 +470,7 @@ impl<'a> Checker<'a> {
         span: Span,
         expected: Option<TyId>,
     ) -> ir::Expr {
+        self.note_package(pkg_span, pkg);
         let Some(decl) = self.lookup_pkg(pkg, name.name) else {
             if self.pkg_incomplete(pkg) || self.report_not_imported(pkg, name.name, name.span) {
                 return ir::Expr::new(ExprKind::Zero, self.types.unknown());
@@ -716,6 +720,7 @@ impl<'a> Checker<'a> {
         }
         if let Some((index, fty)) = self.field_index(ty, name.name) {
             let field = ir::Expr::new(ExprKind::Field { base: Box::new(base.clone()), index }, fty);
+            self.note_field(name.span, ty, name.name, crate::uses::RefKind::Read);
             match args {
                 None => {
                     self.reject_builtin_block(block, name, "a field");

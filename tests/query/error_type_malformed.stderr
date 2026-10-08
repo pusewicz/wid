@@ -1,0 +1,55 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0605",
+      "column": 16,
+      "expansions": [],
+      "explain": "wid explain E0605",
+      "file": "command line",
+      "helps": [
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [],
+          "message": "write the file as diagnostics show it, then the line and the column, counted from 1: `main.wid:12:5`"
+        },
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [
+            {
+              "column": 11,
+              "end": 14,
+              "end_column": 15,
+              "end_line": 1,
+              "file": "command line",
+              "line": 1,
+              "replacement": "def",
+              "start": 10
+            }
+          ],
+          "message": "ask for the declaration of `Player.heal` instead"
+        }
+      ],
+      "labels": [
+        {
+          "column": 16,
+          "end": 26,
+          "end_column": 27,
+          "end_line": 1,
+          "file": "command line",
+          "line": 1,
+          "message": "a position is `file:line:column`",
+          "primary": true,
+          "start": 15
+        }
+      ],
+      "line": 1,
+      "message": "`Player.heal` is not a position",
+      "notes": [
+        "`wid query type` reads a position; a symbol's declaration is what `def` gives"
+      ],
+      "severity": "error"
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}

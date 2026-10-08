@@ -186,6 +186,7 @@ impl<'a> Checker<'a> {
             _ => return None,
         };
         self.check_visible(decl, name.span);
+        self.note_ref(name.span, decl, crate::uses::RefKind::Type);
         let args: Vec<TyId> =
             call.args.iter().enumerate().map(|(i, a)| self.generic_arg_type(decl, i, &a.value)).collect();
         let spans: Vec<Span> = call.args.iter().map(|a| a.value.span).collect();

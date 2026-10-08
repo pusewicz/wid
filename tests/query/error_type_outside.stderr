@@ -1,0 +1,83 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0605",
+      "column": 16,
+      "expansions": [],
+      "explain": "wid explain E0605",
+      "file": "command line",
+      "helps": [
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [
+            {
+              "column": 16,
+              "end": 45,
+              "end_column": 46,
+              "end_line": 1,
+              "file": "command line",
+              "line": 1,
+              "replacement": "tests/query/game/game.wid:88:32",
+              "start": 15
+            }
+          ],
+          "message": "ask about the nearest code, `2`"
+        }
+      ],
+      "labels": [
+        {
+          "column": 16,
+          "end": 45,
+          "end_column": 46,
+          "end_line": 1,
+          "file": "command line",
+          "line": 1,
+          "message": "no expression, name, binding or written type is here",
+          "primary": true,
+          "start": 15
+        },
+        {
+          "column": 32,
+          "end": 1457,
+          "end_column": 33,
+          "end_line": 88,
+          "file": "tests/query/game/game.wid",
+          "line": 88,
+          "message": "the nearest code",
+          "primary": false,
+          "start": 1456
+        },
+        {
+          "column": 28,
+          "end": 1457,
+          "end_column": 33,
+          "end_line": 88,
+          "file": "tests/query/game/game.wid",
+          "line": 88,
+          "message": "nearby code",
+          "primary": false,
+          "start": 1452
+        },
+        {
+          "column": 5,
+          "end": 1467,
+          "end_column": 9,
+          "end_line": 90,
+          "file": "tests/query/game/game.wid",
+          "line": 90,
+          "message": "nearby code",
+          "primary": false,
+          "start": 1463
+        }
+      ],
+      "line": 1,
+      "message": "nothing at `tests/query/game/game.wid:89:1` has a type",
+      "notes": [
+        "`wid query type` answers for the code the checker checked: expressions, names, bindings, parameters, written types and the names in declarations; blank space, comments and keywords have no type, and neither has code the checker never reaches, like a generic method that nothing instantiates"
+      ],
+      "severity": "error"
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}

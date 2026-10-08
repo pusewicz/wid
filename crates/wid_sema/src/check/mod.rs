@@ -16,6 +16,7 @@ mod macros;
 mod matrix;
 mod members;
 mod overloads;
+mod record;
 mod runtime;
 mod stmt;
 mod structs;
@@ -303,6 +304,9 @@ pub(crate) struct Checker<'a> {
     pub generated: &'a typed_arena::Arena<Vec<ast::Stmt>>,
     /// Macro templates, expansions and their virtual files.
     pub macros: macros::MacroState,
+    /// What names and expressions resolve to, recorded only when the check
+    /// indexes (see `record.rs`).
+    pub recorder: Option<Box<record::Recorder>>,
 }
 
 /// Checks a whole program and lowers it to IR.
@@ -312,16 +316,24 @@ pub fn check_program(input: &ProgramInput) -> (ir::Program, Diagnostics) {
 }
 
 /// Checks a whole program like [`check_program`], and also builds the
-/// index of every declaration it collected, for tools such as `wid doc`.
-/// The index is complete even when the program has errors: it holds every
-/// declaration the checker could collect.
-pub fn check_program_indexed(input: &ProgramInput) -> (ir::Program, Diagnostics, crate::index::Index) {
-    let (program, diags, index) = run(input, true);
-    (program, diags, index.unwrap_or_default())
+/// index of every declaration it collected, for tools such as `wid doc`,
+/// and records what every name and expression in the code it checked
+/// resolves to ([`crate::uses`]), for `wid query`. Both are complete even
+/// when the program has errors: they hold everything the checker could
+/// collect and resolve.
+pub fn check_program_indexed(
+    input: &ProgramInput,
+) -> (ir::Program, Diagnostics, crate::index::Index, crate::uses::Uses) {
+    let (program, diags, indexed) = run(input, true);
+    let (index, uses) = indexed.unwrap_or_default();
+    (program, diags, index, uses)
 }
 
-/// Checks a program, building the index when `index` is set.
-fn run(input: &ProgramInput, index: bool) -> (ir::Program, Diagnostics, Option<crate::index::Index>) {
+/// Checks a program, building the index and the uses when `index` is set.
+fn run(
+    input: &ProgramInput,
+    index: bool,
+) -> (ir::Program, Diagnostics, Option<(crate::index::Index, crate::uses::Uses)>) {
     let generated = typed_arena::Arena::new();
     let mut checker = Checker {
         input,
@@ -390,6 +402,7 @@ fn run(input: &ProgramInput, index: bool) -> (ir::Program, Diagnostics, Option<c
             .collect(),
         generated: &generated,
         macros: Default::default(),
+        recorder: index.then(Box::default),
     };
     checker.init_file_positions();
     checker.init_macro_files();
@@ -408,7 +421,7 @@ fn run(input: &ProgramInput, index: bool) -> (ir::Program, Diagnostics, Option<c
             .map(|(i, _)| FnId(i as u32)),
     );
     checker.check_comptime_only(&roots);
-    let index = index.then(|| checker.build_index());
+    let index = index.then(|| (checker.build_index(), checker.build_uses()));
     let expansions = checker.expansion_files();
     let functions = checker.functions.into_iter().map(|f| f.expect("every queued function is lowered")).collect();
     let mut c = cimport::CBuild::default();

@@ -279,6 +279,7 @@ impl<'a> Checker<'a> {
     /// passes `allow_unused`.
     pub fn declare_var(&mut self, name: Name, ty: TyId, span: Span, allow_unused: bool) -> LocalId {
         let local = self.new_local(Some(name), ty);
+        self.note_binding(span, ty);
         let mark = self.mark_at(span);
         let allow_unused = allow_unused || matches!(self.types.kind(ty), TyKind::Unknown);
         let scope = self.frame_mut().scopes.last_mut().expect("a scope is open");
@@ -303,6 +304,7 @@ impl<'a> Checker<'a> {
     /// method's parameters are open to the macro's caller (see
     /// [`Var::open`]).
     pub fn declare_param(&mut self, name: Name, ty: TyId, span: Span) -> LocalId {
+        self.note_param(span);
         let local = self.declare_var(name, ty, span, true);
         if let Some(var) = self.frame_mut().scopes.last_mut().and_then(|s| s.vars.last_mut()) {
             var.open = var.mark.is_some();

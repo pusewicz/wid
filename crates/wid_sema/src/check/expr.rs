@@ -80,6 +80,7 @@ impl<'a> Checker<'a> {
         let site = self.enter_site(e.span);
         let v = self.expr_here(e, expected);
         self.leave_site(site);
+        self.note_expr(e, &v);
         v
     }
 
@@ -433,7 +434,8 @@ impl<'a> Checker<'a> {
     fn ident(&mut self, name: Name, span: Span, expected: Option<TyId>) -> ir::Expr {
         if let Some(var) = self.find_var_at(name, span) {
             var.read = true;
-            let (local, ty, indirect) = (var.local, var.ty, var.indirect);
+            let (local, ty, indirect, binding) = (var.local, var.ty, var.indirect, var.span);
+            self.note_local(span, binding);
             let read = self.var_place(local, ty, indirect);
             if self.is_narrowed(local) && self.optional_inner(ty).is_some() {
                 return self.opt_get(read);
@@ -776,6 +778,7 @@ impl<'a> Checker<'a> {
 
     /// Reads a constant declaration's value, typed by `expected` when untyped.
     pub fn const_ref_decl(&mut self, decl: super::DeclId, span: Span, expected: Option<TyId>) -> ir::Expr {
+        self.note_const(span, decl);
         if self.is_extern_const(decl) {
             return self.extern_const(decl, span);
         }
@@ -1009,6 +1012,7 @@ impl<'a> Checker<'a> {
                 if self.types.is_numeric(l.ty) { None } else { self.package_operand_type(op.as_str(), l.ty, true) };
             let (l, r) = self.sequenced(l, |this, l_ty| this.expr(rhs, Some(rhs_expected.unwrap_or(l_ty))));
             if let Some(decl) = self.package_operator(op.as_str(), l.ty, r.ty) {
+                self.note_ref(span, decl, crate::uses::RefKind::Call);
                 return self.call_operator_fn(decl, l, r);
             }
             return self.binary_values(op, l, r, lhs.span, rhs.span, span);
@@ -1024,6 +1028,7 @@ impl<'a> Checker<'a> {
             };
             let l = self.expr(lhs, Some(l_expected));
             if let Some(decl) = self.package_operator(op.as_str(), l.ty, r.ty) {
+                self.note_ref(span, decl, crate::uses::RefKind::Call);
                 return self.call_operator_fn(decl, l, r);
             }
             (l, r)
@@ -1625,6 +1630,7 @@ impl<'a> Checker<'a> {
     ) -> ir::Expr {
         let fname = self.decls[decl.0 as usize].name;
         self.check_visible(decl, name_span);
+        self.note_ref(name_span, decl, crate::uses::RefKind::Call);
         if self.is_macro(decl) {
             let call = MacroCall { decl, shown: fname.to_string(), args, block, name_span, span };
             return self.call_macro(call, None);
