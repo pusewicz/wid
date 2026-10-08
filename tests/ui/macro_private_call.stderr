@@ -1,0 +1,13 @@
+error[E0205]: `hidden` is private to package `tools`
+  --> tests/ui/macro_private_call/main.wid:7:11
+   |
+ 7 |   p tools.hidden
+   |           ^^^^^^ not visible from here
+  ::: tests/ui/macro_private_call/tools/tools.wid:11:22
+   |
+11 |     private helpers :hidden
+   |                      ------ declared `private` here
+help: use a public method of `tools` instead, or remove `private` from the declaration
+   = see `wid explain E0205`
+
+error: could not compile due to 1 error

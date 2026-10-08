@@ -86,6 +86,43 @@ struct LooseTypeParam {
     typed: bool,
 }
 
+/// A bracketed list of expressions being parsed: a call's arguments, an
+/// array literal or an index.
+struct List {
+    /// The `(` or `[`.
+    open: Span,
+    /// The token that closes it, and its text.
+    close: TokenKind,
+    closer: &'static str,
+    /// What the parser expects at its end, for messages ("`)` to close
+    /// the argument list").
+    what: &'static str,
+    /// What one item and several are called ("argument", "arguments").
+    item: &'static str,
+    items: &'static str,
+}
+
+/// What follows an item of a [`List`].
+enum ListStep {
+    /// Another item (after its `,`, eaten).
+    Item,
+    /// The closer, or what isn't one on the item's line: the caller
+    /// expects the closer.
+    Close,
+    /// Nothing more on the item's line: the list was left open, and that
+    /// is reported.
+    Open,
+}
+
+/// The parser's state before a speculative parse (see [`Parser::mark`]).
+struct Mark {
+    pos: usize,
+    diags: usize,
+    last_error_at: Option<u32>,
+    splices: usize,
+    inserted: usize,
+}
+
 /// A block that was closed by an `end`, kept to diagnose misplaced `end`s.
 struct Closed {
     keyword: &'static str,
@@ -134,6 +171,10 @@ struct Parser<'a> {
     /// While a method's parameters and return type are parsed, the `[$N]`
     /// array lengths in them (see [`ArrayValueParam`]).
     array_params: Option<Vec<ArrayValueParam>>,
+    /// The token indices of the line ends put back after an unfinished
+    /// line (see [`Parser::insert_line_end`]), in order, so a speculative
+    /// parse that is rewound takes them back.
+    inserted: Vec<usize>,
 }
 
 /// Binding powers for infix operators.
@@ -238,6 +279,7 @@ impl<'a> Parser<'a> {
             in_macro: false,
             uninferred: Vec::new(),
             array_params: None,
+            inserted: Vec::new(),
         }
     }
 
@@ -475,17 +517,113 @@ impl<'a> Parser<'a> {
     /// Reports a `(` whose line ended before its `)`, with a fix that
     /// closes it after `last`, the line's last token.
     fn unclosed_paren(&mut self, open: Span, last: Span) {
+        self.unclosed(open, last, ")", "`)`");
+    }
+
+    /// Reports the bracket at `open` whose line ended before its `closer`,
+    /// with a fix that closes it after `last`, the line's last token.
+    /// `what` is what the parser expected, as in "expected `]` to close
+    /// the array".
+    fn unclosed(&mut self, open: Span, last: Span, closer: &str, what: &str) {
         let at = last.shrink_to_end();
+        let bracket = self.text_of(open);
         self.report(
-            Diagnostic::error(codes::UNEXPECTED_TOKEN, "expected `)`, found end of line")
-                .primary(at, "expected `)`")
-                .secondary(open, "this `(` is never closed")
+            Diagnostic::error(codes::UNEXPECTED_TOKEN, format!("expected {what}, found end of line"))
+                .primary(at, format!("expected `{closer}`"))
+                .secondary(open, format!("this `{bracket}` is never closed"))
                 .suggest(
                     "close it",
-                    vec![Edit { span: at, replacement: ")".into() }],
+                    vec![Edit { span: at, replacement: closer.into() }],
                     Applicability::MachineApplicable,
                 ),
         );
+    }
+
+    /// Puts back the line end the lexer dropped after `last` (an operator,
+    /// `,`, `(` or `[` that would have continued the line), unless one is
+    /// already here, so the next line is parsed on its own.
+    fn restore_line_end(&mut self, last: Span) {
+        if !self.at(T::Newline) {
+            self.insert_line_end(last.shrink_to_end());
+        }
+    }
+
+    /// Inserts a line end at the position, recorded so that
+    /// [`Parser::try_parse_type`] can take it back.
+    fn insert_line_end(&mut self, at: Span) {
+        self.tokens.insert(self.pos, Token { kind: T::Newline, span: at, space_before: false });
+        self.inserted.push(self.pos);
+    }
+
+    /// Whether the line ended right before the token here, after the one
+    /// before it, which continued the line (an operator, `=`, `,`, `(`,
+    /// `[`), and this one starts a declaration or the `end` of a block:
+    /// `X = 1 +` followed by `def main` never finished its line. Returns
+    /// the token that ended the line.
+    fn line_cut_before_declaration(&self) -> Option<Token> {
+        let last = *self.tokens[..self.pos].last()?;
+        let next = self.peek();
+        (last.kind != T::Newline
+            && starts_declaration(next.kind)
+            && self.line_of(next.span.start) > self.line_of(last.span.start))
+        .then_some(last)
+    }
+
+    /// At the start of an item of `list` (after its opener or a `,`): when
+    /// the line ended there and the next one starts a declaration or the
+    /// `end` of a block (`X = max(1,` followed by `def main`), the list was
+    /// left open at the end of the line. Reports that, with a fix that
+    /// closes it, and puts back the line end, so the declaration is parsed
+    /// on its own.
+    fn list_left_open(&mut self, list: &List) -> bool {
+        let Some(last) = self.line_cut_before_declaration() else { return false };
+        self.unclosed(list.open, last.span, list.closer, list.what);
+        self.restore_line_end(last.span);
+        true
+    }
+
+    /// After an item of `list`: eats the `,` before the next item, and
+    /// otherwise decides whether the list ends here. The item is complete,
+    /// so a line end may only lead to a `,` or the list's closer: anything
+    /// else on the next line is not part of the list, which was left open
+    /// at the end of this line (reported with a fix that closes it), unless
+    /// that line is indented under the list's first line and starts an
+    /// expression, which is the next item with its `,` missing.
+    fn list_step(&mut self, list: &List) -> ListStep {
+        let (last, before) = (self.prev_span(), self.pos);
+        self.skip_newlines();
+        if self.eat(T::Comma) {
+            return ListStep::Item;
+        }
+        if self.at(list.close) || (self.pos == before && !self.at(T::Eof)) {
+            return ListStep::Close;
+        }
+        let next = self.peek();
+        let indent = |p: &Self, span: Span| p.indent_of_line(p.line_of(span.start));
+        if next.kind != T::Eof
+            && !starts_declaration(next.kind)
+            && self.can_start_expr(next)
+            && indent(self, next.span) > indent(self, list.open)
+        {
+            let at = last.shrink_to_end();
+            self.report(
+                Diagnostic::error(
+                    codes::UNEXPECTED_TOKEN,
+                    format!("expected `,` or `{}`, found end of line", list.closer),
+                )
+                .primary(at, "expected `,`")
+                .secondary(next.span, format!("the next {} starts here", list.item))
+                .suggest(
+                    format!("separate the {} with `,`", list.items),
+                    vec![Edit { span: at, replacement: ",".into() }],
+                    Applicability::MaybeIncorrect,
+                ),
+            );
+            return ListStep::Item;
+        }
+        self.pos = before;
+        self.unclosed(list.open, last, list.closer, list.what);
+        ListStep::Open
     }
 
     /// Reports a line that ends with the `(` at `open` (just consumed) when
@@ -508,7 +646,7 @@ impl<'a> Parser<'a> {
                 .help("write the value after the `(`, and close it on the same line"),
         );
         if !restored {
-            self.tokens.insert(self.pos, Token { kind: T::Newline, span: at, space_before: false });
+            self.insert_line_end(at);
         }
         true
     }
@@ -912,6 +1050,9 @@ impl<'a> Parser<'a> {
         if self.at_kw(K::Comptime) && self.nth(1).kind == T::Kw(K::If) {
             return self.parse_quote_comptime_if();
         }
+        if let Some(stmt) = self.quote_private_call() {
+            return stmt;
+        }
         self.parse_stmt()
     }
 
@@ -1221,24 +1362,14 @@ impl<'a> Parser<'a> {
                 let save = self.pos;
                 let splices = self.splice_mark();
                 let expr = self.parse_expr_cmd();
-                let is_statement =
-                    self.at(T::Eq) || is_assign_op(self.kind()) || self.at(T::Comma) || self.at_modifier();
-                // A call, a name, or a package member (`lib.make`) may be a
-                // macro call.
-                let qualified = matches!(
-                    &expr.kind,
-                    ExprKind::Member { recv, safe: false, .. } if matches!(recv.kind, ExprKind::Ident(_))
-                );
-                match &expr.kind {
-                    ExprKind::Call(_) | ExprKind::Ident(_) if !is_statement => ItemKind::MacroCall(Box::new(expr)),
-                    _ if qualified && !is_statement => ItemKind::MacroCall(Box::new(expr)),
-                    _ => {
-                        self.pos = save;
-                        self.rewind_splices(splices);
-                        let stmt = self.parse_stmt();
-                        self.top_level_statement(stmt.span, ctx);
-                        ItemKind::Error
-                    }
+                if is_macro_call(&expr) && !self.at_statement_rest() {
+                    ItemKind::MacroCall(Box::new(expr))
+                } else {
+                    self.pos = save;
+                    self.rewind_splices(splices);
+                    let stmt = self.parse_stmt();
+                    self.top_level_statement(stmt.span, ctx);
+                    ItemKind::Error
                 }
             }
             _ => {
@@ -1297,6 +1428,39 @@ impl<'a> Parser<'a> {
         }
         let span = start.to(self.prev_span());
         Some(Item { kind, span, attrs, private, doc })
+    }
+
+    /// Whether what follows a line's first expression makes the line a
+    /// statement: an assignment (`=`, `+=`), a list of values or targets
+    /// (`,`) or a modifier (`if`, `unless`).
+    fn at_statement_rest(&self) -> bool {
+        self.at(T::Eq) || is_assign_op(self.kind()) || self.at(T::Comma) || self.at_modifier()
+    }
+
+    /// `private` before a macro call on a line of a `quote` (`private
+    /// helpers :hp`), as at package level: a declaration-level call whose
+    /// declarations are all private. Anything else after `private` (a
+    /// local, an assignment) is left to the statement parser, which
+    /// reports `private` there.
+    fn quote_private_call(&mut self) -> Option<Stmt> {
+        if !self.at_kw(K::Private)
+            || self.nth(1).kind != T::Ident
+            || (self.nth(2).kind == T::Colon && !self.nth(2).space_before)
+        {
+            return None;
+        }
+        let start = self.peek().span;
+        let mark = self.mark();
+        self.bump();
+        let expr = self.parse_expr_cmd();
+        if !is_macro_call(&expr) || self.at_statement_rest() || !self.clean_since(&mark) {
+            self.rewind(mark);
+            return None;
+        }
+        let span = start.to(self.prev_span());
+        let item =
+            Item { kind: ItemKind::MacroCall(Box::new(expr)), span, attrs: Vec::new(), private: true, doc: None };
+        Some(Stmt { kind: StmtKind::Item(Box::new(item)), span, attrs: Vec::new() })
     }
 
     /// `private` and the space after it, consumed, for a fix that removes
@@ -2592,24 +2756,55 @@ impl<'a> Parser<'a> {
     /// Tries to parse a type at the current position without reporting
     /// errors; restores the position on failure.
     fn try_parse_type(&mut self) -> Option<TypeExpr> {
-        let saved_pos = self.pos;
-        let saved_diags = self.diags.len();
-        let saved_last = self.last_error_at;
-        let saved_splices = self.splice_mark();
+        let mark = self.mark();
         let ty = self.parse_type();
-        if self.diags.len() > saved_diags || matches!(ty.kind, TypeKind::Error) {
-            self.pos = saved_pos;
-            self.diags.truncate(saved_diags);
-            self.last_error_at = saved_last;
-            self.rewind_splices(saved_splices);
+        if !self.clean_since(&mark) || matches!(ty.kind, TypeKind::Error) {
+            self.rewind(mark);
             return None;
         }
         Some(ty)
     }
 
+    /// The parser's state here, for a speculative parse to go back to.
+    fn mark(&self) -> Mark {
+        Mark {
+            pos: self.pos,
+            diags: self.diags.len(),
+            last_error_at: self.last_error_at,
+            splices: self.splice_mark(),
+            inserted: self.inserted.len(),
+        }
+    }
+
+    /// Whether nothing was reported, and no line end put back, since `mark`.
+    fn clean_since(&self, mark: &Mark) -> bool {
+        self.diags.len() == mark.diags && self.inserted.len() == mark.inserted
+    }
+
+    /// Goes back to `mark`, dropping what was reported and the line ends
+    /// put back since.
+    fn rewind(&mut self, mark: Mark) {
+        self.pos = mark.pos;
+        self.diags.truncate(mark.diags);
+        self.last_error_at = mark.last_error_at;
+        self.rewind_splices(mark.splices);
+        while self.inserted.len() > mark.inserted {
+            let at = self.inserted.pop().expect("invariant: more line ends than marked");
+            self.tokens.remove(at);
+        }
+    }
+
     // ----- statements ----------------------------------------------------
 
     fn parse_block_body(&mut self) -> Vec<Stmt> {
+        self.parse_body(false)
+    }
+
+    /// Parses statements up to the end of a block. In a `{ … }` block
+    /// (`brace`), a declaration starting a line ends the body too: the
+    /// block was left open before it, as in `X = xs.map { |x| x * 2`
+    /// followed by `def main`.
+    fn parse_body(&mut self, brace: bool) -> Vec<Stmt> {
         let mut stmts = Vec::new();
         let (start, errors) = (self.peek().span, self.diags.len());
         loop {
@@ -2617,7 +2812,10 @@ impl<'a> Parser<'a> {
             if matches!(
                 self.kind(),
                 T::Eof | T::RBrace | T::SpliceEnd | T::Kw(K::End) | T::Kw(K::Else) | T::Kw(K::Elsif) | T::Kw(K::When)
-            ) {
+            ) || (brace
+                && starts_declaration(self.kind())
+                && (!self.at_kw(K::Private) || starts_declaration(self.nth(1).kind)))
+            {
                 break;
             }
             let before = self.pos;
@@ -3509,6 +3707,12 @@ impl<'a> Parser<'a> {
             }
             T::LBrace => {
                 self.bump();
+                // `X = {` followed by a declaration: the `}` is missing.
+                if self.line_cut_before_declaration().is_some() {
+                    self.unclosed(span, span, "}", "`}`");
+                    self.restore_line_end(span);
+                    return simple(ExprKind::Zero);
+                }
                 if !self.eat(T::RBrace) {
                     self.report(
                         Diagnostic::error(codes::UNEXPECTED_TOKEN, "`{…}` literals must be empty")
@@ -3533,21 +3737,34 @@ impl<'a> Parser<'a> {
                 self.bump();
                 let saved = self.no_do;
                 self.no_do = false;
+                let list = List {
+                    open: span,
+                    close: T::RBracket,
+                    closer: "]",
+                    what: "`]` to close the array",
+                    item: "element",
+                    items: "elements",
+                };
                 let mut elems = Vec::new();
-                loop {
+                let closed = loop {
+                    if self.list_left_open(&list) {
+                        break false;
+                    }
                     self.skip_newlines();
                     if self.at(T::RBracket) || self.at(T::Eof) {
-                        break;
+                        break true;
                     }
                     elems.push(self.parse_expr());
-                    self.skip_newlines();
-                    if !self.eat(T::Comma) {
-                        break;
+                    match self.list_step(&list) {
+                        ListStep::Item => {}
+                        ListStep::Close => break true,
+                        ListStep::Open => break false,
                     }
-                }
-                self.skip_newlines();
+                };
                 self.no_do = saved;
-                self.expect(T::RBracket, "`]` to close the array");
+                if closed {
+                    self.expect(T::RBracket, list.what);
+                }
                 Expr { kind: ExprKind::Array(elems), span: span.to(self.prev_span()) }
             }
             T::Caret => {
@@ -3635,6 +3852,24 @@ impl<'a> Parser<'a> {
                 simple(ExprKind::Ident(name.name))
             }
             _ => {
+                if let Some(last) = self.line_cut_before_declaration() {
+                    // `X = 1 +` followed by `def main`: the line ended with
+                    // an operator (or `=`, `,`), and a declaration can't
+                    // continue it.
+                    let at = last.span.shrink_to_end();
+                    let op = self.text_of(last.span);
+                    self.report(
+                        Diagnostic::error(codes::UNEXPECTED_TOKEN, "expected an expression, found end of line")
+                            .primary(at, "expected an expression")
+                            .secondary(last.span, format!("the line goes on after this `{op}`"))
+                            .help(format!(
+                                "write the rest of the expression after `{op}` on this line; \
+                                 a declaration on the next line can't continue it"
+                            )),
+                    );
+                    self.restore_line_end(last.span);
+                    return Expr { kind: ExprKind::Error, span: at };
+                }
                 self.error_expected("an expression");
                 if !self.at_stmt_end() {
                     self.bump();
@@ -3647,24 +3882,37 @@ impl<'a> Parser<'a> {
     /// Parses `(args)`. `types` is true for the builtins whose arguments are
     /// types (see [`Parser::parse_type_arg`]).
     fn parse_args_in_parens(&mut self, types: bool) -> Vec<Arg> {
-        self.bump();
+        let open = self.bump().span;
         let saved = self.no_do;
         self.no_do = false;
+        let list = List {
+            open,
+            close: T::RParen,
+            closer: ")",
+            what: "`)` to close the argument list",
+            item: "argument",
+            items: "arguments",
+        };
         let mut args = Vec::new();
-        loop {
+        let closed = loop {
+            if self.list_left_open(&list) {
+                break false;
+            }
             self.skip_newlines();
             if self.at(T::RParen) || self.at(T::Eof) {
-                break;
+                break true;
             }
             args.push(self.parse_arg(types, true));
-            self.skip_newlines();
-            if !self.eat(T::Comma) {
-                break;
+            match self.list_step(&list) {
+                ListStep::Item => {}
+                ListStep::Close => break true,
+                ListStep::Open => break false,
             }
-        }
-        self.skip_newlines();
+        };
         self.no_do = saved;
-        self.expect(T::RParen, "`)` to close the argument list");
+        if closed {
+            self.expect(T::RParen, list.what);
+        }
         args
     }
 
@@ -3675,7 +3923,24 @@ impl<'a> Parser<'a> {
             && self.nth(len).kind == T::Colon
         {
             let name = self.parse_name("an argument name");
-            self.bump();
+            let colon = self.bump().span;
+            // `add(a:` followed by a declaration or an `end`: the value is
+            // missing, and the line is left for the list to end.
+            if self.at(T::Newline)
+                && self.tokens[self.pos..]
+                    .iter()
+                    .find(|t| t.kind != T::Newline)
+                    .is_some_and(|t| starts_declaration(t.kind))
+            {
+                let at = colon.shrink_to_end();
+                let text = self.text_of(name.span);
+                self.report(
+                    Diagnostic::error(codes::UNEXPECTED_TOKEN, "expected an expression, found end of line")
+                        .primary(at, format!("expected the value of `{text}`"))
+                        .help(format!("write the value after `{text}:` on this line")),
+                );
+                return Arg { name: Some(name), value: Expr { kind: ExprKind::Error, span: at }, splat: false };
+            }
             self.skip_newlines();
             let value = self.parse_arg_value(types, parens);
             return Arg { name: Some(name), value, splat: false };
@@ -3878,27 +4143,63 @@ impl<'a> Parser<'a> {
         self.push_scope();
         let mut params = Vec::new();
         if self.eat(T::OrOr) {
-        } else if self.eat(T::Pipe) {
-            loop {
+        } else if let Some(pipe) = self.eat(T::Pipe).then(|| self.prev_span()) {
+            let what = "`|` to close the block parameters";
+            let closed = loop {
                 if self.at(T::Pipe) {
-                    break;
+                    break true;
+                }
+                // `{ |x,` followed by a declaration or an `end`.
+                if let Some(last) = self.line_cut_before_declaration() {
+                    self.unclosed(pipe, last.span, "|", what);
+                    self.restore_line_end(last.span);
+                    break false;
                 }
                 let by_ref = self.eat(T::Amp);
                 let name = self.parse_name("a block parameter name");
                 self.declare(name.name);
                 params.push(BlockParam { name, by_ref });
                 if !self.eat(T::Comma) {
-                    break;
+                    break true;
                 }
+            };
+            if closed {
+                self.expect(T::Pipe, what);
             }
-            self.expect(T::Pipe, "`|` to close the block parameters");
         }
         let body;
         if is_brace {
-            body = self.parse_block_body();
+            body = self.parse_body(true);
+            // The body's last token, and the line end after it.
+            let before = self.tokens[..self.pos].iter().rposition(|t| t.kind != T::Newline).map_or(self.pos, |i| i + 1);
+            let last = self.tokens[before.saturating_sub(1)].span;
             self.skip_newlines();
             if !self.eat(T::RBrace) {
-                self.error_expected("`}` to close the block");
+                let next = self.peek();
+                if next.kind == T::Eof || self.line_of(next.span.start) > self.line_of(last.start) {
+                    // The body ended on a later line with something that
+                    // isn't its `}` (an `end`, a declaration): the block
+                    // was left open after its last line, which ends there.
+                    self.pos = before;
+                    self.restore_line_end(last);
+                    let same_line = self.line_of(last.start) == self.line_of(tok.span.start);
+                    let at = last.shrink_to_end();
+                    self.report(
+                        Diagnostic::error(
+                            codes::UNEXPECTED_TOKEN,
+                            "expected `}` to close the block, found end of line",
+                        )
+                        .primary(at, "expected `}`")
+                        .secondary(tok.span, "this `{` is never closed")
+                        .suggest(
+                            "close it",
+                            vec![Edit { span: at, replacement: " }".into() }],
+                            if same_line { Applicability::MachineApplicable } else { Applicability::MaybeIncorrect },
+                        ),
+                    );
+                } else {
+                    self.error_expected("`}` to close the block");
+                }
             }
         } else {
             self.openers.push(Opener { keyword: "do", span: tok.span });
@@ -3967,20 +4268,34 @@ impl<'a> Parser<'a> {
                     self.bump();
                     let saved = self.no_do;
                     self.no_do = false;
+                    let list = List {
+                        open: tok.span,
+                        close: T::RBracket,
+                        closer: "]",
+                        what: "`]`",
+                        item: "index",
+                        items: "indices",
+                    };
                     let mut args = Vec::new();
-                    loop {
+                    let closed = loop {
+                        if self.list_left_open(&list) {
+                            break false;
+                        }
                         self.skip_newlines();
                         if self.at(T::RBracket) {
-                            break;
+                            break true;
                         }
                         args.push(self.parse_expr());
-                        if !self.eat(T::Comma) {
-                            break;
+                        match self.list_step(&list) {
+                            ListStep::Item => {}
+                            ListStep::Close => break true,
+                            ListStep::Open => break false,
                         }
-                    }
-                    self.skip_newlines();
+                    };
                     self.no_do = saved;
-                    self.expect(T::RBracket, "`]`");
+                    if closed {
+                        self.expect(T::RBracket, list.what);
+                    }
                     let span = expr.span.to(self.prev_span());
                     expr = Expr { kind: ExprKind::Index { recv: Box::new(expr), args }, span };
                 }
@@ -4329,6 +4644,17 @@ fn starts_declaration(kind: TokenKind) -> bool {
                 | K::End
         )
     )
+}
+
+/// Whether a line among declarations that parsed as `expr` (with no `=`,
+/// `,` or modifier after it) is a macro call: a call, a name, or a
+/// package member (`lib.make`).
+fn is_macro_call(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Call(_) | ExprKind::Ident(_) => true,
+        ExprKind::Member { recv, safe: false, .. } => matches!(recv.kind, ExprKind::Ident(_)),
+        _ => false,
+    }
 }
 
 /// For a declaration-level line that declares no name `private` could
@@ -4809,6 +5135,29 @@ end
     }
 
     #[test]
+    fn private_macro_calls_in_a_quote() {
+        // `private` before a call or a name in a `quote` is a private
+        // declaration-level macro call, as at package level; before an
+        // assignment it is still reported, once.
+        let src = "macro def m -> Code\n  quote do\n    private helpers :foo\n    private lib.make\n    \
+                   private setup\n    private x = 1\n    private y, z = 1, 2\n    helpers :bar\n  end\nend\n";
+        let (file, diags) = parse_file(FileId(0), src);
+        let messages: Vec<_> = diags.iter().map(|d| d.message.as_str()).collect();
+        assert_eq!(messages, ["`private` applies only to declarations"; 2]);
+        let ItemKind::Def(def) = &file.items[0].kind else { panic!() };
+        let FnBody::Block(body) = &def.body else { panic!() };
+        let Some(Stmt { kind: StmtKind::Expr(Expr { kind: ExprKind::Quote(quote), .. }), .. }) = body.first() else {
+            panic!()
+        };
+        let private_calls: Vec<bool> = quote
+            .body
+            .iter()
+            .map(|s| matches!(&s.kind, StmtKind::Item(i) if i.private && matches!(i.kind, ItemKind::MacroCall(_))))
+            .collect();
+        assert_eq!(private_calls, [true, true, true, false, false, false]);
+    }
+
+    #[test]
     fn unclosed_paren_ends_at_the_line_end() {
         // The `)` goes at the end of the line, and `main` is still parsed.
         for value in ["(1 + 2", "([]"] {
@@ -4895,6 +5244,77 @@ end
         ))));
         // `t = Int?` is one expression: nothing runs past the line end.
         assert!(codes_of("def main\n  t = Int?\nend\n").is_empty());
+    }
+
+    #[test]
+    fn unclosed_lists_end_at_the_line_end() {
+        // One error at the end of the first line, with a fix that closes
+        // the list, and `main` is still parsed.
+        for (value, message, closer) in [
+            ("max(1, 2", "expected `)` to close the argument list, found end of line", ")"),
+            ("max(1,", "expected `)` to close the argument list, found end of line", ")"),
+            ("max(", "expected `)` to close the argument list, found end of line", ")"),
+            ("[1, 2", "expected `]` to close the array, found end of line", "]"),
+            ("[", "expected `]` to close the array, found end of line", "]"),
+            ("xs[1", "expected `]`, found end of line", "]"),
+            ("{", "expected `}`, found end of line", "}"),
+            ("xs.map { |x| x * 2", "expected `}` to close the block, found end of line", " }"),
+            ("xs.map { |x|", "expected `}` to close the block, found end of line", " }"),
+            ("xs.map {", "expected `}` to close the block, found end of line", " }"),
+            ("xs.map { |x,", "expected `|` to close the block parameters, found end of line", "|"),
+        ] {
+            for next in ["def main\n  p X\nend\n", "struct S\nend\n", "private def f = 1\n"] {
+                let src = format!("X = {value}\n{next}");
+                let (messages, fixed) = fix_all(&src);
+                assert_eq!(messages, [message], "{src:?}");
+                assert_eq!(fixed, src.replacen('\n', &format!("{closer}\n"), 1), "{src:?}");
+                assert_eq!(parse_file(FileId(0), &src).0.items.len(), 2, "{src:?}");
+            }
+        }
+        // A line that ends with an operator, `=`, `,` or a named
+        // argument's `:`.
+        for value in ["1 +", "1 &&", "-", "", "add(a:", "add(1, b:"] {
+            for next in ["def main\nend\n", "enum E\n  a\nend\n"] {
+                let src = format!("X = {value}\n{next}");
+                let (file, diags) = parse_file(FileId(0), &src);
+                let messages: Vec<_> = diags.iter().map(|d| d.message.as_str()).collect();
+                assert_eq!(messages, ["expected an expression, found end of line"], "{src:?}");
+                assert_eq!(file.items.len(), 2, "{src:?}");
+            }
+        }
+        // In a method, before a statement or its `end`.
+        for (line, fixed) in [
+            ("x = foo(1, 2", "x = foo(1, 2)"),
+            ("x = [1, 2", "x = [1, 2]"),
+            ("x = xs[1", "x = xs[1]"),
+            ("x = foo(a, [1, 2", "x = foo(a, [1, 2]"),
+        ] {
+            let src = format!("def main\n  {line}\n  p x\nend\n");
+            assert_eq!(fix_all(&src).1, format!("def main\n  {fixed}\n  p x\nend\n"), "{src:?}");
+        }
+        let (messages, fixed) = fix_all("def main\n  xs.each { |x| p x\nend\n");
+        assert_eq!(messages, ["expected `}` to close the block, found end of line"]);
+        assert_eq!(fixed, "def main\n  xs.each { |x| p x }\nend\n");
+        for line in ["x = 1 +", "p 1,", "x ="] {
+            assert_eq!(codes_of(&format!("def main\n  {line}\nend\n")), ["E0105"], "{line}");
+        }
+        // A line indented under the list is its next item, with its `,`
+        // missing (a fix to review).
+        for src in ["X = foo(\n  1\n  2\n)\n", "X = [\n  1,\n  2\n  3,\n]\n"] {
+            let (file, diags) = parse_file(FileId(0), src);
+            let diags: Vec<_> = diags.iter().collect();
+            assert_eq!(diags.len(), 1, "{src:?}");
+            assert!(diags[0].message.starts_with("expected `,` or"), "{src:?}");
+            assert_eq!(diags[0].helps[0].applicability, Applicability::MaybeIncorrect);
+            assert_eq!(file.items.len(), 1, "{src:?}");
+        }
+        // Lists, blocks and operators still go on over lines.
+        parse_ok(
+            "def main\n  a = foo(1,\n    2)\n  b = foo(\n    1,\n    2\n  )\n  c = [\n    1, 2,\n    3,\n  ]\n\
+             \x20 d = [[1, 2],\n    [3, 4]]\n  e = foo(xs.map do |x|\n    x\n  end)\n  f = xs[\n    1\n  ]\n\
+             \x20 g = 1 +\n    2 *\n    3\n  h = foo(1, 2)\n    .bar\n  xs.each { |x|\n    p x\n  }\n\
+             \x20 i = xs.map { |x,\n    y| x }\n  j = {}\n  k = foo(a:\n    1)\n  p a, b, c, d, e, f, g, h, i, j, k\nend\n",
+        );
     }
 
     #[test]

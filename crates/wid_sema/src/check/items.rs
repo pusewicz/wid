@@ -647,7 +647,10 @@ impl<'a> Checker<'a> {
             (None, _) => {
                 let already_reported = self.diags.error_count() > errors_before;
                 let alias = self.is_type_alias_value(&c.value, d.loc, 0);
-                if !already_reported && !alias && !matches!(c.value.kind, ast::ExprKind::Type(_) | ast::ExprKind::Error)
+                if !already_reported
+                    && !alias
+                    && !matches!(c.value.kind, ast::ExprKind::Type(_))
+                    && !super::runtime::holds_parse_error(&c.value)
                 {
                     self.report(
                         Diagnostic::error(codes::COMPTIME_ONLY, "constant value is not known at compile time")

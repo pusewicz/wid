@@ -203,6 +203,16 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// Whether `name` is one of the C types of `core:c` (`int`), which are
+    /// built into the compiler rather than members of the package, maybe
+    /// with the `?` the lexer reads as part of a lowercase name (`int?`).
+    fn c_type_member(&self, pkg: PackageId, name: Ident) -> bool {
+        let stem = name.as_str().strip_suffix('?').unwrap_or(name.as_str());
+        self.input.packages[pkg.0 as usize].path == "core:c"
+            && super::ty::C_TYPE_NAMES.contains(&stem)
+            && self.lookup_pkg(pkg, name.name).is_none()
+    }
+
     /// Reports a generic struct or union named without its arguments where
     /// a type is needed, like `Pool.new` or `geo.Grid.size`, and returns
     /// true for one.
@@ -269,6 +279,14 @@ impl<'a> Checker<'a> {
             return self.safe_member(recv, name, args, span);
         }
         match self.classify_receiver(recv) {
+            // `C.int`, or `C.int?` (the lexer reads `int?` as one name, like
+            // a predicate's): a C type written as a value is a type, like
+            // `Int?` (E0323 outside `comptime`).
+            Receiver::Package(pkg) if args.is_none() && block.is_none() && self.c_type_member(pkg, name) => {
+                let member = ast::Expr { kind: E::Member { recv: Box::new(recv.clone()), name, safe }, span };
+                let texpr = expr_as_type(&member);
+                self.expr(&ast::Expr { kind: E::Type(Box::new(texpr)), span }, expected)
+            }
             Receiver::Package(pkg) => {
                 self.package_member(pkg, recv.span, name, args.unwrap_or(&[]), block, span, expected)
             }

@@ -1,0 +1,8 @@
+# `private helpers :hidden` in a `quote` makes the method it generates
+# private to `tools`; the public one is still reachable.
+import "./tools"
+
+def main
+  p tools.shown, tools.both
+  p tools.hidden
+end

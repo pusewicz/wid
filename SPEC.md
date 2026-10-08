@@ -107,12 +107,22 @@ end
     with `(` and something only a type starts with (`proc`, `distinct`,
     `^`, `[]`, `@[`, …) is a type, and is reported as one when malformed.
   - A line that ends with an operator or `,`, or a next line that starts with
-    `.method`, continues the statement.
+    `.method`, continues the statement. A declaration or an `end` starting
+    the next line never does: `X = 1 +` followed by `def main` is missing
+    its operand. Inside `( )` and `[ ]`, a line end after a complete
+    expression may only lead to a `,` or the closer: anything else on the
+    next line means the bracket was left open at the end of the line (a
+    value indented under the list's first line is read as its next item,
+    with the `,` missing), as does a declaration or an `end` inside a
+    `{ }` block.
   - `x ? a : b` needs spaces around `?`, because `x?` is a predicate name.
     So a `?` written right after a type's name or its closing `)`
     (`Int?`, `rl.Color?`, `Pool(Ball, 64)?`, `(proc(Int) -> Int)?`) ends
     that type, written in place, unless a conditional's `:` follows it:
-    `t = Int?` is the type `Int?` (a value goes there, E0323).
+    `t = Int?` is the type `Int?` (a value goes there, E0323). In `C.int?`
+    the `?` is read as part of the name, as in a predicate's, but `core:c`
+    has no member `int?`: `C.int?` is the optional C type wherever it is
+    written, like `C.int`.
   - A call argument is a type when no expression reads the same way and
     `,` or `)` follows it (in a call without parentheses, also the end of
     the statement or an `if`/`unless` modifier, as in `n = size_of Int?`):
@@ -547,10 +557,11 @@ end
       `overload`, `include`, a constant (`NAME = v` or `NAME: T = v`, also
       with a spliced name, `#{name} = v`), a field (`name: T`), a
       `comptime if` whose branches follow the same rule, or a macro call (a
-      call or a name alone on a line), which expands in turn and counts
-      against the budgets. Any other statement is E0108. Code spliced
-      among declarations inside a `quote`, like `#{fields}` in a `struct`
-      body, follows the same rule (E0911 for a statement).
+      call or a name alone on a line, maybe after `private`), which
+      expands in turn and counts against the budgets. Any other statement
+      is E0108. Code spliced among declarations inside a `quote`, like
+      `#{fields}` in a `struct` body, follows the same rule (E0911 for a
+      statement).
     - What a call may generate follows what may be written where it is
       (types only at package level, fields only in a struct, and so on),
       with two exceptions (E0913). A macro can't add fields to the struct
@@ -560,7 +571,10 @@ end
       or `cimport`, because packages are loaded before any macro runs; the
       quote's own code uses the imports of the macro's file instead.
     - `private` before a call (`private helpers :hp`) makes every
-      declaration it generates private. A call takes no attributes (E0328).
+      declaration it generates private, whether the call is written among
+      declarations or is a line of a `quote` (where `private` before a
+      call or a name alone makes the line such a call). A call takes no
+      attributes (E0328).
     - In a generic struct's body a macro runs once, for the declaration,
       not once per instance. The methods it generates are checked for each
       instance, like written ones, and `Self` in them is the instance.

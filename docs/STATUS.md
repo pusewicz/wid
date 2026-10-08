@@ -468,6 +468,34 @@ runs the stages; `wid_cli` is the `wid` binary.
   `t = Int?` is one E0323 with the `nil` help instead of a conditional that
   ran past the line end (#34). `names_type` is shared with the
   `size_of(Int ?)` check.
+- #33's rule covers argument lists, arrays, indexes, `{ }` blocks and
+  block parameters (#40): a list whose line ends after a complete item
+  with something other than `,` or its closer on the next line is one
+  E0105 at the end of the line, with a machine-applicable fix that closes
+  it (`X = max(1, 2`, `X = [1, 2`, `xs[1`, `xs.each { |x| p x` before
+  `end`), and the next line is parsed on its own. A next line indented
+  under the list that starts a value is its next item with the `,`
+  missing (a fix to review). A declaration or `end` starting the line
+  after an operator, `=`, `,`, `(`, `[`, `{` or `|` (where the lexer
+  drops the line end), or a named argument's `:`, is never read as its
+  operand: `X = 1 +` before `def main` is one "expected an expression,
+  found end of line". Line ends
+  put back this way are taken back when a speculative type parse rewinds,
+  and a constant whose value holds a parse error no longer adds E0327.
+- A C type of `core:c` written as a value (`t = C.int?`, `u = C.size_t`)
+  is the type written in place, like `t = Int?`: one E0323 with the help
+  that fits it (`nil` for the optional), instead of an undefined member
+  `int?` or `int` (#41). The checker recognizes the C type name, with the
+  `?` the lexer glues to a lowercase name taken off, where the member
+  lookup fails; predicates like `xs.empty?` are untouched.
+- `private` before a call or a name alone on a line of a `quote`
+  (`private helpers :foo`) is a private declaration-level macro call, as
+  written at package level: the parser makes the line that item, so what
+  the call generates is private (#42; it was E0105 "`private` applies
+  only to declarations"). Before an assignment or a local it is still that
+  E0105. Expanded in a method, the line is a nested declaration. The
+  speculative parses share a `Mark` that also takes back put-back line
+  ends.
 - Any type written where a `Type` is expected, or in `comptime` code, is a
   `Type` value: constructors (`name_of([]Int)`, `name_of(Int?)`,
   `name_of(^Node)`, `name_of((proc(Int) -> Int)?)`), generic instances and

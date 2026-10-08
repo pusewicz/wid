@@ -1,0 +1,17 @@
+error[E0323]: `C.int?` is a type, not a value
+ --> tests/ui/c_type_value.wid:7:7
+  |
+7 |   t = C.int?
+  |       ^^^^^^ a type cannot be used as a value here
+help: for an empty `C.int?`, write `nil` where `C.int?` is expected
+  = see `wid explain E0323`
+
+error[E0323]: `C.size_t` is a type, not a value
+ --> tests/ui/c_type_value.wid:8:7
+  |
+8 |   u = C.size_t
+  |       ^^^^^^^^ a type cannot be used as a value here
+help: make a zero value of it with `{}` where `C.size_t` is expected, like `x: C.size_t = {}`
+  = see `wid explain E0323`
+
+error: could not compile due to 2 errors
