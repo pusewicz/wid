@@ -47,10 +47,11 @@ pub(super) const BUILTINS: &[&str] = &[
 ];
 
 /// What a name reaches through `self`: a field of the struct `owner` (its
-/// own, or one `using` promotes), or a method.
+/// own, or one `using` promotes), or a method of the type `owner` (its own
+/// or mixed in with `include`).
 pub(super) enum SelfMember {
     Field { owner: TyId, is_proc: bool },
-    Method,
+    Method { owner: TyId },
 }
 
 /// A field of `self` called like a method without `@`: the whole call,
@@ -559,7 +560,7 @@ impl<'a> Checker<'a> {
         self.frame().self_local?;
         match self.self_member(self_ty, name, &mut Vec::new())? {
             SelfMember::Field { owner, is_proc } => Some((owner, is_proc)),
-            SelfMember::Method => None,
+            SelfMember::Method { .. } => None,
         }
     }
 
@@ -605,7 +606,7 @@ impl<'a> Checker<'a> {
             return Some(SelfMember::Field { owner: ty, is_proc });
         }
         if self.find_method(ty, name).is_some() || self.find_included(ty, name).is_some() {
-            return Some(SelfMember::Method);
+            return Some(SelfMember::Method { owner: ty });
         }
         let TyKind::Struct(id) = *self.types.kind(ty) else { return None };
         let used: Vec<TyId> = self.types.struct_info(id).fields.iter().filter(|f| f.using).map(|f| f.ty).collect();

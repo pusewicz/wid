@@ -25,16 +25,18 @@ help: call the method: `heal(1)`
    |   def healed -> Int = heal(1)
    = see `wid explain E0204`
 
-error[E0204]: `@push` names a method of `Body`, not a field
+error[E0204]: `@push` reads a field, but `push` is a method
   --> tests/ui/ivar_call.wid:20:23
    |
 20 |   def pushed -> Int = @push(3)
-   |                       ^^^^^ instance variables only reach fields
+   |                       ^^^^^ `Player` has no field `push`
+   = note: `push` is a method of `Body`, promoted into `Player` by `using`
+   = note: `@name` reads a field of `self`; methods are called by name
 help: call the method: `push(3)`
    |   def pushed -> Int = push(3)
    = see `wid explain E0204`
 
-error[E0204]: `Player` has no field `@on_hitt`
+error[E0204]: `Player` has no field `on_hitt`
   --> tests/ui/ivar_call.wid:21:20
    |
 21 |   def hit -> Int = @on_hitt(3)

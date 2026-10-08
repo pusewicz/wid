@@ -8,7 +8,7 @@ help: call the method: `area`
   |   def bad -> Int = area
   = see `wid explain E0204`
 
-error[E0204]: `S` has no field `@wdth`
+error[E0204]: `S` has no field `wdth`
  --> tests/ui/member_errors.wid:5:22
   |
 5 |   def worse -> Int = @wdth

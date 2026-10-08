@@ -21,6 +21,18 @@ pub(crate) enum Receiver {
     Value,
 }
 
+/// Where a method of `self` that `@name` names comes from.
+enum MethodOrigin {
+    /// Declared by the type itself.
+    Own,
+    /// Mixed in with `include` from this module.
+    Included(DeclId),
+    /// Added by an `extend` block.
+    Extended,
+    /// Promoted by `using` from a field of this type.
+    Promoted(TyId),
+}
+
 /// Method names people reach for that Wid spells differently.
 const SYNONYMS: &[(&str, &str)] = &[
     ("length", "size"),
@@ -155,6 +167,7 @@ impl<'a> Checker<'a> {
             self.no_member(base.ty, name, span, Some(called));
             return None;
         }
+        let self_ty = base.ty;
         let mut inner = base;
         while self.field_index(inner.ty, name).is_none()
             && let Some((index, using_ty)) = self.using_lookup(inner.ty, name, span)
@@ -167,18 +180,83 @@ impl<'a> Checker<'a> {
         if let Some((index, ty)) = self.field_index(inner.ty, name) {
             return Some((inner, index, ty));
         }
-        let shown = self.types.display(inner.ty);
-        self.report(
-            Diagnostic::error(codes::NO_SUCH_MEMBER, format!("`@{name}` names a method of `{shown}`, not a field"))
-                .primary(span, "instance variables only reach fields")
-                .suggest_replace(
-                    format!("call the method: `{name}{called}`"),
-                    span,
-                    name.as_str().to_string(),
-                    Applicability::MaybeIncorrect,
-                ),
-        );
+        // A method that `using` promotes, unless the type's own, mixed-in
+        // or extension method of that name is the one a call reaches.
+        if !self.ivar_names_method(self_ty, name, span, called) {
+            self.no_member(self_ty, name, span, Some(called));
+        }
         None
+    }
+
+    /// Where the method a call without a receiver named `name` reaches in
+    /// a method of `ty` comes from, searching as
+    /// [`Self::implicit_self_call`] does: the type's own, those its modules
+    /// mix in, those `extend` blocks add, then those `using` fields
+    /// promote. `None` when the name reaches no method.
+    fn self_method_origin(&mut self, ty: TyId, name: Name) -> Option<MethodOrigin> {
+        let is_method =
+            |this: &Self, d: DeclId| matches!(this.decls[d.0 as usize].kind, DeclKind::Fn(_) | DeclKind::Overload(_));
+        if let Some(d) = self.find_method(ty, name) {
+            return is_method(self, d).then_some(MethodOrigin::Own);
+        }
+        if let Some(d) = self.find_included(ty, name) {
+            let module = self.decls[d.0 as usize].owner?;
+            return is_method(self, d).then_some(MethodOrigin::Included(module));
+        }
+        for ext in self.extends_of(ty) {
+            let own = self.members.get(&ext).and_then(|m| m.get(&name)).copied();
+            if let Some(d) = own.or_else(|| self.module_member(ext, name, &mut Vec::new())) {
+                return is_method(self, d).then_some(MethodOrigin::Extended);
+            }
+        }
+        let TyKind::Struct(id) = *self.types.kind(ty) else { return None };
+        let used: Vec<TyId> = self.types.struct_info(id).fields.iter().filter(|f| f.using).map(|f| f.ty).collect();
+        let mut visited = vec![ty];
+        used.into_iter().find_map(|t| match self.self_member(t, name, &mut visited) {
+            Some(super::expr::SelfMember::Method { owner }) => Some(MethodOrigin::Promoted(owner)),
+            _ => None,
+        })
+    }
+
+    /// Reports `@name` naming a method of `self` instead of a field, with
+    /// the fix that calls it by name and keeps `called`, the argument list
+    /// `@name(…)` was written with. The method may be the type's own, mixed
+    /// in with `include`, added by `extend` or promoted by `using`; a note
+    /// says which when it isn't the type's own. Returns false when `name`
+    /// is no method that a call in a method of `ty` reaches.
+    fn ivar_names_method(&mut self, ty: TyId, name: Name, span: Span, called: &str) -> bool {
+        let Some(origin) = self.self_method_origin(ty, name) else { return false };
+        let shown = self.types.display(ty);
+        let mut diag =
+            Diagnostic::error(codes::NO_SUCH_MEMBER, format!("`@{name}` reads a field, but `{name}` is a method"))
+                .primary(span, format!("`{shown}` has no field `{name}`"));
+        match origin {
+            MethodOrigin::Own => {}
+            MethodOrigin::Included(module) => {
+                let module = self.decls[module.0 as usize].name;
+                diag = diag.note(format!("`{name}` is a method of `{module}`, mixed into `{shown}` by `include`"));
+            }
+            MethodOrigin::Extended => {
+                diag = diag.note(format!("`{name}` is a method that an `extend` block adds to `{shown}`"));
+            }
+            MethodOrigin::Promoted(owner) => {
+                let owner = self.types.display(owner);
+                diag = diag.note(format!("`{name}` is a method of `{owner}`, promoted into `{shown}` by `using`"));
+            }
+        }
+        // A variable of the same name would take a bare `name`.
+        let call = if self.visible_var_names().contains(&name.as_str()) {
+            format!("self.{name}")
+        } else {
+            name.as_str().to_string()
+        };
+        self.report(diag.note("`@name` reads a field of `self`; methods are called by name").suggest_replace(
+            format!("call the method: `{call}{called}`"),
+            span,
+            call,
+            Applicability::MachineApplicable,
+        ));
+        true
     }
 
     /// Classifies the left side of a member access without lowering values.
@@ -1006,19 +1084,9 @@ impl<'a> Checker<'a> {
             TyKind::Enum(id) => self.enum_decls.get(id).copied(),
             _ => None,
         };
-        let method = decl.and_then(|d| self.members.get(&d)).is_some_and(|m| m.contains_key(&name));
-        if is_ivar && method {
-            self.report(
-                Diagnostic::error(codes::NO_SUCH_MEMBER, format!("`@{name}` reads a field, but `{name}` is a method"))
-                    .primary(span, format!("`{shown}` has no field `{name}`"))
-                    .note("`@name` reads a field of `self`; methods are called by name")
-                    .suggest_replace(
-                        format!("call the method: `{name}{}`", ivar.unwrap_or_default()),
-                        span,
-                        name.as_str(),
-                        Applicability::MachineApplicable,
-                    ),
-            );
+        if let Some(called) = ivar
+            && self.ivar_names_method(ty, name, span, called)
+        {
             return;
         }
         if !is_ivar
@@ -1031,9 +1099,9 @@ impl<'a> Checker<'a> {
             methods.sort_unstable();
             candidates.extend(methods);
         }
+        // A field's name has no `@`, even when `@name` looked for it.
         let what = if is_ivar { "field" } else { "field or method" };
-        let shown_name = if is_ivar { format!("@{name}") } else { name.as_str().to_string() };
-        let mut diag = Diagnostic::error(codes::NO_SUCH_MEMBER, format!("`{shown}` has no {what} `{shown_name}`"))
+        let mut diag = Diagnostic::error(codes::NO_SUCH_MEMBER, format!("`{shown}` has no {what} `{name}`"))
             .primary(span, format!("not found on `{shown}`"));
         if matches!(self.types.kind(ty), TyKind::Type) {
             let diag = self.no_type_value_member(name, span, diag);

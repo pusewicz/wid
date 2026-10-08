@@ -1,0 +1,95 @@
+error[E0204]: `@mend` reads a field, but `mend` is a method
+  --> tests/ui/ivar_method.wid:21:25
+   |
+21 |   def mixed_in -> Int = @mend
+   |                         ^^^^^ `P` has no field `mend`
+   = note: `mend` is a method of `Healing`, mixed into `P` by `include`
+   = note: `@name` reads a field of `self`; methods are called by name
+help: call the method: `mend`
+   |   def mixed_in -> Int = mend
+   = see `wid explain E0204`
+
+error[E0204]: `@mend` reads a field, but `mend` is a method
+  --> tests/ui/ivar_method.wid:22:30
+   |
+22 |   def mixed_in_call -> Int = @mend(1)
+   |                              ^^^^^ `P` has no field `mend`
+   = note: `mend` is a method of `Healing`, mixed into `P` by `include`
+   = note: `@name` reads a field of `self`; methods are called by name
+help: call the method: `mend(1)`
+   |   def mixed_in_call -> Int = mend(1)
+   = see `wid explain E0204`
+
+error[E0204]: `@boost` reads a field, but `boost` is a method
+  --> tests/ui/ivar_method.wid:23:25
+   |
+23 |   def extended -> Int = @boost
+   |                         ^^^^^^ `P` has no field `boost`
+   = note: `boost` is a method that an `extend` block adds to `P`
+   = note: `@name` reads a field of `self`; methods are called by name
+help: call the method: `boost`
+   |   def extended -> Int = boost
+   = see `wid explain E0204`
+
+error[E0204]: `@boost` reads a field, but `boost` is a method
+  --> tests/ui/ivar_method.wid:24:30
+   |
+24 |   def extended_call -> Int = @boost(1)
+   |                              ^^^^^^ `P` has no field `boost`
+   = note: `boost` is a method that an `extend` block adds to `P`
+   = note: `@name` reads a field of `self`; methods are called by name
+help: call the method: `boost(1)`
+   |   def extended_call -> Int = boost(1)
+   = see `wid explain E0204`
+
+error[E0204]: `@regen` reads a field, but `regen` is a method
+  --> tests/ui/ivar_method.wid:25:25
+   |
+25 |   def promoted -> Int = @regen
+   |                         ^^^^^^ `P` has no field `regen`
+   = note: `regen` is a method of `Mob`, promoted into `P` by `using`
+   = note: `@name` reads a field of `self`; methods are called by name
+help: call the method: `regen`
+   |   def promoted -> Int = regen
+   = see `wid explain E0204`
+
+error[E0204]: `@regen` reads a field, but `regen` is a method
+  --> tests/ui/ivar_method.wid:26:30
+   |
+26 |   def promoted_call -> Int = @regen(1)
+   |                              ^^^^^^ `P` has no field `regen`
+   = note: `regen` is a method of `Mob`, promoted into `P` by `using`
+   = note: `@name` reads a field of `self`; methods are called by name
+help: call the method: `regen(1)`
+   |   def promoted_call -> Int = regen(1)
+   = see `wid explain E0204`
+
+error[E0204]: `@mend` reads a field, but `mend` is a method
+  --> tests/ui/ivar_method.wid:27:36
+   |
+27 |   def shadowed(mend: Int) -> Int = @mend(mend)
+   |                                    ^^^^^ `P` has no field `mend`
+   = note: `mend` is a method of `Healing`, mixed into `P` by `include`
+   = note: `@name` reads a field of `self`; methods are called by name
+help: call the method: `self.mend(mend)`
+   |   def shadowed(mend: Int) -> Int = self.mend(mend)
+   = see `wid explain E0204`
+
+error[E0204]: `P` has no field `nothing`
+  --> tests/ui/ivar_method.wid:28:24
+   |
+28 |   def missing -> Int = @nothing
+   |                        ^^^^^^^^ not found on `P`
+   = note: available: hp, mob, on_hit
+   = see `wid explain E0204`
+
+error[E0204]: `P` has no field `on_hitt`
+  --> tests/ui/ivar_method.wid:29:29
+   |
+29 |   def missing_call -> Int = @on_hitt(2)
+   |                             ^^^^^^^^ not found on `P`
+help: did you mean `@on_hit`?
+   |   def missing_call -> Int = @on_hit(2)
+   = see `wid explain E0204`
+
+error: could not compile due to 9 errors
