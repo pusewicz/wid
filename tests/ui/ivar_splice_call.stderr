@@ -1,0 +1,86 @@
+error[E0305]: `hp` is a field, not a method
+  --> tests/ui/ivar_splice_call.wid:29:9
+   |
+29 |   poke :hp
+   |         ^^ this field's type is `Int`
+  ::: tests/ui/ivar_splice_call.wid:6:24
+   |
+ 6 |     def poked -> Int = @#{name}()
+   |                        -------- `hp` is spliced here by `poke`
+  ::: tests/ui/ivar_splice_call.wid:29:3
+   |
+29 |   poke :hp
+   |   -------- `poke` expands here
+help: read the field without `()`
+   |     def poked -> Int = @#{name}
+   = see `wid explain E0305`
+
+error[E0204]: `@heal` reads a field, but `heal` is a method
+  --> tests/ui/ivar_splice_call.wid:30:9
+   |
+30 |   fire :heal
+   |         ^^^^ `P` has no field `heal`
+  ::: tests/ui/ivar_splice_call.wid:12:24
+   |
+12 |     def fired -> Int = @#{name}(1)
+   |                        -------- `heal` is spliced here by `fire`
+  ::: tests/ui/ivar_splice_call.wid:30:3
+   |
+30 |   fire :heal
+   |   ---------- `fire` expands here
+   = note: `@name` reads a field of `self`; methods are called by name
+help: call the method: `#{name}(1)`
+   |     def fired -> Int = #{name}(1)
+   = see `wid explain E0204`
+
+error[E0204]: `Q` has no field `hpp`
+  --> tests/ui/ivar_splice_call.wid:36:9
+   |
+36 |   fire :hpp
+   |         ^^^ not found on `Q`
+  ::: tests/ui/ivar_splice_call.wid:12:24
+   |
+12 |     def fired -> Int = @#{name}(1)
+   |                        -------- `hpp` is spliced here by `fire`
+  ::: tests/ui/ivar_splice_call.wid:36:3
+   |
+36 |   fire :hpp
+   |   --------- `fire` expands here
+help: did you mean `hp`?
+   |   fire :hp
+   = see `wid explain E0204`
+
+error[E0305]: `hp` is a field, not a method
+  --> tests/ui/ivar_splice_call.wid:43:14
+   |
+43 |   poke_self :hp
+   |              ^^ this field's type is `Int`
+  ::: tests/ui/ivar_splice_call.wid:48:34
+   |
+48 |     def poked_self -> Int = self.#{name}()
+   |                                  ------- `hp` is spliced here by `poke_self`
+  ::: tests/ui/ivar_splice_call.wid:43:3
+   |
+43 |   poke_self :hp
+   |   ------------- `poke_self` expands here
+help: read the field without `()`
+   |     def poked_self -> Int = self.#{name}
+   = see `wid explain E0305`
+
+error[E0319]: `on_hit` does not take a block
+  --> tests/ui/ivar_splice_call.wid:18:36
+   |
+18 |     def guard -> Int = @#{name}(3) do
+   |                                    ^^ this block is never called
+  ::: tests/ui/ivar_splice_call.wid:31:12
+   |
+31 |   guarded :on_hit
+   |            ------ `on_hit` is a proc
+  ::: tests/ui/ivar_splice_call.wid:31:3
+   |
+31 |   guarded :on_hit
+   |   --------------- `guarded` expands here
+help: remove the block
+   = see `wid explain E0319`
+
+error: could not compile due to 5 errors

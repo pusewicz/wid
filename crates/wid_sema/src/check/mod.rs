@@ -588,9 +588,12 @@ impl<'a> Checker<'a> {
         self.functions[pending.id.0 as usize] = Some(func);
     }
 
-    /// Returns names visible at package level for "did you mean" hints.
+    /// Returns names visible at package level for "did you mean" hints,
+    /// sorted, since ties in a suggestion go to the first.
     pub fn package_names(&self, pkg: PackageId) -> Vec<&'static str> {
-        self.pkg_scopes[pkg.0 as usize].keys().map(|n| n.as_str()).collect()
+        let mut names: Vec<&'static str> = self.pkg_scopes[pkg.0 as usize].keys().map(|n| n.as_str()).collect();
+        names.sort_unstable();
+        names
     }
 
     /// Reports an `import` or `cimport` inside a `struct`, `enum`, `module`

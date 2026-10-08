@@ -297,11 +297,13 @@ impl<'a> Checker<'a> {
             Some(pkg) => {
                 let Some(target) = self.lookup_import(loc, pkg.name) else {
                     if !self.import_failed(loc, pkg.name) {
-                        let imports: Vec<&'static str> = self
+                        let mut imports: Vec<&'static str> = self
                             .file_imports
                             .get(&(loc.pkg, loc.file))
                             .map(|m| m.keys().map(|n| n.as_str()).collect())
                             .unwrap_or_default();
+                        // Ties in a suggestion go to the first.
+                        imports.sort_unstable();
                         self.undefined_here(pkg.name, pkg.span, imports, "package");
                     }
                     self.failed_among_declarations(p);

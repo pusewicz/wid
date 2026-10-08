@@ -1,0 +1,40 @@
+# `@name` on a method of self, wherever the method comes from: one message,
+# naming where it comes from, and a fix that calls it by name.
+module Healing
+  def mend(n: Int) -> Int = n
+end
+
+module Care
+  include Healing
+end
+
+struct Mob
+  def regen(n: Int) -> Int = n
+end
+
+struct P
+  include Care
+  using mob: Mob
+  hp: Int = 1
+  on_hit: proc(n: Int) -> Int
+
+  def mixed_in -> Int = @mend
+  def mixed_in_call -> Int = @mend(1)
+  def extended -> Int = @boost
+  def extended_call -> Int = @boost(1)
+  def promoted -> Int = @regen
+  def promoted_call -> Int = @regen(1)
+  def shadowed(mend: Int) -> Int = @mend(mend)
+  def missing -> Int = @nothing
+  def missing_call -> Int = @on_hitt(2)
+end
+
+extend P
+  def boost(n: Int) -> Int = n
+end
+
+def main
+  pl = P.new
+  p pl.mixed_in + pl.mixed_in_call + pl.extended + pl.extended_call + pl.promoted
+  p pl.promoted_call + pl.shadowed(1) + pl.missing + pl.missing_call
+end

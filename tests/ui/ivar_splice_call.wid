@@ -1,0 +1,56 @@
+# Errors in `@#{name}(…)` a macro generated point at the name the call gave,
+# with the splice in the `quote` and the call; fixes to the `quote` keep the
+# splice.
+macro def poke(name: Symbol) -> Code
+  quote do
+    def poked -> Int = @#{name}()
+  end
+end
+
+macro def fire(name: Symbol) -> Code
+  quote do
+    def fired -> Int = @#{name}(1)
+  end
+end
+
+macro def guarded(name: Symbol) -> Code
+  quote do
+    def guard -> Int = @#{name}(3) do
+      1
+    end
+  end
+end
+
+struct P
+  hp: Int = 1
+  on_hit: proc(n: Int) -> Int
+  def heal(n: Int) -> Int = n
+
+  poke :hp
+  fire :heal
+  guarded :on_hit
+end
+
+struct Q
+  hp: Int = 1
+  fire :hpp
+end
+
+# The `()` after a spliced name is found from the splice, wherever the
+# macro is.
+struct R
+  hp: Int = 1
+  poke_self :hp
+end
+
+macro def poke_self(name: Symbol) -> Code
+  quote do
+    def poked_self -> Int = self.#{name}()
+  end
+end
+
+def main
+  p P.new.fired
+  p Q.new.fired
+  p R.new.poked_self
+end

@@ -750,6 +750,34 @@ runs the stages; `wid_cli` is the `wid` binary.
   field called by bare name (`on_hit(3)`) gets the fix `@on_hit(3)`
   instead of `@on_hit.call(3)`, and a call close to a proc field's name
   suggests `@on_hit`.
+- "Did you mean" picks the same name on every run (#64; `fooe` among
+  `fooa`…`food` suggested a different one each run). `did_you_mean` gives
+  ties to the shorter candidate, then the first, and every caller now passes
+  candidates in a fixed order: package names (`Checker::package_names`), a
+  type's methods, an overload set's scope, a file's imports and a header's
+  records sorted, as are the files and directories a missing `embed` file
+  or import path is compared with; "known collections" lists the
+  `-collection:` names sorted. `tests/ui/suggestion_ties.wid` covers ties.
+- `@mend` or `@mend(1)` on a method mixed in with `include`, added by
+  `extend` or promoted by `using` gets the message an own method gets (#65;
+  it was "`P` has no field `@mend`" with no fix, or "`@push` names a method
+  of `Body`" for a promoted one): "`@mend` reads a field, but `mend` is a
+  method", a note saying where the method comes from and the
+  machine-applicable fix `mend(1)`, or `self.mend(1)` when a variable
+  `mend` is in scope. `Checker::self_method_origin` searches as a call
+  without a receiver does. A missing field reads "`P` has no field
+  `on_hitt`", without the `@`.
+- A macro can generate `@#{name}(args)`, which calls the proc the field
+  holds as `@name(args)` does (#67; it was E0105 and E0301). The parser
+  reads it as `Callee::IVar` when `(` follows the splice's `}` with no
+  space, and the splicer substitutes the name like any call's. Its errors
+  point at the name the macro call gave, with the splice and the call, as
+  for `#{name}(args)`; fixes in the `quote` keep the splice and are
+  `MaybeIncorrect`: `@#{name}()` on a field drops `()`, on a method it
+  becomes `#{name}(1)`, an ambiguous name `@body.#{name}`, and a misspelled
+  field is fixed at the call (`:hp`). `Checker::splice_site` and
+  `name_end` find the splice, which also fixes the `()` fix for a field
+  called as `self.#{name}()` (it edited unrelated text).
 - A C compiler without C23 (one that rejects `-std=c23`, like gcc 13 or
   clang 17, or lacks `<stdckdint.h>` or `#embed`) is E0702 "the C compiler
   `cc` doesn't support C23", with the first line of its `--version`, the
@@ -833,7 +861,8 @@ macro stack.
        line in a type body (in an enum body it may be `Symbol`s, i.e.
        members). In every name position (method, field, parameter, local,
        block-parameter, loop-variable, type and enum-member names, `x.#{m}`,
-       `@#{f}`, `:#{s}`, named arguments, `#{name}(args)`) it is an
+       `@#{f}`, `:#{s}`, named arguments, `#{name}(args)`,
+       `@#{f}(args)`) it is an
        `Ident`, `IVar` or `Symbol` named `#{i}` (`ast::splice_name`,
        `Ident::splice_index`), spanning the whole `#{…}`. A splice in a
        generic argument list is a `GenericArg::Expr`.

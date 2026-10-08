@@ -300,6 +300,26 @@ impl<'a> Checker<'a> {
         diag
     }
 
+    /// The splice in a `quote` that put the name at `name` into the code
+    /// at `within`, in the expansion's virtual file. A name spliced in from
+    /// a macro call keeps its span there (see [`Splice`]), so the code
+    /// around it, like the arguments of `@#{name}(…)`, is found from the
+    /// splice. `None` for a name that wasn't spliced into `within`.
+    pub(super) fn splice_site(&self, name: Span, within: Span) -> Option<Span> {
+        let inside = |s: Span| s.file == within.file && within.start <= s.start && s.end <= within.end;
+        self.macros.splices.get(&name.file)?.iter().find(|s| s.code == name && inside(s.site)).map(|s| s.site)
+    }
+
+    /// Where the name at `name` ends in the code of `call`, the call it
+    /// names: its own end, or for a name spliced in from a macro call, the
+    /// end of the splice in the `quote` (see [`Self::splice_site`]).
+    pub(super) fn name_end(&self, name: Span, call: Span) -> Option<u32> {
+        if name.file == call.file {
+            return Some(name.end);
+        }
+        self.splice_site(name, call).map(|s| s.end)
+    }
+
     /// Records where each file's names resolve, for virtual files made from
     /// it.
     pub(super) fn init_macro_files(&mut self) {

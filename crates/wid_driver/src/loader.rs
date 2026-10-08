@@ -282,8 +282,10 @@ impl Loader<'_> {
             Some((collection, rel)) => match self.opts.collections.get(collection) {
                 Some(dir) => (dir.clone(), rel),
                 None => {
+                    let mut defined: Vec<String> = self.opts.collections.keys().cloned().collect();
+                    defined.sort_unstable();
                     let mut known: Vec<String> = vec!["core".into(), "vendor".into()];
-                    known.extend(self.opts.collections.keys().cloned());
+                    known.extend(defined);
                     self.diags.push(
                         Diagnostic::error(codes::UNKNOWN_IMPORT, format!("unknown collection `{collection}`"))
                             .primary(span, "no collection with this name")
@@ -299,7 +301,7 @@ impl Loader<'_> {
         if !dir.is_dir() {
             let mut diag = Diagnostic::error(codes::UNKNOWN_IMPORT, format!("package `{path}` not found"))
                 .primary(span, format!("no directory at `{}`", dir.display()));
-            let siblings: Vec<String> = std::fs::read_dir(dir.parent().unwrap_or(&base))
+            let mut siblings: Vec<String> = std::fs::read_dir(dir.parent().unwrap_or(&base))
                 .map(|rd| {
                     rd.flatten()
                         .filter(|e| e.path().is_dir())
@@ -307,6 +309,9 @@ impl Loader<'_> {
                         .collect()
                 })
                 .unwrap_or_default();
+            // A directory lists its entries in no fixed order; ties in a
+            // suggestion go to the first.
+            siblings.sort_unstable();
             let last = rel.rsplit('/').next().unwrap_or(rel);
             if let Some(best) = did_you_mean(last, siblings.iter().map(String::as_str)) {
                 let fixed = format!("\"{}\"", path.replacen(last, best, 1));

@@ -527,9 +527,10 @@ end
       arguments, array elements, returned values, …), one per element.
       Nowhere else.
     - `Symbol` inserts a name, usable as an identifier, a method name
-      (`def #{name}`, `x.#{name}`), a field (`@#{name}`) or a parameter
-      name. In an expression it is that identifier (a constant's, if
-      capitalized), and where a type goes, the type of that name.
+      (`def #{name}`, `x.#{name}`), a field (`@#{name}`, or
+      `@#{name}(args)` to call the proc it holds) or a parameter name. In
+      an expression it is that identifier (a constant's, if capitalized),
+      and where a type goes, the type of that name.
       `:#{name}` inserts a symbol literal; its value must be a `Symbol`.
       In a list, a `[]Symbol` inserts one identifier (or, written
       `:#{names}`, one symbol literal) per name.
@@ -900,6 +901,10 @@ help: unwrap it and handle the nil case
   problem and at least one concrete fix. Fixes are machine-applicable where
   possible, and "did you mean" candidates are included. The compiler recovers
   and reports every error, not just the first one.
+- The same program gets the same diagnostics on every run. Among equally
+  close "did you mean" candidates the shorter one wins, then the one the name
+  would resolve to first (a variable, a method of `self`, a package name, a
+  field), then the first alphabetically.
 - `-json-errors` produces the same diagnostics with structured fix-its.
   `wid explain <code>` gives the long-form explanation with examples.
 - `wid query` answers questions about a package in JSON: `outline`,

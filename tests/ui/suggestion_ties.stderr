@@ -1,0 +1,47 @@
+error[E0201]: overload set `combine` names unknown method `mixc`
+  --> tests/ui/suggestion_ties.wid:26:29
+   |
+26 |   overload :combine, :mixb, :mixc
+   |                             ^^^^^ no method with this name next to the set
+   = note: an overload set lists methods declared in the same scope as the `overload` line
+help: a similar method exists: `mixa`
+   |   overload :combine, :mixb, :mixa
+   = see `wid explain E0201`
+
+error[E0201]: undefined name `fooe`
+  --> tests/ui/suggestion_ties.wid:30:5
+   |
+30 |   p fooe
+   |     ^^^^ not found in this scope
+help: a similar name exists: `fooa`
+   |   p fooa
+   = see `wid explain E0201`
+
+error[E0201]: undefined constant `LIMD`
+  --> tests/ui/suggestion_ties.wid:31:5
+   |
+31 |   p LIMD
+   |     ^^^^ not found in this scope
+help: a similar name exists: `LIMA`
+   |   p LIMA
+   = see `wid explain E0201`
+
+error[E0314]: unknown type `Boxd`
+  --> tests/ui/suggestion_ties.wid:32:6
+   |
+32 |   b: Boxd = Boxa.new
+   |      ^^^^ no type with this name is in scope
+help: a similar type exists: `Boxa`
+   |   b: Boxa = Boxa.new
+   = see `wid explain E0314`
+
+error[E0204]: `Bag` has no field or method `gotd`
+  --> tests/ui/suggestion_ties.wid:33:13
+   |
+33 |   p Bag.new.gotd
+   |             ^^^^ not found on `Bag`
+help: did you mean `gota`?
+   |   p Bag.new.gota
+   = see `wid explain E0204`
+
+error: could not compile due to 5 errors

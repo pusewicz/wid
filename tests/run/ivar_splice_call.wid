@@ -1,0 +1,47 @@
+# A macro that generates `@#{name}(…)` calls the proc the named field holds,
+# as `@name(…)` does.
+macro def caller(name: Symbol) -> Code
+  quote do
+    def fire -> Int = @#{name}(3)
+  end
+end
+
+macro def relay(name: Symbol, method: Symbol) -> Code
+  quote do
+    def #{method}(a: Int, b: Int) -> Int = @#{name}(a, b) + @#{name}(b, a)
+  end
+end
+
+macro def handler(event: Symbol) -> Code
+  name = "on_#{event}".to_sym
+  quote do
+    def #{event}(n: Int) -> Int = @#{name}(n)
+  end
+end
+
+struct Clock
+  on_tick: proc(n: Int) -> Int
+end
+
+struct P
+  using clock: Clock
+  on_hit: proc(n: Int) -> Int
+  combine: proc(a: Int, b: Int) -> Int
+
+  caller :on_hit
+  relay :combine, :both
+  handler :hit
+  handler :tick
+end
+
+def twice(n: Int) -> Int = n * 2
+def minus(a: Int, b: Int) -> Int = a - b * 10
+def plus_one(n: Int) -> Int = n + 1
+
+def main
+  pl = P.new(Clock.new(method(:plus_one)), method(:twice), method(:minus))
+  puts pl.fire
+  puts pl.both(1, 2)
+  puts pl.hit(21)
+  puts pl.tick(41)
+end
