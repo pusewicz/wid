@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use clang_sys::*;
 
 use crate::ffi::{Cursor, Diagnostic, EvalValue, Index, ParseOptions, Severity, Token, TokenKind, TranslationUnit};
-use crate::lower::{Lowerer, is_identifier};
+use crate::lower::{Lowerer, is_identifier, name_params};
 use crate::model::*;
 use crate::source::{preceding_doc_comment, trailing_comment};
 
@@ -250,9 +250,36 @@ fn probe(
         if matches!(ty.kind(), CXType_Invalid) || ty.canonical().kind() == CXType_Auto {
             continue;
         }
-        results.insert(position, (lowerer.ty(ty), var.evaluate()));
+        let mut lowered = lowerer.ty(ty);
+        // A function type carries no parameter names; a macro that names a
+        // function (`#define ALIAS InitWindow`) takes them from its
+        // declaration.
+        if let Some(decl) = named_declaration(var) {
+            name_params(&mut lowered, decl);
+        }
+        results.insert(position, (lowered, var.evaluate()));
     }
     Ok(results)
+}
+
+/// The function, or function-pointer variable, that a probe variable's
+/// initializer names when it is just a name, through any implicit
+/// conversions and parentheses.
+fn named_declaration<'tu>(var: Cursor<'tu>) -> Option<Cursor<'tu>> {
+    let mut expr = *var.children().last()?;
+    loop {
+        match expr.kind() {
+            CXCursor_DeclRefExpr => {
+                let decl = expr.referenced();
+                return matches!(decl.kind(), CXCursor_FunctionDecl | CXCursor_VarDecl).then_some(decl);
+            }
+            CXCursor_UnexposedExpr | CXCursor_ParenExpr => match expr.children().as_slice() {
+                [inner] => expr = *inner,
+                _ => return None,
+            },
+            _ => return None,
+        }
+    }
 }
 
 /// The first variable declared under `cursor`.

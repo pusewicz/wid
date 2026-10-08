@@ -891,7 +891,11 @@ end
 
 - `cimport` uses libclang to turn the functions, structs, unions, enums,
   typedefs, constants and simple macros of a header into a package of Wid
-  declarations. `wid cimport --dump <header>` prints that package.
+  declarations. `wid cimport --dump <header>` prints that package. Its
+  flags `-strip-prefix:`, `-include-dir:`, `-pkg-config:` and `-define:`
+  stand for the options below, it looks for the header from the current
+  directory, and its errors name those flags where a `cimport` line's name
+  the options (E0701: "add its directory with `-include-dir:`").
 - **Namespaces.** With `as: :stbi`, the declarations live under `stbi.` in
   the file that imports them, like an `import`, and other packages don't see
   them. Without `as:`, they join the package's own namespace, exactly as if
@@ -937,8 +941,13 @@ end
   become constants. Other value macros, like raylib's `RED`, and `const`
   globals are read by name in C (`@[extern("RED")] RED: Color = ---`). A macro
   that names a function (`#define GetMouseRay GetScreenToWorldRay`) is a
-  function. Function-like macros, mutable globals and bit-fields are not
-  imported, and using one is an error (E0705) that explains why.
+  function with the macro's name and the declaration of the function it
+  names, parameter names included, so named arguments work the same for
+  both. Function-like macros, mutable globals and bit-fields are not
+  imported, and using one is an error (E0705) that explains why, whether
+  the use writes its C name or any name the rules above give it as a
+  function, type or constant (`lib.counter`, `lib.Counter` or
+  `lib.COUNTER` for `extern int lib_counter;` with `strip_prefix: "lib_"`).
 - **Calls.** String literals convert to `CString`; a runtime `String` needs
   `.to_cstr`. A C function ending in `...` takes numbers, pointers, C strings
   and C structs there; untyped literals become `C.int` and `C.double`, as in C.

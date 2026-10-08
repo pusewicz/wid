@@ -299,7 +299,11 @@ fn typed_macros_without_a_value() {
     assert_eq!(macro_expr(module, "KITCHEN_VEC"), (&named(NamedKind::Typedef, "Vec2"), None), "compound literal");
     assert_eq!(macro_expr(module, "KITCHEN_NULL"), (&pointer(CType::Void, NONE), None));
     let (alias, value) = macro_expr(module, "KITCHEN_ALIAS");
-    assert!(matches!(alias, CType::FnPtr(sig) if sig.params.len() == 2) && value.is_none(), "function alias");
+    let CType::FnPtr(sig) = alias else { panic!("function alias: {alias:?}") };
+    assert!(value.is_none(), "function alias");
+    // The alias copies the function's declaration, parameter names included.
+    let names: Vec<Option<&str>> = sig.params.iter().map(|p| p.name.as_deref()).collect();
+    assert_eq!(names, [Some("a"), Some("b")], "function alias parameters");
 }
 
 #[test]

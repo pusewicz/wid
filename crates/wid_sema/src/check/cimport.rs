@@ -238,17 +238,20 @@ impl<'a> Checker<'a> {
         matches!(d.kind, DeclKind::Const(_)) && d.item.has_attr("extern")
     }
 
-    /// The declaration `cimport` left out under this Wid or C name, if any.
-    /// For a package that merged `cimport`s, it looks in each of them.
-    /// Returns the cimport package with the declaration.
+    /// The declaration `cimport` left out under this Wid or C name, or under
+    /// another spelling the naming rules give it, if any. A declaration's
+    /// own Wid or C name wins over another one's other spelling. For a
+    /// package that merged `cimport`s, it looks in each of them. Returns the
+    /// cimport package with the declaration.
     pub fn c_skipped(&self, pkg: PackageId, name: Name) -> Option<(PackageId, &'a CSkipped)> {
-        let find = |p: PackageId| {
-            self.c_binding(p)?.skipped.iter().find(|s| s.wid_name == name.as_str() || s.c_name == name.as_str())
+        let text = name.as_str();
+        let mut packages = vec![pkg];
+        packages.extend(self.merged_cimports.get(&pkg).into_iter().flatten().copied());
+        let find = |matches: &dyn Fn(&CSkipped) -> bool| {
+            packages.iter().find_map(|&p| self.c_binding(p)?.skipped.iter().find(|s| matches(s)).map(|s| (p, s)))
         };
-        if let Some(s) = find(pkg) {
-            return Some((pkg, s));
-        }
-        self.merged_cimports.get(&pkg)?.iter().find_map(|&p| find(p).map(|s| (p, s)))
+        find(&|s| s.wid_name == text || s.c_name == text)
+            .or_else(|| find(&|s| s.spellings.iter().any(|spelling| spelling == text)))
     }
 
     /// The C name of a declaration a cimport package declares as `name`.

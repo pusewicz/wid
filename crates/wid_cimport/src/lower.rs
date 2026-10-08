@@ -616,7 +616,7 @@ fn non_empty(text: String) -> Option<String> {
 
 /// Names the parameters of a function-pointer type from the parameter
 /// declarations nested under the declaration that spells it.
-fn name_params(ty: &mut CType, cursor: Cursor<'_>) {
+pub(crate) fn name_params(ty: &mut CType, cursor: Cursor<'_>) {
     let sig = match ty {
         CType::FnPtr(sig) | CType::Function(sig) => sig,
         _ => return,

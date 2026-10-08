@@ -1,0 +1,9 @@
+# A macro that names a function is that function under another name, with
+# its parameter names, so named arguments reach the right parameters.
+cimport "ruler.h", as: :ruler, strip_prefix: "ruler_"
+
+def main
+  puts ruler.distance(start: 2, stop: 9)
+  puts ruler.length(stop: 9, start: 2)
+  puts ruler.span(stop: 2, start: 9)
+end

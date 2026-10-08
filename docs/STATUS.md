@@ -1444,6 +1444,24 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   saying Wid has no package-level variables (for a constant at package
   level), with fixes that write a value (`…`) or, for a typed constant,
   `{}`. `@[extern]` constants keep `= ---`.
+- A C declaration `cimport` left out is E0705 under every name the naming
+  rules give it (#147, SPEC "C and C++ interop"): `CSkipped::spellings`
+  holds its function, type and constant spellings, so `lib.counter`,
+  `lib.Counter` and `lib.COUNTER` all explain a skipped `lib_counter`
+  (before, only the constant spelling did and `lib.counter` was a bare
+  E0201). A declaration's own Wid or C name wins over another's spelling.
+- A macro that names a function (`#define LIB_ALIAS LIB_InitWindow`) keeps
+  the function's parameter names (#147, SPEC "C and C++ interop"): the
+  macro probe follows the initializer to the declaration it names
+  (`clang_getCursorReferenced`, through implicit casts, parentheses and
+  chains of such macros) and names the function type's parameters from it,
+  as for function-pointer globals. It was `def alias(arg0, arg1, arg2)`.
+- `wid cimport --dump`'s errors name its flags (#147, SPEC "C and C++
+  interop"): `cimport::Spec::command_line` makes E0701's help say
+  `-include-dir:`, `-pkg-config:` and `-define:` and "relative to the
+  current directory" (a `cimport` line's keep `include_dirs:`,
+  `pkg_config:` and `define:`), and the help for a missing pkg-config no
+  longer offers `link:`. Tested by `crates/wid_driver/tests/cimport_dump.rs`.
 
 ## Next
 

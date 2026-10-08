@@ -66,6 +66,7 @@ const REQUIRED: &[(&str, IsLoaded)] = &[
     ("clang_getCursorExtent", clang_getCursorExtent::is_loaded),
     ("clang_getCursorKind", clang_getCursorKind::is_loaded),
     ("clang_getCursorLocation", clang_getCursorLocation::is_loaded),
+    ("clang_getCursorReferenced", clang_getCursorReferenced::is_loaded),
     ("clang_getCursorResultType", clang_getCursorResultType::is_loaded),
     ("clang_getCursorSpelling", clang_getCursorSpelling::is_loaded),
     ("clang_getCursorTLSKind", clang_getCursorTLSKind::is_loaded),
@@ -615,6 +616,13 @@ impl<'tu> Cursor<'tu> {
     pub fn is_thread_local(&self) -> bool {
         // SAFETY: plain accessor on a value type.
         unsafe { clang_getCursorTLSKind(self.raw) != CXTLS_None }
+    }
+
+    /// The declaration a reference, such as a `DeclRefExpr`, names; a null
+    /// cursor when there is none.
+    pub fn referenced(&self) -> Cursor<'tu> {
+        // SAFETY: plain accessor on a value type.
+        Cursor::new(unsafe { clang_getCursorReferenced(self.raw) })
     }
 
     /// The return type of a function.

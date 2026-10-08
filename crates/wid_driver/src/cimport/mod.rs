@@ -42,6 +42,27 @@ pub struct Spec {
     pub pkg_config: Vec<(String, Span)>,
     /// `include_dirs:`, made absolute.
     pub include_dirs: Vec<PathBuf>,
+    /// Whether the options come from `wid cimport --dump`'s command line
+    /// rather than a `cimport` item, so messages name its flags
+    /// (`-include-dir:`) instead of the options (`include_dirs:`), and the
+    /// current directory instead of the package's.
+    pub command_line: bool,
+}
+
+impl Spec {
+    /// How messages name an option: `` `include_dirs:` `` on a `cimport`
+    /// line, and the flag that sets it, `` `-include-dir:` ``, on the
+    /// command line.
+    fn option(&self, name: &str) -> String {
+        let flag = match name {
+            "include_dirs" => "include-dir",
+            "pkg_config" => "pkg-config",
+            "define" => "define",
+            "strip_prefix" => "strip-prefix",
+            _ => return format!("`{name}:`"),
+        };
+        if self.command_line { format!("`-{flag}:`") } else { format!("`{name}:`") }
+    }
 }
 
 /// The option names `cimport` accepts.
@@ -61,6 +82,7 @@ pub fn spec(c: &ast::Cimport, dir: &Path, diags: &mut Vec<Diagnostic>) -> Option
         link_flags: Vec::new(),
         pkg_config: Vec::new(),
         include_dirs: Vec::new(),
+        command_line: false,
     };
     let errors_before = diags.len();
     let mut seen = HashSet::new();
@@ -262,15 +284,20 @@ struct PkgFlags {
     libs: Vec<String>,
 }
 
-/// Runs `pkg-config` for each package, or explains why it failed.
-fn pkg_config(packages: &[(String, Span)]) -> Result<PkgFlags, Diagnostic> {
+/// Runs `pkg-config` for each package of `spec`, or explains why it failed.
+fn pkg_config(spec: &Spec) -> Result<PkgFlags, Diagnostic> {
     let mut flags = PkgFlags::default();
-    for (package, span) in packages {
+    for (package, span) in &spec.pkg_config {
         for (flag, out) in [("--cflags", &mut flags.cflags), ("--libs", &mut flags.libs)] {
             let output = Command::new("pkg-config").arg(flag).arg(package).output().map_err(|e| {
+                let instead = if spec.command_line {
+                    "add its headers' directory with `-include-dir:` instead".to_string()
+                } else {
+                    format!("list the library with `link:` and its headers with {}", spec.option("include_dirs"))
+                };
                 Diagnostic::error(codes::CIMPORT_FAILED, format!("cannot run `pkg-config` for `{package}`: {e}"))
                     .primary(*span, "needs pkg-config")
-                    .help("install pkg-config (for example `brew install pkg-config`), or list the library with `link:` and its headers with `include_dirs:`")
+                    .help(format!("install pkg-config (for example `brew install pkg-config`), or {instead}"))
             })?;
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -318,7 +345,7 @@ pub fn import(
     } else {
         (Header::Include(spec.header.clone()), format!("<{}>", spec.header))
     };
-    let pkg = pkg_config(&spec.pkg_config).map_err(|d| vec![d])?;
+    let pkg = pkg_config(spec).map_err(|d| vec![d])?;
     let mut request = ImportRequest::new(header);
     request.include_dirs = spec.include_dirs.clone();
     request.defines = spec.defines.clone();
@@ -377,14 +404,25 @@ fn import_error(error: ImportError, spec: &Spec, sources: &mut SourceMap) -> Dia
                 .help("install a newer LLVM and point LIBCLANG_PATH at it")
         }
         ImportError::HeaderNotFound { header, include_dirs } => {
+            // `wid cimport --dump` looks for the header from the current
+            // directory, and takes flags rather than options.
+            let (place, dir, searched) = if spec.command_line {
+                ("not in the current directory or on the include path", "the current directory", "-include-dir")
+            } else {
+                ("not next to the package's files or on the include path", "the package directory", "include_dirs")
+            };
             let mut diag = Diagnostic::error(codes::CIMPORT_FAILED, format!("header `{}` not found", spec.header))
-                .primary(at, "not next to the package's files or on the include path");
+                .primary(at, place);
             if !include_dirs.is_empty() {
                 let list: Vec<String> = include_dirs.iter().map(|p| p.display().to_string()).collect();
-                diag = diag.note(format!("include_dirs: {}", list.join(", ")));
+                diag = diag.note(format!("{searched}: {}", list.join(", ")));
             }
             let _ = header;
-            diag.help("write the path relative to the package directory, add its directory with `include_dirs:`, or name the library with `pkg_config:`")
+            diag.help(format!(
+                "write the path relative to {dir}, add its directory with {}, or name the library with {}",
+                spec.option("include_dirs"),
+                spec.option("pkg_config")
+            ))
         }
         ImportError::Parse { errors } => {
             let mut diag = Diagnostic::error(codes::CIMPORT_FAILED, format!("`{}` has C errors", spec.header)).primary(
@@ -415,14 +453,18 @@ fn import_error(error: ImportError, spec: &Spec, sources: &mut SourceMap) -> Dia
             if errors.len() > 8 {
                 diag = diag.note(format!("and {} more", errors.len() - 8));
             }
-            diag.help("fix the header, or set the macros it expects with `define:`")
+            diag.help(format!("fix the header, or set the macros it expects with {}", spec.option("define")))
         }
         ImportError::Clang { code } => Diagnostic::error(
             codes::CIMPORT_FAILED,
             format!("libclang failed to parse `{}` (error {code:?})", spec.header),
         )
         .primary(at, "this header")
-        .help("check that the file is a C header, and that libclang works with `wid cimport --dump`"),
+        .help(if spec.command_line {
+            "check that the file is a C header"
+        } else {
+            "check that the file is a C header, and that libclang works with `wid cimport --dump`"
+        }),
     }
 }
 
