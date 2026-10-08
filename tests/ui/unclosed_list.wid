@@ -1,0 +1,20 @@
+# An argument list, array, index or `{ }` block left open at the end of
+# its line, or a line that ends with an operator, when the next line
+# doesn't continue it: one error at the end of the line, with a fix that
+# closes the list, and the next line (here a declaration or an `end`) is
+# parsed on its own, so `main` is still found.
+def add(a: Int, b: Int) -> Int = a + b
+SIZE = size_of(Int
+PRIMES = [2, 3, 5
+TOTAL = 1 +
+def main
+  x = add(1, 2
+  p x, PRIMES[1
+  # A line indented under the list is its next item, with a missing `,`.
+  y = add(
+    1
+    2
+  )
+  p y, SIZE
+  PRIMES.each { |q| p q
+end

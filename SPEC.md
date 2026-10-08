@@ -107,7 +107,14 @@ end
     with `(` and something only a type starts with (`proc`, `distinct`,
     `^`, `[]`, `@[`, …) is a type, and is reported as one when malformed.
   - A line that ends with an operator or `,`, or a next line that starts with
-    `.method`, continues the statement.
+    `.method`, continues the statement. A declaration or an `end` starting
+    the next line never does: `X = 1 +` followed by `def main` is missing
+    its operand. Inside `( )` and `[ ]`, a line end after a complete
+    expression may only lead to a `,` or the closer: anything else on the
+    next line means the bracket was left open at the end of the line (a
+    value indented under the list's first line is read as its next item,
+    with the `,` missing), as does a declaration or an `end` inside a
+    `{ }` block.
   - `x ? a : b` needs spaces around `?`, because `x?` is a predicate name.
     So a `?` written right after a type's name or its closing `)`
     (`Int?`, `rl.Color?`, `Pool(Ball, 64)?`, `(proc(Int) -> Int)?`) ends

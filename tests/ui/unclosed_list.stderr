@@ -1,0 +1,71 @@
+error[E0105]: expected `)` to close the argument list, found end of line
+ --> tests/ui/unclosed_list.wid:7:19
+  |
+7 | SIZE = size_of(Int
+  |                   ^ expected `)`
+  |               - this `(` is never closed
+help: close it
+  | SIZE = size_of(Int)
+  = see `wid explain E0105`
+
+error[E0105]: expected `]` to close the array, found end of line
+ --> tests/ui/unclosed_list.wid:8:18
+  |
+8 | PRIMES = [2, 3, 5
+  |                  ^ expected `]`
+  |          - this `[` is never closed
+help: close it
+  | PRIMES = [2, 3, 5]
+  = see `wid explain E0105`
+
+error[E0105]: expected an expression, found end of line
+ --> tests/ui/unclosed_list.wid:9:12
+  |
+9 | TOTAL = 1 +
+  |            ^ expected an expression
+  |           - the line goes on after this `+`
+help: write the rest of the expression after `+` on this line; a declaration on the next line can't continue it
+  = see `wid explain E0105`
+
+error[E0105]: expected `)` to close the argument list, found end of line
+  --> tests/ui/unclosed_list.wid:11:15
+   |
+11 |   x = add(1, 2
+   |               ^ expected `)`
+   |          - this `(` is never closed
+help: close it
+   |   x = add(1, 2)
+   = see `wid explain E0105`
+
+error[E0105]: expected `]`, found end of line
+  --> tests/ui/unclosed_list.wid:12:16
+   |
+12 |   p x, PRIMES[1
+   |                ^ expected `]`
+   |              - this `[` is never closed
+help: close it
+   |   p x, PRIMES[1]
+   = see `wid explain E0105`
+
+error[E0105]: expected `,` or `)`, found end of line
+  --> tests/ui/unclosed_list.wid:15:6
+   |
+15 |     1
+   |      ^ expected `,`
+16 |     2
+   |     - the next argument starts here
+help: separate the arguments with `,`
+   |     1,
+   = see `wid explain E0105`
+
+error[E0105]: expected `}` to close the block, found end of line
+  --> tests/ui/unclosed_list.wid:19:24
+   |
+19 |   PRIMES.each { |q| p q
+   |                        ^ expected `}`
+   |               - this `{` is never closed
+help: close it
+   |   PRIMES.each { |q| p q }
+   = see `wid explain E0105`
+
+error: could not compile due to 7 errors
