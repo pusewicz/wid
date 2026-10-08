@@ -1,0 +1,70 @@
+error[E0205]: `Hidden` is private to package `geo`
+ --> tests/ui/qualified_generics/main.wid:6:9
+  |
+6 |   p geo.Hidden(Int).new.value
+  |         ^^^^^^ not visible from here
+ ::: tests/ui/qualified_generics/geo/geo.wid:7:16
+  |
+7 | private struct Hidden($T)
+  |                ------ declared `private` here
+help: use a public method of `geo` instead, or remove `private` from the declaration
+  = see `wid explain E0205`
+
+error[E0205]: `Hidden` is private to package `geo`
+ --> tests/ui/qualified_generics/main.wid:7:9
+  |
+7 |   p geo.Hidden(Int).size
+  |         ^^^^^^ not visible from here
+ ::: tests/ui/qualified_generics/geo/geo.wid:7:16
+  |
+7 | private struct Hidden($T)
+  |                ------ declared `private` here
+help: use a public method of `geo` instead, or remove `private` from the declaration
+  = see `wid explain E0205`
+
+error[E0315]: `geo.Box` needs type arguments
+ --> tests/ui/qualified_generics/main.wid:8:5
+  |
+8 |   p geo.Box.new.value
+  |     ^^^^^^^ write it like `geo.Box(T)`
+  = see `wid explain E0315`
+
+error[E0315]: `geo.Either` needs type arguments
+ --> tests/ui/qualified_generics/main.wid:9:5
+  |
+9 |   p geo.Either.size
+  |     ^^^^^^^^^^ write it like `geo.Either(T)`
+  = see `wid explain E0315`
+
+error[E0315]: `Box` takes 1 generic argument, but 2 were given
+  --> tests/ui/qualified_generics/main.wid:10:5
+   |
+10 |   p geo.Box(Int, 3).new
+   |     ^^^^^^^^^^^^^^^ write it like `Box(T)`
+  ::: tests/ui/qualified_generics/geo/geo.wid:1:8
+   |
+ 1 | struct Box($T)
+   |        --- `Box` is declared here
+   = see `wid explain E0315`
+
+error[E0315]: `Box` takes a type for `T`, but `4` is a value
+  --> tests/ui/qualified_generics/main.wid:11:13
+   |
+11 |   p geo.Box(4).new
+   |             ^ expected a type like `F32` or `Vec2`
+  ::: tests/ui/qualified_generics/geo/geo.wid:1:12
+   |
+ 1 | struct Box($T)
+   |            -- `T` is a type parameter
+   = see `wid explain E0315`
+
+error[E0323]: `Box` is a struct, not a value
+  --> tests/ui/qualified_generics/main.wid:12:11
+   |
+12 |   b = geo.Box(Int)
+   |           ^^^ expected a method or constant
+help: `geo.Box(Int)` is a type: build a value of it with `new`
+   |   b = geo.Box(Int).new
+   = see `wid explain E0323`
+
+error: could not compile due to 7 errors

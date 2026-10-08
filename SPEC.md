@@ -172,7 +172,10 @@ end
   data pointer.
 - **Generics:** a `$T` in a parameter introduces a type parameter
   (`def max(a: $T, b: T) -> T`). Generic structs are written
-  `struct Pool($T, $N: Int)` and used as `Pool(Ball, 64)`. A value
+  `struct Pool($T, $N: Int)` and used as `Pool(Ball, 64)`, or as
+  `geo.Pool(Ball, 64)` from another package. An instance is a type like any
+  other: `Pool(Ball, 64).new`, `.size` and `def self.` methods work on it,
+  while `Pool.new` without arguments is an error. A value
   parameter like `$N: Int` takes any constant integer: a literal, a named
   constant (`Pool(Ball, MAX)`), constant arithmetic (`Pool(Ball, MAX * 2)`)
   or a `comptime` result; a name there is a constant unless it names a type.

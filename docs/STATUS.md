@@ -449,6 +449,15 @@ runs the stages; `wid_cli` is the `wid` binary.
   with `(` and a type-only token (`(proc`, `(^`, `([]`, `(distinct`, …)
   commits to the type parse, and an unclosed `(` at the end of a line is
   one E0105 there with a fix that adds the `)`.
+- A generic struct or union of another package works as a receiver:
+  `geo.Box(Int).new`, `geo.Box(Int).size`, its `def self.` methods and
+  `geo.Outcome(Int).align` (it was E0323, a call of the member `Box`). A
+  receiver call goes through the same `generic_instance` as `type_info`
+  and `size_of`, so an unqualified generic union (`Outcome(Int).size`)
+  works too, a private one is E0205, and `geo.Box.new` or `Outcome.size`
+  without arguments is E0315 at the use (`geo.Box.new` compiled, and
+  `Outcome.size` was reported at the declaration). `x = geo.Box(Int)`
+  suggests `geo.Box(Int).new` (#27).
 - Macro syntax: `quote` bodies holding statements and declarations, with
   splices in every expression, type, declaration and name position (`#{x}`,
   `@#{f}`, `:#{s}`), splices outside a `quote` (E0111), variadic

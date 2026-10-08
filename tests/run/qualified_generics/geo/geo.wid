@@ -1,0 +1,16 @@
+struct Box($T)
+  value: T
+
+  def self.of(v: T) -> Box(T) = Box(T).new(v)
+  def get -> T = @value
+end
+
+struct Grid($T, $N: Int)
+  cells: [N]T
+end
+
+struct Failure
+  code: Int
+end
+
+union Outcome($T) = T | Failure
