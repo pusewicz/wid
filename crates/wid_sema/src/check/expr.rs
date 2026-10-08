@@ -395,13 +395,30 @@ impl<'a> Checker<'a> {
             }
         }
         if let ConstValue::Int(i) = v {
-            let (lo, hi) = crate::types::IntTy::Int.range();
-            if i < lo || i > hi {
-                self.report(
-                    Diagnostic::error(codes::CONSTANT_OVERFLOW, format!("`{i}` does not fit in `Int`"))
+            use crate::types::IntTy;
+            let (lo, hi) = IntTy::Int.range();
+            let (_, max) = IntTy::U64.range();
+            let error =
+                |what: &str| Diagnostic::error(codes::CONSTANT_OVERFLOW, format!("`{i}` does not fit in {what}"));
+            let diag = if i > hi && i <= max {
+                Some(
+                    error("`Int`")
                         .primary(span, "too large for a 64-bit integer")
                         .help("give it an unsigned type, like `x: U64 = …`"),
-                );
+                )
+            } else if i > max {
+                Some(error("any integer type").primary(span, "too large for every integer type").help(format!(
+                    "the largest, `U64`, holds values up to {max}; a float type, like `F64`, holds larger ones"
+                )))
+            } else if i < lo {
+                Some(error("any integer type").primary(span, "too small for every integer type").help(format!(
+                    "the widest signed type, `Int`, holds values down to {lo}; a float type, like `F64`, holds smaller ones"
+                )))
+            } else {
+                None
+            };
+            if let Some(diag) = diag {
+                self.report(diag);
             }
         }
         self.default_const(v)
@@ -1166,6 +1183,16 @@ impl<'a> Checker<'a> {
         if unknown {
             let ty = if op.is_comparison() { bool_ty } else { self.types.unknown() };
             return ir::Expr::new(ExprKind::Zero, ty);
+        }
+        // `x << -1`: a constant amount can't be negative. One that isn't
+        // constant panics in `-debug` builds.
+        if matches!(op, ast::BinOp::Shl | ast::BinOp::Shr)
+            && let ExprKind::Int(b) = r.kind
+            && b < 0
+            && self.types.is_int(l.ty)
+        {
+            self.report_negative_shift(op, lspan, rspan, b);
+            return ir::Expr::new(ExprKind::Zero, self.types.unknown());
         }
         let ir_op = match op {
             ast::BinOp::Add => ir::BinaryOp::Add,
@@ -1935,6 +1962,10 @@ impl<'a> Checker<'a> {
             };
         }
         match self.fold_const_for(default, loc, &[], Some(ty)) {
+            // `x: Int = 1 << 70` is named as 2^70 (reported).
+            Some(c) if self.types.is_int(ty) && self.shift_overflows(default, &c, loc, Some(ty)) => {
+                ir::Expr::new(ExprKind::Zero, self.types.unknown())
+            }
             Some(c) => {
                 let v = self.const_with_expected(c, Some(ty), default.span);
                 self.coerce(v, ty, default.span)

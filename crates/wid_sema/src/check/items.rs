@@ -915,6 +915,13 @@ impl<'a> Checker<'a> {
                 let l = self.fold_const_for(lhs, loc, subst, operand)?;
                 let amount = if *op == ast::BinOp::Shl { None } else { operand };
                 let r = self.fold_const_for(rhs, loc, subst, amount)?;
+                if matches!(op, ast::BinOp::Shl | ast::BinOp::Shr)
+                    && let (ConstValue::Int(_), ConstValue::Int(b)) = (&l, &r)
+                    && *b < 0
+                {
+                    self.report_negative_shift(*op, lhs.span, rhs.span, *b);
+                    return Some(ConstValue::Int(0));
+                }
                 if *op == ast::BinOp::Shl
                     && let (ConstValue::Int(a), ConstValue::Int(b)) = (&l, &r)
                     && shift_value(*a, *b) == Some(None)
@@ -996,6 +1003,30 @@ impl<'a> Checker<'a> {
         }
         self.report(diag);
         true
+    }
+
+    /// Reports a shift by a constant negative `amount`, the value of the
+    /// operand at `rhs` (E0311), with a fix that shifts the other way, as
+    /// Ruby reads it: `1 << -2` is `1 >> 2`.
+    pub(super) fn report_negative_shift(&mut self, op: ast::BinOp, lhs: Span, rhs: Span, amount: i128) {
+        let other = if op == ast::BinOp::Shl { ">>" } else { "<<" };
+        // `x <<= -1` is fixed as `x >>= 1`.
+        let assign = if self.source_text(Span::new(lhs.file, lhs.end, rhs.start)).contains('=') { "=" } else { "" };
+        let text = self.source_text(lhs.to(rhs));
+        let fixed = format!("{other}{assign} {}", amount.unsigned_abs());
+        self.report(
+            Diagnostic::error(codes::CONSTANT_OVERFLOW, format!("`{text}` shifts by a negative amount"))
+                .primary(rhs, format!("this is {amount}"))
+                .note("a shift amount counts bit positions, so it can't be negative")
+                .suggest(
+                    format!("to shift the other way, write `{fixed}`"),
+                    vec![wid_diagnostics::Edit {
+                        span: Span::new(lhs.file, lhs.end, rhs.end),
+                        replacement: format!(" {fixed}"),
+                    }],
+                    Applicability::MaybeIncorrect,
+                ),
+        );
     }
 
     /// Reports a constant integer operation at `span` whose exact value is

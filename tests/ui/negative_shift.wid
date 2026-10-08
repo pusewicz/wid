@@ -1,0 +1,16 @@
+# A shift by a constant negative amount is E0311, with a fix that shifts
+# the other way. At compile time, a negative amount that isn't constant
+# fails as in a `-debug` build.
+X = 1 << -2
+NEG = -3
+
+def shift(n: Int) -> Int = 1 << n
+
+Y = comptime shift(-1)
+
+def main
+  x = 5
+  p x << -1, 8 >> -1, x << NEG
+  x <<= -1
+  p X, Y, x
+end

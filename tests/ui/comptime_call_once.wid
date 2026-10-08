@@ -1,0 +1,20 @@
+# A method call where a constant is needed is one E0327, with its
+# `comptime` fix, whatever needs the constant.
+def width -> Int = 3
+
+enum E
+  a
+  b = width()
+end
+
+struct Pool($T, $N: Int)
+  items: [N]T
+end
+
+def main
+  ys: [width()]Int = {}
+  m: matrix[width(), 2]F32 = {}
+  pool: Pool(Int, width()) = {}
+  bytes = embed(width())
+  p ys.size, m, pool, bytes, E.b
+end

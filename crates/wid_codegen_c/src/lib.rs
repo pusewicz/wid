@@ -739,7 +739,16 @@ impl<'p> Gen<'p> {
                 }
                 B::Shl | B::Shr => {
                     let name = if op == B::Shl { "shl" } else { "shr" };
-                    return format!("wid_{name}_{s}({}, (uint64_t)({}))", strip_parens(&l), strip_parens(&r));
+                    // `-debug` panics on a negative amount; a constant one
+                    // was an error.
+                    let signed = self.int_kind(rhs.ty).is_some_and(IntTy::signed);
+                    let amount = if self.p.checks.overflow && signed && !matches!(rhs.kind, ExprKind::Int(_)) {
+                        let loc = self.location(span);
+                        format!("wid_shift_amount({}, {loc})", strip_parens(&r))
+                    } else {
+                        format!("(uint64_t)({})", strip_parens(&r))
+                    };
+                    return format!("wid_{name}_{s}({}, {amount})", strip_parens(&l));
                 }
                 B::Add | B::Sub | B::Mul if self.p.checks.overflow => {
                     let name = match op {

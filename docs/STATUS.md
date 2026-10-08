@@ -1209,6 +1209,19 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   the 128-bit limit no longer panics the next one, and a member without a
   value after one that doesn't fit isn't reported again. The interpreter
   holds at most 64-bit values in `i128`, so its arithmetic can't overflow.
+- Constant diagnostics (#114): an untyped integer that doesn't fit in `Int`
+  suggests `U64` only when `U64` holds it, and otherwise says no integer
+  type does, naming the widest (`Checker::const_with_expected`). A method
+  call where a constant is needed (an enum value, an array length, matrix
+  dimensions, a generic argument, `embed`'s path) is one E0327 with its
+  `comptime` fix: the callers of `eval_const` compare error counts and stay
+  quiet when evaluating reported. A shift by a constant negative amount is
+  E0311 (`Checker::report_negative_shift`, from the folder and from
+  `binary_values` for `x << -1`), with a fix that shifts the other way; a
+  run-time one panics in `-debug` builds (`wid_shift_amount`, which the
+  emitter calls for a signed amount that isn't a literal) and in the
+  interpreter, and otherwise shifts every bit out. A parameter's default
+  `1 << 70` is named as 2^70 like other constants.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),

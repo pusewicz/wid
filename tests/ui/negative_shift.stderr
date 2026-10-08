@@ -1,0 +1,62 @@
+error[E0311]: `1 << -2` shifts by a negative amount
+ --> tests/ui/negative_shift.wid:4:10
+  |
+4 | X = 1 << -2
+  |          ^^ this is -2
+  = note: a shift amount counts bit positions, so it can't be negative
+help: to shift the other way, write `>> 2`
+  | X = 1 >> 2
+  = see `wid explain E0311`
+
+error[E0901]: `comptime` code failed: shift by a negative amount: -1
+ --> tests/ui/negative_shift.wid:7:28
+  |
+7 | def shift(n: Int) -> Int = 1 << n
+  |                            ^^^^^^ failed here
+...
+9 | Y = comptime shift(-1)
+  |     ------------------ while running this at compile time
+  = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+  = see `wid explain E0901`
+
+error[E0311]: `x << -1` shifts by a negative amount
+  --> tests/ui/negative_shift.wid:13:10
+   |
+13 |   p x << -1, 8 >> -1, x << NEG
+   |          ^^ this is -1
+   = note: a shift amount counts bit positions, so it can't be negative
+help: to shift the other way, write `>> 1`
+   |   p x >> 1, 8 >> -1, x << NEG
+   = see `wid explain E0311`
+
+error[E0311]: `8 >> -1` shifts by a negative amount
+  --> tests/ui/negative_shift.wid:13:19
+   |
+13 |   p x << -1, 8 >> -1, x << NEG
+   |                   ^^ this is -1
+   = note: a shift amount counts bit positions, so it can't be negative
+help: to shift the other way, write `<< 1`
+   |   p x << -1, 8 << 1, x << NEG
+   = see `wid explain E0311`
+
+error[E0311]: `x << NEG` shifts by a negative amount
+  --> tests/ui/negative_shift.wid:13:28
+   |
+13 |   p x << -1, 8 >> -1, x << NEG
+   |                            ^^^ this is -3
+   = note: a shift amount counts bit positions, so it can't be negative
+help: to shift the other way, write `>> 3`
+   |   p x << -1, 8 >> -1, x >> 3
+   = see `wid explain E0311`
+
+error[E0311]: `x <<= -1` shifts by a negative amount
+  --> tests/ui/negative_shift.wid:14:9
+   |
+14 |   x <<= -1
+   |         ^^ this is -1
+   = note: a shift amount counts bit positions, so it can't be negative
+help: to shift the other way, write `>>= 1`
+   |   x >>= 1
+   = see `wid explain E0311`
+
+error: could not compile due to 6 errors

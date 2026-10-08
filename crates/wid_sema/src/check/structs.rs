@@ -278,9 +278,12 @@ impl<'a> Checker<'a> {
         // value isn't reported again.
         let mut prev_fits = true;
         for m in &e.members {
+            let errors = self.diags.error_count();
             let value = match &m.value {
                 Some(v) => match self.eval_const(v, d.loc) {
                     Some(ConstValue::Int(i)) => i,
+                    // Evaluating it reported why, like a call without `comptime`.
+                    None if self.diags.error_count() > errors => next,
                     _ => {
                         self.report(
                             Diagnostic::error(codes::COMPTIME_ONLY, "enum values must be constant integers")
