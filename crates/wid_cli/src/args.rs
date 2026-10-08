@@ -212,6 +212,9 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
             "-include-dir" => parsed.include_dirs.push(PathBuf::from(need("path")?)),
             "-pkg-config" => parsed.pkg_config.push(need("raylib")?),
             _ => {
+                if parsed.command == Command::Query && name == "-json" {
+                    return Err("`wid query` always prints JSON; drop `-json`".to_string());
+                }
                 if let Some((_, owner)) = COMMAND_FLAGS.iter().find(|(flag, _)| *flag == name) {
                     return Err(format!("`{name}` only applies to `wid {owner}`"));
                 }
