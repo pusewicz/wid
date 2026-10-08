@@ -1,0 +1,18 @@
+# Two macros that call each other reach the nesting limit (E0903). The
+# human output lists the first few calls and the outermost one, and says
+# how many it leaves out.
+macro def ping(n: Code) -> Code
+  quote do
+    pong(#{n})
+  end
+end
+
+macro def pong(n: Code) -> Code
+  quote do
+    ping(#{n})
+  end
+end
+
+def main
+  p ping(1)
+end

@@ -939,6 +939,11 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   E0203 for it any more). `Checker::explain_macro_name`, called by
   `undefined_near`, finds the macro through `Expansion::decl` and the
   hidden variable by its mark (`hidden_var`).
+- The human renderer shortens a list of more than six macro calls behind
+  an error to the first three and the outermost, with a line like "...
+  60 more expansions of `ping` and `pong`" (#79; macros calling each
+  other to the nesting limit printed all 64 calls, 266 lines). JSON keeps
+  every call. `render::shorten_frames`.
 - A proc parameter whose name a macro splices (`->(#{v}: Int) -> Int {
   #{v} * 2 }`), in a method body or a generated `def`, is the caller's
   name, as a block parameter's is: the proc's body and code spliced from

@@ -738,7 +738,9 @@ end
     at each macro call that led to it, innermost first, in the human and
     JSON output alike: the human output adds a `:::` snippet per call
     (`` `m` expands here ``, with nested calls of a macro from one place
-    counted), and each JSON diagnostic has an `expansions` list (the
+    counted; more than six are shortened to the first three and the
+    outermost, with a line counting the rest and naming their macros),
+    and each JSON diagnostic has an `expansions` list of every call (the
     `macro` name and the call's position). Code spliced from the call site
     keeps its own position, and an error in it also points at the splice
     in the `quote` where it landed and at the calls behind that. A name the
