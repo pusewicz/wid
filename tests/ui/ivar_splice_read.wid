@@ -1,0 +1,42 @@
+# Errors in `@#{name}` a macro generated, read or assigned without
+# arguments, point at the name the call gave, with the splice in the
+# `quote` and the call. A misspelled field is fixed at the call; the fix
+# for a method keeps the splice.
+macro def read(name: Symbol) -> Code
+  quote do
+    def get -> Int = @#{name}
+  end
+end
+
+macro def zero(name: Symbol) -> Code
+  quote do
+    def clear
+      @#{name} = 0
+    end
+  end
+end
+
+struct P
+  hp: Int = 1
+  def heal -> Int = 2
+  read :hpp
+end
+
+struct Q
+  hp: Int = 1
+  def heal -> Int = 2
+  read :heal
+end
+
+struct R
+  hp: Int = 1
+  zero :hq
+end
+
+def main
+  p P.new.get
+  p Q.new.get
+  r = R.new
+  r.clear
+  p r.hp
+end

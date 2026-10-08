@@ -1,0 +1,52 @@
+error[E0204]: `P` has no field `hpp`
+  --> tests/ui/ivar_splice_read.wid:22:9
+   |
+22 |   read :hpp
+   |         ^^^ not found on `P`
+  ::: tests/ui/ivar_splice_read.wid:7:22
+   |
+ 7 |     def get -> Int = @#{name}
+   |                      -------- `hpp` is spliced here by `read`
+  ::: tests/ui/ivar_splice_read.wid:22:3
+   |
+22 |   read :hpp
+   |   --------- `read` expands here
+help: did you mean `hp`?
+   |   read :hp
+   = see `wid explain E0204`
+
+error[E0204]: `@heal` reads a field, but `heal` is a method
+  --> tests/ui/ivar_splice_read.wid:28:9
+   |
+28 |   read :heal
+   |         ^^^^ `Q` has no field `heal`
+  ::: tests/ui/ivar_splice_read.wid:7:22
+   |
+ 7 |     def get -> Int = @#{name}
+   |                      -------- `heal` is spliced here by `read`
+  ::: tests/ui/ivar_splice_read.wid:28:3
+   |
+28 |   read :heal
+   |   ---------- `read` expands here
+   = note: `@name` reads a field of `self`; methods are called by name
+help: call the method: `#{name}`
+   |     def get -> Int = #{name}
+   = see `wid explain E0204`
+
+error[E0204]: `R` has no field `hq`
+  --> tests/ui/ivar_splice_read.wid:33:9
+   |
+33 |   zero :hq
+   |         ^^ not found on `R`
+  ::: tests/ui/ivar_splice_read.wid:14:7
+   |
+14 |       @#{name} = 0
+   |       -------- `hq` is spliced here by `zero`
+  ::: tests/ui/ivar_splice_read.wid:33:3
+   |
+33 |   zero :hq
+   |   -------- `zero` expands here
+   = note: available: hp
+   = see `wid explain E0204`
+
+error: could not compile due to 3 errors

@@ -915,6 +915,14 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   field is fixed at the call (`:hp`). `Checker::splice_site` and
   `name_end` find the splice, which also fixes the `()` fix for a field
   called as `self.#{name}()` (it edited unrelated text).
+- `@#{name}` read or assigned without arguments reports a missing field
+  at the name the macro call gave, with the splice and the call, like
+  `@#{name}(…)` (#95; it pointed at the `quote` with no splice label, and
+  its fix replaced the splice with a literal `@hp`). A misspelled field is
+  fixed at the call (`:hp`); a method's fix keeps the splice (`#{name}`,
+  `MaybeIncorrect`). The splicer records the name's span for each
+  `@#{name}` (`MacroState::ivar_names`), which `Checker::ivar` looks up
+  (`spliced_ivar`).
 - A proc parameter whose name a macro splices (`->(#{v}: Int) -> Int {
   #{v} * 2 }`), in a method body or a generated `def`, is the caller's
   name, as a block parameter's is: the proc's body and code spliced from

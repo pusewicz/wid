@@ -193,6 +193,10 @@ pub(crate) struct MacroState {
     /// The code every expansion spliced in from outside it, by the file of
     /// its span.
     pub splices: HashMap<FileId, Vec<Splice>>,
+    /// For each `@#{name}` an expansion spliced a name into (by the span of
+    /// the `@#{name}`, in the expansion's virtual file), the name's span:
+    /// where the macro call gave it (see [`Checker::spliced_ivar`]).
+    pub ivar_names: HashMap<Span, Span>,
     /// While the last line of an expansion whose call is a statement is
     /// lowered, that line's span: a macro call that is the whole line is a
     /// statement too (see [`Checker::lower_generated`]).
@@ -321,6 +325,14 @@ impl<'a> Checker<'a> {
     pub(super) fn splice_site(&self, name: Span, within: Span) -> Option<Span> {
         let inside = |s: Span| s.file == within.file && within.start <= s.start && s.end <= within.end;
         self.macros.splices.get(&name.file)?.iter().find(|s| s.code == name && inside(s.site)).map(|s| s.site)
+    }
+
+    /// For `@#{name}` at `span` in generated code, the span of the name the
+    /// macro call gave, at the call (see [`MacroState::ivar_names`]).
+    pub(super) fn spliced_ivar(&self, span: Span) -> Option<Span> {
+        // Written code has none.
+        span.file.expansion_index()?;
+        self.macros.ivar_names.get(&span).copied()
     }
 
     /// Where the name at `name` ends in the code of `call`, the call it
@@ -977,9 +989,10 @@ impl<'a> Checker<'a> {
             errors: Vec::new(),
             splices: Vec::new(),
             bad_names: HashSet::new(),
+            ivars: Vec::new(),
         };
         let stmts = ex.code(result, None);
-        let (errors, splices) = (ex.errors, ex.splices);
+        let (errors, splices, ivars) = (ex.errors, ex.splices, ex.ivars);
         self.register_virtual_files(first_file);
         let failed = !errors.is_empty();
         for diag in errors {
@@ -991,6 +1004,7 @@ impl<'a> Checker<'a> {
         for splice in splices {
             self.macros.splices.entry(splice.code.file).or_default().push(splice);
         }
+        self.macros.ivar_names.extend(ivars);
         Some(stmts)
     }
 
@@ -1392,6 +1406,8 @@ struct Expander<'x> {
     /// Names from `Symbol`s reported as not fitting where they were
     /// spliced, so each is reported once.
     bad_names: HashSet<Name>,
+    /// Each `@#{name}` spliced so far: its span and the name's.
+    ivars: Vec<(Span, Span)>,
 }
 
 impl Expander<'_> {
@@ -2376,7 +2392,14 @@ impl VisitMut for Splicer<'_, '_> {
                 }
                 let place = if matches!(e.kind, E::IVar(_)) { NamePlace::Field } else { NamePlace::Expr };
                 match (self.name_for(i, span, place), &e.kind) {
-                    (Some(name), E::IVar(_)) => e.kind = E::IVar(name),
+                    // `@#{name}` keeps the splice's span, the whole `@…`;
+                    // the name's own span, where the call gave it, is found
+                    // from there (`MacroState::ivar_names`).
+                    (Some(name), E::IVar(_)) => {
+                        let at = self.name_span(name, span);
+                        self.ex.ivars.push((span, at));
+                        e.kind = E::IVar(name);
+                    }
                     (Some(name), _) => *e = name_expr(name, self.name_span(name, span)),
                     (None, _) => e.kind = E::Error,
                 }

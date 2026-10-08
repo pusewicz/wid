@@ -110,9 +110,15 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Lowers `@name`.
+    /// Lowers `@name`. For `@#{name}` in generated code, a missing name is
+    /// reported where the macro call gave it, and fixes to the code keep
+    /// the splice.
     pub fn ivar(&mut self, name: Name, span: Span) -> ir::Expr {
-        match self.ivar_owner(name, span, IvarUse::default()) {
+        let (span, written) = match self.spliced_ivar(span) {
+            Some(at) => (at, IvarUse { site: Some(span), ..IvarUse::default() }),
+            None => (span, IvarUse::default()),
+        };
+        match self.ivar_owner(name, span, written) {
             Some((owner, index, ty)) => ir::Expr::new(ExprKind::Field { base: Box::new(owner), index }, ty),
             None => ir::Expr::new(ExprKind::Zero, self.types.unknown()),
         }
