@@ -1132,10 +1132,7 @@ impl<'a> Parser<'a> {
         let doc = self.doc_before(start.start);
         let attrs = self.parse_attrs();
         // `private` and the space after it, for the fix on a field.
-        let private_kw = self.at_kw(K::Private).then(|| {
-            let kw = self.bump().span;
-            (kw, kw.to(self.peek().span.shrink_to_start()))
-        });
+        let private_kw = self.at_kw(K::Private).then(|| self.bump_private());
         let mut private = private_kw.is_some();
         let kind = match self.kind() {
             T::Kw(K::Import) => self.parse_import(),
@@ -1257,8 +1254,60 @@ impl<'a> Parser<'a> {
             self.private_field(kw, removal, f);
             private = false;
         }
+        // `private` hides a declaration by its name; these have none.
+        if let Some((kw, removal)) = private_kw
+            && let Some((what, why)) = nameless_item(&kind)
+        {
+            self.report(
+                Diagnostic::error(codes::UNEXPECTED_TOKEN, format!("{what} can't be `private`"))
+                    .primary(kw, "`private` has nothing to hide here")
+                    .note(why)
+                    .suggest(
+                        "remove `private`",
+                        vec![Edit { span: removal, replacement: String::new() }],
+                        Applicability::MachineApplicable,
+                    ),
+            );
+            private = false;
+        }
         let span = start.to(self.prev_span());
         Some(Item { kind, span, attrs, private, doc })
+    }
+
+    /// `private` and the space after it, consumed, for a fix that removes
+    /// both.
+    fn bump_private(&mut self) -> (Span, Span) {
+        let kw = self.bump().span;
+        (kw, kw.to(self.peek().span.shrink_to_start()))
+    }
+
+    /// Reports `private` written before a statement (E0105), at `kw` (with
+    /// the space after it, `removal`). The statement after it is parsed as
+    /// if it weren't there.
+    fn private_statement(&mut self, kw: Span, removal: Span) {
+        let (label, note) = if self.quotes.is_empty() {
+            (
+                "this line is a statement",
+                "`private` hides a method outside its type, or a type, constant or macro outside its package; \
+                 a local variable is visible only in its method anyway",
+            )
+        } else {
+            (
+                "this line of the `quote` reads as a statement",
+                "`private` hides a method outside its type, or a type, constant or macro outside its package; \
+                 fields are always public, and a local variable is visible only in its method",
+            )
+        };
+        self.report(
+            Diagnostic::error(codes::UNEXPECTED_TOKEN, "`private` applies only to declarations")
+                .primary(kw, label)
+                .note(note)
+                .suggest(
+                    "remove `private`",
+                    vec![Edit { span: removal, replacement: String::new() }],
+                    Applicability::MachineApplicable,
+                ),
+        );
     }
 
     /// Reports `private` written on a struct field (E0105): fields are
@@ -1960,20 +2009,23 @@ impl<'a> Parser<'a> {
             if matches!(self.kind(), T::Eof | T::SpliceEnd | T::Kw(K::End)) {
                 break;
             }
-            // A splice is a member when a value or another member follows;
-            // standing alone it is an `ItemKind::Splice`. `struct`, `enum`
-            // and `union` standing alone are members (`TypeKind.struct`).
-            let member = match self.name_len(0) {
-                Some(n) if self.at(T::Ident) => {
-                    matches!(self.nth(n).kind, T::Newline | T::Eq | T::Comma | T::Kw(K::End))
-                }
-                Some(n) => matches!(self.nth(n).kind, T::Eq | T::Comma),
-                None => {
-                    is_keyword_member(self.kind())
-                        && matches!(self.nth(1).kind, T::Newline | T::Eq | T::Comma | T::Kw(K::End))
-                }
-            };
-            if member {
+            // Members are always public, like fields.
+            if self.at_kw(K::Private) && (self.enum_member_at(1) || self.upper_member_at(1)) {
+                let (kw, removal) = self.bump_private();
+                self.report(
+                    Diagnostic::error(codes::UNEXPECTED_TOKEN, "an enum member can't be `private`")
+                        .primary(kw, "enum members are always public")
+                        .note(
+                            "any code that can name the enum can select its members; `private` applies to methods and other declarations",
+                        )
+                        .suggest(
+                            "remove `private`",
+                            vec![Edit { span: removal, replacement: String::new() }],
+                            Applicability::MachineApplicable,
+                        ),
+                );
+            }
+            if self.enum_member_at(0) {
                 loop {
                     let member = self.parse_enum_member();
                     let value = if self.eat(T::Eq) { Some(self.parse_expr()) } else { None };
@@ -1983,7 +2035,7 @@ impl<'a> Parser<'a> {
                     }
                     self.skip_newlines();
                 }
-            } else if self.at(T::Const) && matches!(self.nth(1).kind, T::Newline | T::Comma | T::Kw(K::End)) {
+            } else if self.upper_member_at(0) {
                 let tok = self.bump();
                 let text = self.text_of(tok.span);
                 let lower = to_snake_case(text);
@@ -2006,6 +2058,29 @@ impl<'a> Parser<'a> {
         }
         self.expect_end();
         ItemKind::Enum(Box::new(EnumDecl { name, backing, members, body }))
+    }
+
+    /// Whether the token `n` ahead starts an enum member. A splice is a
+    /// member when a value or another member follows; standing alone it is
+    /// an `ItemKind::Splice`. `struct`, `enum` and `union` standing alone
+    /// are members (`TypeKind.struct`).
+    fn enum_member_at(&self, n: usize) -> bool {
+        match self.name_len(n) {
+            Some(len) if self.nth(n).kind == T::Ident => {
+                matches!(self.nth(n + len).kind, T::Newline | T::Eq | T::Comma | T::Kw(K::End))
+            }
+            Some(len) => matches!(self.nth(n + len).kind, T::Eq | T::Comma),
+            None => {
+                is_keyword_member(self.nth(n).kind)
+                    && matches!(self.nth(n + 1).kind, T::Newline | T::Eq | T::Comma | T::Kw(K::End))
+            }
+        }
+    }
+
+    /// Whether the token `n` ahead is an uppercase name standing as an enum
+    /// member, which is reported.
+    fn upper_member_at(&self, n: usize) -> bool {
+        self.nth(n).kind == T::Const && matches!(self.nth(n + 1).kind, T::Newline | T::Comma | T::Kw(K::End))
     }
 
     /// An enum member's name: an identifier, a splice, or `struct`, `enum`
@@ -2549,6 +2624,16 @@ impl<'a> Parser<'a> {
 
     fn parse_stmt(&mut self) -> Stmt {
         let attrs = self.parse_attrs();
+        let decl_kw = |kind| {
+            matches!(
+                kind,
+                T::Kw(K::Def | K::Struct | K::Enum | K::Union | K::Module | K::Extend | K::Overload | K::Macro)
+            )
+        };
+        if self.at_kw(K::Private) && !decl_kw(self.nth(1).kind) {
+            let (kw, removal) = self.bump_private();
+            self.private_statement(kw, removal);
+        }
         let start = self.peek().span;
         let kind = match self.kind() {
             T::Kw(K::Return) => {
@@ -2577,7 +2662,7 @@ impl<'a> Parser<'a> {
                 }
             }
             T::Kw(K::Guard) => self.parse_guard(),
-            T::Kw(K::Def | K::Struct | K::Enum | K::Union | K::Module | K::Extend | K::Overload | K::Macro) => {
+            kind if decl_kw(kind) || kind == T::Kw(K::Private) => {
                 let item = self.parse_item(ItemCtx::Struct);
                 match item {
                     Some(item) => StmtKind::Item(Box::new(item)),
@@ -4077,6 +4162,33 @@ fn is_keyword_member(kind: TokenKind) -> bool {
     matches!(kind, T::Kw(Keyword::Struct | Keyword::Enum | Keyword::Union))
 }
 
+/// For a declaration-level line that declares no name `private` could
+/// hide, what it is and why `private` means nothing there.
+fn nameless_item(kind: &ItemKind) -> Option<(&'static str, &'static str)> {
+    Some(match kind {
+        ItemKind::Include(_) => (
+            "an `include`",
+            "`include` mixes a module's methods into this type; the ones the module declares with `private def` stay private",
+        ),
+        ItemKind::Import(_) => {
+            ("an `import`", "an import is visible only in the file that writes it, never in other packages")
+        }
+        ItemKind::Cimport(_) => (
+            "a `cimport`",
+            "with `as:`, the C declarations are visible only in this file; without it, they join this package's own declarations, which other packages see",
+        ),
+        ItemKind::Extend(_) => (
+            "an `extend`",
+            "`extend` adds methods to a type declared elsewhere; write `private def` on the ones to hide",
+        ),
+        ItemKind::ComptimeIf(_) => {
+            ("a `comptime if`", "write `private` on the declarations in its branches that should be hidden")
+        }
+        ItemKind::Splice(_) => ("a splice", "write `private` on the declarations in the code that is spliced in"),
+        _ => return None,
+    })
+}
+
 fn to_snake_case(text: &str) -> String {
     let mut out = String::new();
     let mut prev: Option<char> = None;
@@ -4450,6 +4562,87 @@ end
             ["E0105"]
         );
         assert!(codes_of("module M\n  private hp: Int\nend\n").is_empty());
+    }
+
+    /// The messages of the diagnostics for `src`, and `src` with the edits
+    /// of every first fix applied.
+    fn fix_all(src: &str) -> (Vec<String>, String) {
+        let (_, diags) = parse_file(FileId(0), src);
+        let mut edits: Vec<_> = diags
+            .iter()
+            .filter_map(|d| d.helps.first())
+            .filter(|h| h.applicability == Applicability::MachineApplicable)
+            .flat_map(|h| h.edits.iter())
+            .map(|e| (e.span.start as usize, e.span.end as usize, e.replacement.clone()))
+            .collect();
+        edits.sort_by_key(|e| std::cmp::Reverse(e.0));
+        let mut fixed = src.to_string();
+        for (start, end, replacement) in edits {
+            fixed.replace_range(start..end, &replacement);
+        }
+        (diags.iter().map(|d| d.message.clone()).collect(), fixed)
+    }
+
+    #[test]
+    fn private_where_it_does_not_apply() {
+        // Before a declaration without a name of its own: one error each,
+        // whose fix removes `private `.
+        let src = "private import \"core:strings\"\nprivate cimport \"a.h\", as: :a\n\
+                   struct Hero\n  private include M\nend\n\
+                   private extend Hero\n  def heal -> Int = 1\nend\n\
+                   private comptime if true\n  def f -> Int = 1\nend\n";
+        let (messages, fixed) = fix_all(src);
+        assert_eq!(
+            messages,
+            [
+                "an `import` can't be `private`",
+                "a `cimport` can't be `private`",
+                "an `include` can't be `private`",
+                "an `extend` can't be `private`",
+                "a `comptime if` can't be `private`",
+            ]
+        );
+        assert_eq!(fixed, src.replace("private ", ""));
+        let (file, _) = parse_file(FileId(0), src);
+        assert!(file.items.iter().all(|item| !item.private));
+        // A splice standing alone among declarations, in a `quote`.
+        let (messages, _) =
+            fix_all("macro def m -> Code\n  quote do\n    struct S\n      private #{x}\n    end\n  end\nend\n");
+        assert_eq!(messages, ["a splice can't be `private`"]);
+        // Declarations and macro calls keep it, without an error.
+        assert!(
+            codes_of("private def f -> Int = 1\nprivate X = 1\nprivate struct S\nend\nprivate make :x\n").is_empty()
+        );
+
+        // An enum member is parsed as one, after the error.
+        let src = "enum E\n  private a\n  private b = 2, c\n  private struct\n  private helpers()\nend\n";
+        let (messages, fixed) = fix_all(src);
+        assert_eq!(messages, ["an enum member can't be `private`"; 3]);
+        assert_eq!(fixed, src.replacen("private ", "", 3));
+        let (file, _) = parse_file(FileId(0), src);
+        let ItemKind::Enum(e) = &file.items[0].kind else { panic!() };
+        let names: Vec<_> = e.members.iter().map(|m| m.name.as_str()).collect();
+        assert_eq!(names, ["a", "b", "c", "struct"]);
+        // `private` before a macro call in an enum body is the call's.
+        assert!(matches!(e.body[0].kind, ItemKind::MacroCall(_)) && e.body[0].private);
+
+        // A statement is parsed as if `private` weren't there, so `x` is
+        // declared and nothing cascades.
+        let src = "def main\n  private x = 1\n  p x\nend\n";
+        let (messages, fixed) = fix_all(src);
+        assert_eq!(messages, ["`private` applies only to declarations"]);
+        assert_eq!(fixed, "def main\n  x = 1\n  p x\nend\n");
+        let (messages, fixed) = fix_all("macro def m -> Code\n  quote do\n    private hp: Int\n  end\nend\n");
+        assert_eq!(messages, ["`private` applies only to declarations"]);
+        assert_eq!(fixed, "macro def m -> Code\n  quote do\n    hp: Int\n  end\nend\n");
+        // A declaration in a method keeps it; nesting is the checker's error.
+        assert!(codes_of("def main\n  private def f -> Int = 1\nend\n").is_empty());
+    }
+
+    #[test]
+    fn keywords_are_quoted_in_messages() {
+        let (messages, _) = fix_all("def main\n  x = def\nend\n");
+        assert_eq!(messages, ["expected an expression, found `def`"]);
     }
 
     #[test]

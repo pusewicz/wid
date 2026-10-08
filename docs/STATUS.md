@@ -42,7 +42,12 @@ runs the stages; `wid_cli` is the `wid` binary.
   method's owner). Fields are always public: `private` on a field in a
   struct body (a `using` one, or one inside a `quote`'s struct, too) is
   E0105 from the parser (`Parser::private_field`), with a fix that removes
-  it; the field is kept, and the item's `private` flag cleared.
+  it; the field is kept, and the item's `private` flag cleared. The parser
+  reports `private` the same way wherever else it hides nothing: before an
+  `import`, `cimport`, `include`, `extend`, `comptime if` or a splice
+  standing alone (`nameless_item`), an enum member, or a statement
+  (`Parser::private_statement`); what follows is parsed as if it weren't
+  there.
 - Overload resolution works on lowered argument values
   (`call_with_values`), so compound assignments and `[]=` reuse it without
   re-evaluating operands. Module and generic-struct members of a set are
@@ -415,6 +420,13 @@ runs the stages; `wid_cli` is the `wid` binary.
   only `MaybeIncorrect`.
 - `private` on a struct field is E0105 (fields are always public), once per
   field, with a machine-applicable fix that removes it (#9).
+- `private` where it hides nothing is one E0105 with a machine-applicable
+  fix that removes it (#28): before an `import`, `cimport`, `include`,
+  `extend`, `comptime if` or a splice among declarations (which ignored it),
+  before an enum member (which became an undefined macro call), and before
+  a statement in a method or a `quote` (which cascaded; the line is now
+  parsed as if `private` weren't there, so `private x = 1` declares `x`).
+  Keywords in parser messages are in backticks (`found `end``).
 - Any type written where a `Type` is expected, or in `comptime` code, is a
   `Type` value: constructors (`name_of([]Int)`, `name_of(Int?)`,
   `name_of(^Node)`, `name_of((proc(Int) -> Int)?)`), generic instances and

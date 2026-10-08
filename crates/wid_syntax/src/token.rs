@@ -138,6 +138,51 @@ impl Keyword {
             Keyword::Private => "private",
         }
     }
+
+    /// Returns the keyword in backticks, as diagnostics quote code.
+    pub fn quoted(self) -> &'static str {
+        match self {
+            Keyword::Def => "`def`",
+            Keyword::End => "`end`",
+            Keyword::If => "`if`",
+            Keyword::Unless => "`unless`",
+            Keyword::Elsif => "`elsif`",
+            Keyword::Else => "`else`",
+            Keyword::Then => "`then`",
+            Keyword::While => "`while`",
+            Keyword::Until => "`until`",
+            Keyword::For => "`for`",
+            Keyword::In => "`in`",
+            Keyword::Do => "`do`",
+            Keyword::Loop => "`loop`",
+            Keyword::Return => "`return`",
+            Keyword::Break => "`break`",
+            Keyword::Next => "`next`",
+            Keyword::Yield => "`yield`",
+            Keyword::Struct => "`struct`",
+            Keyword::Enum => "`enum`",
+            Keyword::Union => "`union`",
+            Keyword::Module => "`module`",
+            Keyword::Include => "`include`",
+            Keyword::Extend => "`extend`",
+            Keyword::Using => "`using`",
+            Keyword::Import => "`import`",
+            Keyword::Cimport => "`cimport`",
+            Keyword::Guard => "`guard`",
+            Keyword::Case => "`case`",
+            Keyword::When => "`when`",
+            Keyword::Defer => "`defer`",
+            Keyword::Nil => "`nil`",
+            Keyword::True => "`true`",
+            Keyword::False => "`false`",
+            Keyword::SelfKw => "`self`",
+            Keyword::Comptime => "`comptime`",
+            Keyword::Macro => "`macro`",
+            Keyword::Quote => "`quote`",
+            Keyword::Overload => "`overload`",
+            Keyword::Private => "`private`",
+        }
+    }
 }
 
 /// The kind of a token. Literal payloads live in side tables or the source.
@@ -253,7 +298,7 @@ impl TokenKind {
             Const => "constant",
             IVar => "field reference",
             TypeParam => "type parameter",
-            Kw(k) => k.as_str(),
+            Kw(k) => k.quoted(),
             LParen => "`(`",
             RParen => "`)`",
             LBracket => "`[`",
