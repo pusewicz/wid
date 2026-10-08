@@ -67,8 +67,11 @@ what is implemented, which conventions are fixed and what comes next.
   `WID_TEST_CC=clang,gcc-16`.
 - Lint: `cargo clippy --all-targets -- -D warnings`
 - Format: `cargo fmt --check`
+- MSRV: `cargo +1.88 check --workspace --all-targets --locked` (CI checks the
+  `rust-version` in `Cargo.toml`; install it with
+  `rustup toolchain install 1.88 --profile minimal`)
 - Error docs: `cargo build && ruby scripts/errdocs_drift.rb` after any
-  diagnostic change (E0902 fails until macros land).
+  diagnostic change.
 
 ## Workflow
 
@@ -76,8 +79,8 @@ what is implemented, which conventions are fixed and what comes next.
   stacked GitHub PRs. The orchestrating session follows
   `docs/ORCHESTRATOR.md`; a subagent works only in its own worktree, commits
   there with `git commit -m`, and never pushes unless told to.
-- Every PR passes the full gate (fmt, clippy, `cargo test` with every
-  available C compiler) and updates `docs/STATUS.md`.
+- Every PR passes the full gate (fmt, clippy, the MSRV check, `cargo test`
+  with every available C compiler) and updates `docs/STATUS.md`.
 - File a GitHub issue for every problem you find that the current task doesn't
   fix: a bug, a poor diagnostic, a flaky test, missing docs. Subagents file
   them directly with `gh issue create`; this is the one outward-facing action
@@ -122,7 +125,8 @@ parser and checker recover and report every error, never just the first one.
 ## Rust conventions
 
 - Use the stable toolchain and edition 2024. Format with the repo's
-  `rustfmt.toml`.
+  `rustfmt.toml`. Code must also build on the MSRV (Rust 1.88): no `if let`
+  match guards (`Pat if let Some(x) = … =>`); let chains are fine.
 - User errors are diagnostics, never panics. Don't call `unwrap()` in compiler
   code; use `expect("invariant: …")` only for true invariants.
 - Compiler stages are pure functions of their inputs, so `wid check`,
