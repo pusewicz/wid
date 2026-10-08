@@ -865,7 +865,9 @@ end
   libraries, through pkg-config) and the vendored `stb/image`,
   `stb/image_write`, `stb/truetype`, `stb/rect_pack` and `miniaudio`. `core:` holds
   `builtin` (the prelude), `mem`, `fmt`, `strings`, `os`, `math`, `c` and
-  `testing`.
+  `testing`. Each opens the file named after it with its package doc, and
+  documents every public declaration, so `wid doc core:<pkg>` has a summary
+  for each.
 - The CLI follows Odin. Commands: `wid run <dir> [-- args]`, `build`, `check`,
   `test`, `doc`, `fmt`, `explain`, `cimport`, `query`, `lsp` and `version`. Flags:
   `-out:`, `-o:none|minimal|size|speed|aggressive`, `-debug`, `-vet`,

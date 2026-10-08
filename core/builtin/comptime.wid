@@ -4,37 +4,58 @@
 # Operating systems a program can be compiled for. `OS` holds the target's,
 # so `comptime if OS == :windows` picks code per platform.
 enum Os
+  # macOS and Apple's other systems.
   darwin
+  # Linux.
   linux
+  # Windows.
   windows
+  # FreeBSD.
   freebsd
+  # OpenBSD.
   openbsd
+  # NetBSD.
   netbsd
+  # No operating system, as on bare metal.
   freestanding
 end
 
 # CPU architectures a program can be compiled for. `ARCH` holds the target's.
 enum Arch
+  # 64-bit ARM (AArch64).
   arm64
+  # 64-bit x86 (x86-64).
   amd64
+  # 32-bit x86.
   i386
+  # 32-bit ARM.
   arm32
+  # 64-bit RISC-V.
   riscv64
+  # WebAssembly with 32-bit addresses.
   wasm32
+  # WebAssembly with 64-bit addresses.
   wasm64
 end
 
 # A field of a struct, as `T.fields` describes it while compiling.
 struct FieldInfo
+  # The field's name.
   name: String
+  # The field's type.
   type: Type
+  # Where the field starts, in bytes from the start of the struct.
   offset: Int
 end
 
 # A method of a type, as `T.methods` describes it while compiling.
 struct MethodInfo
+  # The method's name.
   name: String
+  # The types of its parameters, in order.
   params: []Type
+  # The type it returns.
   ret: Type
+  # Whether it is a type-level method, `def self.name`.
   static: Bool
 end

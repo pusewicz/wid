@@ -402,6 +402,12 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   (packages are `-in:tests/doc/shapes` and the like) against `NAME.stdout`
   and `NAME.stderr`; a usage error expects the CLI's two lines on stderr.
   `tests/query/cmerged` is a package with a `cimport` without `as:`.
+- Every `core` package opens the file named after it (`core/mem/mem.wid`,
+  `core/builtin/builtin.wid`) with its package doc, and every public
+  declaration in `core` has a `# ` doc comment directly above it: types,
+  fields, enum members, methods, constants, overload sets and extensions.
+  Other file headers describe their file. `wid_driver/tests/core_docs.rs`
+  checks both.
 
 ## Done
 
@@ -972,6 +978,13 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   dropping `-file`; a missing file offers a similar `.wid` file (`main` for
   `main.wid` too) or lists those there; a directory offers dropping
   `-file`. `Options::command` names the command for the message.
+- `core` docs: `core:builtin` has a package doc describing the prelude
+  (`builtin.wid`), `Arena`, `Pool`, `Tracker` and `Builder` are described
+  above their declarations instead of in file headers, and every public
+  `core` declaration, field and enum member has a doc comment, checked by
+  `wid_driver/tests/core_docs.rs`. `OS` and `ARCH` have a doc each, and the
+  prelude declares them when it is the package itself
+  (`wid doc core:builtin OS`).
 
 ## Next
 

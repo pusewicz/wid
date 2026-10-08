@@ -1,0 +1,10 @@
+# core:builtin: the prelude, whose public names every package sees without
+# an import.
+#
+# It extends slices with `each`, `find`, `sum`, `sort!` and the like (arrays
+# and dynamic arrays use them through a slice), and numbers with `clamp`,
+# `between?`, `abs`, `times` and the like. It declares the target, `OS` and
+# `ARCH`, with their enums `Os` and `Arch`, and the records reflection hands
+# out: `FieldInfo` and `MethodInfo` while compiling, and `TypeInfo` with the
+# records it points to at run time. Builtins the compiler provides itself,
+# such as `puts`, `alloc` and `context`, are described in SPEC.md.

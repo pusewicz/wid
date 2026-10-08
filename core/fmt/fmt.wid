@@ -20,6 +20,7 @@ enum FloatStyle
   general
 end
 
+# The digits of bases up to 36, in order: a digit's value is its index.
 DIGITS = "0123456789abcdefghijklmnopqrstuvwxyz"
 
 # Appends `n` in `base` (2 to 36), padded on the left with `pad` to `width`

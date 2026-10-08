@@ -1,15 +1,25 @@
-# Pool: fixed-size chunks recycled through a free list. Allocations up to the
-# chunk size cost a pointer swap; freeing returns the chunk to the list.
+# The pool allocator, `Pool`, and the free list that links its chunks.
 
 # Bytes reserved at the start of each pool block for the link to the previous
 # block.
 private POOL_HEADER = 16
 
+# A pool of fixed-size chunks recycled through a free list. Allocations up
+# to the chunk size cost a pointer swap; freeing returns the chunk to the
+# list.
 struct Pool
+  # The allocator the blocks of chunks come from.
   backing: Allocator
+  # The size of every chunk, in bytes; `create` rounds it up to a multiple
+  # of 16.
   chunk_size: Int
+  # How many chunks each block from `backing` holds.
   chunks_per_block: Int = 64
+  # The first free chunk, whose start links to the next; nil when every
+  # chunk is in use.
   free_list: RawPtr
+  # The newest block, whose start links to the previous one; nil before the
+  # first.
   blocks: RawPtr
 
   # An empty pool of `chunk_size`-byte chunks, taking `chunks_per_block`

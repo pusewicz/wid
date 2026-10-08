@@ -1,10 +1,14 @@
 # Vectors as small fixed arrays, which already support element-wise math and
 # swizzles (`v.x`, `v.yx`), and an axis-aligned rectangle.
 
+# A 2D vector or point: `v.x`, `v.y`.
 Vec2 = [2]F32
+# A 3D vector or point: `v.x`, `v.y`, `v.z`.
 Vec3 = [3]F32
+# A 4D vector, or an RGBA color: `v.x` … `v.w`, `v.r` … `v.a`.
 Vec4 = [4]F32
 
+# Vector math for 2D vectors, `Vec2`.
 extend [2]F32
   # The vector's length.
   def length -> F32 = sqrt_f32(self.length_squared)
@@ -44,6 +48,7 @@ extend [2]F32
   def lerp(o: [2]F32, t: F32) -> [2]F32 = self + (o - self) * t
 end
 
+# Vector math for 3D vectors, `Vec3`.
 extend [3]F32
   # The vector's length.
   def length -> F32 = sqrt_f32(self.length_squared)
@@ -74,9 +79,13 @@ end
 
 # An axis-aligned rectangle: a corner and a size.
 struct Rect
+  # The left edge.
   x: F32
+  # The top edge.
   y: F32
+  # The width.
   w: F32
+  # The height.
   h: F32
 
   # The top-left corner.

@@ -109,7 +109,14 @@ pub fn load_program(opts: &Options) -> (SourceMap, Option<ProgramInput>, Diagnos
         let files = loader.wid_files(&prelude_dir);
         let canon = prelude_dir.canonicalize().unwrap_or_else(|_| prelude_dir.clone());
         match loader.by_dir.get(&canon) {
-            Some(&id) => Some(id),
+            // The prelude is the package itself (`wid doc core:builtin`),
+            // which declares the target too.
+            Some(&id) => {
+                if !opts.file_mode {
+                    loader.add_target_file(id);
+                }
+                Some(id)
+            }
             None if !files.is_empty() => {
                 let id = loader.add_package("builtin".into(), "core:builtin".into(), prelude_dir, files);
                 loader.add_target_file(id);
@@ -174,7 +181,8 @@ impl Loader<'_> {
     /// Adds the prelude's `OS` and `ARCH` constants for the target.
     fn add_target_file(&mut self, prelude: PackageId) {
         let text = format!(
-            "# The target this program is compiled for, set with `-target:`.\nOS = Os.{}\nARCH = Arch.{}\n",
+            "# The operating system this program is compiled for, set with `-target:`.\nOS = Os.{}\n\
+             # The CPU architecture this program is compiled for, set with `-target:`.\nARCH = Arch.{}\n",
             self.opts.target_os, self.opts.target_arch
         );
         let text: Arc<str> = Arc::from(text);
