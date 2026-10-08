@@ -42,6 +42,7 @@ fn main() -> ExitCode {
         Command::Doc => doc(&parsed),
         Command::Fmt => fmt(&parsed),
         Command::Query => query(&parsed),
+        Command::Lsp => lsp(&parsed),
     }
 }
 
@@ -163,6 +164,25 @@ fn query(parsed: &Parsed) -> ExitCode {
     err(&printed.stderr);
     out(&printed.stdout);
     if printed.success { ExitCode::SUCCESS } else { ExitCode::from(1) }
+}
+
+/// `wid lsp`: the language server, on stdin and stdout, until the client
+/// sends `exit`; the exit status is 0 when it sent `shutdown` first.
+fn lsp(parsed: &Parsed) -> ExitCode {
+    if let Some(target) = &parsed.target {
+        let message = format!(
+            "unexpected argument `{}`; `wid lsp` takes none: an editor starts it and speaks LSP over stdin and stdout",
+            target.display()
+        );
+        err(&format!("{}\nrun `wid help lsp` for usage\n", error_line(&message)));
+        return ExitCode::from(2);
+    }
+    let config = wid_lsp::Config {
+        collections: parsed.collections.clone(),
+        defines: parsed.defines.clone(),
+        target: parsed.target_os_arch.clone(),
+    };
+    ExitCode::from(wid_lsp::run(config).clamp(0, 255) as u8)
 }
 
 fn explain(parsed: &Parsed) -> ExitCode {

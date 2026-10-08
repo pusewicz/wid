@@ -1008,7 +1008,8 @@ end
   `-out:`, `-o:none|minimal|size|speed|aggressive`, `-debug`, `-vet`,
   `-define:NAME=val`, `-collection:name=path`, `-target:os_arch`, `-file`,
   `-sanitize:address`, `-filter:` (for `test`), `-json` and `-private` (for
-  `doc`), `-in:` (for `query`), `-check` (for `fmt`) and `-json-errors`.
+  `doc`), `-in:` (for `query`), `-check` (for `fmt`), `-stdio` (for `lsp`,
+  which ignores it) and `-json-errors`.
   `check` generates no C, so it takes only the flags that change what is
   checked: `-file`, `-define:`, `-target:`, `-collection:` and
   `-json-errors`; the flags for building C (`-out:`, `-o:`, `-debug`,
@@ -1174,9 +1175,10 @@ end
     library that takes a loaded and checked program (the checker's symbol
     index, and where each declaration starts and ends) and returns plain
     data. It never prints or exits. The driver loads and checks the package
-    with one function that a long-lived caller reruns when files change,
-    and the CLI prints the answer. A query never generates code or runs the
-    C compiler.
+    with one function that a long-lived caller reruns when files change
+    (`wid_driver::analyze`, which takes the editor's unsaved buffers as an
+    overlay; see "LSP"), and the CLI prints the answer. A query never
+    generates code or runs the C compiler.
   - The package is the one in `.`, or the one `-in:` names: a directory, a
     `.wid` file with `-file`, or a collection path (`-in:core:fmt`).
     `-collection:`, `-define:` and `-target:` work as for the other
@@ -1272,6 +1274,95 @@ end
     E0605. The exit status is 1 when the request fails or the package has
     errors. A malformed command line, like an unknown query or a missing
     argument, is a usage error (status 2), as for every command.
+- **LSP.** `wid lsp [-collection:…] [-define:…] [-target:…]` is the
+  language server. An editor starts it and speaks LSP (3.17) with it over
+  stdin and stdout; `-stdio`, which some clients pass, is accepted and
+  ignored. It never generates code or runs a C compiler. `docs/editors.md`
+  shows how to set it up.
+  - It is one synchronous loop with no async runtime: a thread reads the
+    messages, and the server handles them one at a time and replies. It is
+    built on the `lsp-types` crate, with its own JSON-RPC framing (by
+    `Content-Length`). A malformed message gets a JSON-RPC error
+    (`ParseError` or `InvalidRequest`, with `id: null` when it has no usable
+    id) and the server keeps running. An unknown request gets
+    `MethodNotFound`; an unknown notification is ignored. A request before
+    `initialize` gets `ServerNotInitialized`, and one after `shutdown`
+    `InvalidRequest`. `$/cancelRequest` answers a request that is still
+    waiting with `RequestCancelled`; a request already being handled gets
+    its answer. `exit` ends the server, with status 0 after `shutdown` and
+    1 otherwise; so does the end of stdin. A closed stdout means the client
+    can't be answered any more, so the server stops quietly with status 1;
+    a closed stderr, where it logs what it couldn't read, is ignored.
+  - Documents are synchronized in full (`didOpen`, `didChange`, `didSave`,
+    `didClose`), and an open document's text is what gets checked, not the
+    file on disk: `wid_driver::analyze` takes an overlay of unsaved buffers
+    (path to text), which the loader reads instead of the disk, and a `.wid`
+    buffer that isn't saved yet belongs to its directory's package. Only
+    `file:` documents are checked; others can be formatted.
+  - A `.wid` file is checked with the package of its directory, as `wid
+    check <dir>` loads it, and a `_test.wid` file with its package's other
+    `_test.wid` files too, as `wid test` loads them. Any other file is
+    checked alone, as `wid check <file> -file`. Packages are checked as
+    libraries, as `wid query` checks them, so none needs a `def main`. A
+    package is checked while one of its files is open; when the last one
+    closes, its diagnostics are cleared.
+  - A package is checked at once after an open or a save, 0.1 seconds after
+    the last of a run of changes (so a burst is checked once, at its latest
+    text), and before a request about one of its files is answered, so no
+    answer is about older text. A check that crashes the compiler is
+    reported with `window/showMessage`.
+  - Each check publishes the diagnostics of every file of the package, and
+    of every other file it has diagnostics for (an imported package's). A
+    file that several checks cover gets all their diagnostics, without
+    duplicates, and a file's diagnostics are published again only when
+    they change. A diagnostic's range is its primary label; its `code` is
+    the error code, with a `codeDescription` that links to
+    `docs/errors/<code>.md` in the Wid root when that file is there; its
+    `severity` is `error` or `warning`, and its `source` is `wid`. The
+    message is the compiler's, then the primary label's message, every
+    note (`note: …`) and every help (`help: …`), one per line. Secondary
+    labels are `relatedInformation`. A diagnostic in code a macro generated
+    is published at the outermost macro call, in the file the user wrote,
+    and its message says ``in the code `name` generates``; its label in the
+    `quote`, and every other macro call that led to the code (`` `name`
+    expands here``), are related information. A diagnostic with no place
+    in a file on disk (no label, or one in a `cimport`'s generated source)
+    is published at the start of the package's open documents.
+  - A help with edits is a `quickfix` code action for the diagnostics at the
+    range asked about, `isPreferred` when it is machine-applicable.
+  - Hover is what `wid query type` finds at the position, the cursor just
+    past a name counting as on it: the declaration line of what the name
+    refers to (or the expression's type), what that is and which package
+    declares it (``method `Ball.move` in `core:geo` ``), its type where
+    the declaration line doesn't show it (`Type: …`, or `Returns …` for a
+    call), the types of the generic instances, and the first paragraph of
+    its doc. It is Markdown when the client shows Markdown.
+  - Go to definition goes to the declaration (or the local or parameter)
+    that `type`'s `refers_to` names, at its name, in the macro's `quote`
+    for a declaration a macro generated there; an import name goes to the
+    file of its package named after the package, or its first file.
+    Builtin types and C declarations have no definition.
+  - Document symbols are the file's declarations from `outline`, with
+    fields, enum members and methods under their type, or a flat list for
+    a client that can't nest them.
+  - Formatting formats as `wid fmt` does: one edit that replaces the whole
+    document, or none when the document is canonical already or doesn't
+    parse (its errors are published). A result that would change the
+    document's syntax tree is a `RequestFailed` error, as a bug in the
+    formatter.
+  - Lines count from 0 (from 1 in the compiler's messages). Columns count
+    UTF-16 code units, LSP's default, unless the client offers the `utf-8`
+    position encoding, which the server then picks: columns count bytes.
+    `\n`, `\r\n` and `\r` end lines.
+  - The command line's `-collection:` (a relative path is read against the
+    directory the server starts in), `-define:` and `-target:` apply to
+    every check, and the client's `initializationOptions` add to them and
+    override them: `{"collections": {"shared": "../shared"}, "defines":
+    {"LOG_LEVEL": "2"}, "target": "linux_amd64"}`. A relative collection
+    path there is read against the first workspace folder (or `rootUri`),
+    and a define's value is a string, a number or a boolean. What the
+    server can't read there is reported with `window/showMessage` and
+    ignored.
 
 ## Built for humans and LLMs
 
