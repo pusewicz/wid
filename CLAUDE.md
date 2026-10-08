@@ -55,6 +55,8 @@ what is implemented, which conventions are fixed and what comes next.
   diagnostics in `NAME.stderr`
 - `tests/test/`: packages run with `wid test`, with the expected report in
   `NAME.stdout`
+- `tests/doc/`: `wid doc` runs, with the arguments in `NAME.args` and the
+  expected `NAME.stdout` and `NAME.stderr`
 - `tests/vendor/`: programs using pkg-config libraries (raylib, SDL3), run
   by `tests/vendor.rs` and skipped when the library is missing
 
@@ -104,9 +106,10 @@ Every new error needs all of the following:
 - a plain-English explanation of why it is wrong
 - at least one concrete fix, machine-applicable when possible
 - a `docs/errors/` entry
-- a `tests/ui/` case
+- a `tests/ui/` case (a `tests/doc/` case for `wid doc`'s own errors)
 
-The test suite fails when a code that appears in `tests/ui` lacks docs. The
+The test suite fails when a code that appears in `tests/ui` or `tests/doc`
+lacks docs. The
 parser and checker recover and report every error, never just the first one.
 
 ## Generated C
