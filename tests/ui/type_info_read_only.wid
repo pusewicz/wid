@@ -1,0 +1,43 @@
+struct Ball
+  hp: Int
+  name: String
+end
+
+union Shape = Ball | Int
+
+def main
+  t = type_info(Ball)
+  t.size = 99
+  t.size += 1
+  t.align ||= 4
+  t.fields[0] = t.fields[1]
+  t.fields[0].offset = 3
+  t^ = type_info(Int)^
+  first, t.count = 1, 2
+  p first
+  for &f in t.fields
+    f.offset = 1
+    f = t.fields[1]
+  end
+  field = t.fields[0]
+  field.type.size = 1
+  if elem = t.elem
+    elem.size = 2
+  end
+  u = type_info(Shape)
+  u.variants[0] = t
+  for &v in u.variants
+    p v.size
+  end
+  ptr = &t.size
+  p ptr
+  # These are fine: reading, changing a copy, a pointer to a record and
+  # pointing `t` at another table.
+  info = t^
+  info.size = 1
+  p info.size
+  rec = &t.fields[0]
+  p rec.offset
+  t = type_info(Int)
+  p t.size
+end

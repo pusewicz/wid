@@ -938,6 +938,17 @@ impl<'a> Checker<'a> {
         let int = self.types.int();
         let bool_ty = self.types.bool();
         let by_ref = f.bindings.first().is_some_and(|b| b.by_ref);
+        if by_ref && is_place(&iter) {
+            // `for &v in t.variants`: `v` would point into a table.
+            let zero = ir::Expr::new(ExprKind::Int(0), int);
+            let element = ir::Expr::new(
+                ExprKind::Index { base: Box::new(iter.clone()), index: Box::new(zero), checked: false, span },
+                elem,
+            );
+            if self.report_type_table_address(&element, f.iter.span) {
+                return;
+            }
+        }
         let base = if is_place(&iter) {
             let ptr = self.address_of(iter);
             let ptr = self.spill(ptr);

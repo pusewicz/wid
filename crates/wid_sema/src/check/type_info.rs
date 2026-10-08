@@ -3,6 +3,7 @@
 //! table built by the interpreter).
 
 use wid_diagnostics::{Applicability, Diagnostic, Span, codes};
+use wid_syntax::Name;
 use wid_syntax::ast::{self, ExprKind as E};
 
 use super::members::expr_as_type;
@@ -192,6 +193,96 @@ impl<'a> Checker<'a> {
             return Some(self.types.unknown());
         }
         Some(if union { self.union_instance(decl, args, span) } else { self.struct_instance(decl, args, span) })
+    }
+
+    // ----- the tables are read-only -------------------------------------------------
+
+    /// Whether a type is one of the records `type_info` tables are made
+    /// of: the prelude's `TypeInfo`, `TypeInfoField` or `TypeInfoMember`.
+    fn is_table_record(&self, ty: TyId) -> bool {
+        let TyKind::Struct(id) = self.types.kind(ty) else { return false };
+        let Some(&decl) = self.struct_decls.get(id) else { return false };
+        ["TypeInfo", "TypeInfoField", "TypeInfoMember"].iter().any(|n| self.lookup_prelude(Name::new(n)) == Some(decl))
+    }
+
+    /// Whether storage reached by `e` may be in a `type_info` table: it is
+    /// reached through a pointer to (or a slice of) a table record, or
+    /// through a pointer or slice read out of a table, which points into
+    /// the tables too.
+    fn in_type_table(&self, e: &ir::Expr) -> bool {
+        match &e.kind {
+            ExprKind::Field { base, .. } | ExprKind::OptGet(base) | ExprKind::UnionGet { value: base, .. } => {
+                self.in_type_table(base)
+            }
+            ExprKind::Index { base, .. } => match self.types.kind(self.types.base(base.ty)) {
+                TyKind::Array(..) | TyKind::Matrix(..) => self.in_type_table(base),
+                TyKind::Slice(elem) | TyKind::MultiPointer(elem) | TyKind::Dynamic(elem) => {
+                    self.is_table_record(*elem) || self.in_type_table(base)
+                }
+                _ => false,
+            },
+            ExprKind::Deref(ptr) => {
+                let pointee = match self.types.kind(ptr.ty) {
+                    TyKind::Pointer(t) => Some(*t),
+                    _ => None,
+                };
+                pointee.is_some_and(|t| self.is_table_record(t)) || self.in_type_table(ptr)
+            }
+            _ => false,
+        }
+    }
+
+    /// Reports an assignment whose target `place`, written at `span`, is
+    /// in a `type_info` table (E0309), and returns whether it was.
+    pub(super) fn report_type_table_write(&mut self, place: &ir::Expr, span: Span) -> bool {
+        if !self.in_type_table(place) {
+            return false;
+        }
+        let text = self.source_text(span);
+        let word = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || c == '_');
+        let help = if word(&text) {
+            // A `for &f in t.fields` variable.
+            format!("`{text}` points into the table: loop over copies, `for {text} in …`, and change the copy")
+        } else {
+            let name = match text.rsplit_once('.') {
+                Some((_, field)) if word(field) => field.to_string(),
+                _ => "copy".to_string(),
+            };
+            format!("copy the value into a variable and change the copy, like `{name} = {text}`")
+        };
+        self.report(
+            Diagnostic::error(codes::NOT_ASSIGNABLE, "`type_info` tables are read-only")
+                .primary(span, "this is part of a `type_info` table")
+                .note("`type_info` points at a table the compiler emits as constant data, shared by every use of the type")
+                .help(help),
+        );
+        true
+    }
+
+    /// Reports `&` of a place in a `type_info` table (E0309) when the
+    /// pointer would allow writes the checker can't see: a pointer to a
+    /// table record is fine, since writes through it are reported.
+    pub(super) fn report_type_table_address(&mut self, place: &ir::Expr, span: Span) -> bool {
+        if self.is_table_record(place.ty) || !self.in_type_table(place) {
+            return false;
+        }
+        let (label, help) = match self.source_text(span).starts_with('&') {
+            true => (
+                "this pointer would let code change a `type_info` table",
+                "read the value instead, or copy it into a variable and take the variable's address",
+            ),
+            false => (
+                "binding these elements by reference would let code change a `type_info` table",
+                "drop the `&` to loop over copies of the elements",
+            ),
+        };
+        self.report(
+            Diagnostic::error(codes::NOT_ASSIGNABLE, "`type_info` tables are read-only")
+                .primary(span, label)
+                .note("`type_info` points at a table the compiler emits as constant data, shared by every use of the type")
+                .help(help),
+        );
+        true
     }
 
     /// `type_info(Never)`, or of code that never finishes.

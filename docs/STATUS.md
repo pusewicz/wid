@@ -899,6 +899,14 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   codegen counts reads the same way, so parameters and `_` locals written
   that way get `[[maybe_unused]]`. `tests/run/write_only_locals` covers the
   shapes that stay valid under gcc's strict flags.
+- Writing into a `type_info` table is E0309 "`type_info` tables are
+  read-only" (#81); it built and silently wrote to the `static const`
+  tables (STATUS said it faulted). `Checker::place`, the assignments to
+  `for &x` variables, `&` and `for &v` check `Checker::in_type_table`: the
+  place is reached through a pointer to, or a slice of, a `TypeInfo`,
+  `TypeInfoField` or `TypeInfoMember`, or through a pointer or slice read
+  out of one. `&` of a whole record stays allowed, since writes through it
+  are caught.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
@@ -1137,9 +1145,12 @@ before anyone starts them.
 - `type_info`: at compile time the tables use Wid's layouts, which differ
   from C's for a cimported C union (whose fields all start at 0 in C), and
   `Error`'s members are the error symbols seen so far. Proc tables don't say
-  whether a proc is `@[c]`. Nothing stops a program from writing through a
-  `^TypeInfo` (the run-time tables are `const`, so it faults; at compile
-  time it succeeds).
+  whether a proc is `@[c]`. Writes into the tables are E0309, except through
+  a `[]^TypeInfo` copied out of a table (`vs = t.variants`, or one passed to
+  a method) or a pointer converted with `.to`: those are undefined
+  behaviour at run time (the tables are `static const` and the C casts
+  `const` away; the write may be ignored or fault) and succeed at compile
+  time.
 - Macros: a `quote` inside a splice must fit on one line, because newlines
   are suppressed inside splices (`#{if a then quote do x end else quote do
   end end}` works; a multi-line `quote` there doesn't). Code spliced from

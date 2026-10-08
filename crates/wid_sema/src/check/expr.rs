@@ -1425,6 +1425,9 @@ impl<'a> Checker<'a> {
             );
             return ir::Expr::new(ExprKind::Zero, self.types.unknown());
         }
+        if self.report_type_table_address(&v, span) {
+            return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+        }
         let ptr = self.types.pointer(v.ty);
         ir::Expr::new(ExprKind::AddrOf(Box::new(v)), ptr)
     }

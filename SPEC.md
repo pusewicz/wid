@@ -731,7 +731,17 @@ end
     values to describe (E0323).
   - The tables are static data: only types the program passes to
     `type_info`, and the types those point at, are emitted, and nothing is
-    allocated. Don't write through the pointer; the tables are read-only.
+    allocated.
+  - The tables are read-only. An assignment (`=`, compound or `||=`) to a
+    `TypeInfo`, `TypeInfoField` or `TypeInfoMember` reached through a
+    pointer or a slice, or to anything reached through a pointer or slice
+    read out of one, is E0309, and so are `&` of a value inside a table
+    other than a whole record and `for &v` over a table's list. A copy in a
+    variable can be changed (`info = t^`), and a variable can point at
+    another table. This is a rule for these records, not a read-only
+    pointer type: a `[]^TypeInfo` copied out of a table
+    (`vs = t.variants`, then `vs[0] = …`) and pointers converted with `.to`
+    can still be written through, which is undefined behaviour.
   - `type_info` works in `comptime` code too. Its result is a pointer, so it
     can't cross to run time (E0905), but what is read from it can:
     `comptime type_info(Ball).size`.

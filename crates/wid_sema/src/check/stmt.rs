@@ -305,9 +305,11 @@ impl<'a> Checker<'a> {
                 Some((local, ty, true)) => {
                     let v = self.expr_coerced(value, ty);
                     let ptr = self.local_ty(local);
-                    let target =
+                    let place =
                         ir::Expr::new(ExprKind::Deref(Box::new(ir::Expr::new(ExprKind::Local(local), ptr))), ty);
-                    self.emit(Stmt::Assign { target, value: v });
+                    if !self.report_type_table_write(&place, target.span) {
+                        self.emit(Stmt::Assign { target: place, value: v });
+                    }
                 }
                 Some((local, ty, false)) => {
                     let v = self.expr_coerced(value, ty);
@@ -395,7 +397,11 @@ impl<'a> Checker<'a> {
                 Some((l, ty, indirect)) => {
                     let var = ir::Expr::new(ExprKind::Local(l), if indirect { self.local_ty(l) } else { ty });
                     if indirect {
-                        ir::Expr::new(ExprKind::Deref(Box::new(var)), ty)
+                        let place = ir::Expr::new(ExprKind::Deref(Box::new(var)), ty);
+                        if self.report_type_table_write(&place, target.span) {
+                            return;
+                        }
+                        place
                     } else {
                         local = Some(l);
                         var
@@ -508,7 +514,14 @@ impl<'a> Checker<'a> {
                     (v.local, v.ty)
                 });
                 match found {
-                    Some(_) => self.expr(target, None),
+                    Some(_) => {
+                        // A `for &f in t.fields` variable points into a table.
+                        let v = self.expr(target, None);
+                        if self.report_type_table_write(&v, target.span) {
+                            return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+                        }
+                        v
+                    }
                     None => {
                         let candidates = self.visible_var_names();
                         if !self.declared_by_failed_macro(true, false) {
@@ -529,6 +542,9 @@ impl<'a> Checker<'a> {
                             .primary(target.span, "cannot change a byte of a `String`")
                             .help("build a new string, for example with interpolation"),
                     );
+                    return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+                }
+                if self.report_type_table_write(&v, target.span) {
                     return ir::Expr::new(ExprKind::Zero, self.types.unknown());
                 }
                 if matches!(self.types.kind(v.ty), TyKind::Unknown) || super::members::is_place(&v) {
