@@ -1,0 +1,2 @@
+error: `wid query refs` isn't implemented yet; the queries so far are `outline`, `def` and `methods`
+run `wid help query` for usage

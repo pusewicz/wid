@@ -1,0 +1,36 @@
+{
+  "package": {
+    "doc": "A package with an error in a method body: `wid doc` reports it and still\ndocuments the package.",
+    "name": "broken",
+    "path": "."
+  },
+  "query": "def",
+  "results": [
+    {
+      "attributes": [],
+      "doc": "Adds one.",
+      "kind": "method",
+      "location": {
+        "column": 5,
+        "end_column": 12,
+        "end_line": 5,
+        "file": "tests/doc/broken/broken.wid",
+        "line": 5
+      },
+      "name": "add_one",
+      "package": ".",
+      "path": "add_one",
+      "private": false,
+      "signature": "def add_one(x: Int) -> Int",
+      "span": {
+        "column": 1,
+        "end_column": 4,
+        "end_line": 7,
+        "file": "tests/doc/broken/broken.wid",
+        "line": 5
+      },
+      "static": false
+    }
+  ],
+  "symbol": "add_one"
+}

@@ -1,0 +1,48 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0601",
+      "column": 23,
+      "expansions": [],
+      "explain": "wid explain E0601",
+      "file": "command line",
+      "helps": [
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [
+            {
+              "column": 23,
+              "end": 38,
+              "end_column": 39,
+              "end_line": 1,
+              "file": "command line",
+              "line": 1,
+              "replacement": "tests/doc/shapes",
+              "start": 22
+            }
+          ],
+          "message": "a similar package exists: `tests/doc/shapes`"
+        }
+      ],
+      "labels": [
+        {
+          "column": 23,
+          "end": 38,
+          "end_column": 39,
+          "end_line": 1,
+          "file": "command line",
+          "line": 1,
+          "message": "no directory with this path",
+          "primary": true,
+          "start": 22
+        }
+      ],
+      "line": 1,
+      "message": "package `tests/doc/shapez` not found",
+      "notes": [],
+      "severity": "error"
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}

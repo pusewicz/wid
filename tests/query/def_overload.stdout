@@ -1,0 +1,137 @@
+{
+  "package": {
+    "doc": "Shapes for a small 2D game: balls, players and the methods that move\nthem.\n\nA second paragraph, which only the overview shows.",
+    "name": "shapes",
+    "path": "."
+  },
+  "query": "def",
+  "results": [
+    {
+      "attributes": [],
+      "doc": "Clamps either kind of number.",
+      "kind": "overload",
+      "location": {
+        "column": 10,
+        "end_column": 16,
+        "end_line": 128,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 128
+      },
+      "methods": [
+        {
+          "attributes": [],
+          "doc": "Clamps an `Int` to 0..10.",
+          "kind": "method",
+          "location": {
+            "column": 5,
+            "end_column": 14,
+            "end_line": 122,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 122
+          },
+          "name": "clamp_int",
+          "package": ".",
+          "path": "clamp_int",
+          "private": false,
+          "signature": "def clamp_int(x: Int) -> Int",
+          "span": {
+            "column": 1,
+            "end_column": 46,
+            "end_line": 122,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 122
+          },
+          "static": false
+        },
+        {
+          "attributes": [],
+          "doc": "Clamps an `F32` to 0..10.",
+          "kind": "method",
+          "location": {
+            "column": 5,
+            "end_column": 14,
+            "end_line": 125,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 125
+          },
+          "name": "clamp_f32",
+          "package": ".",
+          "path": "clamp_f32",
+          "private": false,
+          "signature": "def clamp_f32(x: F32) -> F32",
+          "span": {
+            "column": 1,
+            "end_column": 50,
+            "end_line": 125,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 125
+          },
+          "static": false
+        }
+      ],
+      "name": "clamp",
+      "package": ".",
+      "path": "clamp",
+      "private": false,
+      "signature": "overload :clamp, :clamp_int, :clamp_f32",
+      "span": {
+        "column": 1,
+        "end_column": 40,
+        "end_line": 128,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 128
+      }
+    },
+    {
+      "attributes": [],
+      "doc": "Clamps an `Int` to 0..10.",
+      "kind": "method",
+      "location": {
+        "column": 5,
+        "end_column": 14,
+        "end_line": 122,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 122
+      },
+      "name": "clamp_int",
+      "package": ".",
+      "path": "clamp_int",
+      "private": false,
+      "signature": "def clamp_int(x: Int) -> Int",
+      "span": {
+        "column": 1,
+        "end_column": 46,
+        "end_line": 122,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 122
+      },
+      "static": false
+    },
+    {
+      "attributes": [],
+      "doc": "Clamps an `F32` to 0..10.",
+      "kind": "method",
+      "location": {
+        "column": 5,
+        "end_column": 14,
+        "end_line": 125,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 125
+      },
+      "name": "clamp_f32",
+      "package": ".",
+      "path": "clamp_f32",
+      "private": false,
+      "signature": "def clamp_f32(x: F32) -> F32",
+      "span": {
+        "column": 1,
+        "end_column": 50,
+        "end_line": 125,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 125
+      },
+      "static": false
+    }
+  ],
+  "symbol": "clamp"
+}

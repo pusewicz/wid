@@ -1,0 +1,145 @@
+{
+  "package": {
+    "doc": "Vectors from C: a `cimport` without `as:` makes the header's declarations\nthe package's own, and `as: :geo` keeps another header's apart.",
+    "name": "cmerged",
+    "path": "."
+  },
+  "query": "outline",
+  "results": [
+    {
+      "attributes": [
+        "extern(\"Vec\")",
+        "size(16)",
+        "align(8)"
+      ],
+      "c": {
+        "declared_at": "vec.h:5",
+        "header": "vec.h",
+        "name": "Vec"
+      },
+      "children": [
+        {
+          "attributes": [],
+          "kind": "field",
+          "location": null,
+          "name": "x",
+          "package": "cimport:vec.h",
+          "path": "Vec.x",
+          "private": false,
+          "signature": "x: C.double",
+          "span": null,
+          "summary": "Across."
+        },
+        {
+          "attributes": [],
+          "kind": "field",
+          "location": null,
+          "name": "y",
+          "package": "cimport:vec.h",
+          "path": "Vec.y",
+          "private": false,
+          "signature": "y: C.double",
+          "span": null,
+          "summary": "Down."
+        }
+      ],
+      "kind": "struct",
+      "location": null,
+      "name": "Vec",
+      "package": "cimport:vec.h",
+      "path": "Vec",
+      "private": false,
+      "signature": "struct Vec",
+      "span": null,
+      "summary": "A vector in the plane.\nC struct: 16 bytes, aligned to 8"
+    },
+    {
+      "attributes": [
+        "extern(\"vec_length\")"
+      ],
+      "c": {
+        "declared_at": "vec.h:11",
+        "header": "vec.h",
+        "name": "vec_length"
+      },
+      "kind": "method",
+      "location": null,
+      "name": "vec_length",
+      "package": "cimport:vec.h",
+      "path": "vec_length",
+      "private": false,
+      "signature": "def vec_length(v: Vec) -> C.double",
+      "span": null,
+      "static": false,
+      "summary": "The length of `v`."
+    },
+    {
+      "attributes": [],
+      "c": {
+        "declared_at": "vec.h:13",
+        "header": "vec.h",
+        "name": "VEC_DIMENSIONS"
+      },
+      "kind": "constant",
+      "location": null,
+      "name": "VEC_DIMENSIONS",
+      "package": "cimport:vec.h",
+      "path": "VEC_DIMENSIONS",
+      "private": false,
+      "signature": "VEC_DIMENSIONS = 2",
+      "span": null,
+      "summary": null
+    },
+    {
+      "attributes": [],
+      "kind": "method",
+      "location": {
+        "column": 5,
+        "end_column": 12,
+        "end_line": 8,
+        "file": "tests/query/cmerged/cmerged.wid",
+        "line": 8
+      },
+      "name": "longest",
+      "package": ".",
+      "path": "longest",
+      "private": false,
+      "signature": "def longest(a: Vec, b: Vec) -> F64",
+      "span": {
+        "column": 1,
+        "end_column": 70,
+        "end_line": 8,
+        "file": "tests/query/cmerged/cmerged.wid",
+        "line": 8
+      },
+      "static": false,
+      "summary": "The longer of two vectors' lengths."
+    },
+    {
+      "attributes": [],
+      "kind": "method",
+      "location": {
+        "column": 13,
+        "end_column": 17,
+        "end_line": 11,
+        "file": "tests/query/cmerged/cmerged.wid",
+        "line": 11
+      },
+      "name": "disc",
+      "package": ".",
+      "path": "disc",
+      "private": true,
+      "signature": "def disc(v: Vec) -> F64",
+      "span": {
+        "column": 1,
+        "end_column": 65,
+        "end_line": 11,
+        "file": "tests/query/cmerged/cmerged.wid",
+        "line": 11
+      },
+      "static": false,
+      "summary": "The area of a circle as wide as `v` is long."
+    }
+  ],
+  "symbol": null
+}

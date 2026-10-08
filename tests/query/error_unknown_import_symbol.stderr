@@ -1,0 +1,33 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0602",
+      "column": 19,
+      "expansions": [],
+      "explain": "wid explain E0602",
+      "file": "command line",
+      "helps": [],
+      "labels": [
+        {
+          "column": 19,
+          "end": 24,
+          "end_column": 25,
+          "end_line": 1,
+          "file": "command line",
+          "line": 1,
+          "message": "not declared in package `geo` (imported as `geo`)",
+          "primary": true,
+          "start": 18
+        }
+      ],
+      "line": 1,
+      "message": "no symbol `Circle` in package `geo` (imported as `geo`)",
+      "notes": [
+        "package `geo` declares `Point` and `Rect`"
+      ],
+      "severity": "error"
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}

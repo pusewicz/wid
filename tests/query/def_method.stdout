@@ -1,0 +1,40 @@
+{
+  "package": {
+    "doc": "Shapes for a small 2D game: balls, players and the methods that move\nthem.\n\nA second paragraph, which only the overview shows.",
+    "name": "shapes",
+    "path": "."
+  },
+  "query": "def",
+  "results": [
+    {
+      "attributes": [],
+      "doc": "Restores `amount` hit points, up to 100.\n\nHealing a dead player brings it back.",
+      "kind": "method",
+      "location": {
+        "column": 7,
+        "end_column": 11,
+        "end_line": 78,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 78
+      },
+      "name": "heal",
+      "owner": {
+        "kind": "struct",
+        "name": "Player"
+      },
+      "package": ".",
+      "path": "Player.heal",
+      "private": false,
+      "signature": "def heal(amount: Int)",
+      "span": {
+        "column": 3,
+        "end_column": 6,
+        "end_line": 80,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 78
+      },
+      "static": false
+    }
+  ],
+  "symbol": "Player.heal"
+}

@@ -1,0 +1,1127 @@
+{
+  "package": {
+    "doc": "Shapes for a small 2D game: balls, players and the methods that move\nthem.\n\nA second paragraph, which only the overview shows.",
+    "name": "shapes",
+    "path": "."
+  },
+  "query": "outline",
+  "results": [
+    {
+      "attributes": [],
+      "kind": "constant",
+      "location": {
+        "column": 1,
+        "end_column": 10,
+        "end_line": 9,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 9
+      },
+      "name": "MAX_BALLS",
+      "package": ".",
+      "path": "MAX_BALLS",
+      "private": false,
+      "signature": "MAX_BALLS = 64",
+      "span": {
+        "column": 1,
+        "end_column": 15,
+        "end_line": 9,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 9
+      },
+      "summary": "How many balls fit on the screen."
+    },
+    {
+      "attributes": [],
+      "kind": "type_alias",
+      "location": {
+        "column": 1,
+        "end_column": 5,
+        "end_line": 12,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 12
+      },
+      "name": "Vec2",
+      "package": ".",
+      "path": "Vec2",
+      "private": false,
+      "signature": "Vec2 = [2]F32",
+      "span": {
+        "column": 1,
+        "end_column": 14,
+        "end_line": 12,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 12
+      },
+      "summary": "A 2D vector."
+    },
+    {
+      "attributes": [],
+      "kind": "type_alias",
+      "location": {
+        "column": 1,
+        "end_column": 7,
+        "end_line": 15,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 15
+      },
+      "name": "Pixels",
+      "package": ".",
+      "path": "Pixels",
+      "private": false,
+      "signature": "Pixels = distinct F32",
+      "span": {
+        "column": 1,
+        "end_column": 22,
+        "end_line": 15,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 15
+      },
+      "summary": "Screen pixels, kept apart from other numbers."
+    },
+    {
+      "attributes": [],
+      "kind": "constant",
+      "location": {
+        "column": 1,
+        "end_column": 13,
+        "end_line": 17,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 17
+      },
+      "name": "DEBUG_SHAPES",
+      "package": ".",
+      "path": "DEBUG_SHAPES",
+      "private": false,
+      "signature": "DEBUG_SHAPES = false",
+      "span": {
+        "column": 1,
+        "end_column": 21,
+        "end_line": 17,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 17
+      },
+      "summary": null
+    },
+    {
+      "attributes": [],
+      "children": [
+        {
+          "attributes": [],
+          "kind": "enum_member",
+          "location": {
+            "column": 3,
+            "end_column": 8,
+            "end_line": 22,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 22
+          },
+          "name": "north",
+          "package": ".",
+          "path": "Dir.north",
+          "private": false,
+          "signature": "north",
+          "span": {
+            "column": 3,
+            "end_column": 8,
+            "end_line": 22,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 22
+          },
+          "summary": "Up the screen."
+        },
+        {
+          "attributes": [],
+          "kind": "enum_member",
+          "location": {
+            "column": 3,
+            "end_column": 8,
+            "end_line": 23,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 23
+          },
+          "name": "south",
+          "package": ".",
+          "path": "Dir.south",
+          "private": false,
+          "signature": "south",
+          "span": {
+            "column": 3,
+            "end_column": 8,
+            "end_line": 23,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 23
+          },
+          "summary": null
+        },
+        {
+          "attributes": [],
+          "kind": "enum_member",
+          "location": {
+            "column": 3,
+            "end_column": 7,
+            "end_line": 25,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 25
+          },
+          "name": "east",
+          "package": ".",
+          "path": "Dir.east",
+          "private": false,
+          "signature": "east = 4",
+          "span": {
+            "column": 3,
+            "end_column": 11,
+            "end_line": 25,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 25
+          },
+          "summary": "Values can skip ahead."
+        },
+        {
+          "attributes": [],
+          "kind": "enum_member",
+          "location": {
+            "column": 3,
+            "end_column": 7,
+            "end_line": 26,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 26
+          },
+          "name": "west",
+          "package": ".",
+          "path": "Dir.west",
+          "private": false,
+          "signature": "west",
+          "span": {
+            "column": 3,
+            "end_column": 7,
+            "end_line": 26,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 26
+          },
+          "summary": null
+        },
+        {
+          "attributes": [],
+          "kind": "method",
+          "location": {
+            "column": 7,
+            "end_column": 15,
+            "end_line": 29,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 29
+          },
+          "name": "opposite",
+          "package": ".",
+          "path": "Dir.opposite",
+          "private": false,
+          "signature": "def opposite -> Dir",
+          "span": {
+            "column": 3,
+            "end_column": 6,
+            "end_line": 36,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 29
+          },
+          "static": false,
+          "summary": "The opposite direction."
+        }
+      ],
+      "kind": "enum",
+      "location": {
+        "column": 6,
+        "end_column": 9,
+        "end_line": 20,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 20
+      },
+      "name": "Dir",
+      "package": ".",
+      "path": "Dir",
+      "private": false,
+      "signature": "enum Dir : U8",
+      "span": {
+        "column": 1,
+        "end_column": 4,
+        "end_line": 37,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 20
+      },
+      "summary": "A compass direction."
+    },
+    {
+      "attributes": [],
+      "children": [],
+      "kind": "union",
+      "location": {
+        "column": 7,
+        "end_column": 12,
+        "end_line": 40,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 40
+      },
+      "name": "Shape",
+      "package": ".",
+      "path": "Shape",
+      "private": false,
+      "signature": "union Shape = Ball | geo.Rect",
+      "span": {
+        "column": 1,
+        "end_column": 30,
+        "end_line": 40,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 40
+      },
+      "summary": "Something to draw."
+    },
+    {
+      "attributes": [],
+      "children": [
+        {
+          "attributes": [],
+          "kind": "method",
+          "location": {
+            "column": 7,
+            "end_column": 12,
+            "end_line": 44,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 44
+          },
+          "name": "label",
+          "package": ".",
+          "path": "label",
+          "private": false,
+          "signature": "def label -> String",
+          "span": {
+            "column": 3,
+            "end_column": 32,
+            "end_line": 44,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 44
+          },
+          "static": false,
+          "summary": "What the shape is called in messages."
+        }
+      ],
+      "kind": "extension",
+      "location": {
+        "column": 8,
+        "end_column": 13,
+        "end_line": 42,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 42
+      },
+      "name": "extend Shape",
+      "package": ".",
+      "path": "extend Shape",
+      "private": false,
+      "signature": "extend Shape",
+      "span": {
+        "column": 1,
+        "end_column": 4,
+        "end_line": 45,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 42
+      },
+      "summary": null
+    },
+    {
+      "attributes": [],
+      "children": [
+        {
+          "attributes": [],
+          "kind": "field",
+          "location": {
+            "column": 3,
+            "end_column": 5,
+            "end_line": 50,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 50
+          },
+          "name": "hp",
+          "package": ".",
+          "path": "Entity.hp",
+          "private": false,
+          "signature": "hp: Int = 100",
+          "span": {
+            "column": 3,
+            "end_column": 16,
+            "end_line": 50,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 50
+          },
+          "summary": "Hit points; 0 is dead."
+        },
+        {
+          "attributes": [],
+          "kind": "field",
+          "location": {
+            "column": 3,
+            "end_column": 6,
+            "end_line": 51,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 51
+          },
+          "name": "pos",
+          "package": ".",
+          "path": "Entity.pos",
+          "private": false,
+          "signature": "pos: Vec2",
+          "span": {
+            "column": 3,
+            "end_column": 12,
+            "end_line": 51,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 51
+          },
+          "summary": null
+        },
+        {
+          "attributes": [],
+          "kind": "method",
+          "location": {
+            "column": 7,
+            "end_column": 11,
+            "end_line": 54,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 54
+          },
+          "name": "move",
+          "package": ".",
+          "path": "Entity.move",
+          "private": false,
+          "signature": "def move(delta: Vec2)",
+          "span": {
+            "column": 3,
+            "end_column": 6,
+            "end_line": 56,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 54
+          },
+          "static": false,
+          "summary": "Moves by `delta`."
+        }
+      ],
+      "kind": "struct",
+      "location": {
+        "column": 8,
+        "end_column": 14,
+        "end_line": 48,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 48
+      },
+      "name": "Entity",
+      "package": ".",
+      "path": "Entity",
+      "private": false,
+      "signature": "struct Entity",
+      "span": {
+        "column": 1,
+        "end_column": 4,
+        "end_line": 57,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 48
+      },
+      "summary": "Shared by everything that moves."
+    },
+    {
+      "attributes": [],
+      "children": [
+        {
+          "attributes": [],
+          "kind": "method",
+          "location": {
+            "column": 7,
+            "end_column": 12,
+            "end_line": 62,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 62
+          },
+          "name": "greet",
+          "package": ".",
+          "path": "Greeter.greet",
+          "private": false,
+          "signature": "def greet -> String",
+          "span": {
+            "column": 3,
+            "end_column": 32,
+            "end_line": 62,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 62
+          },
+          "static": false,
+          "summary": "Says hello."
+        }
+      ],
+      "kind": "module",
+      "location": {
+        "column": 8,
+        "end_column": 15,
+        "end_line": 60,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 60
+      },
+      "name": "Greeter",
+      "package": ".",
+      "path": "Greeter",
+      "private": false,
+      "signature": "module Greeter",
+      "span": {
+        "column": 1,
+        "end_column": 4,
+        "end_line": 63,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 60
+      },
+      "summary": "Gives a type a greeting."
+    },
+    {
+      "attributes": [],
+      "children": [
+        {
+          "attributes": [],
+          "kind": "field",
+          "location": {
+            "column": 9,
+            "end_column": 13,
+            "end_line": 69,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 69
+          },
+          "name": "base",
+          "package": ".",
+          "path": "Player.base",
+          "private": false,
+          "signature": "using base: Entity",
+          "span": {
+            "column": 3,
+            "end_column": 21,
+            "end_line": 69,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 69
+          },
+          "summary": null
+        },
+        {
+          "attributes": [],
+          "kind": "field",
+          "location": {
+            "column": 3,
+            "end_column": 7,
+            "end_line": 71,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 71
+          },
+          "name": "name",
+          "package": ".",
+          "path": "Player.name",
+          "private": false,
+          "signature": "name: String",
+          "span": {
+            "column": 3,
+            "end_column": 15,
+            "end_line": 71,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 71
+          },
+          "summary": "The name shown above the player."
+        },
+        {
+          "attributes": [],
+          "kind": "method",
+          "location": {
+            "column": 7,
+            "end_column": 11,
+            "end_line": 78,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 78
+          },
+          "name": "heal",
+          "package": ".",
+          "path": "Player.heal",
+          "private": false,
+          "signature": "def heal(amount: Int)",
+          "span": {
+            "column": 3,
+            "end_column": 6,
+            "end_line": 80,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 78
+          },
+          "static": false,
+          "summary": "Restores `amount` hit points, up to 100."
+        },
+        {
+          "attributes": [],
+          "kind": "method",
+          "location": {
+            "column": 12,
+            "end_column": 18,
+            "end_line": 83,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 83
+          },
+          "name": "create",
+          "package": ".",
+          "path": "Player.create",
+          "private": false,
+          "signature": "def self.create(name: String) -> Player",
+          "span": {
+            "column": 3,
+            "end_column": 67,
+            "end_line": 83,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 83
+          },
+          "static": true,
+          "summary": "A player at the origin."
+        },
+        {
+          "attributes": [],
+          "kind": "method",
+          "location": {
+            "column": 15,
+            "end_column": 21,
+            "end_line": 86,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 86
+          },
+          "name": "secret",
+          "package": ".",
+          "path": "Player.secret",
+          "private": true,
+          "signature": "def secret",
+          "span": {
+            "column": 3,
+            "end_column": 6,
+            "end_line": 87,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 86
+          },
+          "static": false,
+          "summary": "Only the player's own methods call this."
+        },
+        {
+          "attributes": [],
+          "kind": "method",
+          "location": {
+            "column": 12,
+            "end_column": 17,
+            "end_line": 73,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 73
+          },
+          "name": "kills",
+          "package": ".",
+          "path": "Player.kills",
+          "private": false,
+          "signature": "def kills -> Int",
+          "span": {
+            "column": 3,
+            "end_column": 17,
+            "end_line": 73,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 73
+          },
+          "static": false,
+          "summary": null
+        }
+      ],
+      "kind": "struct",
+      "location": {
+        "column": 8,
+        "end_column": 14,
+        "end_line": 68,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 68
+      },
+      "name": "Player",
+      "package": ".",
+      "path": "Player",
+      "private": false,
+      "signature": "struct Player",
+      "span": {
+        "column": 1,
+        "end_column": 4,
+        "end_line": 88,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 68
+      },
+      "summary": "The one the player controls."
+    },
+    {
+      "attributes": [],
+      "children": [
+        {
+          "attributes": [],
+          "kind": "method",
+          "location": {
+            "column": 7,
+            "end_column": 12,
+            "end_line": 92,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 92
+          },
+          "name": "boost",
+          "package": ".",
+          "path": "boost",
+          "private": false,
+          "signature": "def boost",
+          "span": {
+            "column": 3,
+            "end_column": 6,
+            "end_line": 93,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 92
+          },
+          "static": false,
+          "summary": "Doubles the player's speed."
+        }
+      ],
+      "kind": "extension",
+      "location": {
+        "column": 8,
+        "end_column": 14,
+        "end_line": 90,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 90
+      },
+      "name": "extend Player",
+      "package": ".",
+      "path": "extend Player",
+      "private": false,
+      "signature": "extend Player",
+      "span": {
+        "column": 1,
+        "end_column": 4,
+        "end_line": 94,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 90
+      },
+      "summary": null
+    },
+    {
+      "attributes": [],
+      "children": [
+        {
+          "attributes": [],
+          "kind": "field",
+          "location": {
+            "column": 3,
+            "end_column": 6,
+            "end_line": 98,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 98
+          },
+          "name": "pos",
+          "package": ".",
+          "path": "Ball.pos",
+          "private": false,
+          "signature": "pos: Vec2",
+          "span": {
+            "column": 3,
+            "end_column": 12,
+            "end_line": 98,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 98
+          },
+          "summary": null
+        },
+        {
+          "attributes": [],
+          "kind": "field",
+          "location": {
+            "column": 3,
+            "end_column": 6,
+            "end_line": 100,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 100
+          },
+          "name": "vel",
+          "package": ".",
+          "path": "Ball.vel",
+          "private": false,
+          "signature": "vel: Vec2 = [120.0, 80.0]",
+          "span": {
+            "column": 3,
+            "end_column": 28,
+            "end_line": 100,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 100
+          },
+          "summary": "Pixels per second."
+        },
+        {
+          "attributes": [],
+          "kind": "field",
+          "location": {
+            "column": 3,
+            "end_column": 9,
+            "end_line": 101,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 101
+          },
+          "name": "radius",
+          "package": ".",
+          "path": "Ball.radius",
+          "private": false,
+          "signature": "radius: F32 = 8.0",
+          "span": {
+            "column": 3,
+            "end_column": 20,
+            "end_line": 101,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 101
+          },
+          "summary": null
+        }
+      ],
+      "kind": "struct",
+      "location": {
+        "column": 8,
+        "end_column": 12,
+        "end_line": 97,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 97
+      },
+      "name": "Ball",
+      "package": ".",
+      "path": "Ball",
+      "private": false,
+      "signature": "struct Ball",
+      "span": {
+        "column": 1,
+        "end_column": 4,
+        "end_line": 102,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 97
+      },
+      "summary": "A bouncing ball."
+    },
+    {
+      "attributes": [],
+      "children": [
+        {
+          "attributes": [],
+          "kind": "field",
+          "location": {
+            "column": 3,
+            "end_column": 8,
+            "end_line": 106,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 106
+          },
+          "name": "items",
+          "package": ".",
+          "path": "Pool.items",
+          "private": false,
+          "signature": "items: [N]T",
+          "span": {
+            "column": 3,
+            "end_column": 14,
+            "end_line": 106,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 106
+          },
+          "summary": null
+        },
+        {
+          "attributes": [],
+          "kind": "field",
+          "location": {
+            "column": 3,
+            "end_column": 8,
+            "end_line": 107,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 107
+          },
+          "name": "count",
+          "package": ".",
+          "path": "Pool.count",
+          "private": false,
+          "signature": "count: Int",
+          "span": {
+            "column": 3,
+            "end_column": 13,
+            "end_line": 107,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 107
+          },
+          "summary": null
+        },
+        {
+          "attributes": [],
+          "kind": "method",
+          "location": {
+            "column": 7,
+            "end_column": 11,
+            "end_line": 110,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 110
+          },
+          "name": "push",
+          "package": ".",
+          "path": "Pool.push",
+          "private": false,
+          "signature": "def push(x: T) -> Bool",
+          "span": {
+            "column": 3,
+            "end_column": 6,
+            "end_line": 115,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 110
+          },
+          "static": false,
+          "summary": "Adds `x`, unless the pool is full."
+        }
+      ],
+      "kind": "struct",
+      "location": {
+        "column": 8,
+        "end_column": 12,
+        "end_line": 105,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 105
+      },
+      "name": "Pool",
+      "package": ".",
+      "path": "Pool",
+      "private": false,
+      "signature": "struct Pool($T, $N: Int)",
+      "span": {
+        "column": 1,
+        "end_column": 4,
+        "end_line": 116,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 105
+      },
+      "summary": "A fixed-size pool of `N` items."
+    },
+    {
+      "attributes": [],
+      "kind": "method",
+      "location": {
+        "column": 5,
+        "end_column": 11,
+        "end_line": 119,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 119
+      },
+      "name": "max_of",
+      "package": ".",
+      "path": "max_of",
+      "private": false,
+      "signature": "def max_of(a: $T, b: T) -> T",
+      "span": {
+        "column": 1,
+        "end_column": 45,
+        "end_line": 119,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 119
+      },
+      "static": false,
+      "summary": "The larger of two values."
+    },
+    {
+      "attributes": [],
+      "kind": "method",
+      "location": {
+        "column": 5,
+        "end_column": 14,
+        "end_line": 122,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 122
+      },
+      "name": "clamp_int",
+      "package": ".",
+      "path": "clamp_int",
+      "private": false,
+      "signature": "def clamp_int(x: Int) -> Int",
+      "span": {
+        "column": 1,
+        "end_column": 46,
+        "end_line": 122,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 122
+      },
+      "static": false,
+      "summary": "Clamps an `Int` to 0..10."
+    },
+    {
+      "attributes": [],
+      "kind": "method",
+      "location": {
+        "column": 5,
+        "end_column": 14,
+        "end_line": 125,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 125
+      },
+      "name": "clamp_f32",
+      "package": ".",
+      "path": "clamp_f32",
+      "private": false,
+      "signature": "def clamp_f32(x: F32) -> F32",
+      "span": {
+        "column": 1,
+        "end_column": 50,
+        "end_line": 125,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 125
+      },
+      "static": false,
+      "summary": "Clamps an `F32` to 0..10."
+    },
+    {
+      "attributes": [],
+      "kind": "overload",
+      "location": {
+        "column": 10,
+        "end_column": 16,
+        "end_line": 128,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 128
+      },
+      "name": "clamp",
+      "package": ".",
+      "path": "clamp",
+      "private": false,
+      "signature": "overload :clamp, :clamp_int, :clamp_f32",
+      "span": {
+        "column": 1,
+        "end_column": 40,
+        "end_line": 128,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 128
+      },
+      "summary": "Clamps either kind of number."
+    },
+    {
+      "attributes": [],
+      "kind": "macro",
+      "location": {
+        "column": 11,
+        "end_column": 18,
+        "end_line": 133,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 133
+      },
+      "name": "counter",
+      "package": ".",
+      "path": "counter",
+      "private": false,
+      "signature": "macro def counter(name: Symbol) -> Code",
+      "span": {
+        "column": 1,
+        "end_column": 4,
+        "end_line": 137,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 133
+      },
+      "static": false,
+      "summary": "Declares a method `name` that counts nothing yet."
+    },
+    {
+      "attributes": [],
+      "kind": "method",
+      "location": {
+        "column": 7,
+        "end_column": 18,
+        "end_line": 146,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 146
+      },
+      "name": "dump_shapes",
+      "package": ".",
+      "path": "dump_shapes",
+      "private": false,
+      "signature": "def dump_shapes",
+      "span": {
+        "column": 3,
+        "end_column": 6,
+        "end_line": 147,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 146
+      },
+      "static": false,
+      "summary": "Does nothing outside debug builds."
+    },
+    {
+      "attributes": [],
+      "kind": "method",
+      "location": {
+        "column": 13,
+        "end_column": 26,
+        "end_line": 150,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 150
+      },
+      "name": "secret_helper",
+      "package": ".",
+      "path": "secret_helper",
+      "private": true,
+      "signature": "def secret_helper -> Int",
+      "span": {
+        "column": 1,
+        "end_column": 37,
+        "end_line": 150,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 150
+      },
+      "static": false,
+      "summary": null
+    },
+    {
+      "attributes": [],
+      "children": [
+        {
+          "attributes": [],
+          "kind": "method",
+          "location": {
+            "column": 7,
+            "end_column": 15,
+            "end_line": 154,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 154
+          },
+          "name": "loudness",
+          "package": ".",
+          "path": "loudness",
+          "private": false,
+          "signature": "def loudness -> Int",
+          "span": {
+            "column": 3,
+            "end_column": 38,
+            "end_line": 154,
+            "file": "tests/doc/shapes/shapes.wid",
+            "line": 154
+          },
+          "static": false,
+          "summary": "The size, shouted."
+        }
+      ],
+      "kind": "extension",
+      "location": {
+        "column": 8,
+        "end_column": 14,
+        "end_line": 152,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 152
+      },
+      "name": "extend String",
+      "package": ".",
+      "path": "extend String",
+      "private": false,
+      "signature": "extend String",
+      "span": {
+        "column": 1,
+        "end_column": 4,
+        "end_line": 155,
+        "file": "tests/doc/shapes/shapes.wid",
+        "line": 152
+      },
+      "summary": null
+    }
+  ],
+  "symbol": null
+}

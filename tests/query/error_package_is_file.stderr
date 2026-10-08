@@ -1,0 +1,48 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0601",
+      "column": 23,
+      "expansions": [],
+      "explain": "wid explain E0601",
+      "file": "command line",
+      "helps": [
+        {
+          "applicability": "machine_applicable",
+          "edits": [
+            {
+              "column": 50,
+              "end": 49,
+              "end_column": 50,
+              "end_line": 1,
+              "file": "command line",
+              "line": 1,
+              "replacement": " -file",
+              "start": 49
+            }
+          ],
+          "message": "read the file on its own with `-file`"
+        }
+      ],
+      "labels": [
+        {
+          "column": 23,
+          "end": 49,
+          "end_column": 50,
+          "end_line": 1,
+          "file": "command line",
+          "line": 1,
+          "message": "a package is a directory of `.wid` files",
+          "primary": true,
+          "start": 22
+        }
+      ],
+      "line": 1,
+      "message": "`tests/doc/shapes/shapes.wid` is a file, not a package directory",
+      "notes": [],
+      "severity": "error"
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}

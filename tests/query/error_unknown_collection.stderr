@@ -1,0 +1,50 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0601",
+      "column": 23,
+      "expansions": [],
+      "explain": "wid explain E0601",
+      "file": "command line",
+      "helps": [
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [
+            {
+              "column": 23,
+              "end": 25,
+              "end_column": 26,
+              "end_line": 1,
+              "file": "command line",
+              "line": 1,
+              "replacement": "core",
+              "start": 22
+            }
+          ],
+          "message": "a similar collection exists: `core`"
+        }
+      ],
+      "labels": [
+        {
+          "column": 23,
+          "end": 25,
+          "end_column": 26,
+          "end_line": 1,
+          "file": "command line",
+          "line": 1,
+          "message": "no collection with this name",
+          "primary": true,
+          "start": 22
+        }
+      ],
+      "line": 1,
+      "message": "unknown collection `cor`",
+      "notes": [
+        "the collections are `core` and `vendor`"
+      ],
+      "severity": "error"
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}

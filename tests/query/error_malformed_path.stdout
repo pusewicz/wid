@@ -1,0 +1,10 @@
+{
+  "package": {
+    "doc": "Shapes for a small 2D game: balls, players and the methods that move\nthem.\n\nA second paragraph, which only the overview shows.",
+    "name": "shapes",
+    "path": "."
+  },
+  "query": "def",
+  "results": [],
+  "symbol": "Player."
+}

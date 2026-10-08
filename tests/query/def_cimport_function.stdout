@@ -1,0 +1,31 @@
+{
+  "package": {
+    "doc": "Geometry from C, through `cimport`.",
+    "name": "cgeo",
+    "path": "."
+  },
+  "query": "def",
+  "results": [
+    {
+      "attributes": [
+        "extern(\"circle_area\")"
+      ],
+      "c": {
+        "declared_at": "geo.h:7",
+        "header": "geo.h",
+        "name": "circle_area"
+      },
+      "doc": "The area of a circle with radius `r`.\n\nNegative radii give the area of the positive one.",
+      "kind": "method",
+      "location": null,
+      "name": "circle_area",
+      "package": "cimport:geo.h",
+      "path": "circle_area",
+      "private": false,
+      "signature": "def circle_area(r: C.double) -> C.double",
+      "span": null,
+      "static": false
+    }
+  ],
+  "symbol": "geo.circle_area"
+}

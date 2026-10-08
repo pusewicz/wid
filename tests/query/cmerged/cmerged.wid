@@ -1,0 +1,11 @@
+# Vectors from C: a `cimport` without `as:` makes the header's declarations
+# the package's own, and `as: :geo` keeps another header's apart.
+
+cimport "vec.h"
+cimport "../../doc/cgeo/geo.h", as: :geo
+
+# The longer of two vectors' lengths.
+def longest(a: Vec, b: Vec) -> F64 = vec_length(a).max(vec_length(b))
+
+# The area of a circle as wide as `v` is long.
+private def disc(v: Vec) -> F64 = geo.circle_area(vec_length(v))
