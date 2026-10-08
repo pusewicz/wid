@@ -29,6 +29,9 @@ pub struct DocRequest {
     pub args: Vec<String>,
     /// Document private declarations too (`-private`).
     pub private: bool,
+    /// The directory relative paths are read from, and the package in `.`
+    /// is: the current directory when empty.
+    pub dir: PathBuf,
 }
 
 /// The result of `wid doc`.
@@ -184,13 +187,14 @@ struct Reading {
 pub fn doc(opts: &Options, request: &DocRequest) -> DocOutput {
     let cmd = CommandLine::new(&request.args, opts.file_mode);
     let args = &request.args;
+    let dir = if request.dir.as_os_str().is_empty() { Path::new(".") } else { request.dir.as_path() };
     let reading = match args.len() {
         0 => Reading { package: None, symbol: None },
-        1 if opts.file_mode || names_package(&args[0]) => Reading { package: Some(0), symbol: None },
+        1 if opts.file_mode || names_package(dir, &args[0]) => Reading { package: Some(0), symbol: None },
         1 => Reading { package: None, symbol: Some(0) },
         _ => Reading { package: Some(0), symbol: Some(1) },
     };
-    let target = match package_target(opts, &cmd, &reading, args) {
+    let target = match package_target(opts, dir, &cmd, &reading, args) {
         Ok(target) => target,
         Err(diag) => {
             let mut sources = SourceMap::new();
@@ -242,21 +246,55 @@ pub fn doc(opts: &Options, request: &DocRequest) -> DocOutput {
     DocOutput { sources, diags, page }
 }
 
+/// What `wid doc` prints.
+pub struct Printed {
+    /// The page: text, or JSON with `-json`.
+    pub stdout: String,
+    /// The diagnostics: rendered, or JSON with `-json-errors`.
+    pub stderr: String,
+    /// Whether the page was shown and the package had no errors.
+    pub success: bool,
+}
+
+/// Renders a result the way `wid doc` prints it: the page on stdout (as
+/// JSON with `json`) and the diagnostics on stderr (as JSON with
+/// `json_errors`).
+pub fn print(out: &DocOutput, json: bool, json_errors: bool, color: bool) -> Printed {
+    let stderr = if json_errors {
+        wid_diagnostics::render_json(&out.diags, &out.sources) + "\n"
+    } else if out.diags.is_empty() {
+        String::new()
+    } else {
+        wid_diagnostics::render_all(&out.diags, &out.sources, wid_diagnostics::RenderOptions { color })
+    };
+    let stdout = match &out.page {
+        Some(page) if json => render_json(page) + "\n",
+        Some(page) => render_text(page),
+        None => String::new(),
+    };
+    Printed { stdout, stderr, success: out.page.is_some() && !out.diags.has_errors() }
+}
+
 /// Whether a lone argument names a package: an existing directory or file,
 /// or a collection path such as `core:fmt`.
-fn names_package(arg: &str) -> bool {
-    arg.contains(':') || Path::new(arg).exists()
+fn names_package(dir: &Path, arg: &str) -> bool {
+    arg.contains(':') || dir.join(arg).exists()
 }
 
 /// A diagnostic waiting for the command line's file id.
 type Pending = Box<dyn FnOnce(FileId) -> Diagnostic>;
 
 /// The directory (or file, with `-file`) to document.
-fn package_target(opts: &Options, cmd: &CommandLine, reading: &Reading, args: &[String]) -> Result<PathBuf, Pending> {
+fn package_target(
+    opts: &Options,
+    dir: &Path,
+    cmd: &CommandLine,
+    reading: &Reading,
+    args: &[String],
+) -> Result<PathBuf, Pending> {
     let Some(i) = reading.package else {
-        let here = Path::new(".");
-        if has_wid_files(here) {
-            return Ok(here.to_path_buf());
+        if has_wid_files(dir) {
+            return Ok(dir.to_path_buf());
         }
         let symbol = reading.symbol.map(|s| args[s].clone());
         return Err(Box::new(move |file| no_package_here(file, symbol.as_deref())));
@@ -265,7 +303,8 @@ fn package_target(opts: &Options, cmd: &CommandLine, reading: &Reading, args: &[
     let span_at = cmd.args[i];
     let span = move |file| Span::new(file, span_at.0, span_at.1);
     let end = cmd.text.len() as u32;
-    if let Some((collection, rel)) = text.split_once(':') {
+    // An existing path wins over a collection, for `C:\…` on Windows.
+    if let Some((collection, rel)) = text.split_once(':').filter(|_| !dir.join(&text).exists()) {
         let root = find_wid_root(opts);
         let base = match collection {
             "core" | "vendor" => root.join(collection),
@@ -323,7 +362,7 @@ fn package_target(opts: &Options, cmd: &CommandLine, reading: &Reading, args: &[
             diag
         }));
     }
-    let path = PathBuf::from(&text);
+    let path = clean(&dir.join(&text));
     if opts.file_mode {
         if path.is_file() {
             return Ok(path);
@@ -349,7 +388,7 @@ fn package_target(opts: &Options, cmd: &CommandLine, reading: &Reading, args: &[
         return Ok(path);
     }
     let exists = path.is_dir();
-    let parent = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new(".")).to_path_buf();
+    let parent = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(dir).to_path_buf();
     let last = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let siblings: Vec<String> = std::fs::read_dir(&parent)
         .map(|rd| {
@@ -359,10 +398,12 @@ fn package_target(opts: &Options, cmd: &CommandLine, reading: &Reading, args: &[
                 .collect()
         })
         .unwrap_or_default();
-    let best = (!exists).then(|| did_you_mean(&last, siblings.iter().map(String::as_str))).flatten().map(|best| {
-        let prefix = &text[..text.len() - last.len()];
-        format!("{prefix}{best}")
-    });
+    let best = match text.strip_suffix(last.as_str()) {
+        Some(prefix) if !exists => {
+            did_you_mean(&last, siblings.iter().map(String::as_str)).map(|best| format!("{prefix}{best}"))
+        }
+        _ => None,
+    };
     Err(Box::new(move |file| {
         let span = span(file);
         let (message, label) = if exists {
@@ -403,6 +444,12 @@ fn no_package_here(file: FileId, symbol: Option<&str>) -> Diagnostic {
         diag = diag.help("run `wid doc` in a package directory, or name a package, like `wid doc core:fmt`");
     }
     diag
+}
+
+/// `dir/./x` without the `.`, so paths print as written.
+fn clean(path: &Path) -> PathBuf {
+    let out: PathBuf = path.components().filter(|c| !matches!(c, std::path::Component::CurDir)).collect();
+    if out.as_os_str().is_empty() { PathBuf::from(".") } else { out }
 }
 
 /// Whether a directory holds `.wid` files.
@@ -543,7 +590,8 @@ impl ErrorContext<'_> {
         let pkg = self.index.package(package);
         let shown = match &via {
             Some(alias) => format!("package `{}` (imported as `{alias}`)", pkg.name),
-            None => format!("package `{}`", pkg.name),
+            None if pkg.path == "." => "this package".to_string(),
+            None => format!("package `{}`", pkg.path),
         };
         let mut diag = Diagnostic::error(codes::DOC_UNKNOWN_SYMBOL, format!("no symbol `{name}` in {shown}"))
             .primary(span, format!("not declared in {shown}"));
@@ -554,6 +602,7 @@ impl ErrorContext<'_> {
             ));
         }
         let best = did_you_mean(name, candidates.iter().map(String::as_str));
+        let mut suggested = best.is_some();
         if let Some(best) = best {
             diag = diag.suggest_replace(
                 format!("a similar name exists: `{best}`"),
@@ -584,6 +633,7 @@ impl ErrorContext<'_> {
                 .collect();
             match owners.as_slice() {
                 [only] => {
+                    suggested = true;
                     diag = diag.suggest_replace(
                         format!("`{only}` has that name; name its type first"),
                         span,
@@ -595,7 +645,7 @@ impl ErrorContext<'_> {
                 many => diag = diag.note(format!("members with that name: {}", many.join(", "))),
             }
         }
-        if best.is_none() {
+        if !suggested {
             diag = diag.help(match &via {
                 Some(alias) => format!("`wid doc {alias}` lists what package `{}` declares", pkg.name),
                 None => format!("`{}` lists what the package declares", self.package_command()),
@@ -773,7 +823,7 @@ impl PageBuilder<'_> {
         let mut e = self.entry(id);
         match s.kind {
             SymbolKind::Struct => {
-                e.fields = (0..s.fields.len()).map(|i| self.field_entry(id, i, None)).collect();
+                e.fields = (0..s.fields.len()).map(|i| self.field_entry(id, i, Some(own()))).collect();
             }
             SymbolKind::Enum => e.members = (0..s.enum_members.len()).map(|i| self.member_entry(id, i)).collect(),
             SymbolKind::Union => e.variants = s.links.iter().map(|l| l.text.clone()).collect(),
@@ -824,11 +874,14 @@ impl PageBuilder<'_> {
             .fields_of(ty)
             .into_iter()
             .map(|f| {
-                let origin = f.promoted_through.as_ref().map(|path| {
-                    let through = self.index.symbol(f.owner);
-                    OriginInfo { kind: "using", via: format!("using {path}: {}", through.name), location: None }
-                });
-                self.field_entry(f.owner, f.index, origin)
+                let origin = match &f.promoted_through {
+                    Some(path) => {
+                        let through = self.index.symbol(f.owner);
+                        OriginInfo { kind: "using", via: format!("using {path}: {}", through.name), location: None }
+                    }
+                    None => own(),
+                };
+                self.field_entry(f.owner, f.index, Some(origin))
             })
             .collect();
         e.members = (0..s.enum_members.len()).map(|i| self.member_entry(ty, i)).collect();
@@ -857,7 +910,7 @@ impl PageBuilder<'_> {
 
     fn origin(&self, origin: &Origin) -> OriginInfo {
         match origin {
-            Origin::Own => OriginInfo { kind: "own", via: String::new(), location: None },
+            Origin::Own => own(),
             Origin::Include { module, by } => {
                 let m = self.index.symbol(*module);
                 let b = self.index.symbol(*by);
@@ -916,6 +969,11 @@ impl PageBuilder<'_> {
             ..blank_entry("enum_member", &m.name, &path, &m.declaration())
         }
     }
+}
+
+/// The origin of a type's own members.
+fn own() -> OriginInfo {
+    OriginInfo { kind: "own", via: String::new(), location: None }
 }
 
 fn blank_entry(kind: &'static str, name: &str, path: &str, signature: &str) -> Entry {
@@ -1116,12 +1174,18 @@ fn context_line(e: &Entry) -> String {
         ("overload", Some((kind, owner))) => format!("overload set of {kind} {owner}"),
         ("field", Some((_, owner))) => format!("field of struct {owner}"),
         ("enum_member", Some((_, owner))) => format!("member of enum {owner}"),
+        ("overload", _) => "overload set".to_string(),
         (kind, _) => kind.replace('_', " "),
     };
     match (&e.c, &e.location) {
         (Some(c), _) => {
-            let at = c.declared_at.as_ref().map(|d| format!(" in {d}")).unwrap_or_default();
-            format!("{what}, imported from C: `{}`{at} (cimport \"{}\")", c.name, c.header)
+            let c_kind = match e.kind {
+                "method" => "function",
+                "constant" => "constant",
+                _ => "type",
+            };
+            let at = c.declared_at.as_ref().map(|d| format!(", declared at {d}")).unwrap_or_default();
+            format!("C {c_kind} `{}`{at} (cimport \"{}\")", c.name, c.header)
         }
         (None, Some(at)) => format!("{what}, defined at {}:{}", at.file, at.line),
         (None, None) => what,

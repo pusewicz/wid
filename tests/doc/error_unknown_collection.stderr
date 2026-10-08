@@ -1,0 +1,11 @@
+error[E0601]: unknown collection `cor`
+ --> command line:1:9
+  |
+1 | wid doc cor:fmt
+  |         ^^^ no collection with this name
+  = note: known collections: core, vendor
+help: a similar collection exists: `core`
+  | wid doc core:fmt
+  = see `wid explain E0601`
+
+error: could not compile due to 1 error

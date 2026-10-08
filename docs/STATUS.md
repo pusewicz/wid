@@ -308,6 +308,38 @@ runs the stages; `wid_cli` is the `wid` binary.
     visible in the enum's body (`member_names_macro`, E0914, fixed by
     adding `()`), keeps the member, and adds the enum to `failed_owners`
     so the methods the macro would generate aren't reported missing.
+- The symbol index (`wid_sema::index`, for `wid doc` now and `wid query`
+  and the LSP later): `check_program_indexed` runs the checker like
+  `check_program` and then `Checker::build_index` (`check/index.rs`), which
+  only reads the checker's tables (`decls`, `pkg_scopes`, `file_imports`,
+  `include_items`, `merged_cimports`) and reports nothing. Every `DeclId` is
+  the `SymbolId` of the same number. Names in `include`s, `using` field
+  types, `extend` targets, union variants and type aliases resolve with the
+  checker's pure lookups from the file where they are written (a virtual
+  file's `DeclLoc` for generated code), following type aliases. Symbols hold
+  owned data: the declaration line from `wid_syntax::print::Printer` (which
+  reads literals from `source_texts` and names spliced types with
+  `TypeTable::display`), the doc, fields and enum members (whose docs come
+  from `wid_syntax::docs::DocComments`, since the AST keeps none for them),
+  and for a `cimport` package's declarations the C name (the `extern`
+  attribute) and `CBinding::locations`. A package's `items` are sorted by
+  where they stand: generated ones at their outermost macro call, merged
+  `cimport` ones at the `cimport`. `Index::resolve` resolves symbol paths
+  and `member_groups` lists a type's members by origin, in lookup order.
+- `wid doc` (`wid_driver::doc`) reads its arguments against
+  `DocRequest::dir`, so the suite runs it without changing directory, then
+  loads and checks with `CheckOptions::library` (no `def main` needed) and
+  builds a `Page` of `Entry`s that `render_text` and `render_json` print;
+  `doc::print` is what the CLI and the suite share. Errors about the
+  request point into a "command line" source holding `wid doc ARGS`, like
+  `wid cimport --dump`'s, so fixes show the corrected command.
+- `tests/doc/NAME.args` cases run `wid doc` from `tests/doc/` (or
+  `tests/doc/DIR` with a leading `-in:DIR`) against `NAME.stdout` and
+  `NAME.stderr`; the directories there are their packages. Codes in their
+  `.stderr` count as covered for the docs check. `docs/errors` pages about
+  another command say so with `<!-- command: ARGS -->` and
+  `<!-- fix-command: ARGS -->` (E0601–E0604), which both errdocs scripts
+  follow.
 
 ## Done
 
@@ -690,8 +722,24 @@ runs the stages; `wid_cli` is the `wid` binary.
   `crates/wid_driver/tests/toolchain.rs` builds with fake compilers.
 - Test suite: `tests/run` (clang and gcc-16, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
-  `tests/test` (`wid test` reports) and every `core/` package's `_test.wid`
-  files.
+  `tests/test` (`wid test` reports), `tests/doc` (`wid doc` pages and
+  errors) and every `core/` package's `_test.wid` files.
+- `wid doc [package] [symbol]` (SPEC "Toolchain and CLI"): package
+  overviews (the package doc, then every public declaration by section with
+  the first paragraph of its doc), and pages for types (fields, promoted
+  fields, enum members, union variants, and methods from the type itself,
+  `include`d modules, `extend` blocks and `using` promotion, each group
+  marked), methods, macros, constants, type aliases, overload sets, fields,
+  enum members, builtin types (the methods extensions add) and `cimport`ed
+  C declarations (C name, `file:line`, C doc). Symbol paths go through
+  import names (`rl.draw_circle_v`), and one argument is the package or a
+  symbol of `.`. `-json` (a stable shape `wid query` will reuse),
+  `-private`, `-file`; `wid help doc`. Errors E0601 (package), E0602
+  (symbol), E0603 (member) and E0604 (private) point at the argument in the
+  command line, with did-you-mean fixes, a fix that names a member's type
+  first, `-file` and `-private` fixes, and notes on how one argument was
+  read. A package with errors is reported and still documented. Doxygen's
+  `///<` and `/**<` markers no longer show in imported C docs.
 - Linux and CI (`.github/workflows/ci.yml`, cached with sccache and
   rust-cache): `cargo fmt --check`; clippy and the full `cargo test` on
   Ubuntu 26.04 (clang-22, gcc-15, libclang 22, SDL3) and macOS 26 (Apple
@@ -705,7 +753,7 @@ runs the stages; `wid_cli` is the `wid` binary.
 
 Everything before macros is done (see "Done"). This is the work queue for
 the orchestrator (`docs/ORCHESTRATOR.md`), together with the open GitHub
-issues. Each item is one PR unless it says otherwise. Items 2–5 depend only on `main` and can run in parallel with the
+issues. Each item is one PR unless it says otherwise. Items 2–4 depend only on `main` and can run in parallel with the
 macro stack.
 
 1. **Macros and `type_info`** (`wid/macros-*`, about three stacked PRs):
@@ -813,39 +861,37 @@ macro stack.
      and `private macro def`; definition-site resolution of the quote's own
      names; budgets (64 deep, 65,536 per build, E0903). The implementation
      notes are under "Expansion" above.
-2. **`wid doc`** (`wid/doc`). Documentation for packages, types and
-   methods, generated from doc comments, including cimported C symbols
-   (SPEC "C and C++ interop", "Toolchain and CLI"). It prints text by
-   default and JSON with `-json`, and resolves `wid doc rl.draw_circle_v`
-   style queries.
-3. **`wid query`** (`wid/query`). The introspection engine in SPEC "Built
+2. **`wid query`** (`wid/query`). The introspection engine in SPEC "Built
    for humans and LLMs": symbols, types, definitions, references and call
    sites, as stable JSON. Factor it as a reusable engine, because the LSP
    shares it, and keep the compiler stages pure so queries can rerun them.
-4. **`wid fmt`** (`wid/fmt`). A canonical formatter. It must be
+   Build on the symbol index (`wid_sema::index`, `check_program_indexed`)
+   and the JSON items of `wid doc` (SPEC "Toolchain and CLI").
+3. **`wid fmt`** (`wid/fmt`). A canonical formatter. It must be
    idempotent, and parse → format → parse must give the same AST for every
    file in `tests/`, `core/`, `vendor/` and `examples/`. It keeps comments
-   and supports `-check`.
-5. **`wid lsp`** (`crates/wid_lsp`, `wid/lsp`, stacked on 3 and 4).
+   and supports `-check`. Start from `wid_syntax::print`, which renders
+   types, expressions and declaration lines.
+4. **`wid lsp`** (`crates/wid_lsp`, `wid/lsp`, stacked on 2 and 3).
    Diagnostics, hover, go-to-definition, completion, formatting and rename,
    all on top of the query engine.
-6. `vendor:cimgui`: vendor cimgui with the Dear ImGui sources, compiled as
+5. `vendor:cimgui`: vendor cimgui with the Dear ImGui sources, compiled as
    C++ package files (the driver already builds `.cpp` files and links with
    the C++ compiler), plus a raylib or SDL3 backend. Needs a decision on
    shipping the C++ sources versus requiring a system cimgui.
-7. **Cross-target builds** (`wid/targets`). Lift E0709. Make
+6. **Cross-target builds** (`wid/targets`). Lift E0709. Make
    `-target:os_arch` build through clang `--target` with a sysroot. Port
    `core:os`/`core:c` to Windows (LLP64) and make C type sizes
    target-driven.
-8. **SPEC conformance audit** (one agent, a report and no code). List every
+7. **SPEC conformance audit** (one agent, a report and no code). List every
    SPEC.md claim that is unimplemented or behaves differently: CLI flags such
    as `-vet`, `-sanitize:address`, the `-o:` levels and `-collection:`;
    `#line` in `-debug`; the prelude list; and so on. Queue each item here.
-9. **Known gaps** below: one small PR each, in any order.
-10. **Bug hunt after every large feature.** One agent probes with
-    `scripts/probe.rb` and `scripts/errdocs_drift.rb` and logs bad
-    diagnostics and crashes. Another agent fixes them. The first hunt found
-    46 real bugs.
+8. **Known gaps** below: one small PR each, in any order.
+9. **Bug hunt after every large feature.** One agent probes with
+   `scripts/probe.rb` and `scripts/errdocs_drift.rb` and logs bad
+   diagnostics and crashes. Another agent fixes them. The first hunt found
+   46 real bugs.
 
 Items under SPEC.md → Open (map literal syntax, error payloads, threads,
 hot reload, a package manager, `#soa`, a REPL) need the user's decisions
@@ -905,6 +951,16 @@ before anyone starts them.
   `Self.methods` in a type-body macro lists the methods collected so far.
   Generated declarations whose names come from computed symbols point at
   the whole call in messages (E0202, E0317).
+- `wid doc`: the AST drops the parameter names of `proc` types, so a C
+  callback shows as `@[c] proc(RawPtr?, C.int)` (`wid fmt` needs them
+  too). Expressions that hold statements (`if`, `case`, blocks,
+  `comptime do`) print as `if … end` in declaration lines. Only named
+  builtin types can be asked for (`String`, `Int`); extensions of patterns
+  (`[]$T`, `[2]F32`) show in the overview only. Extensions in packages the
+  documented package doesn't load are not listed, and a field promoted by
+  `using` is documented as its struct's (`Player.hp` shows `Entity`'s).
+  `cimport` declarations have no Wid location (their source is generated),
+  and the C enum a constant came from isn't named.
 - `vendor:miniaudio` built with GCC on macOS has no CoreAudio backend: GCC
   can't parse the block syntax in Apple's headers (`miniaudio.c` sets
   `MA_NO_COREAUDIO` there).

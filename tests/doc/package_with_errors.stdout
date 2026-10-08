@@ -1,0 +1,12 @@
+package broken
+
+A package with an error in a method body: `wid doc` reports it and still
+documents the package.
+
+METHODS
+
+def add_one(x: Int) -> Int
+    Adds one.
+
+def sub_one(x: Int) -> Int
+    Subtracts one.

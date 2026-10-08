@@ -923,6 +923,9 @@ fn doc_lines(doc: &str) -> Vec<String> {
         .lines()
         .map(|line| {
             let line = line.trim();
+            // Doxygen's comments on the member before them: `///<`, `/**<`.
+            let line =
+                ["///<", "//!<", "/**<", "/*!<"].iter().find_map(|marker| line.strip_prefix(marker)).unwrap_or(line);
             let line = line.trim_start_matches("/**").trim_start_matches("/*!").trim_start_matches("/*");
             let line = line.trim_start_matches("///").trim_start_matches("//!").trim_start_matches("//");
             let line = line.trim_end_matches("*/");

@@ -1,0 +1,6 @@
+package shapes
+
+MAX_BALLS = 64
+    How many balls fit on the screen.
+
+    constant, defined at tests/doc/shapes/shapes.wid:9

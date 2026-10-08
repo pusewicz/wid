@@ -1,0 +1,10 @@
+error[E0601]: `shapes/shapes.wid` is a file, not a package directory
+ --> command line:1:9
+  |
+1 | wid doc shapes/shapes.wid
+  |         ^^^^^^^^^^^^^^^^^ a package is a directory of `.wid` files
+help: document the file on its own with `-file`
+  | wid doc shapes/shapes.wid -file
+  = see `wid explain E0601`
+
+error: could not compile due to 1 error

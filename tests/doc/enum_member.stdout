@@ -1,0 +1,6 @@
+package shapes
+
+east = 4
+    Values can skip ahead.
+
+    member of enum Dir, defined at tests/doc/shapes/shapes.wid:25

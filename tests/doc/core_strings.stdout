@@ -1,0 +1,30 @@
+package strings // import "core:strings"
+
+struct Builder
+    struct, defined at core/strings/builder.wid:3
+
+FIELDS
+
+buf: [dynamic]U8
+
+METHODS
+
+def self.create(allocator: Allocator = context.allocator) -> Builder
+    An empty builder whose buffer grows with `allocator`.
+def write(s: String)
+    Appends a string.
+def write_byte(b: U8)
+    Appends one byte.
+def write_rune(r: Rune)
+    Appends a rune, encoded as UTF-8.
+def string -> String
+    The text built so far. It points into the builder, so it changes when
+    the builder grows; copy it with `clone` to keep it.
+def size -> Int
+    The number of bytes written.
+def empty? -> Bool
+    Returns true when nothing has been written.
+def clear
+    Forgets the text but keeps the buffer.
+def destroy
+    Releases the buffer.

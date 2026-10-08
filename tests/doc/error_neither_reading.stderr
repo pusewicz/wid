@@ -1,0 +1,10 @@
+error[E0601]: there is no package in the current directory
+ --> command line:1:1
+  |
+1 | wid doc shapez
+  | ^^^^^^^ `wid doc` documents the package in `.` when no package is named
+  = note: `shapez` is not a directory, a file or a collection path (like `core:fmt`), so it was read as a symbol of the package in `.`
+help: name the package first, like `wid doc path/to/package shapez`
+  = see `wid explain E0601`
+
+error: could not compile due to 1 error

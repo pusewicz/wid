@@ -1,0 +1,11 @@
+package shapes
+
+union Shape = Ball | geo.Rect
+    Something to draw.
+
+    union, defined at tests/doc/shapes/shapes.wid:40
+
+VARIANTS
+
+Ball
+geo.Rect

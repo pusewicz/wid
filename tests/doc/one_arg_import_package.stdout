@@ -1,0 +1,22 @@
+package geo
+
+Plane geometry for the shapes package.
+
+TYPES
+
+struct Rect
+    An axis-aligned rectangle.
+
+    x: F32
+    y: F32
+    w: F32
+    h: F32
+
+    def area -> F32
+        The area.
+
+struct Point
+    A point in the plane.
+
+    x: F32
+    y: F32

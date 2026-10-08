@@ -775,7 +775,9 @@ end
   templates directly is out of scope.
 - **Calling Wid from C.** `@[c]` gives a def the C ABI and `@[export("name")]`
   gives it a stable symbol. A C-ABI def starts with `Context.default`.
-- `wid doc` works on C symbols too.
+- `wid doc` works on C symbols too: it shows the declaration `cimport`
+  renders, the C name, where the header declares it, and the C doc comment
+  (`///`, `/** */`, or a comment trailing the declaration).
 
 ## Toolchain and CLI
 
@@ -809,7 +811,65 @@ end
   `test`, `doc`, `fmt`, `explain`, `cimport`, `query`, `lsp` and `version`. Flags:
   `-out:`, `-o:none|minimal|size|speed|aggressive`, `-debug`, `-vet`,
   `-define:NAME=val`, `-collection:name=path`, `-target:os_arch`, `-file`,
-  `-sanitize:address`, `-filter:` (for `test`) and `-json-errors`.
+  `-sanitize:address`, `-filter:` (for `test`), `-json` and `-private` (for
+  `doc`) and `-json-errors`.
+- **Docs.** `wid doc [package] [symbol]` shows documentation made from doc
+  comments: the `# ` comment lines directly above a declaration (above its
+  attributes too), with no blank line between; an enum member's sit above
+  it the same way. A package's doc is the comment block that opens one of
+  its files, when a blank line, the end of the file, or an `import` or
+  `cimport` follows it (so a `vendor` package's header counts); the file
+  named after the package (`strings.wid` in `core/strings`) wins, then the
+  first file that has one.
+  - `package` is a directory (default `.`), a single file with `-file`, or
+    a collection path such as `core:fmt` or `vendor:raylib`. `symbol` is a
+    path: `Name`, `Type.member`, `alias.Name` or `alias.Type.member`, where
+    `alias` is an `import` or `cimport … as:` name of the package's files
+    (`wid doc . rl.draw_circle_v`); an alias alone documents its package. A
+    first name the package doesn't declare is looked up in the prelude and
+    among the builtin types: `wid doc core:strings String` lists the
+    methods the program's extensions add to `String`.
+  - With one argument, it is the package if it names an existing directory
+    or file or contains `:`, and otherwise a symbol of the package in `.`:
+    `wid doc rl.draw_circle_v` works in a package directory. When neither
+    reading works, the error says what was tried both ways.
+  - Without a symbol, the page shows the package doc, then every public
+    declaration with its declaration line and the first paragraph of its
+    doc, in sections: `CONSTANTS`, `TYPES` (structs, enums, unions and type
+    aliases, with their fields, members and own methods), `MODULES`,
+    `METHODS` (package-level methods and overload sets), `MACROS` and
+    `EXTENSIONS`. Declarations a `cimport` without `as:` adds are the
+    package's own.
+  - A symbol's page shows its attributes, its declaration line, its whole
+    doc and where it is declared. A type's page adds its fields (with those
+    `using` promotes), enum members or union variants, and its methods
+    grouped by where they come from: its own, `include`d modules, `extend`
+    blocks and `using` promotion. Declaration lines read like the source:
+    generics show their parameters (`struct Pool($T, $N: Int)`), and a
+    macro's starts with `macro def`. A declaration of a `cimport` package
+    shows the C name and where the header declares it instead of a Wid
+    file.
+  - Private declarations are left out; naming one is an error (E0604) that
+    suggests `-private`, which documents them too, marked `private`. An
+    unknown package is E0601, an unknown symbol E0602 and a missing member
+    E0603.
+  - `wid doc` loads and checks the package, and never generates code.
+    Errors in the package are reported as usual, and the page still shows
+    every declaration the checker collected (the chosen `comptime if`
+    branches and what macros generated included); the exit status is then
+    1.
+  - The page goes to stdout and diagnostics to stderr. `-json` prints the
+    page as one JSON document with `package` (`name`, `path`, `doc`),
+    `symbol` (the path asked for, or `null`) and `items`: every declaration
+    of an overview, or the one symbol. Each item has `kind`, `name`, `path`,
+    `package`, `signature`, `attributes`, `doc`, `private` and `location`
+    (`file`, `line`, `column`; `null` for C), and, where they apply,
+    `owner`, `static`, `c` (`name`, `header`, `declared_at`), `fields`,
+    `members`, `variants`, `targets`, `aliases` and `methods`. Fields and
+    methods listed on a type have an `origin` (`kind`: `own`, `include`,
+    `extend` or `using`; `via`, as written; `location`). `-json-errors`
+    prints the diagnostics as JSON, on stderr. `wid query` reuses this
+    shape.
 
 ## Built for humans and LLMs
 

@@ -1,0 +1,10 @@
+error[E0602]: no symbol `Bal` in this package
+ --> command line:1:16
+  |
+1 | wid doc shapes Bal
+  |                ^^^ not declared in this package
+help: a similar name exists: `Ball`
+  | wid doc shapes Ball
+  = see `wid explain E0602`
+
+error: could not compile due to 1 error

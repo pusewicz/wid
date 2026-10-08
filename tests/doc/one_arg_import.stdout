@@ -1,0 +1,6 @@
+package shapes
+
+def area -> F32
+    The area.
+
+    method of struct Rect, defined at tests/doc/shapes/geo/geo.wid:11

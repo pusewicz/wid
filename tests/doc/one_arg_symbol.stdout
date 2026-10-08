@@ -1,0 +1,13 @@
+package shapes
+
+struct Ball
+    A bouncing ball.
+
+    struct, defined at tests/doc/shapes/shapes.wid:92
+
+FIELDS
+
+pos: Vec2
+vel: Vec2 = [120.0, 80.0]
+    Pixels per second.
+radius: F32 = 8.0

@@ -110,20 +110,13 @@ fn cimport(parsed: &Parsed) -> ExitCode {
 /// when the request fails.
 fn doc(parsed: &Parsed) -> ExitCode {
     let opts = options(parsed);
-    let request = wid_driver::doc::DocRequest { args: parsed.doc_args.clone(), private: parsed.private };
+    let request =
+        wid_driver::doc::DocRequest { args: parsed.doc_args.clone(), private: parsed.private, dir: PathBuf::new() };
     let out = wid_driver::doc::doc(&opts, &request);
-    if parsed.json_errors {
-        eprintln!("{}", render_json(&out.diags, &out.sources));
-    } else if !out.diags.is_empty() {
-        eprint!("{}", render_all(&out.diags, &out.sources, RenderOptions { color: color_stderr() }));
-    }
-    let Some(page) = &out.page else { return ExitCode::from(1) };
-    if parsed.json {
-        println!("{}", wid_driver::doc::render_json(page));
-    } else {
-        print!("{}", wid_driver::doc::render_text(page));
-    }
-    if out.diags.has_errors() { ExitCode::from(1) } else { ExitCode::SUCCESS }
+    let printed = wid_driver::doc::print(&out, parsed.json, parsed.json_errors, color_stderr());
+    eprint!("{}", printed.stderr);
+    print!("{}", printed.stdout);
+    if printed.success { ExitCode::SUCCESS } else { ExitCode::from(1) }
 }
 
 fn explain(parsed: &Parsed) -> ExitCode {

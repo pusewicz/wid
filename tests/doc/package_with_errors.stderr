@@ -1,0 +1,10 @@
+error[E0307]: cannot apply `+` to `Int` and `String`
+ --> tests/doc/broken/broken.wid:6:3
+  |
+6 |   x + "one"
+  |   ^^^^^^^^^ `Int` + `String`
+  |   - `Int`
+  |       ----- `String`
+  = see `wid explain E0307`
+
+error: could not compile due to 1 error

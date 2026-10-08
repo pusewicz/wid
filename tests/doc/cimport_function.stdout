@@ -1,0 +1,9 @@
+package cgeo
+
+@[extern("circle_area")]
+def circle_area(r: C.double) -> C.double
+    The area of a circle with radius `r`.
+
+    Negative radii give the area of the positive one.
+
+    C function `circle_area`, declared at geo.h:7 (cimport "geo.h")

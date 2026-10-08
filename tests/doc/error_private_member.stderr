@@ -1,0 +1,15 @@
+error[E0604]: `Player.secret` is private
+  --> command line:1:23
+   |
+ 1 | wid doc shapes Player.secret
+   |                       ^^^^^^ private declarations are left out of the documentation
+  ::: tests/doc/shapes/shapes.wid:81:15
+   |
+81 |   private def secret
+   |               ------ declared `private` here, which hides it outside its type
+   = note: `wid doc` documents what code outside can use; `-private` shows the rest too
+help: document private declarations too
+   | wid doc shapes Player.secret -private
+   = see `wid explain E0604`
+
+error: could not compile due to 1 error
