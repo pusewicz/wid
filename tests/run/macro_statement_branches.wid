@@ -1,0 +1,87 @@
+# A macro call that is a statement of its own runs its code as statements,
+# the last line included: an `if`, `case` or `comptime if` there needs no
+# value in its branches, as if the caller had written it.
+
+macro def say(s: String) -> Code
+  quote do
+    if #{s} == "quiet"
+      puts "..."
+    else
+      puts #{s}
+    end
+  end
+end
+
+macro def count(n: Int) -> Code
+  quote do
+    case #{n}
+    when 1 then puts "one"
+    when 2 then puts "two"
+    else puts "many"
+    end
+  end
+end
+
+macro def platform -> Code
+  quote do
+    comptime if OS == :linux || OS != :linux
+      puts "some platform"
+    else
+      puts "no platform"
+    end
+  end
+end
+
+macro def only_when(flag: Bool) -> Code
+  quote do
+    comptime if #{flag}
+      puts "flag set"
+    end
+  end
+end
+
+# A call that is the last line of a statement's code is a statement too.
+macro def twice_said(s: String) -> Code
+  quote do
+    puts "first"
+    say #{s}
+  end
+end
+
+macro def wrap(e: Code) -> Code
+  quote do
+    #{e}
+  end
+end
+
+# Where the call's value is used, the last line gives it.
+macro def sign(n: Int) -> Code
+  quote do
+    if #{n} < 0
+      "negative"
+    else
+      "not negative"
+    end
+  end
+end
+
+def main
+  say "hello"
+  say "quiet"
+  if true
+    say "in a branch"
+  end
+  [1, 2].each do |_i|
+    say "in a block"
+  end
+  count 1
+  count 2
+  count 7
+  platform
+  only_when true
+  only_when false
+  twice_said "nested"
+  wrap(say("spliced"))
+  say("postfix") if true
+  puts sign(-1), sign(1)
+end

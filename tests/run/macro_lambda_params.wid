@@ -1,0 +1,55 @@
+# A proc parameter whose name a macro splices is the caller's name, like a
+# block parameter's: the proc's body sees it, and so does code spliced in
+# from the call site. A name the quote writes itself stays the macro's own.
+
+macro def doubled(v: Symbol) -> Code
+  quote do
+    f = ->(#{v}: Int) -> Int { #{v} * 2 }
+    f.call(3)
+  end
+end
+
+# A name the macro computes, which has the call's position.
+macro def bumped(name: String) -> Code
+  v = name.to_sym
+  quote do
+    f = ->(#{v}: Int) -> Int { #{v} + 1 }
+    f.call(10)
+  end
+end
+
+# In a generated `def`.
+macro def squarer(fname: Symbol, v: Symbol) -> Code
+  quote do
+    def #{fname}(n: Int) -> Int
+      f = ->(#{v}: Int) -> Int { #{v} * #{v} }
+      f.call(n)
+    end
+  end
+end
+
+# Code from the call site uses the parameter it named.
+macro def applied(v: Symbol, body: Code) -> Code
+  quote do
+    f = ->(#{v}: Int) -> Int { #{body} }
+    f.call(7)
+  end
+end
+
+macro def own -> Code
+  quote do
+    f = ->(x: Int) -> Int { x - 1 }
+    f.call(5)
+  end
+end
+
+squarer :square, :k
+
+def main
+  p doubled(:e)
+  p bumped("w")
+  p square(4)
+  p applied(:q, q * 3)
+  x = 100
+  p own, x
+end

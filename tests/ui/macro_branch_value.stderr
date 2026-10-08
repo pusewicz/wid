@@ -1,0 +1,52 @@
+error[E0323]: this expression has no value
+  --> tests/ui/macro_branch_value.wid:8:7
+   |
+ 8 |       puts "nothing"
+   |       ^^^^^^^^^^^^^^ it returns nothing, so there is nothing to store
+  ::: tests/ui/macro_branch_value.wid:35:7
+   |
+35 |   x = say("x")
+   |       -------- `say` expands here
+   = note: this ends a branch of the `if` on the last line of `say`'s code, which gives the call's value, and the code around the call uses that value
+help: if the value isn't needed, call `say` as a statement of its own: then its last line needs no value
+   = see `wid explain E0323`
+
+error[E0323]: this expression has no value
+  --> tests/ui/macro_branch_value.wid:10:7
+   |
+10 |       puts #{s}
+   |       ^^^^^^^^^ it returns nothing, so there is nothing to store
+  ::: tests/ui/macro_branch_value.wid:35:7
+   |
+35 |   x = say("x")
+   |       -------- `say` expands here
+   = note: this ends a branch of the `if` on the last line of `say`'s code, which gives the call's value, and the code around the call uses that value
+help: if the value isn't needed, call `say` as a statement of its own: then its last line needs no value
+   = see `wid explain E0323`
+
+error[E0301]: expected `Int`, found `String`
+  --> tests/ui/macro_branch_value.wid:19:10
+   |
+19 |     else "many"
+   |          ^^^^^^ this has type `String`
+  ::: tests/ui/macro_branch_value.wid:36:12
+   |
+36 |   y: Int = mixed(2)
+   |            -------- `mixed` expands here
+   = note: this ends a branch of the `case` on the last line of `mixed`'s code, which gives the call's value, and the code around the call uses that value
+   = see `wid explain E0301`
+
+error[E0323]: this expression has no value
+  --> tests/ui/macro_branch_value.wid:27:7
+   |
+27 |       puts "flag set"
+   |       ^^^^^^^^^^^^^^^ it returns nothing, so there is nothing to store
+  ::: tests/ui/macro_branch_value.wid:37:7
+   |
+37 |   z = only_when(true)
+   |       --------------- `only_when` expands here
+   = note: this ends a branch of the `comptime if` on the last line of `only_when`'s code, which gives the call's value, and the code around the call uses that value
+help: if the value isn't needed, call `only_when` as a statement of its own: then its last line needs no value
+   = see `wid explain E0323`
+
+error: could not compile due to 4 errors

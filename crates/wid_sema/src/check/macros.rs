@@ -25,7 +25,8 @@
 //!    and its splices replaced by their values (a `Code` value is built the
 //!    same way, recursively, and an argument fragment is copied as written);
 //! 4. lowers the code where the call is ([`Checker::lower_generated`]):
-//!    every statement in place, the last one giving the call's value.
+//!    every statement in place, the last one giving the call's value, or
+//!    for a call that is a statement of its own, as a statement too.
 //!
 //! Generated statements are allocated in `Checker::generated`, an arena
 //! that lives as long as the input syntax, so declarations built from them
@@ -191,6 +192,15 @@ pub(crate) struct MacroState {
     /// The code every expansion spliced in from outside it, by the file of
     /// its span.
     pub splices: HashMap<FileId, Vec<Splice>>,
+    /// While the last line of an expansion whose call is a statement is
+    /// lowered, that line's span: a macro call that is the whole line is a
+    /// statement too (see [`Checker::lower_generated`]).
+    pub discarded: Option<Span>,
+    /// While the last line of an expansion gives the call's value and is an
+    /// `if`, `case` or `comptime if`: the expressions that end its branches,
+    /// the macro's name and the line's keyword, innermost expansion last
+    /// (see [`Checker::call_value_note`]).
+    pub value_tails: Vec<(Vec<Span>, String, &'static str)>,
 }
 
 /// A call of a macro.
@@ -234,8 +244,10 @@ impl<'a> Checker<'a> {
     /// macro computed has the call's span, so the primary label there says
     /// which name it is (`` `label`, spliced by `wrap`, has type … `` for a
     /// label about "this"), and an edit there, which would replace the call,
-    /// is dropped.
-    pub(super) fn splice_context(&self, mut diag: Diagnostic) -> Diagnostic {
+    /// is dropped. An error about a value that gives a call's value gets a
+    /// note saying so ([`Checker::call_value_note`]).
+    pub(super) fn splice_context(&self, diag: Diagnostic) -> Diagnostic {
+        let mut diag = self.call_value_note(diag);
         if diag.labels.iter().any(|l| l.splice) {
             return diag;
         }
@@ -318,6 +330,32 @@ impl<'a> Checker<'a> {
             return Some(name.end);
         }
         self.splice_site(name, call).map(|s| s.end)
+    }
+
+    /// Explains an error about the value that ends a branch of an `if`,
+    /// `case` or `comptime if` on the last line of an expansion whose value
+    /// is used: that line gives the call's value, where a statement's last
+    /// line would need none (see [`Checker::lower_generated`]).
+    fn call_value_note(&self, diag: Diagnostic) -> Diagnostic {
+        if diag.code != codes::NOT_A_VALUE && diag.code != codes::TYPE_MISMATCH {
+            return diag;
+        }
+        let Some(primary) = diag.primary_span() else { return diag };
+        let Some((_, name, keyword)) =
+            self.macros.value_tails.iter().rev().find(|(tails, ..)| tails.contains(&primary))
+        else {
+            return diag;
+        };
+        let diag = diag.note(format!(
+            "this ends a branch of the `{keyword}` on the last line of `{name}`'s code, which gives the call's value, and the code around the call uses that value"
+        ));
+        if diag.code == codes::NOT_A_VALUE {
+            diag.help(format!(
+                "if the value isn't needed, call `{name}` as a statement of its own: then its last line needs no value"
+            ))
+        } else {
+            diag
+        }
     }
 
     /// Records where each file's names resolve, for virtual files made from
@@ -580,10 +618,13 @@ impl<'a> Checker<'a> {
     // ----- calls ----------------------------------------------------------------------
 
     /// Expands a macro call and lowers the code it generates where the call
-    /// is. The value is the value of the code's last statement.
+    /// is. The value is the value of the code's last statement, unless the
+    /// call is a statement of its own: a whole statement, or the whole last
+    /// line of the code of a call that is one.
     pub fn call_macro(&mut self, call: MacroCall<'_>, expected: Option<TyId>) -> ir::Expr {
+        let statement = self.macros.line == call.span || self.macros.discarded == Some(call.span);
         match self.expand(&call) {
-            Some(code) => self.lower_generated(code, expected),
+            Some(code) => self.lower_generated(code, expected, &call.shown, statement),
             None => {
                 // What the code would have read and declared is unknown.
                 self.failed_expansion(call.span);
@@ -936,8 +977,16 @@ impl<'a> Checker<'a> {
     }
 
     /// Lowers generated statements where the call was: each in place, the
-    /// last one giving the value.
-    fn lower_generated(&mut self, stmts: &'a [ast::Stmt], expected: Option<TyId>) -> ir::Expr {
+    /// last one giving the value. When the call is a statement of its own
+    /// (`statement`), so is the last line, the way the caller would have
+    /// written it: an `if`, `case` or `comptime if` there needs no value.
+    fn lower_generated(
+        &mut self,
+        stmts: &'a [ast::Stmt],
+        expected: Option<TyId>,
+        name: &str,
+        statement: bool,
+    ) -> ir::Expr {
         let void = self.types.void();
         let Some((last, init)) = stmts.split_last() else {
             return ir::Expr::new(ExprKind::Zero, void);
@@ -948,13 +997,35 @@ impl<'a> Checker<'a> {
         let line = self.macros.line;
         self.lower_stmts(init, Dest::Discard);
         let mut lines = !init.is_empty();
+        let branching = match &last.kind {
+            StmtKind::Expr(e) => branching_keyword(e),
+            _ => None,
+        };
         let value = match &last.kind {
-            StmtKind::Expr(e) if last.attrs.is_empty() && produces_value(last) && !self.current_block_diverges() => {
+            StmtKind::Expr(e)
+                if last.attrs.is_empty()
+                    && produces_value(last)
+                    && !(statement && branching.is_some())
+                    && !self.current_block_diverges() =>
+            {
                 if lines {
                     self.emit(Stmt::Line(last.span));
                 }
                 let saved = self.enter_site(last.span);
+                // A macro call that is the whole line is a statement when
+                // this call is one; the branches of an `if` that gives the
+                // call's value give it a value.
+                let outer = std::mem::replace(&mut self.macros.discarded, statement.then_some(e.span));
+                if let Some(keyword) = branching {
+                    let mut tails = Vec::new();
+                    branch_tails(e, &mut tails);
+                    self.macros.value_tails.push((tails, name.to_string(), keyword));
+                }
                 let v = self.expr(e, expected);
+                if branching.is_some() {
+                    self.macros.value_tails.pop();
+                }
+                self.macros.discarded = outer;
                 self.leave_site(saved);
                 v
             }
@@ -968,6 +1039,308 @@ impl<'a> Checker<'a> {
             self.emit(Stmt::Line(line));
         }
         value
+    }
+
+    // ----- operands -------------------------------------------------------------------
+
+    /// Lowers code that runs apart from the statement around it (see
+    /// [`Operand`]) in a block and a scope of its own, so the statements a
+    /// macro call there generates run with it: the names they declare are
+    /// visible only there, and a `defer` there is an error
+    /// ([`Checker::defer_in_operand`]). Returns the block's statements and
+    /// the value `lower` gives, which may read locals they declare: the
+    /// caller puts the statements right before the value's use, in one
+    /// block.
+    pub(super) fn lower_operand(
+        &mut self,
+        operand: Operand,
+        lower: impl FnOnce(&mut Self) -> ir::Expr,
+    ) -> (Vec<Stmt>, ir::Expr) {
+        self.begin_block();
+        // Code outside any method body (none declares variables) has no
+        // scopes.
+        if self.body.frames.is_empty() {
+            let value = lower(self);
+            return (self.end_block().stmts, value);
+        }
+        self.push_scope();
+        if let Some(scope) = self.frame_mut().scopes.last_mut() {
+            scope.operand = Some(operand);
+        }
+        let mut value = lower(self);
+        // Code that changed the context ends in a block of its own, whose
+        // locals the value can't read after it: a value is stored in a
+        // temporary declared before the block, and a call without one runs
+        // inside it.
+        let shadowed = self.frame().scopes.last().is_some_and(|s| s.context_shadowed);
+        let mut kept = None;
+        if shadowed && matches!(self.types.kind(value.ty), TyKind::Void) && !value.is_pure() {
+            self.emit(Stmt::Expr(value));
+            value = ir::Expr::new(ExprKind::Zero, self.types.void());
+        } else if shadowed
+            && !value.is_constant()
+            && !matches!(self.types.kind(value.ty), TyKind::Void | TyKind::Never | TyKind::Unknown)
+        {
+            let ty = value.ty;
+            let local = self.new_local(None, ty);
+            let target = ir::Expr::new(ExprKind::Local(local), ty);
+            self.emit(Stmt::Assign { target: target.clone(), value });
+            value = target;
+            kept = Some(local);
+        }
+        let out = self.scoped_out(operand);
+        self.pop_scope();
+        if let Some(scope) = self.body.frames.last_mut().and_then(|f| f.scopes.last_mut()) {
+            scope.scoped_out.extend(out);
+        }
+        let mut stmts = self.end_block().stmts;
+        if let Some(local) = kept {
+            stmts.insert(0, Stmt::Let { local, init: None });
+        }
+        (stmts, value)
+    }
+
+    /// The variables the innermost scope, an operand's, declared, with
+    /// those of the operands inside it, as they leave scope.
+    fn scoped_out(&self, operand: Operand) -> Vec<ScopedOut> {
+        let Some(scope) = self.body.frames.last().and_then(|f| f.scopes.last()) else { return Vec::new() };
+        let declared = scope.vars.iter().map(|v| ScopedOut {
+            name: v.name,
+            mark: v.mark,
+            span: v.span,
+            operand,
+            by: self.declaring_macro(v.name, v.span),
+        });
+        let mut out: Vec<ScopedOut> = declared.collect();
+        out.extend(scope.scoped_out.iter().cloned());
+        out
+    }
+
+    /// The macro whose code declared a variable at `span`: the expansion
+    /// whose `quote` wrote the name, or that spliced it in from a `Symbol`.
+    fn declaring_macro(&self, name: Name, span: Span) -> Option<String> {
+        let file = match self.virtual_file(span.file) {
+            Some(_) => span.file,
+            None => {
+                let splices = self.macros.splices.get(&span.file)?;
+                splices.iter().rev().find(|s| s.code == span && s.name == Some(name))?.site.file
+            }
+        };
+        let v = self.virtual_file(file)?;
+        Some(self.macros.expansions[v.expansion as usize].name.clone())
+    }
+
+    /// Reports a `defer` at `span` that would join an operand's scope (see
+    /// [`Checker::lower_operand`]) and returns whether it did: no block
+    /// ends when it should run. Its body is still checked.
+    pub(super) fn defer_in_operand(&mut self, span: Span) -> bool {
+        let Some(operand) = self.body.frames.last().and_then(|f| f.scopes.last()).and_then(|s| s.operand) else {
+            return false;
+        };
+        let what = operand.describe();
+        let why = match operand.kind {
+            OperandKind::TypeInfo => {
+                "a `defer` runs when its block ends, but `type_info`'s operand is checked and never runs, so nothing would reach the `defer`".to_string()
+            }
+            OperandKind::Condition { .. } => format!(
+                "a `defer` runs when its block ends, but {what} runs again on each test of the loop and has no block of its own"
+            ),
+            OperandKind::Logical { .. }
+            | OperandKind::LogicalAssign { .. }
+            | OperandKind::SafeCall
+            | OperandKind::WhenPattern => format!(
+                "a `defer` runs when its block ends, but code in {what} {}, so the end of the block around it can't tell whether the `defer` was reached",
+                operand.runs()
+            ),
+        };
+        let call = self.virtual_file(span.file).map(|v| &self.macros.expansions[v.expansion as usize]);
+        let diag = match call {
+            Some(e) => {
+                let name = e.name.clone();
+                let help = match operand.kind {
+                    OperandKind::Logical { .. }
+                    | OperandKind::LogicalAssign { .. }
+                    | OperandKind::SafeCall
+                    | OperandKind::WhenPattern => format!(
+                        "call `{name}` in a branch of an `if` instead, whose end runs the `defer`; or, if its code may always run, as a statement of its own before this line (`v = {name}(…)`), and use `v` here"
+                    ),
+                    OperandKind::TypeInfo => format!(
+                        "call `{name}` as a statement of its own (`v = {name}(…)`), where the `defer` runs when the block ends, and pass `v` to `type_info`"
+                    ),
+                    OperandKind::Condition { until } => format!(
+                        "test the condition in the loop's body instead: in a `loop`, `break {} {name}(…)` runs the `defer` when each pass ends",
+                        if until { "if" } else { "unless" }
+                    ),
+                };
+                Diagnostic::error(
+                    codes::DEFER_IN_OPERAND,
+                    format!("the code `{name}` generates in {what} has a `defer`"),
+                )
+                .primary(e.call_site, format!("`{name}` expands here, in {what}"))
+                .secondary(span, "this `defer` would wait for the end of the block around it")
+                .note(why)
+                .help(help)
+            }
+            None => Diagnostic::error(codes::DEFER_IN_OPERAND, format!("a `defer` in {what}"))
+                .primary(span, "this `defer` would wait for the end of the block around it")
+                .secondary(operand.span, what)
+                .note(why)
+                .help("move the `defer` into a statement of its own"),
+        };
+        self.report(diag);
+        true
+    }
+
+    /// Reports a name that no code here declares but that a macro's code
+    /// declared in an operand around here, whose scope ended with it (see
+    /// [`Checker::lower_operand`]). Returns whether it did.
+    pub(super) fn report_scoped_out(&mut self, name: Name, span: Span) -> bool {
+        let mark = self.mark_at(span);
+        let found = self.body.frames.last().and_then(|f| {
+            f.scopes.iter().rev().find_map(|s| s.scoped_out.iter().rev().find(|o| o.name == name && o.mark == mark))
+        });
+        let Some(out) = found.cloned() else { return false };
+        if self.undefined_explained(name, span) {
+            return true;
+        }
+        let what = out.operand.describe();
+        let (label, note, help) = match &out.by {
+            Some(by) => (
+                format!("`{by}` declares `{name}` here, but only for {what}"),
+                format!(
+                    "the code a macro generates in {what} {}, so the names it declares are visible only there",
+                    out.operand.runs()
+                ),
+                format!(
+                    "to use `{name}` here, call `{by}` as a statement of its own before this line, so its code always runs"
+                ),
+            ),
+            None => (
+                format!("`{name}` is declared here, but only for {what}"),
+                format!("code in {what} {}, so the names it declares are visible only there", out.operand.runs()),
+                format!("to use `{name}` here, declare it before {what}"),
+            ),
+        };
+        self.report(
+            Diagnostic::error(codes::UNDEFINED_NAME, format!("undefined name `{name}`"))
+                .primary(span, "not found in this scope")
+                .secondary(out.span, label)
+                .note(note)
+                .help(help),
+        );
+        true
+    }
+}
+
+/// Code that runs apart from the statement around it, not once with it:
+/// maybe not at all, never, or on each test of a loop. The statements a
+/// macro generates there get a scope of their own (see
+/// [`Checker::lower_operand`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum OperandKind {
+    /// The right side of `&&` (`or` false) or `||`.
+    Logical { or: bool },
+    /// The value of `&&=` (`or` false) or `||=`.
+    LogicalAssign { or: bool },
+    /// The arguments of a `&.` call, which run only for a receiver that
+    /// isn't nil.
+    SafeCall,
+    /// A `when` pattern after the first of a `case`, which runs only when
+    /// no earlier pattern matched.
+    WhenPattern,
+    /// `type_info`'s operand, which is checked but never runs.
+    TypeInfo,
+    /// A `while` (`until` false) or `until` condition.
+    Condition { until: bool },
+}
+
+/// An operand that runs apart from the statement around it.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Operand {
+    pub kind: OperandKind,
+    /// The operand's code.
+    pub span: Span,
+}
+
+impl Operand {
+    /// The operand, for messages: "the right side of `&&`".
+    fn describe(self) -> &'static str {
+        match self.kind {
+            OperandKind::Logical { or: false } => "the right side of `&&`",
+            OperandKind::Logical { or: true } => "the right side of `||`",
+            OperandKind::LogicalAssign { or: false } => "the value of `&&=`",
+            OperandKind::LogicalAssign { or: true } => "the value of `||=`",
+            OperandKind::SafeCall => "the arguments of a `&.` call",
+            OperandKind::WhenPattern => "a `when` pattern after the first",
+            OperandKind::TypeInfo => "`type_info`'s operand",
+            OperandKind::Condition { until: false } => "a `while` condition",
+            OperandKind::Condition { until: true } => "an `until` condition",
+        }
+    }
+
+    /// When its code runs, for messages: "runs only when the left side is
+    /// true".
+    fn runs(self) -> &'static str {
+        match self.kind {
+            OperandKind::Logical { or: false } => "runs only when the left side is true",
+            OperandKind::Logical { or: true } => "runs only when the left side is false or nil",
+            OperandKind::LogicalAssign { or: false } => "runs only when the target is true or holds a value",
+            OperandKind::LogicalAssign { or: true } => "runs only when the target is false or nil",
+            OperandKind::SafeCall => "runs only when the receiver isn't nil",
+            OperandKind::WhenPattern => "runs only when no earlier pattern matched",
+            OperandKind::TypeInfo => "is checked but never runs",
+            OperandKind::Condition { .. } => "runs again on each test of the loop",
+        }
+    }
+}
+
+/// A variable that macro code declared in an operand (see [`Operand`]),
+/// remembered after the operand's scope ends so that a use after it can
+/// say why the name is missing.
+#[derive(Clone, Debug)]
+pub(crate) struct ScopedOut {
+    pub name: Name,
+    /// The variable's hygiene mark (see `Var::mark`).
+    pub mark: Option<u32>,
+    /// Where it was declared.
+    pub span: Span,
+    /// The operand that declared it.
+    pub operand: Operand,
+    /// The macro whose code declared it, as the call names it.
+    pub by: Option<String>,
+}
+
+/// The keyword of an expression that chooses among branches of statements
+/// (`if`, `unless`, `case`, `comptime if`), which a statement may write
+/// without values.
+fn branching_keyword(e: &ast::Expr) -> Option<&'static str> {
+    match &e.kind {
+        E::If(i) if i.unless => Some("unless"),
+        E::If(_) => Some("if"),
+        E::Case(_) => Some("case"),
+        E::ComptimeIf(_) => Some("comptime if"),
+        _ => None,
+    }
+}
+
+/// The spans of the expressions that end the branches of `e` and give its
+/// value, through nested `if`s and `case`s.
+fn branch_tails(e: &ast::Expr, out: &mut Vec<Span>) {
+    let bodies: Vec<&[ast::Stmt]> = match &e.kind {
+        E::If(i) | E::ComptimeIf(i) => std::iter::once(i.then.as_slice())
+            .chain(i.elifs.iter().map(|(_, b)| b.as_slice()))
+            .chain(i.else_.as_deref())
+            .collect(),
+        E::Case(c) => c.whens.iter().map(|w| w.body.as_slice()).chain(c.else_.as_deref()).collect(),
+        _ => {
+            out.push(e.span);
+            return;
+        }
+    };
+    for body in bodies {
+        if let Some(ast::Stmt { kind: StmtKind::Expr(tail), .. }) = body.last() {
+            branch_tails(tail, out);
+        }
     }
 }
 

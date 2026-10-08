@@ -80,10 +80,10 @@ impl<'a> Checker<'a> {
         if let Some(t) = self.named_type(e) {
             return (t, true);
         }
-        // The value is never computed: drop the statements that would.
-        self.begin_block();
-        let v = self.expr(e, None);
-        self.end_block();
+        // The value is never computed: drop the statements that would. The
+        // names a macro's code declares there are the operand's own.
+        let operand = super::macros::Operand { kind: super::macros::OperandKind::TypeInfo, span: e.span };
+        let (_, v) = self.lower_operand(operand, |this| this.expr(e, None));
         let ty = match self.types.kind(v.ty) {
             TyKind::Never => v.ty,
             _ => self.value_type(v.ty, e.span),

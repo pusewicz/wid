@@ -52,6 +52,12 @@ pub(crate) struct Scope {
     /// it may use locals its code would have declared (see
     /// [`Checker::failed_expansion`]).
     pub failed_macro: bool,
+    /// For the scope of an operand that runs apart from the statement
+    /// around it, which one (see [`Checker::lower_operand`]).
+    pub operand: Option<super::macros::Operand>,
+    /// The variables that macro code declared in such operands inside this
+    /// scope, which only the operands saw, for E0201's note.
+    pub scoped_out: Vec<super::macros::ScopedOut>,
 }
 
 /// One lexical context: the body of a function being lowered.

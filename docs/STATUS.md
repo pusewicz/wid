@@ -145,7 +145,7 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   tests and exported functions calls one.
 - `type_info(x)` lowers to `Builtin::TypeInfo` whose one argument is a `Zero`
   of the described type, never evaluated (`check/type_info.rs` checks `x` in
-  a block it then drops). `wid_sema::type_info::describe` says what a table
+  a block and scope of its own, `lower_operand`, then drops the block). `wid_sema::type_info::describe` says what a table
   holds, and `type_info::check` rejects types whose tables would reach a
   `Type` (E0906) or `Never` (E0323). Codegen (`type_info.rs`) emits one
   `static const` object, `wid_typeinfo`, with arrays `types`, `fields`,
@@ -176,7 +176,13 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
     `check_program`, so generated syntax lives for `'a`).
     `lower_generated` lowers them in place: all but the last with
     `lower_stmts`, the last as the value (with the expected type), then
-    re-emits the caller's `Line`.
+    re-emits the caller's `Line`. A call that is a statement of its own
+    (the statement being lowered, `MacroState::line`, or the whole last
+    line of the code of such a call, `MacroState::discarded`) lowers a
+    last `if`, `case` or `comptime if` as a statement. Where the value is
+    used, `MacroState::value_tails` holds the spans that end that line's
+    branches, and `call_value_note` (run by `splice_context`) adds a note
+    to an E0323 or E0301 there saying the line gives the call's value.
   - `Code` values are numbers: 0 is no code, `1..=n` the argument
     fragments, then the fragments the macro's `quote`s recorded, in order.
     `Builtin::Quote { template }` (lowered by `lower_quote`; `template`
@@ -234,9 +240,30 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
     `find_var` matches the site's mark and `find_var_at(name, span)` the
     span's, so the quote's own locals and the caller's never see each
     other, while spliced code and names (call-site spans) do. Lambdas
-    inherit the site. Parameters of a generated method (`declare_param`,
+    inherit the site; like block parameters, their parameters are declared
+    at their names' spans, so a spliced name gets the caller's mark.
+    Parameters of a generated method (`declare_param`,
     and inlined block methods) are `open`: also visible to code with the
     mark of the expansion's call site.
+  - Operands that don't run once with their statement (`macros::Operand`:
+    the right side of `&&`/`||` in `logical` and `or_default`, the value of
+    `||=`/`&&=` in `lower_logical_assign` and `map_logical_assign`, the
+    call of `&.` with its arguments in `safe_member`, every `when` pattern
+    but a `case`'s first in `lower_when_chain` (a pattern that needs
+    statements is tested only when the earlier ones of its `when` didn't
+    match), `type_info`'s operand, and `while`/`until` conditions) are
+    lowered by `lower_operand`, in a block and a `Scope` of their own whose
+    `operand` is set; the caller places the statements right before the
+    value's use (a value read after a context-shadowing block is first
+    stored in a temporary declared before it, and a call without a value
+    runs inside it). Popping the scope moves its variables into the
+    enclosing scope's `scoped_out`, so `ident` reports a later use with
+    `report_scoped_out` (E0201 naming the macro and the operand, hygiene
+    marks respected). `lower_defer` asks `defer_in_operand`, which reports
+    a `defer` whose scope is an operand's (E0406, at the call that
+    generated it) and keeps it out of the exit stack; its body is still
+    checked. For `while v = …` the operand scope wraps `lower_if_bind`, so
+    the body sees the names.
   - Budgets: depth comes from the call span's virtual file (parent depth +
     1, at most 64); at most 65,536 expansions per build; each E0903 is
     reported once (per macro for depth). A macro whose reachable functions
@@ -807,6 +834,28 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   field is fixed at the call (`:hp`). `Checker::splice_site` and
   `name_end` find the splice, which also fixes the `()` fix for a field
   called as `self.#{name}()` (it edited unrelated text).
+- A proc parameter whose name a macro splices (`->(#{v}: Int) -> Int {
+  #{v} * 2 }`), in a method body or a generated `def`, is the caller's
+  name, as a block parameter's is: the proc's body and code spliced from
+  the call site see it (#73; it was E0201). `lower_lambda` declares each
+  parameter at its name's span instead of the whole parameter's.
+- A macro call that is a statement of its own runs its last line as a
+  statement too: an `if`, `case` or `comptime if` whose branches have no
+  value works there, in a method body, a branch or a block, also through
+  nested calls (#72; it was E0323 on each branch). Where the call's value
+  is used, E0323 (or E0301) on a branch says that the last line gives the
+  call's value, and the help calls the macro as a statement.
+- A macro call in an operand that may not run (the right side of `&&` or
+  `||`, the value of `||=` or `&&=`, the arguments of a `&.` call, a `when`
+  pattern after the first), never runs (`type_info`'s operand) or
+  runs on each test (a `while` or `until` condition) runs its code with the
+  operand (#70). The names it declares are the operand's: a use after it
+  is E0201 with a note naming the macro and the operand, where the C
+  compiler rejected an undeclared variable. A `defer` there is the new
+  E0406 at the call, where it ran at the end of the block even when the
+  operand didn't. A `when` pattern that needs statements (like a macro
+  call's) is tested only when the earlier patterns of its `when` didn't
+  match; they all ran before.
 - A C compiler without C23 (one that rejects `-std=c23`, like gcc 13 or
   clang 17, or lacks `<stdckdint.h>` or `#embed`) is E0702 "the C compiler
   `cc` doesn't support C23", with the first line of its `--version`, the

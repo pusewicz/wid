@@ -457,13 +457,17 @@ impl<'a> Checker<'a> {
             ExprKind::Binary { op, lhs: Box::new(found), rhs: Box::new(null), span: target.span },
             bool_ty,
         );
-        self.begin_block();
-        let v = self.expr_coerced(value, val);
-        let v = if v.is_constant() { v } else { self.spill(v) };
-        let slot = self.map_slot(ptr, key, val, target.span);
-        self.emit(Stmt::Assign { target: ir::Expr::new(ExprKind::Deref(Box::new(slot)), val), value: v });
-        let then = self.end_block();
-        self.emit(Stmt::If { cond, then, else_: ir::Block::default() });
+        // The value runs only when the assignment happens.
+        let kind = super::macros::OperandKind::LogicalAssign { or: is_or };
+        let operand = super::macros::Operand { kind, span: value.span };
+        let (stmts, _) = self.lower_operand(operand, |this| {
+            let v = this.expr_coerced(value, val);
+            let v = if v.is_constant() { v } else { this.spill(v) };
+            let slot = this.map_slot(ptr, key, val, target.span);
+            this.emit(Stmt::Assign { target: ir::Expr::new(ExprKind::Deref(Box::new(slot)), val), value: v });
+            ir::Expr::new(ExprKind::Zero, this.types.void())
+        });
+        self.emit(Stmt::If { cond, then: ir::Block { stmts }, else_: ir::Block::default() });
         true
     }
 
