@@ -8,8 +8,11 @@ Z = -Bar
 
 def width -> Int = 3
 
-# A method called without `comptime` is still E0327, with its fix.
+# A method called without `comptime` is still E0327, with its fix, also
+# in arithmetic. (A macro called without `()` expands, see
+# `tests/run/macro_bare_constants`.)
 W = width
+V = width * 2
 
 # A constant whose value is another constant of a struct type evaluates.
 struct Vec2

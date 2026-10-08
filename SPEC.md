@@ -477,7 +477,9 @@ end
   any type, enum members, indexing other constants and the like evaluate too
   (`ORIGIN = Vec2.new(x: 0.0, y: 0.0)`, `START = ORIGIN`,
   `FACING: Dir = :north`). Calling a method needs `comptime`, so every place
-  where code runs at compile time says so (E0327 suggests adding it). The
+  where code runs at compile time says so (E0327 suggests adding it). A
+  macro expands without it, and one without arguments may omit `()` there
+  as anywhere (`X = five`, `[five]Int`, an enum member's `a = five`). The
   value's names resolve as in a method: an undefined one is E0201 with a
   did-you-mean.
 - `comptime` code can use constants, literals and any Wid method, but not the

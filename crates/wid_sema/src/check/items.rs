@@ -35,10 +35,12 @@ impl ConstValue {
 }
 
 /// Whether an expression needs the interpreter to be evaluated at compile
-/// time, rather than plain folding of literals.
-fn needs_interpreter(e: &ast::Expr) -> bool {
+/// time, rather than plain folding of literals. `names_macro` says whether
+/// a bare name is a macro, called without `()` like `X = five`.
+fn needs_interpreter(e: &ast::Expr, names_macro: &impl Fn(&ast::Expr, Name) -> bool) -> bool {
     use ast::ExprKind as E;
     match &e.kind {
+        E::Ident(name) => names_macro(e, *name),
         E::Comptime(_)
         | E::ComptimeIf(_)
         | E::Call(_)
@@ -51,13 +53,23 @@ fn needs_interpreter(e: &ast::Expr) -> bool {
         | E::Zero
         | E::Nil => true,
         E::Str(parts) => parts.iter().any(|p| matches!(p, ast::StrPart::Interp(_))),
-        E::Paren(inner) | E::Unary { expr: inner, .. } => needs_interpreter(inner),
-        E::Binary { lhs, rhs, .. } => needs_interpreter(lhs) || needs_interpreter(rhs),
+        E::Paren(inner) | E::Unary { expr: inner, .. } => needs_interpreter(inner, names_macro),
+        E::Binary { lhs, rhs, .. } => needs_interpreter(lhs, names_macro) || needs_interpreter(rhs, names_macro),
         _ => false,
     }
 }
 
 impl<'a> Checker<'a> {
+    /// Whether a constant expression written at `loc` needs the
+    /// interpreter (see [`needs_interpreter`]).
+    fn const_needs_interpreter(&self, e: &ast::Expr, loc: DeclLoc) -> bool {
+        needs_interpreter(e, &|ident, name| {
+            // A macro's own code names macros where the macro is.
+            let loc = self.virtual_file(ident.span.file).map_or(loc, |v| v.loc);
+            self.lookup_pkg(loc.pkg, name).or_else(|| self.lookup_prelude(name)).is_some_and(|d| self.is_macro(d))
+        })
+    }
+
     /// Registers every declaration of every package.
     pub(super) fn collect(&mut self) {
         let input = self.input;
@@ -673,7 +685,7 @@ impl<'a> Checker<'a> {
         let folded = self.fold_const(&c.value, d.loc);
         let value = match folded {
             Some(v) => Some(v),
-            None if needs_interpreter(&c.value) => {
+            None if self.const_needs_interpreter(&c.value, d.loc) => {
                 self.interpret_const(&c.value, declared, d.loc).map(ConstValue::Typed)
             }
             // Names, or arithmetic on them, that didn't fold: `X = Foo`
@@ -779,7 +791,7 @@ impl<'a> Checker<'a> {
             ast::ExprKind::Comptime(body) => {
                 self.comptime_value(ComptimeCode::Stmts(body), expected, loc, expr.span, true)
             }
-            _ if needs_interpreter(expr) => {
+            _ if self.const_needs_interpreter(expr, loc) => {
                 self.comptime_value(ComptimeCode::Expr(expr), expected, loc, expr.span, false)
             }
             _ => None,

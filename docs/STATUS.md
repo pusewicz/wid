@@ -1087,6 +1087,11 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   (#97); it emitted `void` variables the C compiler rejected (E0702).
   `comptime do … end` whose last statement is a `comptime if` without
   `else` discards it, like an `if`.
+- A macro without arguments called without `()` expands in an array
+  length (`[five]Int`, `[five + 1]Int`) and an enum member's value
+  (`a = five`) as in a constant's (#78); those were E0327. The constant
+  evaluator's `needs_interpreter` counts a bare name that names a macro as
+  a call. A bare method name stays E0327 with the `comptime` fix.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
