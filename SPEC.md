@@ -114,7 +114,14 @@ end
     next line means the bracket was left open at the end of the line (a
     value indented under the list's first line is read as its next item,
     with the `,` missing), as does a declaration or an `end` inside a
-    `{ }` block.
+    `{ }` block. The same holds for a method's or proc's parameters and a
+    type's arguments, array length and map key. After a `,`, a line that
+    can't start an item also means the list was left open: in a parameter
+    list, one that doesn't start with a parameter; in a list whose items
+    are never named (an array, an index, a type's arguments), a `name:`
+    declaration. A method whose parameter list was left open before a
+    declaration ends with that line. A named argument's value may go on
+    the next line only indented deeper than the call's own line.
   - `x ? a : b` needs spaces around `?`, because `x?` is a predicate name.
     So a `?` written right after a type's name or its closing `)`
     (`Int?`, `rl.Color?`, `Pool(Ball, 64)?`, `(proc(Int) -> Int)?`) ends

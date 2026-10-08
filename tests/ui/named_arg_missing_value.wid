@@ -1,0 +1,13 @@
+# A named argument's value may go on the next line, indented deeper than
+# the call's line. A line indented no deeper can't be it: the value is
+# missing, one error at the end of the line, and the next line is parsed
+# on its own.
+def add(a: Int) -> Int = a
+
+def main
+  x = add(a:
+  p x
+  y = add(a:
+    2)
+  p y
+end

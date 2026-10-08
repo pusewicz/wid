@@ -60,6 +60,18 @@ struct Opener {
     span: Span,
 }
 
+/// A parsed parameter list (see [`Parser::parse_params`]).
+#[derive(Default)]
+struct ParamList {
+    params: Vec<Param>,
+    /// The `&block` parameter.
+    block: Option<BlockParamDecl>,
+    /// The `...` of C variadic arguments.
+    c_variadic: Option<Span>,
+    /// Whether the list was left open at the end of its line (reported).
+    left_open: bool,
+}
+
 /// An array length written `[$N]` in a method's signature, as if a method
 /// could take a value parameter (only generic structs can). The type reads
 /// as the slice `[]T` it should be, and `parse_def` reports it.
@@ -100,6 +112,24 @@ struct List {
     /// What one item and several are called ("argument", "arguments").
     item: &'static str,
     items: &'static str,
+    /// What its items are.
+    kind: Items,
+}
+
+/// What the items of a [`List`] are, which tells a line that doesn't go
+/// on with the list apart from its next item.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Items {
+    /// Call arguments, or a proc type's parameters: values or types, which
+    /// may be named (`name: value`).
+    Args,
+    /// Values or types that are never named: array elements, indices, a
+    /// generic type's arguments or a tuple's types. A line that starts
+    /// with `name:` declares something (a field, a local).
+    Unnamed,
+    /// A method's or proc's parameters, which start with a name and its
+    /// `:` (see [`Parser::param_ahead`]).
+    Params,
 }
 
 /// What follows an item of a [`List`].
@@ -466,13 +496,30 @@ impl<'a> Parser<'a> {
     }
 
     /// Skips to the end of the current line, or of the enclosing splice,
-    /// after an error.
+    /// after an error. A bracket opened on the line goes on over the
+    /// lines up to its closer, but a declaration, or an `end` that no
+    /// `do` skipped here opened, starting a later line was never part of
+    /// the line: it was left open (`X = Foo{` followed by `def main`), so
+    /// the skipping stops there, and the declaration is parsed on its own.
     fn recover_line(&mut self) {
         let mut depth = 0i32;
+        let mut blocks = 0u32;
         loop {
-            match self.kind() {
+            let tok = self.peek();
+            match tok.kind {
                 T::Eof => return,
                 T::Newline | T::SpliceEnd if depth <= 0 => return,
+                T::Kw(K::End) if blocks > 0 => blocks -= 1,
+                kind if starts_declaration(kind) && self.pos > 0 => {
+                    let last = self.tokens[self.pos - 1];
+                    if self.line_of(tok.span.start) > self.line_of(last.span.start) {
+                        if last.kind != T::Newline {
+                            self.restore_line_end(last.span);
+                        }
+                        return;
+                    }
+                }
+                T::Kw(K::Do) => blocks += 1,
                 T::LParen | T::LBracket | T::LBrace => depth += 1,
                 T::RParen | T::RBracket | T::RBrace => depth -= 1,
                 _ => {}
@@ -577,12 +624,33 @@ impl<'a> Parser<'a> {
 
     /// At the start of an item of `list` (after its opener or a `,`): when
     /// the line ended there and the next one starts a declaration or the
-    /// `end` of a block (`X = max(1,` followed by `def main`), the list was
-    /// left open at the end of the line. Reports that, with a fix that
-    /// closes it, and puts back the line end, so the declaration is parsed
-    /// on its own.
+    /// `end` of a block (`X = max(1,` followed by `def main`), or what no
+    /// item of the list starts with (a method's body after a parameter
+    /// list, as in `def foo(a: Int,` followed by `x = a`, or a field after
+    /// a type's arguments), the list was left open at the end of the line.
+    /// Reports that, with a fix that closes it, and puts back the line
+    /// end, so the next line is parsed on its own.
     fn list_left_open(&mut self, list: &List) -> bool {
-        let Some(last) = self.line_cut_before_declaration() else { return false };
+        let cut = self.line_cut_before_declaration().or_else(|| {
+            let last = *self.tokens[..self.pos].last()?;
+            let next = self.peek();
+            if last.kind == T::Newline || self.line_of(next.span.start) == self.line_of(last.span.start) {
+                return None;
+            }
+            let after_name = self.name_len(0).map(|len| self.nth(len));
+            let left = match list.kind {
+                Items::Args => false,
+                Items::Unnamed => after_name.is_some_and(|t| t.kind == T::Colon && !t.space_before),
+                // A parameter, maybe without its type (reported as that).
+                Items::Params => {
+                    !matches!(next.kind, T::RParen | T::Eof)
+                        && !self.param_ahead()
+                        && !after_name.is_some_and(|t| matches!(t.kind, T::Comma | T::RParen | T::Newline | T::Eof))
+                }
+            };
+            left.then_some(last)
+        });
+        let Some(last) = cut else { return false };
         self.unclosed(list.open, last.span, list.closer, list.what);
         self.restore_line_end(last.span);
         true
@@ -594,7 +662,8 @@ impl<'a> Parser<'a> {
     /// else on the next line is not part of the list, which was left open
     /// at the end of this line (reported with a fix that closes it), unless
     /// that line is indented under the list's first line and starts an
-    /// expression, which is the next item with its `,` missing.
+    /// expression (or a parameter, in a parameter list), which is the next
+    /// item with its `,` missing.
     fn list_step(&mut self, list: &List) -> ListStep {
         let (last, before) = (self.prev_span(), self.pos);
         self.skip_newlines();
@@ -606,9 +675,10 @@ impl<'a> Parser<'a> {
         }
         let next = self.peek();
         let indent = |p: &Self, span: Span| p.indent_of_line(p.line_of(span.start));
+        let item = if list.kind == Items::Params { self.param_ahead() } else { self.can_start_expr(next) };
         if next.kind != T::Eof
             && !starts_declaration(next.kind)
-            && self.can_start_expr(next)
+            && item
             && indent(self, next.span) > indent(self, list.open)
         {
             let at = last.shrink_to_end();
@@ -630,6 +700,43 @@ impl<'a> Parser<'a> {
         self.pos = before;
         self.unclosed(list.open, last, list.closer, list.what);
         ListStep::Open
+    }
+
+    /// Whether the next line, after any blank ones, starts a declaration
+    /// other than an `end`.
+    fn declaration_ahead(&self) -> bool {
+        let next = self.tokens[self.pos..].iter().find(|t| t.kind != T::Newline);
+        next.is_some_and(|t| t.kind != T::Kw(K::End) && starts_declaration(t.kind))
+    }
+
+    /// Whether a parameter starts here: a name and its `:`, `&name`,
+    /// `*name`, `$T` or `...`. A method's body, on the lines after an
+    /// unclosed parameter list, doesn't start that way.
+    fn param_ahead(&self) -> bool {
+        match self.kind() {
+            T::Amp | T::Star | T::TypeParam | T::DotDotDot => true,
+            _ => self.name_len(0).is_some_and(|len| self.nth(len).kind == T::Colon),
+        }
+    }
+
+    /// Expects the `]` of the bracket at `open` in a type (`[N]T`,
+    /// `map[K]V`). When the line ends before it, the bracket was left open
+    /// at the end of the line: that is reported with a fix that closes it,
+    /// the next line is parsed on its own, and this returns false, as the
+    /// type can't go on.
+    fn close_type_bracket(&mut self, open: Span) -> bool {
+        if self.eat(T::RBracket) {
+            return true;
+        }
+        let last = self.prev_span();
+        let next = self.peek();
+        if matches!(next.kind, T::Newline | T::Eof) || self.line_of(next.span.start) > self.line_of(last.start) {
+            self.unclosed(open, last, "]", "`]`");
+            self.restore_line_end(last);
+            return false;
+        }
+        self.error_expected("`]`");
+        true
     }
 
     /// Reports a line that ends with the `(` at `open` (just consumed) when
@@ -1523,7 +1630,13 @@ impl<'a> Parser<'a> {
                 let name = self.expect_const("a constant name");
                 let ty = if self.eat(T::Colon) { Some(self.parse_type()) } else { None };
                 self.expect(T::Eq, "`=` and the constant's value");
-                let value = self.parse_const_value();
+                let mut value = self.parse_const_value();
+                // The line goes on after the value (`X = Foo{`), which is
+                // reported at the end of the item: the value isn't the
+                // whole of it, so it isn't checked on its own.
+                if !self.at_stmt_end() && !(self.at(T::SpliceBegin) && self.quotes.is_empty()) {
+                    value.kind = ExprKind::Error;
+                }
                 ItemKind::Const(Box::new(ConstDecl { name, ty, value }))
             }
             T::Ident | T::Kw(_)
@@ -1936,8 +2049,8 @@ impl<'a> Parser<'a> {
         let outer_macro = std::mem::replace(&mut self.in_macro, is_macro);
         let owner = if is_macro { ParamsOf::Macro } else { ParamsOf::Def(name.name) };
         let outer_array_params = self.array_params.replace(Vec::new());
-        let (mut params, block, c_variadic) =
-            if self.at(T::LParen) { self.parse_params(owner) } else { (Vec::new(), None, None) };
+        let ParamList { mut params, block, c_variadic, left_open } =
+            if self.at(T::LParen) { self.parse_params(owner) } else { ParamList::default() };
         let uninferred = std::mem::take(&mut self.uninferred);
         let mut ret = if self.eat(T::Arrow) { Some(self.parse_type()) } else { None };
         let array_params = std::mem::replace(&mut self.array_params, outer_array_params).unwrap_or_default();
@@ -1954,6 +2067,11 @@ impl<'a> Parser<'a> {
         let mut body = if self.eat(T::Eq) {
             self.skip_newlines();
             FnBody::Expr(Box::new(self.parse_expr_cmd()))
+        } else if left_open && self.declaration_ahead() {
+            // `def foo(a: Int,` followed by `def main`: the line, which
+            // was left open, ended the method too, and the next
+            // declaration is parsed on its own.
+            FnBody::Block(Vec::new())
         } else {
             self.openers.push(Opener { keyword: "def", span: def_tok.span.to(name.span) });
             let body = self.parse_block_body();
@@ -1969,25 +2087,29 @@ impl<'a> Parser<'a> {
         FnDecl { name, is_static, is_macro, params, block, ret, body, sig_span, yields, c_variadic }
     }
 
-    fn parse_params(&mut self, owner: ParamsOf) -> (Vec<Param>, Option<BlockParamDecl>, Option<Span>) {
-        self.bump();
+    fn parse_params(&mut self, owner: ParamsOf) -> ParamList {
+        let open = self.bump().span;
+        let list = List {
+            open,
+            close: T::RParen,
+            closer: ")",
+            what: "`)` to close the parameter list",
+            item: "parameter",
+            items: "parameters",
+            kind: Items::Params,
+        };
         let mut params = Vec::new();
         let mut stars = Vec::new();
         let mut block = None;
         let mut variadic = None;
         let mut loose = Vec::new();
-        loop {
+        let closed = loop {
+            if self.list_left_open(&list) {
+                break false;
+            }
             self.skip_newlines();
             if self.at(T::RParen) || self.at(T::Eof) {
-                break;
-            }
-            if self.at(T::TypeParam) {
-                loose.push(self.skip_loose_type_param());
-                self.skip_newlines();
-                if !self.eat(T::Comma) {
-                    break;
-                }
-                continue;
+                break true;
             }
             if self.at(T::DotDotDot) {
                 let dots = self.bump();
@@ -1999,10 +2121,12 @@ impl<'a> Parser<'a> {
                             .primary(dots.span, "C variadic arguments come after every named parameter"),
                     );
                 }
-                break;
+                break true;
             }
             let start = self.peek().span;
-            if self.eat(T::Amp) {
+            if self.at(T::TypeParam) {
+                loose.push(self.skip_loose_type_param());
+            } else if self.eat(T::Amp) {
                 let name = self.parse_name("a block parameter name");
                 if !self.eat(T::Colon) {
                     self.report(
@@ -2049,20 +2173,22 @@ impl<'a> Parser<'a> {
                 let default = if self.eat(T::Eq) { Some(self.parse_expr()) } else { None };
                 params.push(Param { name, ty, default, splat, span: start.to(self.prev_span()) });
             }
-            self.skip_newlines();
-            if !self.eat(T::Comma) {
-                break;
+            match self.list_step(&list) {
+                ListStep::Item => {}
+                ListStep::Close => break true,
+                ListStep::Open => break false,
             }
+        };
+        if closed {
+            self.expect(T::RParen, list.what);
         }
-        self.skip_newlines();
-        self.expect(T::RParen, "`)` to close the parameter list");
         for (index, star) in stars {
             self.check_variadic_param(owner, &mut params, index, star);
         }
         for tp in &loose {
             self.report_loose_type_param(owner, &mut params, tp);
         }
-        (params, block, variadic)
+        ParamList { params, block, c_variadic: variadic, left_open: !closed }
     }
 
     /// Skips a `$T` written as a parameter of its own, with any `: type`
@@ -2683,7 +2809,9 @@ impl<'a> Parser<'a> {
             T::LBracket => {
                 self.bump();
                 if self.eat(T::Caret) {
-                    self.expect(T::RBracket, "`]`");
+                    if !self.close_type_bracket(start) {
+                        return TypeExpr { kind: TypeKind::Error, span: start.to(self.prev_span()) };
+                    }
                     TypeKind::MultiPointer(Box::new(self.parse_type_base()))
                 } else if self.eat(T::RBracket) {
                     TypeKind::Slice(Box::new(self.parse_type()))
@@ -2698,35 +2826,29 @@ impl<'a> Parser<'a> {
                     self.array_value_param(start)
                 } else {
                     let len = self.parse_expr();
-                    self.expect(T::RBracket, "`]`");
-                    TypeKind::Array(Box::new(len), Box::new(self.parse_type()))
+                    let elem = if self.close_type_bracket(start) {
+                        self.parse_type()
+                    } else {
+                        TypeExpr { kind: TypeKind::Error, span: self.prev_span() }
+                    };
+                    TypeKind::Array(Box::new(len), Box::new(elem))
                 }
             }
             T::LParen => {
                 self.bump();
-                let mut elems = Vec::new();
-                loop {
-                    self.skip_newlines();
-                    if self.at(T::RParen) {
-                        break;
-                    }
-                    elems.push(self.parse_type());
-                    if !self.eat(T::Comma) {
-                        break;
-                    }
-                }
-                let (last, before) = (self.prev_span(), self.pos);
-                self.skip_newlines();
-                if !self.eat(T::RParen) {
-                    if self.pos > before || self.at(T::Eof) {
-                        // The line ends unclosed: the `)` goes at its end,
-                        // and the next line is parsed on its own.
-                        self.pos = before;
-                        self.unclosed_paren(start, last);
-                    } else {
-                        self.error_expected("`)`");
-                    }
-                }
+                // A line end that the list doesn't continue leaves it open:
+                // the `)` goes at the end of the line, and the next line is
+                // parsed on its own.
+                let list = List {
+                    open: start,
+                    close: T::RParen,
+                    closer: ")",
+                    what: "`)`",
+                    item: "type",
+                    items: "types",
+                    kind: Items::Unnamed,
+                };
+                let mut elems = self.parse_type_list(&list, |p| Some(p.parse_type()));
                 if elems.len() == 1 {
                     let inner = elems.pop().expect("one element");
                     return TypeExpr { span: start.to(self.prev_span()), kind: inner.kind };
@@ -2739,10 +2861,13 @@ impl<'a> Parser<'a> {
             }
             T::Ident if self.text_of(tok.span) == "map" && self.nth(1).kind == T::LBracket => {
                 self.bump();
-                self.bump();
+                let open = self.bump().span;
                 let key = self.parse_type();
-                self.expect(T::RBracket, "`]`");
-                let value = self.parse_type();
+                let value = if self.close_type_bracket(open) {
+                    self.parse_type()
+                } else {
+                    TypeExpr { kind: TypeKind::Error, span: self.prev_span() }
+                };
                 TypeKind::Map(Box::new(key), Box::new(value))
             }
             T::AtBracket => {
@@ -2783,34 +2908,30 @@ impl<'a> Parser<'a> {
             T::Ident if matches!(self.text_of(tok.span), "proc" | "block") => {
                 let is_block = self.text_of(tok.span) == "block";
                 self.bump();
-                let has_params = self.at(T::LParen) && !self.peek().space_before;
-                if has_params {
-                    self.bump();
-                }
                 let mut params = Vec::new();
                 let mut variadic = false;
-                if has_params {
-                    loop {
-                        self.skip_newlines();
-                        if self.at(T::RParen) || self.at(T::Eof) {
-                            break;
-                        }
-                        if self.at(T::DotDotDot) {
-                            self.bump();
+                if self.at(T::LParen) && !self.peek().space_before {
+                    let list = List {
+                        open: self.bump().span,
+                        close: T::RParen,
+                        closer: ")",
+                        what: "`)`",
+                        item: "parameter",
+                        items: "parameters",
+                        kind: Items::Args,
+                    };
+                    params = self.parse_type_list(&list, |p| {
+                        if p.eat(T::DotDotDot) {
                             variadic = true;
-                            self.skip_newlines();
-                            break;
+                            p.skip_newlines();
+                            return None;
                         }
-                        if self.at(T::Ident) && self.nth(1).kind == T::Colon {
-                            self.bump();
-                            self.bump();
+                        if p.at(T::Ident) && p.nth(1).kind == T::Colon {
+                            p.bump();
+                            p.bump();
                         }
-                        params.push(self.parse_type());
-                        if !self.eat(T::Comma) {
-                            break;
-                        }
-                    }
-                    self.expect(T::RParen, "`)`");
+                        Some(p.parse_type())
+                    });
                 }
                 let ret = if self.eat(T::Arrow) { Some(Box::new(self.parse_type())) } else { None };
                 if is_block {
@@ -2825,12 +2946,15 @@ impl<'a> Parser<'a> {
             }
             T::Ident if self.text_of(tok.span) == "matrix" && self.nth(1).kind == T::LBracket => {
                 self.bump();
-                self.bump();
+                let open = self.bump().span;
                 let rows = self.parse_expr();
                 self.expect(T::Comma, "`,`");
                 let cols = self.parse_expr();
-                self.expect(T::RBracket, "`]`");
-                let elem = self.parse_type();
+                let elem = if self.close_type_bracket(open) {
+                    self.parse_type()
+                } else {
+                    TypeExpr { kind: TypeKind::Error, span: self.prev_span() }
+                };
                 TypeKind::Matrix { rows: Box::new(rows), cols: Box::new(cols), elem: Box::new(elem) }
             }
             T::Const | T::Ident => return self.parse_type_path(),
@@ -2844,6 +2968,35 @@ impl<'a> Parser<'a> {
             }
         };
         TypeExpr { kind, span: start.to(self.prev_span()) }
+    }
+
+    /// Parses the items of a list in a type (a tuple's types, or a generic
+    /// type's or proc type's arguments) after its opener, through its
+    /// closer, as [`Parser::list_step`] reads lists: a list left open at
+    /// the end of a line is one error there, with a fix that closes it.
+    /// `item` parses one item, or returns `None` where the list must end.
+    fn parse_type_list<I>(&mut self, list: &List, mut item: impl FnMut(&mut Self) -> Option<I>) -> Vec<I> {
+        let mut items = Vec::new();
+        let closed = loop {
+            if self.list_left_open(list) {
+                break false;
+            }
+            self.skip_newlines();
+            if self.at(list.close) || self.at(T::Eof) {
+                break true;
+            }
+            let Some(parsed) = item(self) else { break true };
+            items.push(parsed);
+            match self.list_step(list) {
+                ListStep::Item => {}
+                ListStep::Close => break true,
+                ListStep::Open => break false,
+            }
+        };
+        if closed {
+            self.expect(list.close, list.what);
+        }
+        items
     }
 
     fn parse_type_path(&mut self) -> TypeExpr {
@@ -2884,19 +3037,16 @@ impl<'a> Parser<'a> {
         }
         let mut args = Vec::new();
         if optional_suffix.is_none() && self.at(T::LParen) && !self.peek().space_before {
-            self.bump();
-            loop {
-                self.skip_newlines();
-                if self.at(T::RParen) {
-                    break;
-                }
-                args.push(self.parse_generic_arg());
-                if !self.eat(T::Comma) {
-                    break;
-                }
-            }
-            self.skip_newlines();
-            self.expect(T::RParen, "`)`");
+            let list = List {
+                open: self.bump().span,
+                close: T::RParen,
+                closer: ")",
+                what: "`)`",
+                item: "argument",
+                items: "arguments",
+                kind: Items::Unnamed,
+            };
+            args = self.parse_type_list(&list, |p| Some(p.parse_generic_arg()));
         }
         if optional_suffix.is_some() {
             self.pending_optional = optional_suffix;
@@ -2914,21 +3064,21 @@ impl<'a> Parser<'a> {
                     let next = p.tokens[p.pos..].iter().find(|t| t.kind != T::Newline);
                     next.is_some_and(|t| matches!(t.kind, T::Comma | T::RParen))
                 };
-                let (pos, diags, last, splices) = (self.pos, self.diags.len(), self.last_error_at, self.splice_mark());
+                let mark = self.mark();
                 if let Some(ty) = self.try_parse_type()
                     && ends(self)
                 {
                     return GenericArg::Type(ty);
                 }
-                self.pos = pos;
-                self.rewind_splices(splices);
+                self.rewind(mark);
+                let mark = self.mark();
                 let value = self.parse_expr();
-                if self.diags.len() == diags && ends(self) {
+                if self.clean_since(&mark) && ends(self) {
                     return GenericArg::Expr(value);
                 }
                 // Neither: report it as the type it most likely is, unless
                 // no type starts that way (`(2 + )`).
-                let first = self.tokens[pos..].iter().find(|t| t.kind != T::LParen).map(|t| t.kind);
+                let first = self.tokens[mark.pos..].iter().find(|t| t.kind != T::LParen).map(|t| t.kind);
                 if !first.is_some_and(|k| {
                     matches!(
                         k,
@@ -2937,10 +3087,7 @@ impl<'a> Parser<'a> {
                 }) {
                     return GenericArg::Expr(value);
                 }
-                self.pos = pos;
-                self.diags.truncate(diags);
-                self.last_error_at = last;
-                self.rewind_splices(splices);
+                self.rewind(mark);
                 GenericArg::Type(self.parse_type())
             }
             T::Caret | T::LBracket | T::TypeParam => GenericArg::Type(self.parse_type()),
@@ -3960,6 +4107,7 @@ impl<'a> Parser<'a> {
                     what: "`]` to close the array",
                     item: "element",
                     items: "elements",
+                    kind: Items::Unnamed,
                 };
                 let mut elems = Vec::new();
                 let closed = loop {
@@ -4108,6 +4256,7 @@ impl<'a> Parser<'a> {
             what: "`)` to close the argument list",
             item: "argument",
             items: "arguments",
+            kind: Items::Args,
         };
         let mut args = Vec::new();
         let closed = loop {
@@ -4118,7 +4267,7 @@ impl<'a> Parser<'a> {
             if self.at(T::RParen) || self.at(T::Eof) {
                 break true;
             }
-            args.push(self.parse_arg(types, true));
+            args.push(self.parse_arg(types, Some(list.open)));
             match self.list_step(&list) {
                 ListStep::Item => {}
                 ListStep::Close => break true,
@@ -4132,21 +4281,27 @@ impl<'a> Parser<'a> {
         args
     }
 
-    /// Parses one call argument. `parens` is false for a call without
-    /// parentheses, whose last argument ends with the statement.
-    fn parse_arg(&mut self, types: bool, parens: bool) -> Arg {
+    /// Parses one call argument. `open` is the `(` of the argument list,
+    /// and `None` for a call without parentheses, whose last argument ends
+    /// with the statement.
+    fn parse_arg(&mut self, types: bool, open: Option<Span>) -> Arg {
+        let parens = open.is_some();
         if let Some(len) = self.name_len(0)
             && self.nth(len).kind == T::Colon
         {
             let name = self.parse_name("an argument name");
             let colon = self.bump().span;
-            // `add(a:` followed by a declaration or an `end`: the value is
-            // missing, and the line is left for the list to end.
+            // The value may go on the next line, indented deeper than the
+            // call's own line. `add(a:` followed by a declaration, an
+            // `end` or a line indented no deeper is missing it, and the
+            // line is left for the list to end.
+            let call_line = self.line_of(open.unwrap_or(colon).start);
             if self.at(T::Newline)
-                && self.tokens[self.pos..]
-                    .iter()
-                    .find(|t| t.kind != T::Newline)
-                    .is_some_and(|t| starts_declaration(t.kind))
+                && self.tokens[self.pos..].iter().find(|t| t.kind != T::Newline).is_some_and(|t| {
+                    starts_declaration(t.kind)
+                        || t.kind == T::Eof
+                        || self.indent_of_line(self.line_of(t.span.start)) <= self.indent_of_line(call_line)
+                })
             {
                 let at = colon.shrink_to_end();
                 let text = self.text_of(name.span);
@@ -4297,10 +4452,10 @@ impl<'a> Parser<'a> {
 
     fn parse_command_call(&mut self, callee: Callee, start: Span) -> Expr {
         let types = self.takes_type_args(&callee);
-        let mut args = vec![self.parse_arg(types, false)];
+        let mut args = vec![self.parse_arg(types, None)];
         while self.eat(T::Comma) {
             self.skip_newlines();
-            args.push(self.parse_arg(types, false));
+            args.push(self.parse_arg(types, None));
         }
         let block = if self.at_kw(K::Do) && !self.no_do { self.parse_block_arg() } else { None };
         Expr {
@@ -4315,10 +4470,10 @@ impl<'a> Parser<'a> {
         let first = self.peek().span;
         let types = self.takes_type_args(&callee);
         let errors = self.diags.len();
-        let mut args = vec![self.parse_arg(types, false)];
+        let mut args = vec![self.parse_arg(types, None)];
         while self.at(T::Comma) && self.can_start_expr(self.nth(1)) {
             self.bump();
-            args.push(self.parse_arg(types, false));
+            args.push(self.parse_arg(types, None));
         }
         // An argument that failed to parse may have gone past the line end;
         // the `)` goes after its last token, before the newline.
@@ -4493,6 +4648,7 @@ impl<'a> Parser<'a> {
                         what: "`]`",
                         item: "index",
                         items: "indices",
+                        kind: Items::Unnamed,
                     };
                     let mut args = Vec::new();
                     let closed = loop {
@@ -4705,8 +4861,8 @@ impl<'a> Parser<'a> {
     fn parse_lambda(&mut self) -> Expr {
         let arrow = self.bump();
         self.push_def_scope();
-        let (params, block, variadic) =
-            if self.at(T::LParen) { self.parse_params(ParamsOf::Proc) } else { (Vec::new(), None, None) };
+        let ParamList { params, block, c_variadic: variadic, left_open } =
+            if self.at(T::LParen) { self.parse_params(ParamsOf::Proc) } else { ParamList::default() };
         if let Some(dots) = variadic {
             self.report(
                 Diagnostic::error(codes::UNEXPECTED_TOKEN, "procs cannot take C variadic arguments")
@@ -4722,7 +4878,11 @@ impl<'a> Parser<'a> {
             );
         }
         let ret = if self.eat(T::Arrow) { Some(self.parse_type()) } else { None };
-        let body = if self.eat(T::LBrace) {
+        let body = if left_open {
+            // The line ended with the parameter list (reported), and the
+            // body with it.
+            Vec::new()
+        } else if self.eat(T::LBrace) {
             let body = self.parse_block_body();
             self.skip_newlines();
             self.expect(T::RBrace, "`}` to close the proc");
@@ -5537,8 +5697,81 @@ end
             "def main\n  a = foo(1,\n    2)\n  b = foo(\n    1,\n    2\n  )\n  c = [\n    1, 2,\n    3,\n  ]\n\
              \x20 d = [[1, 2],\n    [3, 4]]\n  e = foo(xs.map do |x|\n    x\n  end)\n  f = xs[\n    1\n  ]\n\
              \x20 g = 1 +\n    2 *\n    3\n  h = foo(1, 2)\n    .bar\n  xs.each { |x|\n    p x\n  }\n\
-             \x20 i = xs.map { |x,\n    y| x }\n  j = {}\n  k = foo(a:\n    1)\n  p a, b, c, d, e, f, g, h, i, j, k\nend\n",
+             \x20 i = xs.map { |x,\n    y| x }\n  j = {}\n  k = foo(a:\n    1)\n  l = foo(\n    a:\n    1)\n\
+             \x20 m = ->(a: Int,\n    b: Int) { a }\n  p a, b, c, d, e, f, g, h, i, j, k, l, m\nend\n",
         );
+        // Parameter lists: one error at the end of the line, and the
+        // method ends there when a declaration follows; otherwise the
+        // lines after it are its body.
+        for (head, closed) in [
+            ("def foo(a: Int,", "def foo(a: Int,)"),
+            ("def foo(a: Int, b: Int", "def foo(a: Int, b: Int)"),
+            ("def foo(", "def foo()"),
+            ("macro def foo(a: Code,", "macro def foo(a: Code,)"),
+        ] {
+            for (rest, items) in [("def main\nend\n", 2), ("  p 1\nend\ndef main\nend\n", 2), ("end\n", 1)] {
+                let src = format!("{head}\n{rest}");
+                let (messages, fixed) = fix_all(&src);
+                assert_eq!(messages.len(), 1, "{src:?}: {messages:?}");
+                assert!(messages[0].ends_with("found end of line"), "{src:?}");
+                assert_eq!(fixed, format!("{closed}\n{rest}"), "{src:?}");
+                assert_eq!(parse_file(FileId(0), &src).0.items.len(), items, "{src:?}");
+            }
+        }
+        assert_eq!(codes_of("def main\n  f = ->(a: Int,\n  p 1\nend\n"), ["E0105"]);
+        // In a parameter's type, the one error closes the type's list.
+        let (messages, fixed) = fix_all("def foo(a: Pool(Int,\ndef main\nend\n");
+        assert_eq!(messages, ["expected `)`, found end of line"]);
+        assert_eq!(fixed, "def foo(a: Pool(Int,)\ndef main\nend\n");
+        // A parameter indented under the list is the next one, with its
+        // `,` missing; a parameter without its type is still that error.
+        let (messages, _) = fix_all("def foo(a: Int\n        b: Int) = a\n");
+        assert_eq!(messages, ["expected `,` or `)`, found end of line"]);
+        let (messages, _) = fix_all("def foo(a: Int,\n        b) = a\n");
+        assert_eq!(messages, ["parameter `b` needs a type"]);
+        // Types: a generic type's arguments, a tuple, a proc type, an
+        // array's length and a map's key, in a struct whose next field is
+        // still declared.
+        for (ty, closer) in [
+            ("Pool(Int, 4", ")"),
+            ("Pool(Int,", ")"),
+            ("(Int, Int", ")"),
+            ("proc(Int, Int", ")"),
+            ("[4", "]"),
+            ("[^", "]"),
+            ("map[String", "]"),
+            ("matrix[2, 2", "]"),
+        ] {
+            let src = format!("struct S\n  pool: {ty}\n  hp: Int\nend\n");
+            let (file, diags) = parse_file(FileId(0), &src);
+            let messages: Vec<_> = diags.iter().map(|d| d.message.as_str()).collect();
+            assert_eq!(messages, [format!("expected `{closer}`, found end of line")], "{src:?}");
+            let ItemKind::Struct(s) = &file.items[0].kind else { panic!() };
+            assert_eq!(s.body.len(), 2, "{src:?}");
+            assert_eq!(fix_all(&src).1, src.replacen(ty, &format!("{ty}{closer}"), 1));
+        }
+        parse_ok(
+            "struct S\n  a: Pool(Int,\n    4)\n  b: proc(Int,\n    Int) -> Int\n  c: (Int,\n    Int)\n  \
+             d: Pool(\n    Int,\n    4\n  )\nend\n",
+        );
+        // A named argument's value on a line indented no deeper than the
+        // call's is missing.
+        for src in ["def main\n  x = add(a:\n  p x\nend\n", "def main\n  p a:\n  p 1\nend\n"] {
+            let (messages, _) = fix_all(src);
+            assert_eq!(messages, ["expected an expression, found end of line"], "{src:?}");
+        }
+        // Recovery after an error stops at a declaration (or an `end`) on
+        // a later line, where a bracket was left open.
+        for src in ["X = Foo{\ndef main\nend\n", "X = 1 2 +\ndef main\nend\n", "X = foo(1 2\ndef main\nend\n"] {
+            let (file, diags) = parse_file(FileId(0), src);
+            assert_eq!(diags.iter().count(), 1, "{src:?}");
+            assert!(matches!(file.items.last().map(|i| &i.kind), Some(ItemKind::Def(_))), "{src:?}");
+        }
+        // It skips a `do … end` block on the way.
+        let src = "def main\n  y = 1 2 + f(xs.map do |x|\n    x\n  end)\nend\ndef other\nend\n";
+        let (file, diags) = parse_file(FileId(0), src);
+        assert_eq!(diags.iter().count(), 1);
+        assert_eq!(file.items.len(), 2);
     }
 
     #[test]

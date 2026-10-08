@@ -1,0 +1,14 @@
+# A parameter list left open at the end of its line is one error there,
+# with a fix that closes it. When a declaration follows, the method ends
+# with that line, so `main` is still found; otherwise the lines after it
+# are the method's body.
+def scale(x: Int,
+def add(a: Int, b: Int
+  a + b
+end
+
+def main
+  double = ->(n: Int,
+  add(1, 2)
+  p double
+end

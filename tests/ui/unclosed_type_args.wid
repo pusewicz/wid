@@ -1,0 +1,18 @@
+# A generic type's arguments, an array's length or a map's key left open
+# at the end of a field's line is one error there, with a fix that closes
+# it, and the next field is still declared.
+struct Pool($T, $N: Int)
+  items: [N]T
+end
+
+struct S
+  pool: Pool(Int, 4
+  hp: Int
+  grid: [4
+  names: map[String
+  mp: Int
+end
+
+def main
+  p S.new(hp: 1, mp: 2).hp
+end

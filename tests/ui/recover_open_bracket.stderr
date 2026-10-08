@@ -1,0 +1,8 @@
+error[E0105]: expected end of line, found `{`
+ --> tests/ui/recover_open_bracket.wid:4:8
+  |
+4 | X = Foo{
+  |        ^ expected end of line
+  = see `wid explain E0105`
+
+error: could not compile due to 1 error
