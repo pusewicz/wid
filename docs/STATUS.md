@@ -934,6 +934,11 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   not after a generic instance (`Pool(Int, 4) { … }` is a call's block) or
   before a block's `|x|`. The fix takes the spaces inside the braces with
   them (`Foo { }` becomes `Foo.new()`).
+- A field name glued to a splice and called like `@name(args)` in a
+  `quote` (`@on_#{event}(n)`) is #45's one E0111, read as a call of the
+  proc the field holds (`Callee::IVar`) like `@#{name}(args)`; the `(n)`
+  was "expected end of line" and the field's proc type an E0301 (#95,
+  second part).
 - A C compiler without C23 (one that rejects `-std=c23`, like gcc 13 or
   clang 17, or lacks `<stdckdint.h>` or `#embed`) is E0702 "the C compiler
   `cc` doesn't support C23", with the first line of its `--version`, the

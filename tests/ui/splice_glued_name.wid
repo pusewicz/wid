@@ -6,12 +6,15 @@
 struct Hero
   hp: Int
   hp_count: Int
+  on_hp: proc(n: Int) -> Int
 end
 
 macro def counter(name: Symbol) -> Code
   quote do
     def bump_#{name}(by_#{name}: Int) -> Int = @#{name}_count + by_#{name}
     def twice -> Int = bump_#{name}(1) + self.#{name}_count
+    # A glued field called like `@name(args)`, which calls its proc.
+    def fire(n: Int) -> Int = @on_#{name}(n)
   end
 end
 
@@ -32,5 +35,5 @@ boxed :Hp, :hp
 def main
   hero = Hero.new(hp: 10)
   box = HpBox.new(hp_value: 3)
-  p hero.bump_hp(by_hp: 2), hero.twice, box.hp_value
+  p hero.bump_hp(by_hp: 2), hero.twice, box.hp_value, hero.fire(1)
 end

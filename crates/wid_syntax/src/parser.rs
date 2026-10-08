@@ -3936,6 +3936,11 @@ impl<'a> Parser<'a> {
             // It reads as the splice of the name it builds: a name, field,
             // symbol or call.
             let kind = match tok.kind {
+                // `@on_#{event}(n)` calls the proc the field holds, as
+                // `@name(args)` does.
+                T::AtSplice | T::IVar if self.at(T::LParen) && !self.peek().space_before => {
+                    return self.parse_call_with_parens(Callee::IVar(Ident { span, ..name }), span);
+                }
                 T::AtSplice | T::IVar => ExprKind::IVar(name.name),
                 T::ColonSplice | T::Symbol => ExprKind::Symbol(name.name),
                 _ if self.at(T::LParen) && !self.peek().space_before => {
@@ -6223,6 +6228,16 @@ end
         assert!(diags[0].helps[0].message.ends_with("`x_a = \"x_#{a}\".to_sym`, then `#{x_a}`"));
         // Spaced, a splice is a separate argument.
         parse_ok("macro def m(a: Code) -> Code\n  quote do\n    p #{a}\n    x = [#{a}, a]\n  end\nend\n");
+        // A glued field called like `@name(args)` calls the proc it holds.
+        let src = "macro def m(a: Symbol) -> Code\n  quote do\n    def f(n: Int) -> Int = @on_#{a}(n)\n  end\nend\n";
+        let (file, diags) = parse_file(FileId(0), src);
+        assert_eq!(diags.iter().count(), 1);
+        let StmtKind::Item(item) = &first_quote(&file).body[0].kind else { panic!("an item") };
+        let ItemKind::Def(def) = &item.kind else { panic!("a def") };
+        let FnBody::Expr(body) = &def.body else { panic!("an endless def") };
+        let ExprKind::Call(call) = &body.kind else { panic!("a call") };
+        assert!(matches!(&call.callee, Callee::IVar(name) if name.splice_index() == Some(0)));
+        assert_eq!(call.args.len(), 1);
     }
 
     #[test]
