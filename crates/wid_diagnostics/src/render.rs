@@ -75,6 +75,10 @@ pub fn render(diag: &Diagnostic, sources: &SourceMap, opts: RenderOptions) -> St
 
     let primary = diag.primary_span();
     let frames = diag.chain_span().map(|s| expansion_frames(sources, s)).unwrap_or_default();
+    // A call a secondary label already shows, like the second of two
+    // calls whose code clashes, isn't listed again.
+    let shown = |f: &Frame<'_>| diag.labels.iter().any(|l| !l.primary && l.span == f.span);
+    let frames: Vec<Frame<'_>> = frames.into_iter().filter(|f| f.count > 1 || !shown(f)).collect();
     let (frames, elided) = shorten_frames(frames);
 
     let mut max_line = 1u32;

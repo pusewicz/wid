@@ -958,6 +958,14 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   and notes it in `MacroState::unparsed`, which `expand_code` checks;
   the call counts as a failed expansion, so what it would have declared
   isn't reported missing.
+- A name that two calls of a macro declare (E0202, E0317) shows the line
+  of the `quote` once, labelled for each expansion, with both calls
+  (`first expansion here`, `second expansion here`) in the human and JSON
+  output, and a help to call the macro once or splice the name (#79; the
+  "first definition" label sat on the same `quote` span as the second,
+  and only the second call appeared). `Checker::repeated_expansion`
+  rewrites the labels in `splice_context`; the human renderer no longer
+  lists a call that a secondary label already shows.
 - A proc parameter whose name a macro splices (`->(#{v}: Int) -> Int {
   #{v} * 2 }`), in a method body or a generated `def`, is the caller's
   name, as a block parameter's is: the proc's body and code spliced from

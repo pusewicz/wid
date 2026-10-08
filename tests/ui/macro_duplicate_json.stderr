@@ -1,0 +1,72 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0202",
+      "column": 5,
+      "expansions": [
+        {
+          "column": 1,
+          "end": 174,
+          "end_column": 9,
+          "end_line": 10,
+          "file": "tests/ui/macro_duplicate_json.wid",
+          "line": 10,
+          "macro": "limits",
+          "start": 166
+        }
+      ],
+      "explain": "wid explain E0202",
+      "file": "tests/ui/macro_duplicate_json.wid",
+      "helps": [
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [],
+          "message": "call `limits` once, or take the name as a `Symbol` parameter and splice it where it is declared (`#{name}`), so each call declares its own"
+        }
+      ],
+      "labels": [
+        {
+          "column": 5,
+          "end": 141,
+          "end_column": 10,
+          "end_line": 5,
+          "file": "tests/ui/macro_duplicate_json.wid",
+          "line": 5,
+          "message": "each expansion of `limits` defines `LIMIT` here",
+          "primary": true,
+          "start": 136
+        },
+        {
+          "column": 1,
+          "end": 165,
+          "end_column": 9,
+          "end_line": 9,
+          "file": "tests/ui/macro_duplicate_json.wid",
+          "line": 9,
+          "message": "first expansion here",
+          "primary": false,
+          "start": 157
+        },
+        {
+          "column": 1,
+          "end": 174,
+          "end_column": 9,
+          "end_line": 10,
+          "file": "tests/ui/macro_duplicate_json.wid",
+          "line": 10,
+          "message": "second expansion here",
+          "primary": false,
+          "start": 166
+        }
+      ],
+      "line": 5,
+      "message": "`LIMIT` is defined twice",
+      "notes": [
+        "a macro's code is the same for every call, so a name it declares as written is declared again by each call of `limits`"
+      ],
+      "severity": "error"
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}
