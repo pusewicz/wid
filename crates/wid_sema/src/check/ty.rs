@@ -694,6 +694,18 @@ impl<'a> Checker<'a> {
                     return ty;
                 }
                 if let ast::ExprKind::Const(name) = value.kind {
+                    // `X = Foo` with `Foo` undefined: resolving the constant
+                    // reports `Foo` (E0201) and poisons `X`, so using `X` as a
+                    // type says nothing more. A constant without a value
+                    // reports why, now or when it was first resolved.
+                    if !self.is_type_alias_value(value, d.loc, 0)
+                        && !d.item.has_attr("extern")
+                        && self.const_value(decl).is_none()
+                    {
+                        let ty = self.types.unknown();
+                        self.decl_types.insert(decl, ty);
+                        return ty;
+                    }
                     let ctx = TyCtx { loc: d.loc, self_ty: None, subst: Default::default() };
                     let texpr = ast::TypeExpr {
                         kind: ast::TypeKind::Path {

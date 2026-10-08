@@ -1,0 +1,18 @@
+# A type alias whose value is undefined is reported once, where it is
+# declared (E0201). The alias is poisoned, so using it as a type, in a
+# signature, a field or a local, says nothing more.
+Size = Foo
+
+struct Box
+  size: Size
+end
+
+def grow(s: Size) -> Size
+  s
+end
+
+def main
+  y: Size = 1
+  z: Size = 2
+  p y, z, grow(3), Box.new
+end
