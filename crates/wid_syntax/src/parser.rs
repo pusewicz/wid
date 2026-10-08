@@ -4144,6 +4144,10 @@ impl<'a> Parser<'a> {
         {
             return self.glued_in_splice(len, true);
         }
+        // Outside a `quote` it was reported (E0111) and names nothing (see
+        // [`ast::is_glued_name`]): the checker passes over it, and checks a
+        // call's arguments.
+        let outside_quote = self.quotes.is_empty();
         if let Some((name, span)) = self.glued_name() {
             // It reads as the splice of the name it builds: a name, field,
             // symbol or call.
@@ -4151,8 +4155,10 @@ impl<'a> Parser<'a> {
                 // `@on_#{event}(n)` calls the proc the field holds, as
                 // `@name(args)` does.
                 T::AtSplice | T::IVar if self.at(T::LParen) && !self.peek().space_before => {
-                    return self.parse_call_with_parens(Callee::IVar(Ident { span, ..name }), span);
+                    let callee = if outside_quote { Callee::Name(name) } else { Callee::IVar(Ident { span, ..name }) };
+                    return self.parse_call_with_parens(callee, span);
                 }
+                T::AtSplice | T::IVar | T::ColonSplice | T::Symbol if outside_quote => ExprKind::Error,
                 T::AtSplice | T::IVar => ExprKind::IVar(name.name),
                 T::ColonSplice | T::Symbol => ExprKind::Symbol(name.name),
                 _ if self.at(T::LParen) && !self.peek().space_before => {

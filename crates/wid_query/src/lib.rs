@@ -352,6 +352,7 @@ private LIMIT = 3
             text: Arc::from(src),
             display: "main.wid".into(),
             deferred: HashMap::new(),
+            struct_literals: Vec::new(),
         };
         let package = PackageInput {
             name: "main".into(),

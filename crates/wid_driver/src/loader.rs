@@ -196,6 +196,7 @@ impl Loader<'_> {
             text,
             display,
             deferred: HashMap::new(),
+            struct_literals: Vec::new(),
         });
     }
 
@@ -252,8 +253,20 @@ impl Loader<'_> {
             let text: Arc<str> = Arc::from(text);
             let file = self.sources.add(path.clone(), display.clone(), text.clone());
             let (ast, diags) = wid_syntax::parse_file(file, &text);
-            self.diags.extend(diags);
-            inputs.push(FileInput { ast, imports: HashMap::new(), text, display, deferred: HashMap::new() });
+            // The checker reports struct literal errors, fitted to the type.
+            let (struct_literals, rest): (Vec<_>, Vec<_>) =
+                diags.into_vec().into_iter().partition(|d| d.code == codes::STRUCT_LITERAL);
+            for d in rest {
+                self.diags.push(d);
+            }
+            inputs.push(FileInput {
+                ast,
+                imports: HashMap::new(),
+                text,
+                display,
+                deferred: HashMap::new(),
+                struct_literals,
+            });
         }
         let c_sources = if self.opts.file_mode && id.0 == 0 { Vec::new() } else { Self::c_files(&dir) };
         self.packages.push(PackageInput { name, path, dir, files: inputs, c_sources, cimport: None });
@@ -464,7 +477,14 @@ impl Loader<'_> {
             name: spec.alias.clone(),
             path: display.clone(),
             dir,
-            files: vec![FileInput { ast, imports: HashMap::new(), text, display, deferred: HashMap::new() }],
+            files: vec![FileInput {
+                ast,
+                imports: HashMap::new(),
+                text,
+                display,
+                deferred: HashMap::new(),
+                struct_literals: Vec::new(),
+            }],
             c_sources: Vec::new(),
             cimport: Some(binding),
         });

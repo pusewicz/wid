@@ -1,0 +1,26 @@
+# A glued name outside a `quote` names nothing: each is its one E0111, and
+# what uses it (a field, a call, a local, a symbol, a method or a named
+# argument) adds no error, while the values around it are still read.
+struct P
+  on_hit: proc(n: Int) -> Int
+  def f -> proc(n: Int) -> Int = @on_#{event}
+  def g -> Int = @on_#{event}(1)
+end
+
+def scale(n: Int) -> Int = n
+
+def go
+  x = 1
+  call_#{a}(x)
+  y_#{a}: Int = 1
+  p bar_#{y}(1)
+  z = :a_#{q}
+  y = 2
+  y.twice_#{c}(1)
+  p y.half_#{c}, z
+  p scale(n_#{k}: 1)
+end
+
+def main
+  go
+end

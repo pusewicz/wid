@@ -281,7 +281,8 @@ impl<'a> Checker<'a> {
         let local = self.new_local(Some(name), ty);
         self.note_binding(span, ty);
         let mark = self.mark_at(span);
-        let allow_unused = allow_unused || matches!(self.types.kind(ty), TyKind::Unknown);
+        // A name glued from splices outside a `quote` was reported (E0111).
+        let allow_unused = allow_unused || matches!(self.types.kind(ty), TyKind::Unknown) || ast::is_glued_name(name);
         let scope = self.frame_mut().scopes.last_mut().expect("a scope is open");
         scope.vars.push(Var {
             name,

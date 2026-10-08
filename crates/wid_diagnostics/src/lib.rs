@@ -75,7 +75,9 @@ pub fn did_you_mean<'a>(name: &str, candidates: impl IntoIterator<Item = &'a str
     let max = if len <= 2 { 0 } else { (len / 3).max(1) };
     candidates
         .into_iter()
-        .filter(|c| *c != name)
+        // A Wid name with `#{` (a splice's placeholder, or a name glued from
+        // text and splices) can't be written, so it is never suggested.
+        .filter(|c| *c != name && !c.contains("#{"))
         .map(|c| (edit_distance(&name.to_lowercase(), &c.to_lowercase()), c))
         .filter(|(d, _)| *d <= max)
         .min_by_key(|(d, c)| (*d, c.len()))

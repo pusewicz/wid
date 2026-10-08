@@ -631,6 +631,11 @@ impl<'a> Checker<'a> {
                 TyKind::Struct(_) => self.struct_new(ty, args, span),
                 TyKind::Dynamic(_) | TyKind::Map(..) => self.container_new(ty, args, span),
                 TyKind::Unknown => ir::Expr::new(ExprKind::Zero, ty),
+                // `Int{1}`, which the parser read as `Int.new(1)` (E0113).
+                _ if self.source_text(name.span) == "{" => {
+                    self.fit_struct_literal(ty, recv_span, name.span, args, span);
+                    ir::Expr::new(ExprKind::Zero, ty)
+                }
                 _ => {
                     let shown = self.types.display(ty);
                     self.report(
@@ -1226,7 +1231,8 @@ impl<'a> Checker<'a> {
             Access::Value | Access::Type => None,
         };
         let is_ivar = ivar.is_some();
-        if self.report_skipped_field(ty, name, span) {
+        // A name glued from splices outside a `quote` was reported (E0111).
+        if ast::is_glued_name(name) || self.report_skipped_field(ty, name, span) {
             return;
         }
         // A macro that failed among the type's declarations may have been

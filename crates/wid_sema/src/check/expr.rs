@@ -424,6 +424,90 @@ impl<'a> Checker<'a> {
         self.default_const(v)
     }
 
+    /// Fits the parser's E0113 for struct literal syntax on a type without
+    /// `new` (`Int{1}`, `Color{1}`), which it read as a `new` call: `ty`
+    /// written at `ty_span`, the `{` at `open`, the call at `span`. A
+    /// number gets a fix that writes the value (`w: Int = 1` for a new
+    /// local), anything else a help on how to build its value; the error
+    /// is reported with the parser's others (see `literal_fits`).
+    pub(super) fn fit_struct_literal(&mut self, ty: TyId, ty_span: Span, open: Span, args: &[ast::Arg], span: Span) {
+        let key = ty_span.to(open);
+        let shown = self.types.display(ty);
+        let written = self.source_text(ty_span);
+        let base = self.types.base(ty);
+        let what = match self.types.kind(ty) {
+            TyKind::Enum(_) => "an enum, not a struct",
+            TyKind::Union(_) => "a union, not a struct",
+            TyKind::Distinct(_) => "a distinct type, not a struct",
+            _ if self.types.is_numeric(ty) => "a number type, not a struct",
+            _ => "not a struct",
+        };
+        let mut diag = Diagnostic::error(codes::STRUCT_LITERAL, "Wid has no struct literal syntax")
+            .primary(key, format!("`{shown}` is {what}, so it has no `new`"));
+        // The value it holds: `1` in `Int{1}`, 0 in `Int{}`.
+        let value = match args {
+            [] => Some("0".to_string()),
+            [ast::Arg { name: None, value, splat: false }] => Some(self.source_text(value.span)),
+            _ => None,
+        };
+        if self.types.is_numeric(ty) {
+            diag = match (value, self.literal_local.filter(|(at, _)| *at == span)) {
+                (Some(v), Some((_, local))) => {
+                    let name = self.source_text(local);
+                    diag.suggest(
+                        format!("declare `{name}` with the type instead: `{name}: {written} = {v}`"),
+                        vec![
+                            wid_diagnostics::Edit { span: local.shrink_to_end(), replacement: format!(": {written}") },
+                            wid_diagnostics::Edit { span, replacement: v },
+                        ],
+                        Applicability::MachineApplicable,
+                    )
+                }
+                (Some(v), None) => {
+                    let v = if super::items::is_simple_operand(&v) { v } else { format!("({v})") };
+                    diag.suggest_replace(
+                        format!("write the value and convert it: `{v}.to({written})`"),
+                        span,
+                        format!("{v}.to({written})"),
+                        Applicability::MaybeIncorrect,
+                    )
+                }
+                (None, _) => diag.help(format!("`{shown}` holds one number: write it without the braces")),
+            };
+        } else {
+            let help = match self.types.kind(ty) {
+                TyKind::Enum(id) => {
+                    let first = self.types.enum_info(*id).members.first().map_or("member", |(n, _)| n.as_str());
+                    format!(
+                        "an enum's value is one of its members, like `{written}.{first}`, or `:{first}` where a `{shown}` is expected"
+                    )
+                }
+                TyKind::Union(id) => {
+                    let variants: Vec<String> = self
+                        .types
+                        .union_info(*id)
+                        .variants
+                        .iter()
+                        .map(|v| format!("`{}`", self.types.display(*v)))
+                        .collect();
+                    format!(
+                        "a union's value is a value of one of its variants ({}), given where a `{shown}` is expected",
+                        wid_diagnostics::and_list(&variants).replace(" and ", " or ")
+                    )
+                }
+                TyKind::Distinct(_) => {
+                    let base = self.types.display(base);
+                    format!("build a `{base}` and convert it with `.to({written})`")
+                }
+                TyKind::Bool => "a `Bool` is `true` or `false`".to_string(),
+                TyKind::String | TyKind::CString => "write a string literal, like `\"text\"`".to_string(),
+                _ => format!("write a value of `{shown}` without the braces"),
+            };
+            diag = diag.help(help);
+        }
+        self.literal_fits.insert(key, diag);
+    }
+
     fn string_literal(&mut self, parts: &[ast::StrPart], expected: Option<TyId>, span: Span) -> ir::Expr {
         let mut text = String::new();
         for part in parts {
@@ -2030,6 +2114,9 @@ impl<'a> Checker<'a> {
                         }
                         slots[i] = ArgSource::Given(&arg.value);
                     }
+                    // A name glued from splices outside a `quote` was
+                    // reported (E0111).
+                    None if ast::is_glued_name(n.name) => unknown_named = true,
                     None => {
                         unknown_named = true;
                         let names: Vec<&'static str> = params.iter().map(|p| p.name.as_str()).collect();

@@ -1222,6 +1222,23 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   emitter calls for a signed amount that isn't a literal) and in the
   interpreter, and otherwise shifts every bit out. A parameter's default
   `1 << 70` is named as 2^70 like other constants.
+- E0113 and E0111 follow-ups (#90). Struct literal syntax on a type without
+  `new` (`Int{1}`, `Color{1}`) was E0113 with a fix writing `Int.new(1)`,
+  plus E0204. The loader hands the parser's E0113s to the checker
+  (`FileInput::struct_literals`), which reports them after checking; where
+  the recovered `new` call meets a type without `new`
+  (`Checker::fit_struct_literal`, from `type_member`), the error fits the
+  type: a number is written as itself (`w: Int = 1` for a new local, which
+  `lower_assign` marks in `literal_local`; `1.to(Int)` elsewhere), and an
+  enum, union, distinct or other type gets a help. The value has the type
+  and adds no error. A name glued from splices outside a `quote` added
+  E0204, E0201, E0203 or E0304 to its E0111, and did-you-mean could offer
+  one: the parser reads a glued field or symbol as an error and `@glued(…)`
+  as a call of the name, and the checker passes over glued names
+  (`ast::is_glued_name`) where an undefined name, a missing member, an
+  unknown named argument or an unused local would be reported, still
+  reading the values around them. `did_you_mean` never suggests a name with
+  `#{`.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),

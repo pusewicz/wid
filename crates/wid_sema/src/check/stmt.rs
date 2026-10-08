@@ -322,7 +322,10 @@ impl<'a> Checker<'a> {
                     }
                 }
                 None => {
+                    // `w = Int{1}` is fixed as `w: Int = 1` (E0113).
+                    let outer = self.literal_local.replace((value.span, target.span));
                     let v = self.expr(value, None);
+                    self.literal_local = outer;
                     let ty = self.value_type(v.ty, value.span);
                     let v = self.coerce(v, ty, value.span);
                     let local = self.declare_var(name, ty, target.span, holds_parse_error(value));
