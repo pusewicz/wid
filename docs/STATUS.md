@@ -1450,6 +1450,12 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `lib.Counter` and `lib.COUNTER` all explain a skipped `lib_counter`
   (before, only the constant spelling did and `lib.counter` was a bare
   E0201). A declaration's own Wid or C name wins over another's spelling.
+- A macro that names a function (`#define LIB_ALIAS LIB_InitWindow`) keeps
+  the function's parameter names (#147, SPEC "C and C++ interop"): the
+  macro probe follows the initializer to the declaration it names
+  (`clang_getCursorReferenced`, through implicit casts, parentheses and
+  chains of such macros) and names the function type's parameters from it,
+  as for function-pointer globals. It was `def alias(arg0, arg1, arg2)`.
 
 ## Next
 

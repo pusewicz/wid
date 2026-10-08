@@ -937,7 +937,9 @@ end
   become constants. Other value macros, like raylib's `RED`, and `const`
   globals are read by name in C (`@[extern("RED")] RED: Color = ---`). A macro
   that names a function (`#define GetMouseRay GetScreenToWorldRay`) is a
-  function. Function-like macros, mutable globals and bit-fields are not
+  function with the macro's name and the declaration of the function it
+  names, parameter names included, so named arguments work the same for
+  both. Function-like macros, mutable globals and bit-fields are not
   imported, and using one is an error (E0705) that explains why, whether
   the use writes its C name or any name the rules above give it as a
   function, type or constant (`lib.counter`, `lib.Counter` or
