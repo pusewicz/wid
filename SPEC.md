@@ -558,6 +558,14 @@ end
     `proc(Int) -> Int`, `@[c] proc(I32)`), the line is that constant's
     declaration wherever it is, as `NAME = v` is. `quote` works only in a
     `macro def`, the procs inside it included (E0910).
+  - **Nested quotes:** a splice belongs to the innermost `quote` around
+    it. In a `macro def` that a `quote` generates, the inner macro's
+    `quote` is left as written when the outer macro expands; its splices
+    run when the inner macro runs and read the inner macro's names, so
+    they can't read the outer macro's parameters (E0201, which says so).
+    To pass an outer value on, generate a constant in the outer `quote`
+    (`N_VALUE = #{n}`) and use it, or splice the value into the inner
+    macro's own code, outside its `quote` (`v = #{n}`, then `#{v}`).
   - **Splices:** a spliced value is inserted according to its type, and must
     fit where the splice is (E0911, reported at the call):
     - `Code` inserts that code: one expression where a value goes, and any

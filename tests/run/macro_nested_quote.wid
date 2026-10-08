@@ -1,0 +1,31 @@
+# A macro that generates a macro passes its own values on through a
+# constant, or through the inner macro's own code outside its `quote`.
+macro def with_constant(n: Int) -> Code
+  quote do
+    N_VALUE = #{n}
+    macro def from_constant -> Code
+      quote do
+        N_VALUE + 1
+      end
+    end
+  end
+end
+
+macro def with_code(n: Int) -> Code
+  quote do
+    macro def from_code -> Code
+      v = #{n} * 10
+      quote do
+        #{v} + 2
+      end
+    end
+  end
+end
+
+with_constant(3)
+with_code(4)
+
+def main
+  p from_constant()
+  p from_code()
+end

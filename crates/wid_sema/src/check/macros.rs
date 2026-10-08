@@ -161,6 +161,8 @@ pub(crate) struct MacroState {
     pub file_locs: HashMap<FileId, DeclLoc>,
     /// Set while a macro body is lowered: `quote` works there.
     pub in_macro: bool,
+    /// Set while the splices of a `quote` are lowered.
+    pub splicing: bool,
     /// Macros whose declarations were checked, and whether they are valid.
     pub checked: HashMap<DeclId, bool>,
     /// Checked macros whose bodies failed to parse; they never run.
@@ -683,7 +685,9 @@ impl<'a> Checker<'a> {
         };
         let mut args = Vec::with_capacity(quote.splices.len());
         for splice in &quote.splices {
+            let outer = std::mem::replace(&mut self.macros.splicing, true);
             let v = self.expr(splice, None);
+            self.macros.splicing = outer;
             if !self.spliceable(v.ty) {
                 let shown = self.types.display(v.ty);
                 self.report(
@@ -1375,7 +1379,13 @@ impl<'a> Checker<'a> {
             let e = &self.macros.expansions[expansion as usize];
             let (decl, by) = (e.decl, e.name.clone());
             if let Some(param) = self.macro_param(decl, name) {
-                self.report_unspliced_param(name, span, what, &by, param);
+                match self.generated_macro(expansion) {
+                    // A splice in a `quote` of a macro this one generated.
+                    Some(inner) if self.macros.splicing => {
+                        self.report_outer_param(name, span, what, &by, param, inner);
+                    }
+                    _ => self.report_unspliced_param(name, span, what, &by, param),
+                }
                 return true;
             }
         }
@@ -1502,6 +1512,33 @@ impl<'a> Checker<'a> {
         let DeclKind::Fn(f) = self.decls[decl.0 as usize].kind else { return None };
         f.is_macro.then_some(())?;
         f.params.iter().find(|p| p.name.name == name).map(|p| p.name.span)
+    }
+
+    /// The macro whose body is being lowered, if expansion `expansion`
+    /// generated it (a `macro def` in a `quote`): its name.
+    fn generated_macro(&self, expansion: u32) -> Option<Name> {
+        let decl = self.body.frames.last()?.decl?;
+        let d = &self.decls[decl.0 as usize];
+        let generated = self.virtual_file(d.span.file).is_some_and(|v| v.expansion == expansion);
+        (generated && self.is_macro(decl)).then_some(d.name)
+    }
+
+    /// Reports a splice in a `quote` of a macro that another macro
+    /// generated, naming a parameter of the outer macro (E0201): a splice
+    /// belongs to the innermost `quote`, which runs with the inner macro.
+    fn report_outer_param(&mut self, name: Name, span: Span, what: &str, by: &str, param: Span, inner: Name) {
+        let upper = format!("{}_VALUE", name.as_str().to_uppercase());
+        self.report(
+            Diagnostic::error(codes::UNDEFINED_NAME, format!("undefined {what} `{name}`"))
+                .primary(span, format!("splices in `{inner}`'s `quote` read `{inner}`'s names"))
+                .secondary(param, format!("`{name}` is a parameter of `{by}`"))
+                .note(format!(
+                    "a splice belongs to the innermost `quote` around it: this one runs when `{inner}` runs, after `{by}` has finished, so `{by}`'s parameters are gone"
+                ))
+                .help(format!(
+                    "generate a constant in `{by}`'s `quote`, like `{upper} = #{{{name}}}`, and use `{upper}` in `{inner}`; or splice the value into `{inner}`'s own code, outside its `quote` (`v = #{{{name}}}`), and splice `#{{v}}` there"
+                )),
+        );
     }
 
     /// Reports code that a macro's `quote` generated naming one of the

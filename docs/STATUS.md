@@ -973,6 +973,16 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   variable holding the value). `check_generic_args` reports it
   (`sized_field`) and fails, so the instance is unknown; a value argument
   that was reported (`Grid(1.5)`) fails it too.
+- A splice belongs to the innermost `quote` (SPEC "Compile-time", decided
+  in #79): in a `macro def` a macro generates, the inner `quote`'s `#{n}`
+  reads the inner macro's names. Naming the outer macro's parameter there
+  is E0201 saying so, with a label on the parameter and a help to
+  generate a constant (`N_VALUE = #{n}`) or splice the value into the
+  inner macro's own code (it was a bare "undefined name"). `lower_quote`
+  sets `MacroState::splicing` while it lowers splices, and
+  `explain_macro_name` checks that the macro being lowered came from the
+  name's expansion (`generated_macro`). `tests/run/macro_nested_quote`
+  covers both ways to pass the value.
 - A proc parameter whose name a macro splices (`->(#{v}: Int) -> Int {
   #{v} * 2 }`), in a method body or a generated `def`, is the caller's
   name, as a block parameter's is: the proc's body and code spliced from
