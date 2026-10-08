@@ -30,3 +30,7 @@ macro def report(name: Symbol) -> Code
     puts "#{#{name.to_s}} = #{fmt.int(#{name}, base: 16)}"
   end
 end
+
+# Through an `overload` set, the chosen macro expands like a direct call.
+def scaled_text(s: String) -> String = "#{s} x10"
+overload :scale_any, :scaled, :scaled_text

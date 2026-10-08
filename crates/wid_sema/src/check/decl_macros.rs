@@ -314,7 +314,9 @@ impl<'a> Checker<'a> {
             }
         };
         match found {
-            Some(decl) if self.is_macro(decl) => {
+            // An overload set's member is chosen in the frame the macro runs
+            // in (`expand_among_declarations`).
+            Some(decl) if self.is_macro(decl) || self.set_has_macros(decl) => {
                 self.check_visible(decl, parts.name.span);
                 let (args, block, name_span, span) = (parts.args, parts.block, parts.name.span, expr.span);
                 Some(MacroCall { decl, shown, args, block, name_span, span })
@@ -453,7 +455,7 @@ impl<'a> Checker<'a> {
     /// macro or the arguments use `Self`.
     fn expand_among_declarations(&mut self, call: &MacroCall<'a>, p: PendingMacro<'a>) -> Option<Vec<ast::Stmt>> {
         let in_args = call.args.iter().find_map(|a| self_in(&a.value));
-        let needs_self = in_args.is_some() || self.macro_self_use(call.decl).is_some();
+        let needs_self = in_args.is_some() || self.uses_self(call.decl);
         let self_ty = if needs_self { self.owner_self(p.owner) } else { None };
         if let Some(at) = in_args
             && self_ty.is_none_or(|t| self.has_params(t))
@@ -479,11 +481,41 @@ impl<'a> Checker<'a> {
         });
         self.begin_block();
         let site = self.enter_site(call.span);
-        let code = self.expand_code(call);
+        let code = match self.chosen_macro(call, p) {
+            Some(call) => self.expand_code(&call),
+            None => None,
+        };
         self.leave_site(site);
         self.end_block();
         self.body = saved;
         code
+    }
+
+    /// Whether a macro's own code uses `Self`, or for an overload set, any
+    /// macro among its members.
+    fn uses_self(&mut self, decl: DeclId) -> bool {
+        if !matches!(self.decls[decl.0 as usize].kind, DeclKind::Overload(_)) {
+            return self.macro_self_use(decl).is_some();
+        }
+        let members = self.overload_members(decl);
+        members.into_iter().any(|m| self.is_macro(m) && self.macro_self_use(m).is_some())
+    }
+
+    /// The macro a call among declarations runs: the one it names, or the
+    /// member of the overload set it names that fits the arguments. A
+    /// member that is a `def` can't be called there (E0108). `None` means
+    /// an error was reported.
+    fn chosen_macro(&mut self, call: &MacroCall<'a>, p: PendingMacro<'a>) -> Option<MacroCall<'a>> {
+        let copy = MacroCall { shown: call.shown.clone(), ..*call };
+        if !matches!(self.decls[call.decl.0 as usize].kind, DeclKind::Overload(_)) {
+            return Some(copy);
+        }
+        let (chosen, _) = self.choose_for_call(call)?;
+        if !self.is_macro(chosen) {
+            self.call_among_declarations(call.span, p.owner, Some(chosen));
+            return None;
+        }
+        Some(self.chosen_macro_call(copy, chosen))
     }
 
     /// The `Self` of a macro called among declarations: the struct or enum

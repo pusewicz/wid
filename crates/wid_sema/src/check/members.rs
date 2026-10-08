@@ -483,7 +483,10 @@ impl<'a> Checker<'a> {
             }
             DeclKind::Fn(_) => self.call_fn(decl, None, args, block, name.span, span),
             DeclKind::Const(_) => self.const_ref_decl(decl, span, expected),
-            DeclKind::Overload(_) => self.call_overloaded(decl, None, None, args, name.span, span),
+            DeclKind::Overload(_) => {
+                let shown = format!("{}.{}", self.source_text(pkg_span), name.as_str());
+                self.call_package_set(decl, &shown, args, (name.span, span), expected)
+            }
             ref other => {
                 let what = other.a_describe();
                 let mut diag =

@@ -230,6 +230,40 @@ impl<'a> Checker<'a> {
         self.merged_cimports.entry(pkg).or_default().push(cpkg);
     }
 
+    /// Reports a `macro def` named like an operator (E0915): operators are
+    /// methods of types, which the program runs, and a macro only expands
+    /// where it is called by name.
+    fn report_operator_macro(&mut self, f: &ast::FnDecl) {
+        let op = f.name.as_str();
+        let unary = f.params.len() == 1;
+        let named = super::operator_name(op, unary).and_then(|n| n.strip_prefix("op_")).unwrap_or("expand");
+        // Only a binary operator can also be a package-level `def`.
+        let (usage, runs, keep) = match op {
+            "[]" => ("a[i]".to_string(), "a method of `a`'s type", "in the operand's type"),
+            "[]=" => ("a[i] = v".to_string(), "a method of `a`'s type", "in the operand's type"),
+            _ if unary => (format!("{op}a"), "a method of `a`'s type", "in the operand's type"),
+            _ => (
+                format!("a {op} b"),
+                "a method of `a`'s type, or a package-level `def`,",
+                "in the left operand's type, or at package level",
+            ),
+        };
+        self.report(
+            Diagnostic::error(codes::OPERATOR_MACRO, format!("a macro can't be named like the operator `{op}`"))
+                .primary(f.name.span, "operators are methods, not macros")
+                .note(format!(
+                    "`{usage}` calls {runs} when the program runs, while a macro only expands where it is called by name"
+                ))
+                .suggest_replace(
+                    format!("give the macro a name and call it by that name, like `{named}(…)`"),
+                    f.name.span,
+                    named,
+                    Applicability::MaybeIncorrect,
+                )
+                .help(format!("to keep the operator, define it with `def {op}` {keep}; its body may call a macro")),
+        );
+    }
+
     pub(super) fn collect_item(&mut self, item: &'a ast::Item, loc: DeclLoc, owner: Option<DeclId>) {
         self.check_item_attributes(item);
         let (name, span, kind) = match &item.kind {
@@ -241,6 +275,11 @@ impl<'a> Checker<'a> {
                         .help("move the `macro def` out of this declaration"),
                 );
                 return;
+            }
+            ItemKind::Def(f) if f.is_macro && super::overloads::is_operator(f.name.as_str()) => {
+                // Kept, so uses of the operator aren't reported again.
+                self.report_operator_macro(f);
+                (f.name.name, f.name.span, DeclKind::Fn(f))
             }
             ItemKind::Def(f) if owner.is_some() && f.params.is_empty() && matches!(f.name.as_str(), "-" | "~") => {
                 (Name::new(&format!("{}@", f.name.as_str())), f.name.span, DeclKind::Fn(f))

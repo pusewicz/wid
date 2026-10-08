@@ -305,7 +305,8 @@ end
   other number types, so `clamp(5)` picks `clamp_int` and `clamp(0.5)` picks
   `clamp_f32`. If none fits, or several fit equally well, the error lists
   every member. Members can't take blocks or `$` type parameters, and no two
-  may take the same parameter types.
+  may take the same parameter types. A member may be a macro, which expands
+  when a call chooses it (see Compile-time).
 - **Operators are methods**, because math-heavy game code needs them. You can
   define `+ - * / %`, unary `-`, `==`, `<=>` (which gives you `<`, `<=`, `>`
   and `>=`), `[]` and `[]=`, and `+=`-style forms are derived automatically.
@@ -576,13 +577,29 @@ end
     `private macro def` hides a macro outside its package (E0205). A
     macro is not a method the program can call, so it can't be a proc
     (`method(:name)`, E0323), and it takes no block.
+  - **In an `overload` set,** a macro member expands when a call chooses
+    it, in an expression (with the call's expected type), as a statement
+    or among declarations, where the chosen member must be a macro
+    (E0108). The call picks the member by parameter types as usual,
+    before any argument is lowered: a `Code` parameter takes any argument
+    but ranks below every typed parameter, exact or converting; a
+    `Symbol` parameter takes a symbol literal and a `Type` parameter a
+    type, both exactly; other parameters take values by type, and an
+    argument is checked for its type only when a member needs it. A
+    macro that collects arguments with `*` can't be a member (E0316).
+  - **Operators** are methods of types, which the program runs, so a
+    `macro def` can't be named like one (`+`, `==`, `[]`, unary `-`, …),
+    and an operator's `overload` set can't list a macro (E0915). Define
+    the operator with `def`, whose body may call a macro, or give the
+    macro a name.
   - **Where a macro call expands:** in an expression, as a statement, as a
     declaration in a `struct`, `enum`, `module` or `extend` body, or at
     package level. Declaration-level calls expand once every declaration
     outside them is known, in source order, like `comptime if`.
-  - **Among declarations,** a call must name a macro: calling a method
-    there is a statement outside a method (E0108), and an unknown name is
-    an undefined macro (E0201). In an `enum` body a name alone on a line is
+  - **Among declarations,** a call must name a macro (or an `overload`
+    set that chooses one): calling a method there is a statement outside
+    a method (E0108), and an unknown name is an undefined macro (E0201).
+    In an `enum` body a name alone on a line is
     a member, so a macro without arguments is called `name()` there. A
     member written as a name alone that a macro visible there also has is
     E0914, whose fix adds the `()`; a member with a value (`name = 1`) is

@@ -1,0 +1,39 @@
+# A macro can't be named like an operator: operators are methods of types,
+# which the program runs. A use of the operator finds no method for it.
+struct V
+  x: Int
+end
+
+macro def +(a: Code, b: Code) -> Code
+  quote do
+    V.new(#{a}.x + #{b}.x)
+  end
+end
+
+macro def [](v: Code, i: Code) -> Code
+  quote do
+    #{v}.x
+  end
+end
+
+macro def -(v: Code) -> Code
+  quote do
+    V.new(0)
+  end
+end
+
+# Nor can an operator's set list a macro.
+macro def scale(v: Code, by: Code) -> Code
+  quote do
+    V.new(#{v}.x * #{by})
+  end
+end
+
+def scale_v(v: V, by: V) -> V = V.new(v.x * by.x)
+
+overload :*, :scale, :scale_v
+
+def main
+  a = V.new(1)
+  p a + V.new(2), a * a
+end

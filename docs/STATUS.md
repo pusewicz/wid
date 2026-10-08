@@ -171,7 +171,17 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
 - Macro expansion (`check/macros.rs`, whose module docs describe the core):
   - A call resolves like any call; `call`, `ident` and `package_member`
     hand a macro to `Checker::call_macro` with the expected type, and
-    `call_fn` does for any other path. `expand` converts the arguments
+    `call_fn` does for any other path. A package-level `overload` set with
+    macro members goes through `call_package_set` (from `call` and
+    `package_member`), whose `choose_with_macros` picks the member before
+    any argument is lowered (`Fit::Code` for a macro's `Code` parameter,
+    scored below typed fits; a symbol literal for `Symbol`, `named_type`
+    for `Type`; otherwise the argument's type, from a `Probe` lowered once
+    in a dropped block when a member needs it). A macro chosen goes to
+    `call_macro`, shown by its own name (`chosen_macro_call`); a `def` gets
+    its arguments lowered and `call_member`. Among declarations,
+    `resolve_item_macro` accepts such a set and `chosen_macro` picks the
+    member inside the expansion frame. `expand` converts the arguments
     (`Code` → an *argument fragment*: the call-site syntax, numbered from
     one; `Symbol` → `Name::index`; `Type` → `TyId`; others →
     `comptime_value`; a `*names: T` → a static `[]T`, `fn_sig` typing the
@@ -862,6 +872,18 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   operand didn't. A `when` pattern that needs statements (like a macro
   call's) is tested only when the earlier patterns of its `when` didn't
   match; they all ran before.
+- Macros in an `overload` set expand when a call chooses them, in an
+  expression (with the expected type), as a statement or among
+  declarations (#74; the chosen macro was called as a run-time function,
+  E0906, and a `Code` member never fit). A `Code` parameter takes any
+  argument and ranks below a typed one; a macro with a `*` parameter can't
+  be a member (E0316); a `def` chosen among declarations is E0108.
+- A `macro def` named like an operator (`+`, `[]`, unary `-`, …) is E0915
+  at the declaration, with a fix that names it (`add`) and a help to define
+  the operator with `def` (#74; it was accepted, and `a + b` then called it
+  at run time, E0906). Package operators skip macros, so a use is E0307
+  like any missing operator. An operator's `overload` set can't list a
+  macro either (E0915).
 - A C compiler without C23 (one that rejects `-std=c23`, like gcc 13 or
   clang 17, or lacks `<stdckdint.h>` or `#embed`) is E0702 "the C compiler
   `cc` doesn't support C23", with the first line of its `--version`, the
@@ -1164,9 +1186,11 @@ before anyone starts them.
   is where a "did you mean" fix would apply. "Did you mean" suggestions in
   generated code can name the caller's locals, which the code can't see.
   E0304 tells a symbol literal from a `Symbol` value by its source text. A
-  `Code` parameter's default can't be a `quote`. A macro reached through
-  an `overload` set expands without the expected type. A macro run is
-  repeated for each generic instance that contains the call.
+  `Code` parameter's default can't be a `quote`. A macro run is repeated
+  for each generic instance that contains the call. Choosing among an
+  `overload` set's members lowers an argument that some member needs a
+  value for, so such an argument must check where the call is, even when
+  the macro chosen takes it as `Code`.
 - Macros among declarations: calls expand strictly in source order, once
   each, so a call can't use a macro or a declaration that a later call
   generates (it is undefined), and a macro runs, with the helpers it calls

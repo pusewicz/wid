@@ -1484,7 +1484,8 @@ impl<'a> Checker<'a> {
                         if let Some(b) = block {
                             self.reject_block(b, "overloaded methods do not take blocks");
                         }
-                        return self.call_overloaded(decl, None, None, &call.args, name.span, span);
+                        let spans = (name.span, span);
+                        return self.call_package_set(decl, name.as_str(), &call.args, spans, expected);
                     }
                     if let DeclKind::Fn(_) = self.decls[decl.0 as usize].kind {
                         return self.call_fn(decl, None, &call.args, block, name.span, span);
