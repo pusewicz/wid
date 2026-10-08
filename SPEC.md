@@ -872,6 +872,13 @@ end
   `-define:NAME=val`, `-collection:name=path`, `-target:os_arch`, `-file`,
   `-sanitize:address`, `-filter:` (for `test`), `-json` and `-private` (for
   `doc`), `-in:` (for `query`) and `-json-errors`.
+- `-file` makes the target a single `.wid` file instead of a package
+  directory, so it needs one: `wid check main.wid -file` (for `doc` and
+  `query`, a collection path can name it: `core:fmt/fmt.wid`). Naming no
+  file, a missing file or a directory is an error (E0206; E0601 for `doc`
+  and `query`) that points into the command line, with the only `.wid`
+  file of the directory or a similar one as a fix, and dropping `-file` as
+  the fix for a package directory.
 - **Docs.** `wid doc [package] [symbol]` shows documentation made from doc
   comments: the `# ` comment lines directly above a declaration (above its
   attributes too), with no blank line between; an enum member's sit above

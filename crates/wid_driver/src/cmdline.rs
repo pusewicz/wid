@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
-use wid_diagnostics::{Applicability, Diagnostic, Edit, FileId, SourceMap, Span, and_list, codes, did_you_mean};
+use wid_diagnostics::{Applicability, Code, Diagnostic, Edit, FileId, SourceMap, Span, and_list, codes, did_you_mean};
 use wid_query::Failure;
 use wid_query::item::kind_words;
 use wid_sema::PackageId;
@@ -22,16 +22,19 @@ pub(crate) enum Tool {
     Query,
 }
 
-/// The command line as messages show it, with the span of each argument.
+/// The command line as messages show it, with the span of each argument
+/// and flag.
+#[derive(Clone)]
 pub(crate) struct CommandLine {
     pub(crate) text: String,
     args: Vec<(u32, u32)>,
+    flags: Vec<(String, u32, u32)>,
 }
 
 impl CommandLine {
     /// A command line that starts with `command`: `wid doc`.
     pub(crate) fn new(command: &str) -> Self {
-        CommandLine { text: command.to_string(), args: Vec::new() }
+        CommandLine { text: command.to_string(), args: Vec::new(), flags: Vec::new() }
     }
 
     /// Appends an argument written after `prefix` (`-in:` for `-in:DIR`)
@@ -45,10 +48,27 @@ impl CommandLine {
         self.args.len() - 1
     }
 
-    /// Appends a flag that errors don't point at.
+    /// Appends a flag, like `-file`.
     pub(crate) fn flag(&mut self, flag: &str) {
         self.text.push(' ');
+        let start = self.text.len() as u32;
         self.text.push_str(flag);
+        self.flags.push((flag.to_string(), start, self.text.len() as u32));
+    }
+
+    /// The span of a flag, or the empty span at the end when it wasn't
+    /// added.
+    fn flag_span(&self, file: FileId, flag: &str) -> Span {
+        match self.flags.iter().find(|(f, _, _)| f == flag) {
+            Some(&(_, start, end)) => Span::new(file, start, end),
+            None => self.end(file),
+        }
+    }
+
+    /// The edit that removes a flag and the space before it.
+    fn drop_flag(&self, file: FileId, flag: &str) -> Edit {
+        let span = self.flag_span(file, flag);
+        Edit { span: Span::new(file, span.start.saturating_sub(1), span.end), replacement: String::new() }
     }
 
     /// Registers the command line as the source `command line`.
@@ -90,14 +110,20 @@ pub(crate) fn package_target(
     tool: Tool,
     package: PackageArg,
 ) -> Result<PathBuf, Pending> {
+    let verb = match tool {
+        Tool::Doc => "document",
+        Tool::Query => "read",
+    };
+    let file_request = |arg| FileRequest {
+        cmd,
+        arg,
+        code: codes::DOC_UNKNOWN_PACKAGE,
+        verb,
+        prefix: if tool == Tool::Query { "-in:" } else { "" },
+    };
     let Some((text, arg)) = package.arg else {
-        if opts.file_mode && tool == Tool::Query {
-            let end = cmd.text.len() as u32;
-            return Err(Box::new(move |file| {
-                Diagnostic::error(codes::DOC_UNKNOWN_PACKAGE, "`-file` needs a file to read")
-                    .primary(Span::new(file, end - "-file".len() as u32, end), "no file is named")
-                    .help("name the file with `-in:`, like `wid query outline -in:main.wid -file`")
-            }));
+        if opts.file_mode {
+            return file_target(dir, file_request(None));
         }
         if has_wid_files(dir) {
             return Ok(dir.to_path_buf());
@@ -144,6 +170,9 @@ pub(crate) fn package_target(
             },
         };
         let dir = base.join(rel);
+        if opts.file_mode {
+            return file_target(&base, file_request(Some((&text, arg, clean(&dir)))));
+        }
         if !rel.is_empty() && has_wid_files(&dir) {
             return Ok(dir);
         }
@@ -169,19 +198,8 @@ pub(crate) fn package_target(
         }));
     }
     let path = clean(&dir.join(&text));
-    let verb = match tool {
-        Tool::Doc => "document",
-        Tool::Query => "read",
-    };
     if opts.file_mode {
-        if path.is_file() {
-            return Ok(path);
-        }
-        return Err(Box::new(move |file| {
-            Diagnostic::error(codes::DOC_UNKNOWN_PACKAGE, format!("`{text}` is not a file"))
-                .primary(span(file), format!("`-file` {verb}s a single `.wid` file"))
-                .help(format!("name an existing file, or drop `-file` to {verb} a package directory"))
-        }));
+        return file_target(dir, file_request(Some((&text, arg, path))));
     }
     if path.is_file() {
         return Err(Box::new(move |file| {
@@ -266,6 +284,140 @@ fn no_package_here(file: FileId, tool: Tool, symbol: Option<&str>) -> Diagnostic
             "run `wid query` in a package directory, or name a package with `-in:`, like `wid query outline -in:core:fmt`",
         ),
     }
+}
+
+/// What the errors about `-file`'s argument need to know about the
+/// request.
+pub(crate) struct FileRequest<'a> {
+    /// The command line, with `-file` added.
+    pub(crate) cmd: &'a CommandLine,
+    /// The file as written, its argument number and the path it names;
+    /// `None` when the command line names none.
+    pub(crate) arg: Option<(&'a str, usize, PathBuf)>,
+    /// The code the errors have: E0206 for `build`, `run`, `check` and
+    /// `test`, E0601 for `wid doc` and `wid query`.
+    pub(crate) code: Code,
+    /// What the command does with the file: `check`, `document`.
+    pub(crate) verb: &'a str,
+    /// What the command line writes before a file: `-in:` for `wid query`.
+    pub(crate) prefix: &'a str,
+}
+
+/// The file `-file` names, or the error for no file (with the `.wid` files
+/// in `dir`, where the command runs, as candidates), a missing one (with
+/// those of its directory), or a directory (with a fix that drops `-file`).
+pub(crate) fn file_target(dir: &Path, request: FileRequest) -> Result<PathBuf, Pending> {
+    let FileRequest { cmd, arg, code, verb, prefix } = request;
+    let (cmd, verb, prefix) = (cmd.clone(), verb.to_string(), prefix.to_string());
+    let Some((text, arg, path)) = arg else {
+        let files = wid_file_names(dir);
+        let package = !files.is_empty();
+        return Err(Box::new(move |file| {
+            let flag = cmd.flag_span(file, "-file");
+            let at = |name: &str| Edit {
+                span: Span::new(file, flag.start, flag.start),
+                replacement: format!("{prefix}{name} "),
+            };
+            let mut diag = Diagnostic::error(code, "`-file` needs a `.wid` file to read")
+                .primary(flag, "no file is named")
+                .note("with `-file`, the package is a single `.wid` file instead of a directory, so the file must be named");
+            match files.as_slice() {
+                [only] => {
+                    diag = diag.suggest(
+                        format!("{verb} `{only}`, the only `.wid` file here"),
+                        vec![at(only)],
+                        Applicability::MaybeIncorrect,
+                    )
+                }
+                _ => {
+                    let mut example = cmd.text.clone();
+                    example.insert_str(flag.start as usize, &format!("{prefix}main.wid "));
+                    let with = if prefix.is_empty() { String::new() } else { format!(" with `{prefix}`") };
+                    diag = diag.help(format!("name the file{with}, like `{example}`"));
+                    if !files.is_empty() {
+                        diag = diag.note(format!("the `.wid` files here are {}", list_names(&files)));
+                    }
+                }
+            }
+            if package {
+                diag = diag.suggest(
+                    format!("or drop `-file` to {verb} the package in `.`"),
+                    vec![cmd.drop_flag(file, "-file")],
+                    Applicability::MaybeIncorrect,
+                );
+            }
+            diag
+        }));
+    };
+    if path.is_file() {
+        return Ok(path);
+    }
+    let text = text.to_string();
+    if path.is_dir() {
+        let package = has_wid_files(&path);
+        return Err(Box::new(move |file| {
+            let diag = Diagnostic::error(code, format!("`{text}` is a directory, not a file"))
+                .primary(cmd.span(file, arg), format!("`-file` {verb}s a single `.wid` file"));
+            if package {
+                diag.suggest(
+                    format!("drop `-file` to {verb} the package in `{text}`"),
+                    vec![cmd.drop_flag(file, "-file")],
+                    Applicability::MachineApplicable,
+                )
+            } else {
+                diag.note(format!("`{text}` holds no `.wid` files")).help("name a `.wid` file instead")
+            }
+        }));
+    }
+    let exists = path.exists();
+    let last = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let parent = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(dir).to_path_buf();
+    let written_dir = text.strip_suffix(last.as_str()).unwrap_or_default().to_string();
+    let files = wid_file_names(&parent);
+    // `main` for `main.wid`, then a similar name.
+    let with_extension = format!("{last}.wid");
+    let best = files
+        .iter()
+        .find(|f| **f == with_extension)
+        .map(String::as_str)
+        .or_else(|| did_you_mean(&last, files.iter().map(String::as_str)))
+        .map(|best| format!("{written_dir}{best}"));
+    Err(Box::new(move |file| {
+        let span = cmd.span(file, arg);
+        let (message, label) = if exists {
+            (format!("`{text}` is not a file"), format!("`-file` {verb}s a single `.wid` file"))
+        } else {
+            (format!("file `{text}` not found"), "no file with this path".to_string())
+        };
+        let mut diag = Diagnostic::error(code, message).primary(span, label);
+        if let Some(best) = best {
+            return diag.suggest_replace(
+                format!("a similar file exists: `{best}`"),
+                span,
+                best,
+                Applicability::MaybeIncorrect,
+            );
+        }
+        if !files.is_empty() {
+            let place = if written_dir.is_empty() { "here".to_string() } else { format!("in `{written_dir}`") };
+            diag = diag.note(format!("the `.wid` files {place} are {}", list_names(&files)));
+        }
+        diag.help("name an existing `.wid` file")
+    }))
+}
+
+/// The names of the `.wid` files directly in `dir`, sorted.
+fn wid_file_names(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(dir)
+        .map(|rd| {
+            rd.flatten()
+                .filter(|e| e.path().extension().is_some_and(|x| x == "wid") && e.path().is_file())
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+    names.sort();
+    names
 }
 
 /// `dir/./x` without the `.`, so paths print as written.

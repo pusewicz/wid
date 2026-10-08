@@ -1,0 +1,10 @@
+error[E0601]: file `shapes/shape.wid` not found
+ --> command line:1:9
+  |
+1 | wid doc shapes/shape.wid -file
+  |         ^^^^^^^^^^^^^^^^ no file with this path
+help: a similar file exists: `shapes/shapes.wid`
+  | wid doc shapes/shapes.wid -file
+  = see `wid explain E0601`
+
+error: could not write the documentation due to 1 error

@@ -966,6 +966,12 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `check` and `test`; `cimport` could not import the header, and `wid doc`
   could not write the documentation, or warns that the page it printed may
   be incomplete. The errdocs scripts accept every wording.
+- `-file` errors point into the command line (`wid check main.wid -file`)
+  for every command: no file named (E0206, or E0601 for `wid doc -file`,
+  as for `wid query`) offers the only `.wid` file of the directory and
+  dropping `-file`; a missing file offers a similar `.wid` file (`main` for
+  `main.wid` too) or lists those there; a directory offers dropping
+  `-file`. `Options::command` names the command for the message.
 
 ## Next
 

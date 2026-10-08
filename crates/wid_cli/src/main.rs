@@ -65,8 +65,11 @@ fn report(diags: &Diagnostics, sources: &SourceMap, parsed: &Parsed, failure: &s
 }
 
 fn options(parsed: &Parsed) -> Options {
-    let mut opts = Options::new(parsed.target.clone().unwrap_or_else(|| PathBuf::from(".")));
+    // A package defaults to the one in `.`; `-file` needs a file named.
+    let default = if parsed.file_mode { PathBuf::new() } else { PathBuf::from(".") };
+    let mut opts = Options::new(parsed.target.clone().unwrap_or(default));
     opts.file_mode = parsed.file_mode;
+    opts.command = args::command_name(parsed.command).to_string();
     opts.out = parsed.out.clone();
     opts.opt = parsed.opt;
     opts.debug = parsed.debug;

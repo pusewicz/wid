@@ -1,0 +1,10 @@
+error[E0601]: `-file` needs a `.wid` file to read
+ --> command line:1:9
+  |
+1 | wid doc -file
+  |         ^^^^^ no file is named
+  = note: with `-file`, the package is a single `.wid` file instead of a directory, so the file must be named
+help: name the file, like `wid doc main.wid -file`
+  = see `wid explain E0601`
+
+error: could not write the documentation due to 1 error

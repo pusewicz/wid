@@ -1,0 +1,10 @@
+error[E0601]: `core:fmt` is a directory, not a file
+ --> command line:1:9
+  |
+1 | wid doc core:fmt -file
+  |         ^^^^^^^^ `-file` documents a single `.wid` file
+help: drop `-file` to document the package in `core:fmt`
+  | wid doc core:fmt
+  = see `wid explain E0601`
+
+error: could not write the documentation due to 1 error

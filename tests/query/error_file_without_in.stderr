@@ -27,8 +27,10 @@
         }
       ],
       "line": 1,
-      "message": "`-file` needs a file to read",
-      "notes": [],
+      "message": "`-file` needs a `.wid` file to read",
+      "notes": [
+        "with `-file`, the package is a single `.wid` file instead of a directory, so the file must be named"
+      ],
       "severity": "error"
     }
   ],

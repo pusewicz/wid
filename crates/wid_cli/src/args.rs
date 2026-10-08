@@ -102,7 +102,7 @@ fn command_flags(command: Command) -> Vec<&'static str> {
 }
 
 /// The name a command is run with.
-fn command_name(command: Command) -> &'static str {
+pub fn command_name(command: Command) -> &'static str {
     match command {
         Command::Build => "build",
         Command::Run => "run",
