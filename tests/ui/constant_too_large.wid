@@ -1,0 +1,9 @@
+# An untyped integer constant that doesn't fit in `Int` suggests `U64`
+# only when `U64` holds it; past every integer type, it says so and names
+# the widest.
+def main
+  fits_u64 = 10000000000000000000
+  too_large = 100000000000000000000
+  too_small = -100000000000000000000
+  p fits_u64, too_large, too_small
+end

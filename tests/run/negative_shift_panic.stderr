@@ -1,0 +1,2 @@
+panic: shift by a negative amount: -1
+  at tests/run/negative_shift_panic.wid:7:5 in `main`

@@ -1,0 +1,21 @@
+# Struct literal syntax on a type without `new` is one E0113 whose fix fits
+# the type: a number is written as itself (a new local gets the type), and
+# anything else gets a help on how to build its value.
+enum Color
+  red
+  green
+end
+
+union Shape = Int | F64
+
+Meters = distinct F64
+
+def main
+  w = Int{1}
+  m = Meters{2.0}
+  c = Color{1}
+  s = Shape{1}
+  b = Bool{true}
+  p w, m, c, s, b
+  p Int{2 + 3}, F32{}
+end

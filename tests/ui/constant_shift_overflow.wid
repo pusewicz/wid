@@ -5,10 +5,13 @@ Y = 1 << 200
 SMALL: U8 = 1 << 8
 FINE = (1 << 100) >> 90
 
+# A parameter's default too.
+def scaled(x: Int = 1 << 70) -> Int = x
+
 def main
   p 1 << 70
   p 1 << 128
   p 1 << 200
   p 3 << 127
-  p Y, SMALL, FINE, 1 >> 200
+  p Y, SMALL, FINE, 1 >> 200, scaled()
 end

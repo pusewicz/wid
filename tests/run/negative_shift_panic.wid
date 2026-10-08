@@ -1,0 +1,8 @@
+# In a `-debug` build, a shift by a negative amount panics.
+def amount(n: Int) -> Int = n
+
+def main
+  x = 1
+  p x << amount(3)
+  p x << amount(-1)
+end

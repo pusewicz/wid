@@ -1,0 +1,25 @@
+error[E0311]: `10000000000000000000` does not fit in `Int`
+ --> tests/ui/constant_too_large.wid:5:14
+  |
+5 |   fits_u64 = 10000000000000000000
+  |              ^^^^^^^^^^^^^^^^^^^^ too large for a 64-bit integer
+help: give it an unsigned type, like `x: U64 = …`
+  = see `wid explain E0311`
+
+error[E0311]: `100000000000000000000` does not fit in any integer type
+ --> tests/ui/constant_too_large.wid:6:15
+  |
+6 |   too_large = 100000000000000000000
+  |               ^^^^^^^^^^^^^^^^^^^^^ too large for every integer type
+help: the largest, `U64`, holds values up to 18446744073709551615; a float type, like `F64`, holds larger ones
+  = see `wid explain E0311`
+
+error[E0311]: `-100000000000000000000` does not fit in any integer type
+ --> tests/ui/constant_too_large.wid:7:15
+  |
+7 |   too_small = -100000000000000000000
+  |               ^^^^^^^^^^^^^^^^^^^^^^ too small for every integer type
+help: the widest signed type, `Int`, holds values down to -9223372036854775808; a float type, like `F64`, holds smaller ones
+  = see `wid explain E0311`
+
+error: could not compile due to 3 errors

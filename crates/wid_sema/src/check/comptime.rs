@@ -537,8 +537,11 @@ impl<'a> Checker<'a> {
             return zero;
         };
         let loc = self.loc();
+        let errors = self.diags.error_count();
         let path = match self.eval_const(&arg.value, loc) {
             Some(ConstValue::Str(s)) => s,
+            // Evaluating it reported why, like a call without `comptime`.
+            None if self.diags.error_count() > errors => return zero,
             _ => {
                 self.report(
                     Diagnostic::error(codes::EMBED_FAILED, "`embed` needs a constant file path")

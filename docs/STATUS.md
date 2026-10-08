@@ -1198,6 +1198,66 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `c_layout` measure is gone; the interpreter compares `[0]T` arrays by
   their length, as the C does. `tests/run/zero_size_layout` prints the
   layouts next to the run-time tables.
+- Constant arithmetic past the 128 bits it folds in is E0311 (#113):
+  `-(-2^127)` panicked the compiler, `MAX + 1` and `MAX * 2` blamed an
+  operand, and `2 ** 200` fell through to the interpreter, which wrapped it
+  to 0. `Checker::fold_const_for` reports `-`, `+`, `-`, `*`, `/` by -1 and
+  `**` once where they happen ("`2 ** 200` is 2^200, which doesn't fit in
+  any integer type", `Checker::int_overflow`) and folds them to 0; for a
+  float target the value isn't folded, so the interpreter computes it in
+  floating point. `MIN % -1` folds to 0, as at run time. An enum member at
+  the 128-bit limit no longer panics the next one, and a member without a
+  value after one that doesn't fit isn't reported again. The interpreter
+  holds at most 64-bit values in `i128`, so its arithmetic can't overflow.
+- Constant diagnostics (#114): an untyped integer that doesn't fit in `Int`
+  suggests `U64` only when `U64` holds it, and otherwise says no integer
+  type does, naming the widest (`Checker::const_with_expected`). A method
+  call where a constant is needed (an enum value, an array length, matrix
+  dimensions, a generic argument, `embed`'s path) is one E0327 with its
+  `comptime` fix: the callers of `eval_const` compare error counts and stay
+  quiet when evaluating reported. A shift by a constant negative amount is
+  E0311 (`Checker::report_negative_shift`, from the folder and from
+  `binary_values` for `x << -1`), with a fix that shifts the other way; a
+  run-time one panics in `-debug` builds (`wid_shift_amount`, which the
+  emitter calls for a signed amount that isn't a literal) and in the
+  interpreter, and otherwise shifts every bit out. A parameter's default
+  `1 << 70` is named as 2^70 like other constants.
+- E0113 and E0111 follow-ups (#90). Struct literal syntax on a type without
+  `new` (`Int{1}`, `Color{1}`) was E0113 with a fix writing `Int.new(1)`,
+  plus E0204. The loader hands the parser's E0113s to the checker
+  (`FileInput::struct_literals`), which reports them after checking; where
+  the recovered `new` call meets a type without `new`
+  (`Checker::fit_struct_literal`, from `type_member`), the error fits the
+  type: a number is written as itself (`w: Int = 1` for a new local, which
+  `lower_assign` marks in `literal_local`; `1.to(Int)` elsewhere), and an
+  enum, union, distinct or other type gets a help. The value has the type
+  and adds no error. A name glued from splices outside a `quote` added
+  E0204, E0201, E0203 or E0304 to its E0111, and did-you-mean could offer
+  one: the parser reads a glued field or symbol as an error and `@glued(…)`
+  as a call of the name, and the checker passes over glued names
+  (`ast::is_glued_name`) where an undefined name, a missing member, an
+  unknown named argument or an unused local would be reported, still
+  reading the values around them. `did_you_mean` never suggests a name with
+  `#{`.
+- CLI flags and package targets (#106). A flag another command takes was
+  silently ignored (`wid explain -debug E0206`, `wid check -filter:x .`,
+  `wid doc -out:x core:fmt`); `args::parse` now checks each flag against
+  the command's own list (`command_flags`) and stops with a usage error
+  (status 2) naming the commands that take it. `wid check` has its own
+  list (`CHECK_FLAGS`: `-file`, `-define`, `-target`, `-collection`,
+  `-json-errors`) and help (`CHECK_FLAG_HELP`), without the flags for
+  building C (`-out`, `-o`, `-debug`, `-keep-c`, `-cc`, `-no-bounds-check`,
+  `-sanitize`), which changed nothing it reports: the interpreter always
+  runs with `-debug`'s checks. A unit test parses every flag each command's
+  help lists and checks the help lists exactly the flags the command takes. Without `-file`, a target that isn't a
+  package directory (`cmdline::dir_target`, from `load_program`) points
+  into the command line like the `-file` errors: a missing directory
+  suggests a similar package directory next to it, or `name.wid -file`; a
+  directory without `.wid` files says what it holds or suggests the package
+  in its subdirectory; a `.wid` file gets a fix adding `-file`; another file
+  (`wid check README.md`) says it is neither; and a directory with only
+  `_test.wid` files suggests `wid test`. `crates/wid_cli/tests/package_target.rs`
+  runs them.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),

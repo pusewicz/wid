@@ -31,8 +31,11 @@ impl Checker<'_> {
             return self.types.unknown();
         }
         let dim = |this: &mut Self, e: &ast::Expr, what: &str| -> Option<u32> {
+            let errors = this.diags.error_count();
             match this.eval_const_in(e, ctx.loc, &ctx.subst) {
                 Some(ConstValue::Int(n)) if (1..=MAX_DIM).contains(&n) => Some(n as u32),
+                // Evaluating it reported why, like a call without `comptime`.
+                None if this.diags.error_count() > errors => None,
                 Some(ConstValue::Int(n)) => {
                     this.report(
                         Diagnostic::error(

@@ -1,0 +1,82 @@
+error[E0111]: `#{` starts a splice outside a `quote`
+ --> tests/ui/splice_glued_outside_quote_uses.wid:6:34
+  |
+6 |   def f -> proc(n: Int) -> Int = @on_#{event}
+  |                                  ^^^^^^^^^^^^ a splice only works inside `quote do … end`
+  = note: inside one, a splice can't be part of a name either: it inserts a whole name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole: `on_event = "on_#{event}".to_sym`, then `#{on_event}`
+  = see `wid explain E0111`
+
+error[E0111]: `#{` starts a splice outside a `quote`
+ --> tests/ui/splice_glued_outside_quote_uses.wid:7:18
+  |
+7 |   def g -> Int = @on_#{event}(1)
+  |                  ^^^^^^^^^^^^ a splice only works inside `quote do … end`
+  = note: inside one, a splice can't be part of a name either: it inserts a whole name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole: `on_event = "on_#{event}".to_sym`, then `#{on_event}`
+  = see `wid explain E0111`
+
+error[E0111]: `#{` starts a splice outside a `quote`
+  --> tests/ui/splice_glued_outside_quote_uses.wid:14:3
+   |
+14 |   call_#{a}(x)
+   |   ^^^^^^^^^ a splice only works inside `quote do … end`
+   = note: inside one, a splice can't be part of a name either: it inserts a whole name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole: `call_a = "call_#{a}".to_sym`, then `#{call_a}`
+   = see `wid explain E0111`
+
+error[E0111]: `#{` starts a splice outside a `quote`
+  --> tests/ui/splice_glued_outside_quote_uses.wid:15:3
+   |
+15 |   y_#{a}: Int = 1
+   |   ^^^^^^ a splice only works inside `quote do … end`
+   = note: inside one, a splice can't be part of a name either: it inserts a whole name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole: `y_a = "y_#{a}".to_sym`, then `#{y_a}`
+   = see `wid explain E0111`
+
+error[E0111]: `#{` starts a splice outside a `quote`
+  --> tests/ui/splice_glued_outside_quote_uses.wid:16:5
+   |
+16 |   p bar_#{y}(1)
+   |     ^^^^^^^^ a splice only works inside `quote do … end`
+   = note: inside one, a splice can't be part of a name either: it inserts a whole name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole: `bar_y = "bar_#{y}".to_sym`, then `#{bar_y}`
+   = see `wid explain E0111`
+
+error[E0111]: `#{` starts a splice outside a `quote`
+  --> tests/ui/splice_glued_outside_quote_uses.wid:17:7
+   |
+17 |   z = :a_#{q}
+   |       ^^^^^^^ a splice only works inside `quote do … end`
+   = note: inside one, a splice can't be part of a name either: it inserts a whole name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole: `a_q = "a_#{q}".to_sym`, then `#{a_q}`
+   = see `wid explain E0111`
+
+error[E0111]: `#{` starts a splice outside a `quote`
+  --> tests/ui/splice_glued_outside_quote_uses.wid:19:5
+   |
+19 |   y.twice_#{c}(1)
+   |     ^^^^^^^^^^ a splice only works inside `quote do … end`
+   = note: inside one, a splice can't be part of a name either: it inserts a whole name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole: `twice_c = "twice_#{c}".to_sym`, then `#{twice_c}`
+   = see `wid explain E0111`
+
+error[E0111]: `#{` starts a splice outside a `quote`
+  --> tests/ui/splice_glued_outside_quote_uses.wid:20:7
+   |
+20 |   p y.half_#{c}, z
+   |       ^^^^^^^^^ a splice only works inside `quote do … end`
+   = note: inside one, a splice can't be part of a name either: it inserts a whole name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole: `half_c = "half_#{c}".to_sym`, then `#{half_c}`
+   = see `wid explain E0111`
+
+error[E0111]: `#{` starts a splice outside a `quote`
+  --> tests/ui/splice_glued_outside_quote_uses.wid:21:11
+   |
+21 |   p scale(n_#{k}: 1)
+   |           ^^^^^^ a splice only works inside `quote do … end`
+   = note: inside one, a splice can't be part of a name either: it inserts a whole name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole: `n_k = "n_#{k}".to_sym`, then `#{n_k}`
+   = see `wid explain E0111`
+
+error: could not compile due to 9 errors

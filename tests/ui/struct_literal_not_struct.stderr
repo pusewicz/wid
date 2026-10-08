@@ -1,0 +1,61 @@
+error[E0113]: Wid has no struct literal syntax
+  --> tests/ui/struct_literal_not_struct.wid:14:7
+   |
+14 |   w = Int{1}
+   |       ^^^^ `Int` is a number type, not a struct, so it has no `new`
+help: declare `w` with the type instead: `w: Int = 1`
+   |   w: Int = 1
+   = see `wid explain E0113`
+
+error[E0113]: Wid has no struct literal syntax
+  --> tests/ui/struct_literal_not_struct.wid:15:7
+   |
+15 |   m = Meters{2.0}
+   |       ^^^^^^^ `Meters` is a distinct type, not a struct, so it has no `new`
+help: declare `m` with the type instead: `m: Meters = 2.0`
+   |   m: Meters = 2.0
+   = see `wid explain E0113`
+
+error[E0113]: Wid has no struct literal syntax
+  --> tests/ui/struct_literal_not_struct.wid:16:7
+   |
+16 |   c = Color{1}
+   |       ^^^^^^ `Color` is an enum, not a struct, so it has no `new`
+help: an enum's value is one of its members, like `Color.red`, or `:red` where a `Color` is expected
+   = see `wid explain E0113`
+
+error[E0113]: Wid has no struct literal syntax
+  --> tests/ui/struct_literal_not_struct.wid:17:7
+   |
+17 |   s = Shape{1}
+   |       ^^^^^^ `Shape` is a union, not a struct, so it has no `new`
+help: a union's value is a value of one of its variants (`Int` or `F64`), given where a `Shape` is expected
+   = see `wid explain E0113`
+
+error[E0113]: Wid has no struct literal syntax
+  --> tests/ui/struct_literal_not_struct.wid:18:7
+   |
+18 |   b = Bool{true}
+   |       ^^^^^ `Bool` is not a struct, so it has no `new`
+help: a `Bool` is `true` or `false`
+   = see `wid explain E0113`
+
+error[E0113]: Wid has no struct literal syntax
+  --> tests/ui/struct_literal_not_struct.wid:20:5
+   |
+20 |   p Int{2 + 3}, F32{}
+   |     ^^^^ `Int` is a number type, not a struct, so it has no `new`
+help: write the value and convert it: `(2 + 3).to(Int)`
+   |   p (2 + 3).to(Int), F32{}
+   = see `wid explain E0113`
+
+error[E0113]: Wid has no struct literal syntax
+  --> tests/ui/struct_literal_not_struct.wid:20:17
+   |
+20 |   p Int{2 + 3}, F32{}
+   |                 ^^^^ `F32` is a number type, not a struct, so it has no `new`
+help: write the value and convert it: `0.to(F32)`
+   |   p Int{2 + 3}, 0.to(F32)
+   = see `wid explain E0113`
+
+error: could not compile due to 7 errors

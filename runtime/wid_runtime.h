@@ -265,6 +265,16 @@ WID_USHIFT_OPS(uint16_t, u16, 16)
 WID_USHIFT_OPS(uint32_t, u32, 32)
 WID_USHIFT_OPS(uint64_t, u64, 64)
 
+/*
+ * A signed shift amount, checked in debug builds: a negative one panics.
+ * Release builds convert it to `uint64_t` unchecked, so a negative amount is
+ * past the width and shifts every bit out.
+ */
+static inline uint64_t wid_shift_amount(int64_t b, wid_Location loc) {
+    if (b < 0) wid_panicf(loc, "shift by a negative amount: %lld", (long long)b);
+    return (uint64_t)b;
+}
+
 /** Converts a float to an integer, saturating at the integer's range; NaN becomes 0. */
 static inline int64_t wid_f2i(double v, int64_t lo, int64_t hi) {
     if (isnan(v)) return 0;

@@ -1,0 +1,88 @@
+error[E0311]: `-(-170141183460469231731687303715884105727 - 1)` is 2^127, which doesn't fit in any integer type
+ --> tests/ui/constant_arith_overflow.wid:6:7
+  |
+6 | NEG = -(-170141183460469231731687303715884105727 - 1)
+  |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ integer types hold values from -9223372036854775808 to 18446744073709551615
+help: use a value in range; a float type, like `F64`, holds larger values
+  = see `wid explain E0311`
+
+error[E0311]: `MAX + 1` is at least 2^127, which doesn't fit in any integer type
+ --> tests/ui/constant_arith_overflow.wid:7:7
+  |
+7 | ADD = MAX + 1
+  |       ^^^^^^^ integer types hold values from -9223372036854775808 to 18446744073709551615
+help: use a value in range; a float type, like `F64`, holds larger values
+  = see `wid explain E0311`
+
+error[E0311]: `MIN - 1` is less than -2^127, which doesn't fit in any integer type
+ --> tests/ui/constant_arith_overflow.wid:8:7
+  |
+8 | SUB = MIN - 1
+  |       ^^^^^^^ integer types hold values from -9223372036854775808 to 18446744073709551615
+help: use a value in range; a float type, like `F64`, holds larger values
+  = see `wid explain E0311`
+
+error[E0311]: `MAX * 2` is at least 2^127, which doesn't fit in any integer type
+ --> tests/ui/constant_arith_overflow.wid:9:7
+  |
+9 | MUL = MAX * 2
+  |       ^^^^^^^ integer types hold values from -9223372036854775808 to 18446744073709551615
+help: use a value in range; a float type, like `F64`, holds larger values
+  = see `wid explain E0311`
+
+error[E0311]: `MIN / -1` is 2^127, which doesn't fit in any integer type
+  --> tests/ui/constant_arith_overflow.wid:10:7
+   |
+10 | DIV = MIN / -1
+   |       ^^^^^^^^ integer types hold values from -9223372036854775808 to 18446744073709551615
+help: use a value in range; a float type, like `F64`, holds larger values
+   = see `wid explain E0311`
+
+error[E0311]: `2 ** 200` is 2^200, which doesn't fit in any integer type
+  --> tests/ui/constant_arith_overflow.wid:11:7
+   |
+11 | POW = 2 ** 200
+   |       ^^^^^^^^ integer types hold values from -9223372036854775808 to 18446744073709551615
+help: use a value in range; a float type, like `F64`, holds larger values
+   = see `wid explain E0311`
+
+error[E0311]: `(-3) ** 81` is less than -2^127, which doesn't fit in any integer type
+  --> tests/ui/constant_arith_overflow.wid:12:11
+   |
+12 | NEG_POW = (-3) ** 81
+   |           ^^^^^^^^^^ integer types hold values from -9223372036854775808 to 18446744073709551615
+help: use a value in range; a float type, like `F64`, holds larger values
+   = see `wid explain E0311`
+
+error[E0311]: `MAX + 1` is at least 2^127, which doesn't fit in any integer type
+  --> tests/ui/constant_arith_overflow.wid:13:16
+   |
+13 | SHIFTED: U8 = (MAX + 1) << 2
+   |                ^^^^^^^ integer types hold values from -9223372036854775808 to 18446744073709551615
+help: use a value in range; a float type, like `F64`, holds larger values
+   = see `wid explain E0311`
+
+error[E0311]: `170141183460469231731687303715884105727` does not fit in the enum's backing type `Int`
+  --> tests/ui/constant_arith_overflow.wid:17:3
+   |
+17 |   top = 170141183460469231731687303715884105727
+   |   ^^^ `Int` holds values from -9223372036854775808 to 9223372036854775807
+   = see `wid explain E0311`
+
+error[E0311]: `2 ** 127` is 2^127, which doesn't fit in any integer type
+  --> tests/ui/constant_arith_overflow.wid:23:5
+   |
+23 |   p 2 ** 127
+   |     ^^^^^^^^ integer types hold values from -9223372036854775808 to 18446744073709551615
+help: use a value in range; a float type, like `F64`, holds larger values
+   = see `wid explain E0311`
+
+error[E0311]: `170141183460469231731687303715884105727 * 3` is at least 2^127, which doesn't fit in any integer type
+  --> tests/ui/constant_arith_overflow.wid:24:11
+   |
+24 |   x: I8 = 170141183460469231731687303715884105727 * 3
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ integer types hold values from -9223372036854775808 to 18446744073709551615
+help: use a value in range; a float type, like `F64`, holds larger values
+   = see `wid explain E0311`
+
+error: could not compile due to 11 errors

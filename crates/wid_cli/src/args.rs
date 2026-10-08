@@ -67,8 +67,8 @@ pub struct Parsed {
 const COMMANDS: &[&str] =
     &["build", "run", "check", "test", "doc", "fmt", "query", "explain", "cimport", "version", "help"];
 
-/// The flags `build`, `run` and `check` take, without their `:`; `test`
-/// takes `-filter` too.
+/// The flags `build` and `run` take, without their `:`; `test` takes
+/// `-filter` too.
 const BUILD_FLAGS: &[&str] = &[
     "-file",
     "-out",
@@ -83,6 +83,11 @@ const BUILD_FLAGS: &[&str] = &[
     "-sanitize",
     "-json-errors",
 ];
+
+/// The flags `wid check` takes: the ones that change what is checked.
+/// Generating and compiling C (`-out`, `-o`, `-debug`, `-keep-c`, `-cc`,
+/// `-no-bounds-check`, `-sanitize`) is for `build`, `run` and `test`.
+const CHECK_FLAGS: &[&str] = &["-file", "-define", "-target", "-collection", "-json-errors"];
 
 /// The flags `wid doc` takes.
 const DOC_FLAGS: &[&str] = &["-json", "-private", "-file", "-json-errors", "-define", "-target", "-collection"];
@@ -99,7 +104,8 @@ const CIMPORT_FLAGS: &[&str] = &["-dump", "-strip-prefix", "-include-dir", "-pkg
 /// The flags a command takes, for the hints about one it doesn't.
 fn command_flags(command: Command) -> Vec<&'static str> {
     match command {
-        Command::Build | Command::Run | Command::Check => BUILD_FLAGS.to_vec(),
+        Command::Build | Command::Run => BUILD_FLAGS.to_vec(),
+        Command::Check => CHECK_FLAGS.to_vec(),
         Command::Test => BUILD_FLAGS.iter().copied().chain(["-filter"]).collect(),
         Command::Doc => DOC_FLAGS.to_vec(),
         Command::Fmt => FMT_FLAGS.to_vec(),
@@ -107,6 +113,36 @@ fn command_flags(command: Command) -> Vec<&'static str> {
         Command::Cimport => CIMPORT_FLAGS.to_vec(),
         Command::Explain | Command::Version | Command::Help => Vec::new(),
     }
+}
+
+/// Every command, in the order the help lists them.
+const ALL_COMMANDS: [Command; 11] = [
+    Command::Build,
+    Command::Run,
+    Command::Check,
+    Command::Test,
+    Command::Doc,
+    Command::Fmt,
+    Command::Query,
+    Command::Explain,
+    Command::Cimport,
+    Command::Version,
+    Command::Help,
+];
+
+/// The message for `flag`, which another command takes, given to
+/// `command`: `wid explain -debug` says which commands take `-debug`.
+fn misplaced_flag(command: Command, flag: &str) -> String {
+    let takers: Vec<String> = ALL_COMMANDS
+        .into_iter()
+        .filter(|c| command_flags(*c).contains(&flag))
+        .map(|c| format!("`wid {}`", command_name(c)))
+        .collect();
+    let takes = match takers.as_slice() {
+        [one] => format!("only {one} takes it"),
+        _ => format!("{} take it", wid_diagnostics::and_list(&takers)),
+    };
+    format!("`{flag}` doesn't apply to `wid {}`; {takes}", command_name(command))
 }
 
 /// The name a command is run with.
@@ -226,6 +262,13 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
             Some((n, v)) => (n, Some(v)),
             None => (arg.as_str(), None),
         };
+        // A flag of another command, like `wid explain -debug`, would be
+        // ignored.
+        if !command_flags(parsed.command).contains(&name)
+            && ALL_COMMANDS.into_iter().any(|c| command_flags(c).contains(&name))
+        {
+            return Err(misplaced_flag(parsed.command, name));
+        }
         let need = |what: &str| {
             value.map(str::to_string).ok_or_else(|| format!("`{name}` needs a value, like `{name}:{what}`"))
         };
@@ -307,14 +350,14 @@ fn unknown_flag(command: Command, name: &str) -> String {
 /// Returns the help text for a topic, or the general usage.
 pub fn usage(topic: Option<&str>) -> String {
     match topic {
-        Some("build") => "wid build [dir] [flags]\n\nCompiles the package in `dir` (default `.`) into an executable.\n".to_string() + FLAG_HELP,
+        Some("build") => "wid build [dir] [flags]\n\nCompiles the package in `dir` (default `.`) into an executable.\n".to_string() + BUILD_FLAG_HELP,
         Some("run") => {
             "wid run [dir] [flags] [-- args]\n\nBuilds the package and runs it, passing everything after `--` to the program.\n"
                 .to_string()
-                + FLAG_HELP
+                + BUILD_FLAG_HELP
         }
-        Some("check") => "wid check [dir] [flags]\n\nType-checks the package without generating code.\n".to_string() + FLAG_HELP,
-        Some("test") => "wid test [dir] [flags]\n\nBuilds the package with its `_test.wid` files and runs every `@[test]` method,\neach in its own process. `-filter:<text>` runs only tests whose name contains\nthe text. Exits with 1 when a test fails.\n".to_string() + FLAG_HELP,
+        Some("check") => "wid check [dir] [flags]\n\nType-checks the package without generating code, so it takes none of the flags\nfor building C (`-out:`, `-o:`, `-debug`, `-keep-c`, `-cc:`, `-no-bounds-check`,\n`-sanitize:`).\n".to_string() + CHECK_FLAG_HELP,
+        Some("test") => "wid test [dir] [flags]\n\nBuilds the package with its `_test.wid` files and runs every `@[test]` method,\neach in its own process. `-filter:<text>` runs only tests whose name contains\nthe text. Exits with 1 when a test fails.\n".to_string() + BUILD_FLAG_HELP + "  -filter:<text>         Run only tests whose name contains the text\n",
         Some("doc") => DOC_HELP.to_string(),
         Some("fmt") => FMT_HELP.to_string(),
         Some("query") => QUERY_HELP.to_string(),
@@ -334,7 +377,10 @@ pub fn usage(topic: Option<&str>) -> String {
                explain  Explain an error code\n  \
                cimport  Print the Wid view of a C header\n  \
                version  Print the version\n  \
-               help     Show help for a command\n\n{FLAG_HELP}",
+               help     Show help for a command\n\n{BUILD_FLAG_HELP}  \
+             -filter:<text>         `wid test`: run only tests whose name contains the text\n\n\
+             `wid check` takes only `-file`, `-define:`, `-target:`, `-collection:` and\n\
+             `-json-errors`; `wid help <command>` lists a command's flags.\n",
             env!("CARGO_PKG_VERSION")
         ),
     }
@@ -436,7 +482,8 @@ Flags:
   -collection:name=path  Add an import collection
 ";
 
-const FLAG_HELP: &str = "Flags:\n  \
+/// The flags `build`, `run` and `test` take (`test` takes `-filter:` too).
+const BUILD_FLAG_HELP: &str = "Flags:\n  \
     -file                  Treat the target as a single-file package\n  \
     -out:<path>            Output executable path\n  \
     -o:<level>             none, minimal (default), size, speed, aggressive\n  \
@@ -448,12 +495,19 @@ const FLAG_HELP: &str = "Flags:\n  \
     -collection:name=path  Add an import collection\n  \
     -no-bounds-check       Disable bounds checks\n  \
     -sanitize:<name>       Enable a sanitizer, e.g. address\n  \
-    -json-errors           Print diagnostics (and test results) as JSON\n  \
-    -filter:<text>         `wid test`: run only tests whose name contains the text\n";
+    -json-errors           Print diagnostics (and test results) as JSON\n";
+
+/// The flags `wid check` takes.
+const CHECK_FLAG_HELP: &str = "Flags:\n  \
+    -file                  Treat the target as a single-file package\n  \
+    -define:NAME=value     Set a value that `config(:NAME, default)` reads\n  \
+    -target:<os_arch>      Check another target's code, like linux_amd64 (sets OS and ARCH)\n  \
+    -collection:name=path  Add an import collection\n  \
+    -json-errors           Print diagnostics as JSON\n";
 
 #[cfg(test)]
 mod tests {
-    use super::parse;
+    use super::{Command, command_flags, command_name, parse, usage};
 
     /// The error `wid ARGS` stops with.
     fn error(args: &str) -> String {
@@ -480,6 +534,102 @@ mod tests {
         assert_eq!(error("query --json"), "`wid query` always prints JSON; drop `--json`");
         assert_eq!(error("check --filter:x"), "unknown flag `--filter`; `-filter` only applies to `wid test`");
         assert_eq!(error("build --verbose"), "unknown flag `--verbose`");
+    }
+
+    #[test]
+    fn flags_of_other_commands_are_errors() {
+        let build = "`wid build`, `wid run` and `wid test` take it";
+        assert_eq!(error("explain -debug E0206"), format!("`-debug` doesn't apply to `wid explain`; {build}"));
+        assert_eq!(error("check -filter:x ."), "`-filter` doesn't apply to `wid check`; only `wid test` takes it");
+        assert_eq!(error("doc -out:x core:fmt"), format!("`-out` doesn't apply to `wid doc`; {build}"));
+        assert_eq!(error("build -private"), "`-private` doesn't apply to `wid build`; only `wid doc` takes it");
+        assert_eq!(error("query -dump"), "`-dump` doesn't apply to `wid query`; only `wid cimport` takes it");
+        // `wid check` generates no C, so the flags for building it are errors.
+        for flag in ["-out:x", "-o:speed", "-debug", "-keep-c", "-cc:clang", "-no-bounds-check", "-sanitize:address"] {
+            let name = flag.split(':').next().unwrap_or(flag);
+            assert_eq!(
+                error(&format!("check main.wid -file {flag}")),
+                format!("`{name}` doesn't apply to `wid check`; {build}")
+            );
+        }
+        assert_eq!(
+            error("version -json-errors"),
+            "`-json-errors` doesn't apply to `wid version`; `wid build`, `wid run`, `wid check`, `wid test`, \
+             `wid doc`, `wid fmt` and `wid cimport` take it"
+        );
+        assert_eq!(
+            error("cimport -file x.h"),
+            "`-file` doesn't apply to `wid cimport`; `wid build`, `wid run`, `wid check`, `wid test`, `wid doc`, \
+             `wid fmt` and `wid query` take it"
+        );
+        assert_eq!(error("build -check ."), "`-check` doesn't apply to `wid build`; only `wid fmt` takes it");
+        assert_eq!(error("fmt -debug"), format!("`-debug` doesn't apply to `wid fmt`; {build}"));
+    }
+
+    /// The flags a command's help lists, from the `Flags:` section of
+    /// [`usage`].
+    fn promised(command: &str) -> Vec<String> {
+        let text = usage(Some(command));
+        let flags = text.split_once("Flags:").map_or("", |(_, f)| f);
+        flags
+            .lines()
+            .filter_map(|line| line.split_whitespace().next())
+            .filter(|word| word.starts_with('-'))
+            .map(|word| word.split(':').next().unwrap_or(word).to_string())
+            .collect()
+    }
+
+    /// A value for a flag that needs one.
+    fn sample(flag: &str) -> Option<&'static str> {
+        Some(match flag {
+            "-out" | "-include-dir" | "-in" => "x",
+            "-o" => "speed",
+            "-cc" => "clang",
+            "-define" => "A=1",
+            "-target" => "linux_amd64",
+            "-collection" => "a=b",
+            "-sanitize" => "address",
+            "-filter" => "x",
+            "-strip-prefix" => "SDL_",
+            "-pkg-config" => "raylib",
+            _ => return None,
+        })
+    }
+
+    #[test]
+    fn every_flag_the_help_promises_is_taken() {
+        let mut checked = 0;
+        for command in ["build", "run", "check", "test", "doc", "fmt", "query", "cimport"] {
+            let flags = promised(command);
+            assert!(!flags.is_empty(), "`wid help {command}` lists no flags");
+            for flag in flags {
+                let arg = match sample(&flag) {
+                    Some(v) => format!("{flag}:{v}"),
+                    None => flag.clone(),
+                };
+                let argv = vec![command.to_string(), arg.clone()];
+                if let Err(message) = parse(&argv) {
+                    panic!("`wid {command} {arg}` failed: {message}");
+                }
+                checked += 1;
+            }
+        }
+        assert!(checked > 30, "only {checked} flags checked");
+        // The help lists every flag a command takes, and no other.
+        for command in
+            [Command::Build, Command::Run, Command::Check, Command::Test, Command::Doc, Command::Fmt, Command::Query]
+        {
+            let name = command_name(command);
+            let mut listed = promised(name);
+            let mut taken: Vec<String> = command_flags(command).into_iter().map(str::to_string).collect();
+            listed.sort();
+            taken.sort();
+            assert_eq!(listed, taken, "`wid help {name}` and the flags `wid {name}` takes");
+        }
+        // The commands whose help lists no flags take none.
+        for command in [Command::Explain, Command::Version, Command::Help] {
+            assert!(command_flags(command).is_empty(), "`wid {}` takes flags", command_name(command));
+        }
     }
 
     #[test]

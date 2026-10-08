@@ -48,6 +48,14 @@ pub fn splice_index(name: Name) -> Option<u32> {
     name.as_str().strip_prefix("#{")?.strip_suffix('}')?.parse().ok()
 }
 
+/// Whether `name` is glued from text and splices outside a `quote`
+/// (`bump_#{name}`), which the parser reported (E0111) and keeps as
+/// written where a declaration needs a name. Source can't spell it, so no
+/// code refers to it: it is never unused, and never a suggestion.
+pub fn is_glued_name(name: Name) -> bool {
+    name.as_str().contains("#{") && splice_index(name).is_none()
+}
+
 /// One parsed source file.
 #[derive(Clone, Debug)]
 pub struct File {

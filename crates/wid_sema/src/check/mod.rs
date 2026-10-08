@@ -310,6 +310,13 @@ pub(crate) struct Checker<'a> {
     pub embedded_files: Vec<std::path::PathBuf>,
     /// The global holding each embedded file.
     pub embeds: HashMap<std::path::PathBuf, ir::GlobalId>,
+    /// The E0113 errors of struct literals on types without `new`
+    /// (`Int{1}`), fitted to the type, by the span the parser's error
+    /// points at (see [`crate::input::FileInput::struct_literals`]).
+    pub literal_fits: HashMap<Span, Diagnostic>,
+    /// While the value of a new local is lowered (`w = Int{1}`): the
+    /// value's span and the local's name's, for E0113's fix.
+    pub literal_local: Option<(Span, Span)>,
     /// Each source file's display name and text, for `caller_location` at
     /// compile time.
     pub file_positions: HashMap<FileId, (String, std::sync::Arc<str>)>,
@@ -408,6 +415,8 @@ fn run(
         include_items: HashMap::new(),
         embedded_files: Vec::new(),
         embeds: HashMap::new(),
+        literal_fits: HashMap::new(),
+        literal_local: None,
         file_positions: HashMap::new(),
         source_texts: input
             .packages
@@ -462,6 +471,11 @@ fn run(
         debug: input.options.debug,
         expansions,
     };
+    // The parser's struct literal errors, fitted to their types.
+    for d in input.packages.iter().flat_map(|p| &p.files).flat_map(|f| &f.struct_literals) {
+        let fit = d.primary_span().and_then(|s| checker.literal_fits.remove(&s));
+        checker.diags.push(fit.unwrap_or_else(|| d.clone()));
+    }
     let mut diags = checker.diags;
     diags.sort();
     (program, diags, index)
@@ -760,6 +774,10 @@ impl<'a> Checker<'a> {
     /// missing names, or a name of a merged `cimport` that wasn't imported
     /// (reported here).
     pub fn undefined_explained(&mut self, name: Name, span: Span) -> bool {
+        // A name glued from splices outside a `quote` was reported (E0111).
+        if wid_syntax::ast::is_glued_name(name) {
+            return true;
+        }
         if self.body.frames.is_empty() {
             return false;
         }

@@ -1,0 +1,51 @@
+error[E0327]: a constant can't call `width` without `comptime`
+ --> tests/ui/comptime_call_once.wid:7:7
+  |
+7 |   b = width()
+  |       ^^^^^ this method would run while compiling
+  = note: constants are computed at compile time; `comptime` marks code that runs then
+help: run the initializer with `comptime`
+  |   b = comptime width()
+  = see `wid explain E0327`
+
+error[E0327]: a constant can't call `width` without `comptime`
+  --> tests/ui/comptime_call_once.wid:15:8
+   |
+15 |   ys: [width()]Int = {}
+   |        ^^^^^ this method would run while compiling
+   = note: constants are computed at compile time; `comptime` marks code that runs then
+help: run the initializer with `comptime`
+   |   ys: [comptime width()]Int = {}
+   = see `wid explain E0327`
+
+error[E0327]: a constant can't call `width` without `comptime`
+  --> tests/ui/comptime_call_once.wid:16:13
+   |
+16 |   m: matrix[width(), 2]F32 = {}
+   |             ^^^^^ this method would run while compiling
+   = note: constants are computed at compile time; `comptime` marks code that runs then
+help: run the initializer with `comptime`
+   |   m: matrix[comptime width(), 2]F32 = {}
+   = see `wid explain E0327`
+
+error[E0327]: a constant can't call `width` without `comptime`
+  --> tests/ui/comptime_call_once.wid:17:19
+   |
+17 |   pool: Pool(Int, width()) = {}
+   |                   ^^^^^ this method would run while compiling
+   = note: constants are computed at compile time; `comptime` marks code that runs then
+help: run the initializer with `comptime`
+   |   pool: Pool(Int, comptime width()) = {}
+   = see `wid explain E0327`
+
+error[E0327]: a constant can't call `width` without `comptime`
+  --> tests/ui/comptime_call_once.wid:18:17
+   |
+18 |   bytes = embed(width())
+   |                 ^^^^^ this method would run while compiling
+   = note: constants are computed at compile time; `comptime` marks code that runs then
+help: run the initializer with `comptime`
+   |   bytes = embed(comptime width())
+   = see `wid explain E0327`
+
+error: could not compile due to 5 errors

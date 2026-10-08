@@ -1035,6 +1035,11 @@ impl<'c> Interp<'c> {
                         Ok(self.encode(ty, Num::I(v)))
                     }
                     B::Shl | B::Shr => {
+                        // As in a `-debug` build; an unsigned amount decodes
+                        // as non-negative.
+                        if y < 0 {
+                            return Err(self.fail_check(span, format!("shift by a negative amount: {y}")));
+                        }
                         let shift = (y as u128 & u128::from(u64::MAX)) as u64;
                         let v = if shift >= bits {
                             if op == B::Shr && it.signed() && x < 0 { -1 } else { 0 }

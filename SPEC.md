@@ -211,6 +211,15 @@ end
   pointer to `RawPtr` or `RawPtr?`.
 - **`[^]T` arithmetic:** `p + n` and `p - n` move by whole elements, and
   `p - q` counts the elements between two of them.
+- **Integer operations** wrap on overflow; `-debug` builds panic on `+`, `-`
+  and `*` that overflow. Division and remainder by zero always panic,
+  `MIN / -1` is `MIN` and `MIN % -1` is 0, and `%` truncates toward zero.
+  A shift by the type's width or more shifts every bit out: the result is 0,
+  or -1 for `>>` of a negative value. A negative shift amount is an error
+  when it is a constant (E0311, whose fix shifts the other way: `x >> 1`
+  for `x << -1`) and panics in `-debug` builds and at compile time.
+  Otherwise the amount is read as unsigned, so a negative one is past the
+  width and shifts every bit out.
 - **`Never`** is the return type of methods that never return, like
   `os.exit`. Their body must end in `panic`, an endless loop or another
   `-> Never` call, and a call to one ends the code path, so it satisfies
@@ -308,7 +317,11 @@ end
   literal syntax: a type followed
   directly by `{` (`Vec2{x: 1.0}`, `geo.Vec2{1.0, 2.0}`, `Pool(Int, 4){}`,
   as in Odin, Go, Rust or Zig) is E0113, with a fix that writes the `new`
-  call, and is read as that call. A constant never takes a block, so a `{`
+  call, and is read as that call. On a type without `new`, the fix fits the
+  type: a number is written as itself (`w = Int{1}` becomes `w: Int = 1`,
+  another use `1.to(Int)`), and an enum, union, distinct or other type gets
+  a help on how to build its value; the value has the type and adds no
+  other error. A constant never takes a block, so a `{`
   after a space on the constant's line is the same mistake (`Foo { a: 1 }`,
   `geo.Vec2 { … }`), unless it opens a block's `|x|`; after a generic
   instance, a spaced `{` (`Pool(Int, 4) { … }`) is a call's block. `==`
@@ -499,8 +512,11 @@ end
   untyped (`SIZE = 4 * 64`) and exact, past every integer type in between
   (`(1 << 100) >> 90` is `1024`); a value that doesn't fit its type is
   E0311, which names a shift's value as a power of two (`1 << 200` is
-  2^200), whatever the shift amount. Struct literals, `T.size`, other constants of
-  any type, enum members, indexing other constants and the like evaluate too
+  2^200), whatever the shift amount. Folding is exact in 128 bits; an
+  operation past them (`2 ** 200`, `-(-2^127)`) is E0311 where it happens,
+  unless the value is for a float type, which computes it in floating
+  point. Struct literals, `T.size`, other constants of any type, enum
+  members, indexing other constants and the like evaluate too
   (`ORIGIN = Vec2.new(x: 0.0, y: 0.0)`, `START = ORIGIN`,
   `FACING: Dir = :north`). Calling a method needs `comptime`, so every place
   where code runs at compile time says so (E0327 suggests adding it). A
@@ -647,7 +663,9 @@ end
     name first (`fname = "bump_#{name}".to_sym`) and splices that
     (`def #{fname}`). Outside a `quote`, a splice glued to a name is never
     read as a comment: it is one E0111, and the line is read as the
-    declaration it was written in. Inside a splice's expression, which is
+    declaration it was written in. The name names nothing: a field, call,
+    method, symbol, local or named argument written with it adds no other
+    error, and no suggestion offers it. Inside a splice's expression, which is
     macro code, a name glued to a splice (`#{foo_#{name}}`) is E0111 too,
     and is read as the `"foo_#{name}".to_sym` it means.
   - **Calls:** macros are package members like any def, declared at the top
@@ -979,6 +997,21 @@ end
   `-define:NAME=val`, `-collection:name=path`, `-target:os_arch`, `-file`,
   `-sanitize:address`, `-filter:` (for `test`), `-json` and `-private` (for
   `doc`), `-in:` (for `query`), `-check` (for `fmt`) and `-json-errors`.
+  `check` generates no C, so it takes only the flags that change what is
+  checked: `-file`, `-define:`, `-target:`, `-collection:` and
+  `-json-errors`; the flags for building C (`-out:`, `-o:`, `-debug`,
+  `-keep-c`, `-cc:`, `-no-bounds-check`, `-sanitize:`) belong to `build`,
+  `run` and `test`. Compile-time code runs with `-debug`'s checks whatever
+  the flags. A flag another command takes is an error that names the
+  commands taking it (`wid explain -debug`: "`-debug` doesn't apply to
+  `wid explain`"), never silently ignored; like every usage error, it exits
+  with status 2.
+- Without `-file`, the target of `build`, `run`, `check` and `test` is a
+  package directory. One that isn't is an error (E0206) that points into the
+  command line: a missing directory, with a similar package directory next
+  to it (or its `.wid` file) as the fix; a directory without `.wid` files,
+  with what it holds (the package in a subdirectory as the fix); a `.wid`
+  file, with adding `-file` as the fix; or another file, which is neither.
 - `-file` makes the target a single `.wid` file instead of a package
   directory, so it needs one: `wid check main.wid -file` (for `doc` and
   `query`, a collection path can name it: `core:fmt/fmt.wid`). Naming no

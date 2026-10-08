@@ -1,0 +1,10 @@
+# Without `-debug`, a shift amount is read as unsigned, so a negative one
+# is past the width and every bit shifts out: `>>` of a negative value
+# leaves -1.
+def amount(n: Int) -> Int = n
+
+def main
+  p 1 << amount(-1), 8 >> amount(-1), -8 >> amount(-1)
+  small: I8 = -8
+  p small >> amount(-1).to(I8), small << amount(-1).to(I8)
+end

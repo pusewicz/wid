@@ -260,6 +260,7 @@ impl<'a> Checker<'a> {
                     return self.types.unknown();
                 }
                 let loc = self.virtual_file(len.span.file).map_or(ctx.loc, |v| v.loc);
+                let errors = self.diags.error_count();
                 match bound.or_else(|| self.eval_const_in(len, loc, &ctx.subst)) {
                     Some(ConstValue::Int(n)) if n >= 0 => {
                         let within = self.resolving_instance(ctx.self_ty);
@@ -277,6 +278,8 @@ impl<'a> Checker<'a> {
                         );
                         self.types.unknown()
                     }
+                    // Evaluating it reported why, like a call without `comptime`.
+                    None if self.diags.error_count() > errors => self.types.unknown(),
                     _ => {
                         let mut diag =
                             Diagnostic::error(codes::COMPTIME_ONLY, "array length must be a compile-time integer")
@@ -633,8 +636,11 @@ impl<'a> Checker<'a> {
     /// takes a type, or of a declaration that isn't generic: its constant
     /// integer value, which the caller reports as misplaced.
     fn generic_expr_arg(&mut self, e: &ast::Expr, ctx: &TyCtx) -> TyId {
+        let errors = self.diags.error_count();
         match self.eval_const_in(e, ctx.loc, &ctx.subst) {
             Some(ConstValue::Int(v)) => self.types.intern(TyKind::ConstValue(v)),
+            // Evaluating it reported why, like a call without `comptime`.
+            None if self.diags.error_count() > errors => self.types.unknown(),
             _ => {
                 self.report(
                     Diagnostic::error(codes::GENERIC_ARGS, "a generic value argument must be a constant integer")

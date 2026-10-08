@@ -151,6 +151,10 @@ pub struct FileInput {
     /// Errors from loading the imports inside `comptime if` branches, keyed
     /// like `imports`. They are reported only when the branch is chosen.
     pub deferred: HashMap<u32, Vec<wid_diagnostics::Diagnostic>>,
+    /// The parser's E0113 errors for struct literal syntax (`Vec2{x: 1}`),
+    /// which the checker reports: their fix calls `new`, and for a type
+    /// without one (`Int{1}`) the checker fits the error to the type.
+    pub struct_literals: Vec<wid_diagnostics::Diagnostic>,
 }
 
 /// Options that affect checking.
