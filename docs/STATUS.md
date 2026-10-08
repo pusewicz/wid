@@ -993,6 +993,14 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `MacroState::not_macros`) serve `resolve_item_macro`, `chosen_macro`
   and `lower_quote`; the call among declarations runs
   `failed_among_declarations`.
+- E0316 "no member of `pick` takes (…)" offers `.to(T)` only for
+  conversions that exist and make a member fit (#102; it always suggested
+  `.to(T)`, even for a `Bool` and `Int`/`String` members, where
+  `true.to(Int)` is E0308): one such member gets the fix that converts
+  each argument it needs, several are listed (`x.to(I32)` for `from_i32`
+  or `x.to(U8)` for `from_u8`), and none says no conversion helps and to
+  call a member by name. `Checker::converts_with_to` is `convert`'s rule
+  as a predicate.
 - A proc parameter whose name a macro splices (`->(#{v}: Int) -> Int {
   #{v} * 2 }`), in a method body or a generated `def`, is the caller's
   name, as a block parameter's is: the proc's body and code spliced from

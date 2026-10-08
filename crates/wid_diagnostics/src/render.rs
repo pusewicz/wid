@@ -203,12 +203,7 @@ fn shorten_frames(mut frames: Vec<Frame<'_>>) -> (Vec<Frame<'_>>, Option<String>
             names.push(name);
         }
     }
-    let names = match names.split_last() {
-        Some((last, [])) => last.clone(),
-        Some((last, init)) => format!("{} and {last}", init.join(", ")),
-        None => String::new(),
-    };
-    (frames, Some(format!("{count} more expansions of {names}")))
+    (frames, Some(format!("{count} more expansions of {}", crate::and_list(&names))))
 }
 
 /// The calls that led to code at `span`, innermost first, with runs of

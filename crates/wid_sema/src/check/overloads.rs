@@ -700,22 +700,68 @@ impl Checker<'_> {
             .primary(span, format!("{} fit equally well", and_list(&names)))
             .note(format!("the members are {}", listing.join(", ")))
         };
-        let conversion = if tied.is_empty() {
-            let same_shape: Vec<&FnSig> = sigs
-                .iter()
-                .map(|(_, s)| s)
-                .filter(|s| s.params.len() == values.len() && s.receiver.is_some() == has_receiver)
-                .collect();
-            match same_shape.as_slice() {
-                [only] => values
+        let to_call = |this: &Self, i: usize, ty: TyId| {
+            let shown = this.types.display(ty);
+            let src = this.source_text(args[i].span);
+            let simple =
+                matches!(args[i].kind, ast::ExprKind::Int(_) | ast::ExprKind::Float(_) | ast::ExprKind::Ident(_));
+            if simple { format!("{src}.to({shown})") } else { format!("({src}).to({shown})") }
+        };
+        if tied.is_empty() {
+            // The members whose parameters every argument has or converts
+            // to with `.to(T)`, with the arguments to convert.
+            let mut fits: Vec<(Name, Vec<(usize, TyId)>)> = Vec::new();
+            for (c, sig) in &sigs {
+                if sig.params.len() != values.len() || sig.receiver.is_some() != has_receiver {
+                    continue;
+                }
+                let convert: Vec<(usize, TyId)> = values
                     .iter()
-                    .zip(&only.params)
-                    .position(|(v, p)| v.ty != p.ty)
-                    .filter(|&i| self.types.is_numeric(values[i].ty) && self.types.is_numeric(only.params[i].ty))
-                    .map(|i| (i, only.params[i].ty)),
-                _ => None,
+                    .zip(&sig.params)
+                    .enumerate()
+                    .filter(|(_, (v, p))| v.ty != p.ty)
+                    .map(|(i, (_, p))| (i, p.ty))
+                    .collect();
+                if !convert.is_empty() && convert.iter().all(|&(i, ty)| self.converts_with_to(values[i].ty, ty)) {
+                    fits.push((self.decls[c.0 as usize].name, convert));
+                }
             }
-        } else {
+            diag = match fits.as_slice() {
+                [(member, convert)] => {
+                    let edits = convert
+                        .iter()
+                        .map(|&(i, ty)| wid_diagnostics::Edit { span: args[i].span, replacement: to_call(self, i, ty) })
+                        .collect();
+                    let message = match convert.as_slice() {
+                        [(_, ty)] => {
+                            format!("convert the argument to `{}`, which `{member}` takes", self.types.display(*ty))
+                        }
+                        _ => format!("convert the arguments to the types `{member}` takes"),
+                    };
+                    diag.suggest(message, edits, Applicability::MaybeIncorrect)
+                }
+                [] => {
+                    let first = sigs.first().map(|(c, _)| self.decls[c.0 as usize].name);
+                    let call = first.map(|n| format!(", like `{n}(…)`")).unwrap_or_default();
+                    diag.help(format!(
+                        "no conversion makes ({shown_args}) fit a member: pass arguments of one member's parameter types, or call a member by name{call}"
+                    ))
+                }
+                _ => {
+                    let options: Vec<String> = fits
+                        .iter()
+                        .map(|(member, convert)| {
+                            let calls: Vec<String> = convert.iter().map(|&(i, ty)| to_call(self, i, ty)).collect();
+                            format!("`{}` for `{member}`", calls.join(", "))
+                        })
+                        .collect();
+                    diag.help(format!("convert with `.to(T)` so that one member fits: {}", or_list(&options)))
+                }
+            };
+            self.report(diag);
+            return;
+        }
+        let conversion = {
             // A macro's `Code`, `Symbol` or `Type` parameter takes an
             // argument by its kind, which no conversion changes.
             let by_kind = |t: TyId| matches!(self.types.kind(t), TyKind::Code | TyKind::Symbol | TyKind::Type);
@@ -727,19 +773,13 @@ impl Checker<'_> {
         diag = match conversion {
             Some((i, ty)) => {
                 let shown = self.types.display(ty);
-                let src = self.source_text(args[i].span);
-                let simple =
-                    matches!(args[i].kind, ast::ExprKind::Int(_) | ast::ExprKind::Float(_) | ast::ExprKind::Ident(_));
-                let replacement = if simple { format!("{src}.to({shown})") } else { format!("({src}).to({shown})") };
+                let replacement = to_call(self, i, ty);
                 diag.suggest_replace(
                     format!("convert the argument to `{shown}`"),
                     args[i].span,
                     replacement,
                     Applicability::MaybeIncorrect,
                 )
-            }
-            None if tied.is_empty() => {
-                diag.help("convert an argument with `.to(T)` so that one member's parameter types match")
             }
             None => {
                 let first = self.decls[tied[0].0.0 as usize].name;
@@ -1047,4 +1087,14 @@ fn snake_case(name: &str) -> String {
         }
     }
     out
+}
+
+/// Joins items into an English list of alternatives: `a`, `a or b`, or
+/// `a, b or c`.
+fn or_list(items: &[String]) -> String {
+    match items {
+        [] => String::new(),
+        [one] => one.clone(),
+        [rest @ .., last] => format!("{} or {last}", rest.join(", ")),
+    }
 }

@@ -320,7 +320,8 @@ end
   types; an untyped literal matches its default type exactly and converts to
   other number types, so `clamp(5)` picks `clamp_int` and `clamp(0.5)` picks
   `clamp_f32`. If none fits, or several fit equally well, the error lists
-  every member. Members can't take blocks or `$` type parameters, and no two
+  every member, and offers `.to(T)` only where that conversion exists and
+  makes a member fit. Members can't take blocks or `$` type parameters, and no two
   may take the same parameter types. A member may be a macro, which expands
   when a call chooses it (see Compile-time).
 - **Operators are methods**, because math-heavy game code needs them. You can

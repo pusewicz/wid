@@ -1,0 +1,39 @@
+error[E0316]: no member of `pick` takes (Bool)
+  --> tests/ui/overload_conversion_help.wid:19:5
+   |
+19 |   p pick(true)
+   |     ^^^^^^^^^^ called with (Bool)
+   = note: the members are `from_int(n: Int)`, `from_text(s: String)`
+help: no conversion makes (Bool) fit a member: pass arguments of one member's parameter types, or call a member by name, like `from_int(…)`
+   = see `wid explain E0316`
+
+error[E0316]: no member of `pick` takes (F64)
+  --> tests/ui/overload_conversion_help.wid:20:5
+   |
+20 |   p pick(x)
+   |     ^^^^^^^ called with (F64)
+   = note: the members are `from_int(n: Int)`, `from_text(s: String)`
+help: convert the argument to `Int`, which `from_int` takes
+   |   p pick(x.to(Int))
+   = see `wid explain E0316`
+
+error[E0316]: no member of `narrow` takes (F64)
+  --> tests/ui/overload_conversion_help.wid:21:5
+   |
+21 |   p narrow(x)
+   |     ^^^^^^^^^ called with (F64)
+   = note: the members are `from_i32(n: I32)`, `from_u8(n: U8)`
+help: convert with `.to(T)` so that one member fits: `x.to(I32)` for `from_i32` or `x.to(U8)` for `from_u8`
+   = see `wid explain E0316`
+
+error[E0316]: no member of `pair` takes (F32, F32)
+  --> tests/ui/overload_conversion_help.wid:22:5
+   |
+22 |   p pair(y, y)
+   |     ^^^^^^^^^^ called with (F32, F32)
+   = note: the members are `from_pair(a: Int, b: F64)`, `from_words(s: String, t: String)`
+help: convert the arguments to the types `from_pair` takes
+   |   p pair(y.to(Int), y.to(F64))
+   = see `wid explain E0316`
+
+error: could not compile due to 4 errors
