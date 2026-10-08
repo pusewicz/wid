@@ -251,14 +251,53 @@ impl<'a> Checker<'a> {
         false
     }
 
-    /// Whether `name` is a field that a macro called in the body of `ty`'s
-    /// struct generated and E0913 rejected, or one written there with a
-    /// space before its `:` (`pos :Vec2`, E0105). That error explains its
-    /// uses (`x.name`, `@name`, `T.new(name: …)`), which aren't reported
+    /// Whether `name` is a member of `ty` that an error rejected: a field
+    /// that a macro called in the body of `ty`'s struct generated and E0913
+    /// rejected, one written there with a space before its `:` (`pos
+    /// :Vec2`, E0105), or a `macro def` in a type's body (see
+    /// [`Checker::macro_rejected`]). That error explains its uses
+    /// (`x.name`, `@name`, `T.new(name: …)`), which aren't reported
     /// missing.
-    pub(super) fn field_rejected(&self, ty: TyId, name: Name) -> bool {
-        !self.macros.rejected_fields.is_empty()
-            && self.type_decl(ty).is_some_and(|d| self.macros.rejected_fields.contains(&(d, name)))
+    pub(super) fn field_rejected(&mut self, ty: TyId, name: Name) -> bool {
+        (!self.macros.rejected_fields.is_empty()
+            && self.type_decl(ty).is_some_and(|d| self.macros.rejected_fields.contains(&(d, name))))
+            || self.macro_rejected(ty, name)
+    }
+
+    /// Whether `name` is a `macro def` written in the body of `ty`'s struct
+    /// or enum, of a module it includes, or of an `extend` of it, which
+    /// E0105 rejected, since macros are package members. That error
+    /// explains its uses (`x.name`, `name` in a method), which aren't
+    /// reported missing.
+    pub(super) fn macro_rejected(&mut self, ty: TyId, name: Name) -> bool {
+        let owners: Vec<DeclId> =
+            self.macros.rejected_macros.iter().filter(|(_, n)| *n == name).map(|(o, _)| *o).collect();
+        if owners.is_empty() {
+            return false;
+        }
+        // The type and the modules it includes, directly or through others.
+        let mut pending: Vec<DeclId> = self.type_decl(ty).into_iter().collect();
+        let mut seen = Vec::new();
+        while let Some(d) = pending.pop() {
+            if owners.contains(&d) {
+                return true;
+            }
+            seen.push(d);
+            let modules = self.includes_of(d);
+            pending.extend(modules.into_iter().filter(|m| !seen.contains(m)));
+        }
+        for owner in owners {
+            if !matches!(self.decls[owner.0 as usize].kind, DeclKind::Extend(_)) {
+                continue;
+            }
+            for pattern in self.extend_targets(owner) {
+                let mut bindings = vec![(Name::new("Self"), ty)];
+                if self.unify(pattern, ty, &mut bindings) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     /// Whether a macro call failed in the body of `owner` or of a module it

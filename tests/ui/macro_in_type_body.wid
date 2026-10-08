@@ -1,0 +1,38 @@
+# A `macro def` inside a type's body is one E0105: macros are package
+# members. Uses of its name as a member of the type, through an `extend`
+# or an included module too, aren't reported again; other missing
+# members still are.
+struct P
+  x: Int
+
+  macro def in_struct -> Code
+    quote do 1 end
+  end
+
+  def total -> Int = in_struct + bad(2)
+end
+
+extend P
+  macro def bad -> Code
+    quote do 1 end
+  end
+end
+
+module Helpers
+  macro def from_module(n: Int) -> Code
+    quote do #{n} end
+  end
+end
+
+struct Q
+  include Helpers
+
+  def three -> Int = from_module(3)
+end
+
+def main
+  x = P.new
+  p x.bad, x.bad(1), x.in_struct, x.total
+  p Q.new.from_module(3), Q.new.three
+  p x.y
+end

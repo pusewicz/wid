@@ -286,6 +286,10 @@ impl<'a> Checker<'a> {
                         .note("macros are package members, called like `name(…)` or `pkg.name(…)`")
                         .help("move the `macro def` out of this declaration"),
                 );
+                // Its uses as a member are explained by this error.
+                if let Some(o) = owner {
+                    self.macros.rejected_macros.insert((o, f.name.name));
+                }
                 return;
             }
             ItemKind::Def(f) if f.is_macro && super::overloads::is_operator(f.name.as_str()) => {

@@ -1361,6 +1361,12 @@ the language server.
   counterpart of #52's missing value at a line end: `parse_arg` leaves the
   `,` for the list, so `b: 2` is parsed and checked. It was also "expected
   `)` to close the argument list" at `b` and "missing argument `b`".
+- A `macro def` inside a struct, enum, module or `extend` body is one
+  E0105 (#123): `collect_item` records its name on the declaration
+  (`MacroState::rejected_macros`), and `Checker::macro_rejected` (asked by
+  `field_rejected` for a member access, and by `undefined_explained` for a
+  name in a method of the type) keeps its uses on the type, through an
+  `include` or an `extend` of it too, from being E0204 or E0201.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),

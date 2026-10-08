@@ -199,6 +199,10 @@ pub(crate) struct MacroState {
     /// read as a macro call (`pos :Vec2`, E0105), by struct: their uses
     /// aren't reported missing (see [`Checker::field_rejected`]).
     pub rejected_fields: HashSet<(DeclId, Name)>,
+    /// `macro def`s written in the body of a struct, enum, module or
+    /// `extend`, which E0105 rejected, by that declaration: their uses
+    /// aren't reported missing (see [`Checker::macro_rejected`]).
+    pub rejected_macros: HashSet<(DeclId, Name)>,
     /// The code every expansion spliced in from outside it, by the file of
     /// its span.
     pub splices: HashMap<FileId, Vec<Splice>>,
