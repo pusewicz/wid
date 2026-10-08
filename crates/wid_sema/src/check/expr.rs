@@ -157,6 +157,10 @@ impl<'a> Checker<'a> {
                 ir::Expr::new(ExprKind::Zero, self.types.unknown())
             }
             E::Error => ir::Expr::new(ExprKind::Zero, self.types.unknown()),
+            // A bound that failed to parse (`[..]`) was reported already.
+            E::Range { lo, hi, .. } if [lo, hi].into_iter().flatten().any(|b| matches!(b.kind, E::Error)) => {
+                ir::Expr::new(ExprKind::Zero, self.types.unknown())
+            }
             E::Range { .. } => {
                 self.report(
                     Diagnostic::error(codes::NOT_A_VALUE, "a range is not a value by itself")
@@ -563,7 +567,7 @@ impl<'a> Checker<'a> {
 
     /// The methods of `ty` by name: its own, then those its modules mix in,
     /// then those `extend` blocks add.
-    fn method_decls(&mut self, ty: TyId) -> Vec<(Name, super::DeclId)> {
+    pub(super) fn method_decls(&mut self, ty: TyId) -> Vec<(Name, super::DeclId)> {
         let mut owners: Vec<super::DeclId> = self.type_decl(ty).into_iter().collect();
         owners.extend(self.extends_of(ty));
         let mut next = 0;
@@ -623,7 +627,8 @@ impl<'a> Checker<'a> {
     }
 
     /// Finds what `name` reaches in `ty`, as `self.name` does: the struct's
-    /// own members first, then each `using` field in order.
+    /// own members first (its fields, its methods, those its modules mix in
+    /// and those `extend` blocks add), then each `using` field in order.
     pub(super) fn self_member(&mut self, ty: TyId, name: Name, visited: &mut Vec<TyId>) -> Option<SelfMember> {
         let ty = match *self.types.kind(ty) {
             TyKind::Pointer(t) => t,
@@ -637,7 +642,10 @@ impl<'a> Checker<'a> {
             let is_proc = matches!(self.types.kind(fty), TyKind::Proc(_));
             return Some(SelfMember::Field { owner: ty, is_proc });
         }
-        if self.find_method(ty, name).is_some() || self.find_included(ty, name).is_some() {
+        if self.find_method(ty, name).is_some()
+            || self.find_included(ty, name).is_some()
+            || self.extension_member(ty, name).is_some()
+        {
             return Some(SelfMember::Method { owner: ty });
         }
         let TyKind::Struct(id) = *self.types.kind(ty) else { return None };
@@ -1954,8 +1962,12 @@ impl<'a> Checker<'a> {
         // it takes the remaining positional arguments, which are not checked,
         // so its calls add no errors of their own.
         let splat_at = f.params.iter().position(|p| p.splat);
+        // An argument that failed to parse was reported, and the parser may
+        // have dropped the arguments after it, so none is reported missing.
+        let truncated = args.iter().any(|a| matches!(a.value.kind, E::Error));
         for arg in args {
-            if arg.splat {
+            // `f(*)`: the value after `*` failed to parse.
+            if arg.splat && !matches!(arg.value.kind, E::Error) {
                 let text = self.source_text(arg.value.span);
                 self.report(
                     Diagnostic::error(codes::ARG_COUNT, "Wid has no argument spreading")
@@ -2027,7 +2039,7 @@ impl<'a> Checker<'a> {
         if f.c_variadic.is_some() {
             extra.clear();
         }
-        if !extra.is_empty() || (!missing.is_empty() && !unknown_named) {
+        if !extra.is_empty() || (!missing.is_empty() && !unknown_named && !truncated) {
             let sig_text = self.signature_text(fname, params);
             let want = params.len();
             let diag = if !extra.is_empty() {

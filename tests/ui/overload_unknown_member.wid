@@ -1,0 +1,16 @@
+# An overload set naming an unknown method suggests a method next to it
+# that the set doesn't list already and that isn't a set itself.
+struct S
+  def sum(x: Int) -> Int = x
+  def sun(x: F64) -> F64 = x
+  overload :add, :sum, :sux
+  overload :addd, :sun, :addx
+end
+
+def twice(x: Int) -> Int = x * 2
+def twin(x: F64) -> F64 = x * 2.0
+overload :double, :twice, :twine
+overload :doubles, :twin, :doubled
+
+def main
+end

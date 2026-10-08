@@ -1,0 +1,54 @@
+error[E0105]: expected an expression, found `)`
+  --> tests/ui/parse_error_no_followup.wid:13:8
+   |
+13 |   p f(*)
+   |        ^ expected an expression
+   = see `wid explain E0105`
+
+error[E0105]: expected an expression, found `)`
+  --> tests/ui/parse_error_no_followup.wid:14:10
+   |
+14 |   p v.m(*)
+   |          ^ expected an expression
+   = see `wid explain E0105`
+
+error[E0105]: expected an expression, found `)`
+  --> tests/ui/parse_error_no_followup.wid:15:11
+   |
+15 |   p g(1, *)
+   |           ^ expected an expression
+   = see `wid explain E0105`
+
+error[E0105]: expected an expression after `..`, found `]`
+  --> tests/ui/parse_error_no_followup.wid:17:10
+   |
+17 |   z = [..]
+   |          ^ expected an expression
+   |        -- `..` needs a value after it
+help: write the value after `..`
+   = see `wid explain E0105`
+
+error[E0105]: expected an expression after `..`, found end of line
+  --> tests/ui/parse_error_no_followup.wid:18:14
+   |
+18 |   for i in ..
+   |              ^ expected an expression
+   |            -- `..` needs a value after it
+help: write the value after `..`
+   = see `wid explain E0105`
+
+error[E0105]: expected an expression, found `,`
+  --> tests/ui/parse_error_no_followup.wid:22:10
+   |
+22 |   p g(a: , b: 2)
+   |          ^ expected an expression
+   = see `wid explain E0105`
+
+error[E0105]: expected `)` to close the argument list, found `b`
+  --> tests/ui/parse_error_no_followup.wid:22:12
+   |
+22 |   p g(a: , b: 2)
+   |            ^ expected `)` to close the argument list
+   = see `wid explain E0105`
+
+error: could not compile due to 7 errors

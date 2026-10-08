@@ -537,6 +537,49 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// Checks the field defaults of a struct that isn't generic against
+    /// their fields' types, once, so a mistake in one is reported whether or
+    /// not a `new` takes it. The code is discarded: each `new` that takes a
+    /// default lowers it where it is called (see [`Self::struct_new`]),
+    /// which reports nothing new.
+    pub(super) fn check_field_defaults(&mut self, decl: DeclId) {
+        let d = self.decls[decl.0 as usize].clone();
+        let DeclKind::Struct(s) = d.kind else { return };
+        if !s.generics.is_empty()
+            || !s.body.iter().any(|i| matches!(&i.kind, ItemKind::Field(f) if f.default.is_some()))
+        {
+            return;
+        }
+        let ty = self.struct_type(decl);
+        let TyKind::Struct(sid) = *self.types.kind(ty) else { return };
+        let fields: Vec<(Name, TyId)> = self.types.struct_info(sid).fields.iter().map(|f| (f.name, f.ty)).collect();
+        let saved = std::mem::take(&mut self.body);
+        let void = self.types.void();
+        self.body.frames.push(Frame {
+            loc: d.loc,
+            scopes: Vec::new(),
+            ret: void,
+            self_ty: None,
+            self_local: None,
+            fn_name: d.name.as_str().to_string(),
+            block: None,
+            subst: Default::default(),
+            no_bounds: false,
+            is_proc: false,
+            decl: None,
+            site: None,
+        });
+        self.body.exits.push(super::body::Exit::Function { frame: 0 });
+        self.begin_block();
+        for (name, fty) in fields {
+            if let Some((default, loc)) = self.field_default(decl, name) {
+                let _ = self.lower_in_package(default, fty, loc);
+            }
+        }
+        self.end_block();
+        self.body = saved;
+    }
+
     fn field_default(&self, decl: DeclId, name: Name) -> Option<(&'a ast::Expr, super::DeclLoc)> {
         let d = &self.decls[decl.0 as usize];
         let DeclKind::Struct(s) = d.kind else { return None };

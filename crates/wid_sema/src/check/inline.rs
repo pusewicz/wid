@@ -10,7 +10,7 @@ use wid_syntax::Name;
 use wid_syntax::ast;
 
 use super::body::{Dest, Exit, Frame, Var};
-use super::{Checker, DeclId, DeclKind};
+use super::{Checker, DeclId, DeclKind, InstanceOf};
 use crate::ir::{self, ExprKind, LabelId, LocalId, Stmt};
 use crate::types::{Abi, ProcSig, TyId, TyKind};
 
@@ -289,10 +289,18 @@ impl<'a> Checker<'a> {
         let frame = self.body.frames.len() - 1;
         self.body.exits.push(Exit::Region { end_label, result, frame });
         self.inline_stack.push(decl);
-        let generic_context = !subst.is_empty();
-        if generic_context {
+        let context = if self.is_concrete_extension(decl) {
+            self.extension_target_site(decl, &subst)
+                .map(|(shown, site)| (display_name.clone(), site, d.item.span, InstanceOf::Target(shown)))
+        } else if !subst.is_empty() {
             let shown = self.instance_display(&display_name, &subst);
-            self.instance_stack.push((shown, call_site, d.item.span, None));
+            Some((shown, call_site, d.item.span, InstanceOf::Generic))
+        } else {
+            None
+        };
+        let generic_context = context.is_some();
+        if let Some(context) = context {
+            self.instance_stack.push(context);
         }
         self.begin_block();
         self.push_scope();
@@ -523,9 +531,11 @@ impl<'a> Checker<'a> {
     }
 
     /// Checks a block method that may never be called, by inlining it once
-    /// with an empty block and discarding the code.
-    pub fn check_block_method(&mut self, decl: DeclId) {
-        let sig = self.fn_sig(decl);
+    /// with an empty block and discarding the code. `subst` binds `Self`
+    /// for a method of an `extend` of concrete types, and is empty
+    /// otherwise.
+    pub fn check_block_method(&mut self, decl: DeclId, subst: super::generics::Subst) {
+        let sig = self.fn_sig_inst(decl, &subst);
         let Some(bsig) = sig.block.clone() else { return };
         let d = self.decls[decl.0 as usize].clone();
         let span = d.span;
@@ -563,7 +573,7 @@ impl<'a> Checker<'a> {
             })
             .collect();
         let block = Rc::new(ast::BlockArg { params, body: Vec::new(), span });
-        let _ = self.inline_body(decl, &sig, locals, block, Default::default(), Span::default());
+        let _ = self.inline_body(decl, &sig, locals, block, subst, Span::default());
         self.pop_scope();
         self.end_block();
         self.body = saved;

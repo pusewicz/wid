@@ -66,6 +66,19 @@ impl SelfNames {
     }
 }
 
+/// What an entry of [`Checker::instance_stack`] checks code for, which the
+/// errors in that code say.
+#[derive(Clone, Debug)]
+pub(crate) enum InstanceOf {
+    /// A generic method, for the types of a call.
+    Generic,
+    /// A macro that runs for the `Self` of its call, that type as shown.
+    MacroSelf(String),
+    /// A method of an `extend` of several concrete types, for one of them,
+    /// as shown.
+    Target(String),
+}
+
 /// A declaration together with its syntax.
 #[derive(Clone, Debug)]
 pub(crate) struct Decl<'a> {
@@ -264,9 +277,10 @@ pub(crate) struct Checker<'a> {
     /// Number of procs lowered so far, for unique C names.
     pub lambda_count: u32,
     /// Generic instances being lowered, outermost first: the instance's
-    /// name, the call that created it, the span of its declaration and, for
-    /// a macro that runs for the `Self` of its call, that type as shown.
-    pub instance_stack: Vec<(String, Span, Span, Option<String>)>,
+    /// name, the call that created it (or the type in the `extend` line
+    /// it is checked for), the span of its declaration and what it is an
+    /// instance of.
+    pub instance_stack: Vec<(String, Span, Span, InstanceOf)>,
     /// Bindings for the next `call_fn`: the receiver type's generic arguments
     /// for type-level calls and the `Self` of extension methods.
     pub owner_bindings: Vec<(Name, TyId)>,
@@ -465,12 +479,15 @@ impl<'a> Checker<'a> {
             && self.instance_stack.iter().any(|(_, _, body, _)| within(primary, *body))
         {
             diag = match macro_self {
-                Some(shown) => diag
+                InstanceOf::MacroSelf(shown) => diag
                     .secondary(site, format!("`{name}` runs with `Self` as `{shown}` for this call"))
                     .note(format!("the error is inside the macro `{name}`, checked for each `Self` it runs with")),
-                None => diag
+                InstanceOf::Generic => diag
                     .secondary(site, format!("`{name}` is checked for these types because of this call"))
                     .note(format!("the error is inside the generic method `{name}`")),
+                InstanceOf::Target(shown) => diag
+                    .secondary(site, format!("`{name}` is checked with `Self` as `{shown}` here"))
+                    .note(format!("`extend` adds `{name}` to each type it lists, and it is checked for each")),
             };
         }
         self.diags.push(diag);
@@ -527,7 +544,10 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Queues every non-generic function of the root package for checking.
+    /// Checks every concrete declaration of the root package, used or not:
+    /// it queues each non-generic function (methods of an `extend` of
+    /// concrete types among them, once per target) and checks types, field
+    /// defaults and constants. Generic code is checked per use instead.
     fn check_all_roots(&mut self) {
         let count = self.decls.len();
         for i in 0..count {
@@ -549,9 +569,21 @@ impl<'a> Checker<'a> {
             let decl = &self.decls[i];
             if check && matches!(decl.kind, DeclKind::Fn(f) if !f.is_macro) && self.decl_is_concrete(DeclId(i as u32)) {
                 if matches!(decl.kind, DeclKind::Fn(f) if f.block.is_some()) {
-                    self.check_block_method(DeclId(i as u32));
+                    self.check_block_method(DeclId(i as u32), Default::default());
                 } else {
                     self.fn_instance(DeclId(i as u32));
+                }
+            } else if check && matches!(decl.kind, DeclKind::Fn(f) if !f.is_macro) {
+                // A method of an `extend` of concrete types is checked for
+                // each, as a method of that type is: `Self` is the target.
+                let id = DeclId(i as u32);
+                let block = matches!(decl.kind, DeclKind::Fn(f) if f.block.is_some());
+                for subst in self.concrete_extension_substs(id) {
+                    if block {
+                        self.check_block_method(id, subst);
+                    } else {
+                        self.fn_instance_with(id, subst, Span::default());
+                    }
                 }
             }
         }
@@ -564,6 +596,7 @@ impl<'a> Checker<'a> {
             if check && is_type {
                 let span = d.span;
                 self.decl_as_type(DeclId(i as u32), span);
+                self.check_field_defaults(DeclId(i as u32));
             }
             let generics = match self.decls[i].kind {
                 DeclKind::Struct(s) => s.generics.as_slice(),

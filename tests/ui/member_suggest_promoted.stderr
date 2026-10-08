@@ -1,0 +1,62 @@
+error[E0204]: `P` has no field `healt`
+  --> tests/ui/member_suggest_promoted.wid:17:18
+   |
+17 |   def a -> Int = @healt
+   |                  ^^^^^^ not found on `P`
+help: did you mean `@health`?
+   |   def a -> Int = @health
+   = see `wid explain E0204`
+
+error[E0204]: `P` has no field `zzz`
+  --> tests/ui/member_suggest_promoted.wid:18:18
+   |
+18 |   def b -> Int = @zzz
+   |                  ^^^^ not found on `P`
+   = note: available: mob; through `mob`: health
+   = see `wid explain E0204`
+
+error[E0204]: `P` has no field or method `healt`
+  --> tests/ui/member_suggest_promoted.wid:27:8
+   |
+27 |   p pl.healt
+   |        ^^^^^ not found on `P`
+help: did you mean `health`?
+   |   p pl.health
+   = see `wid explain E0204`
+
+error[E0204]: `P` has no field or method `regem`
+  --> tests/ui/member_suggest_promoted.wid:28:8
+   |
+28 |   p pl.regem(1)
+   |        ^^^^^ not found on `P`
+help: did you mean `regen`?
+   |   p pl.regen(1)
+   = see `wid explain E0204`
+
+error[E0204]: `P` has no field or method `mendd`
+  --> tests/ui/member_suggest_promoted.wid:29:8
+   |
+29 |   p pl.mendd(1)
+   |        ^^^^^ not found on `P`
+help: did you mean `mend`?
+   |   p pl.mend(1)
+   = see `wid explain E0204`
+
+error[E0204]: `P` has no field or method `bost`
+  --> tests/ui/member_suggest_promoted.wid:30:8
+   |
+30 |   p pl.bost(1)
+   |        ^^^^ not found on `P`
+help: did you mean `boost`?
+   |   p pl.boost(1)
+   = see `wid explain E0204`
+
+error[E0204]: `P` has no field or method `zzz`
+  --> tests/ui/member_suggest_promoted.wid:31:8
+   |
+31 |   p pl.zzz
+   |        ^^^ not found on `P`
+   = note: available: a, b, boost, mend, mob; through `mob`: health, regen
+   = see `wid explain E0204`
+
+error: could not compile due to 7 errors

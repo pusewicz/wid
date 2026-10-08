@@ -1,0 +1,38 @@
+error[E0323]: the constant `BUF` needs a value
+ --> tests/ui/const_uninit.wid:4:14
+  |
+4 | BUF: [4]U8 = ---
+  |              ^^^ `---` leaves it without one
+  = note: Wid has no package-level variables, so `BUF` is a constant: a constant's value is computed while compiling, and `---` only opts a variable out of zeroing
+help: give it the value it should hold
+  | BUF: [4]U8 = …
+help: or make it the zero value
+  | BUF: [4]U8 = {}
+help: for state that changes, keep it in a struct that methods receive
+  = see `wid explain E0323`
+
+error[E0323]: the constant `LIMIT` needs a value
+ --> tests/ui/const_uninit.wid:5:9
+  |
+5 | LIMIT = ---
+  |         ^^^ `---` leaves it without one
+  = note: Wid has no package-level variables, so `LIMIT` is a constant: a constant's value is computed while compiling, and `---` only opts a variable out of zeroing
+help: give it the value it should hold
+  | LIMIT = …
+help: for state that changes, keep it in a struct that methods receive
+  = see `wid explain E0323`
+
+error[E0323]: the constant `CAP` needs a value
+ --> tests/ui/const_uninit.wid:8:14
+  |
+8 |   CAP: Int = ---
+  |              ^^^ `---` leaves it without one
+  = note: a constant's value is computed while compiling, and `---` only opts a variable out of zeroing
+help: give it the value it should hold
+  |   CAP: Int = …
+help: or make it the zero value
+  |   CAP: Int = {}
+help: for state that changes, keep it in a struct that methods receive
+  = see `wid explain E0323`
+
+error: could not compile due to 3 errors

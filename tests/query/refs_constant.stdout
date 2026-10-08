@@ -18,6 +18,17 @@
       }
     },
     {
+      "context": "Entity",
+      "kind": "read",
+      "location": {
+        "column": 13,
+        "end_column": 19,
+        "end_line": 21,
+        "file": "tests/query/game/game.wid",
+        "line": 21
+      }
+    },
+    {
       "context": "Player",
       "kind": "read",
       "location": {

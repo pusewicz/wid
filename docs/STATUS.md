@@ -1317,6 +1317,48 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `wid_driver/tests/core_docs.rs`. `OS` and `ARCH` have a doc each, and the
   prelude declares them when it is the package itself
   (`wid doc core:builtin OS`).
+- Every concrete declaration is checked whether or not anything uses it
+  (#111, SPEC "Compile-time"): a struct's field defaults are checked once
+  against their fields' types (`check_field_defaults`; each `new` that
+  takes one still lowers it where it is called), and the methods of an
+  `extend` of concrete types once for each type it lists, with `Self`
+  bound to it (`concrete_extension_substs`); the call reuses that
+  instance, so its errors are reported once. An error that only one of
+  several types hits points at that type in the `extend` line. Generic
+  code (`$T` methods, generic structs, an `extend` over a pattern,
+  modules) is still checked per use, so the code that nothing lowers, and
+  that `wid query` can record nothing for, is only generic code nothing
+  uses.
+- `using` promotes the methods `extend` blocks add to the field's type
+  (#92, SPEC "Data and behavior"): `provides` and `self_member` consult
+  `extension_member`, as the did-you-mean candidates already did, so a
+  bare `zap(1)`, `self.zap(1)` and `pl.zap(1)` reach `self.mob.zap(1)`,
+  transitively, two fields providing it are E0204 until the access names
+  one, and `@zap(1)` says `zap` is a promoted method.
+- E0204 for a missing member suggests, and lists, every member the access
+  reaches (#93): for `value.name`, the type's own, mixed-in and extension
+  methods and what `using` promotes; for `@name`, the fields of `self`
+  and promoted ones (`@health`). The "available" note groups promoted
+  names by the field they come through ("available: a, mob; through
+  `mob`: health, regen"); `Type.name` keeps the type's own members. An
+  `overload` naming an unknown method suggests only methods next to it
+  that aren't sets and that the set doesn't list already.
+- `@heal = 1` (`+=`, `||=`, several targets) when `heal` is a method
+  (#94): `place` lowers an `@name` target through `ivar_target`, and E0204
+  says a method can't be assigned to and `@name` only names fields, with
+  no fix that drops the `@` (which would declare a variable); a field of
+  a similar name, its own or promoted, is suggested instead. For a
+  spliced `@#{name} = …`, the error and the fix point at the name the
+  macro call gave, as for a read.
+- A value that failed to parse is reported once (#109): `match_args`
+  doesn't report spreading for `f(*)` nor arguments missing after one
+  that failed to parse (`g(a: , b: 2)`), and a range with a bound that
+  failed to parse (`[..]`, `for i in ..`) isn't E0323.
+- `---` as a constant's value (#112, SPEC "Syntax"): `resolve_const`
+  reports E0323 "the constant `BUF` needs a value" before evaluating it,
+  saying Wid has no package-level variables (for a constant at package
+  level), with fixes that write a value (`…`) or, for a typed constant,
+  `{}`. `@[extern]` constants keep `= ---`.
 
 ## Next
 

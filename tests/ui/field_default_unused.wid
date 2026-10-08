@@ -1,0 +1,22 @@
+# A field default is checked against its field's type whether or not a
+# `new` takes it, once: a `new` that takes it adds nothing.
+struct Unused
+  x: Int = "s"
+  y: F64 = 1.5
+end
+
+struct Used
+  hp: Int = true
+  name: String = "used"
+end
+
+# A generic struct's defaults are checked for each instance a `new` makes.
+struct Box($T)
+  value: $T = "generic"
+end
+
+def main
+  a = Used.new
+  b = Used.new(name: "again")
+  p a.hp + b.hp
+end

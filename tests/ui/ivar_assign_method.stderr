@@ -1,0 +1,78 @@
+error[E0204]: cannot assign to `@heal`: `heal` is a method
+  --> tests/ui/ivar_assign_method.wid:26:5
+   |
+26 |     @heal = 1
+   |     ^^^^^ `P` has no field `heal`
+   = note: `@name` names a field of `self`, and a method can't be assigned to
+help: did you mean the field `@heat`?
+   |     @heat = 1
+   = see `wid explain E0204`
+
+error[E0204]: cannot assign to `@heal`: `heal` is a method
+  --> tests/ui/ivar_assign_method.wid:27:5
+   |
+27 |     @heal += 1
+   |     ^^^^^ `P` has no field `heal`
+   = note: `@name` names a field of `self`, and a method can't be assigned to
+help: did you mean the field `@heat`?
+   |     @heat += 1
+   = see `wid explain E0204`
+
+error[E0204]: cannot assign to `@heal`: `heal` is a method
+  --> tests/ui/ivar_assign_method.wid:28:5
+   |
+28 |     @heal ||= 1
+   |     ^^^^^ `P` has no field `heal`
+   = note: `@name` names a field of `self`, and a method can't be assigned to
+help: did you mean the field `@heat`?
+   |     @heat ||= 1
+   = see `wid explain E0204`
+
+error[E0204]: cannot assign to `@plain`: `plain` is a method
+  --> tests/ui/ivar_assign_method.wid:29:5
+   |
+29 |     @plain = 2
+   |     ^^^^^^ `P` has no field `plain`
+   = note: `@name` names a field of `self`, and a method can't be assigned to
+   = see `wid explain E0204`
+
+error[E0204]: cannot assign to `@recover`: `recover` is a method
+  --> tests/ui/ivar_assign_method.wid:30:5
+   |
+30 |     @recover = 3
+   |     ^^^^^^^^ `P` has no field `recover`
+   = note: `recover` is a method of `Mob`, promoted into `P` by `using`
+   = note: `@name` names a field of `self`, and a method can't be assigned to
+help: did you mean the field `@recovery`?
+   |     @recovery = 3
+   = see `wid explain E0204`
+
+error[E0204]: cannot assign to `@heal`: `heal` is a method
+  --> tests/ui/ivar_assign_method.wid:32:5
+   |
+32 |     @heal, x = 1, 2
+   |     ^^^^^ `P` has no field `heal`
+   = note: `@name` names a field of `self`, and a method can't be assigned to
+help: did you mean the field `@heat`?
+   |     @heat, x = 1, 2
+   = see `wid explain E0204`
+
+error[E0204]: cannot assign to `@heal`: `heal` is a method
+  --> tests/ui/ivar_assign_method.wid:40:9
+   |
+40 |   zero :heal
+   |         ^^^^ `S` has no field `heal`
+  ::: tests/ui/ivar_assign_method.wid:8:7
+   |
+ 8 |       @#{name} = 0
+   |       -------- `heal` is spliced here by `zero`
+  ::: tests/ui/ivar_assign_method.wid:40:3
+   |
+40 |   zero :heal
+   |   ---------- `zero` expands here
+   = note: `@name` names a field of `self`, and a method can't be assigned to
+help: did you mean the field `@heat`?
+   |   zero :heat
+   = see `wid explain E0204`
+
+error: could not compile due to 7 errors

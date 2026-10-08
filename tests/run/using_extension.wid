@@ -1,0 +1,34 @@
+# `using` promotes the methods an `extend` block adds to the field's type,
+# as it promotes the type's own: a bare name, `self.`, an outside call and
+# a struct that uses this one in turn all reach them, with `self` as the
+# field.
+struct Mob
+  hp: Int
+end
+
+extend Mob
+  def zap(n: Int) -> Int = n * 10 + @hp
+end
+
+struct P
+  using mob: Mob
+  def bare -> Int = zap(1)
+  def through_self -> Int = self.zap(2)
+  def through_field -> Int = @mob.zap(3)
+end
+
+struct Q
+  using p: P
+  def deep -> Int = zap(4)
+end
+
+def main
+  pl = P.new(Mob.new(hp: 5))
+  p pl.bare
+  p pl.through_self
+  p pl.through_field
+  p pl.zap(6)
+  q = Q.new(pl)
+  p q.deep
+  p q.zap(7)
+end
