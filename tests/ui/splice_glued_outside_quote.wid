@@ -1,0 +1,23 @@
+# A splice glued to a name outside a `quote` (`def bump_#{name}`, as Ruby's
+# define_method("bump_#{name}") would build it) is never a comment: it is
+# one E0111, with no comment fix, and the rest of the line is read as the
+# declaration it was written in, so `main` is still found.
+def bump_#{name} -> Int = 1
+
+struct Hero
+  hp_#{stat}: Int
+end
+
+#{prefix}_LIMIT = 3
+
+def go
+  value = 2
+  total_#{name} = value
+  #{name}_count = 1
+end
+
+def main
+  # A comment written without a space after `#` is still read as one.
+  #{TODO} call go
+  go
+end

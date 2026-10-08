@@ -932,13 +932,15 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Inside a `quote`, the number of tokens of the name `n` tokens ahead
-    /// when it is glued together from text and splices, with no space
-    /// between them: `bump_#{name}`, `#{name}_count`, `@hp_#{n}` or
-    /// `:#{a}_b`. Ruby builds a name from a string that way, but a splice
-    /// inserts a whole name, so [`Parser::glued_name`] reports it.
+    /// The number of tokens of the name `n` tokens ahead when it is glued
+    /// together from text and splices, with no space between them:
+    /// `bump_#{name}`, `#{name}_count`, `@hp_#{n}` or `:#{a}_b`. Ruby
+    /// builds a name from a string that way, but a splice inserts a whole
+    /// name, so [`Parser::glued_name`] reports it. Outside a `quote` too,
+    /// where it is never a comment, but not inside a splice's expression,
+    /// where a splice is reported as nested.
     fn glued_len(&self, n: usize) -> Option<usize> {
-        if self.quotes.is_empty() {
+        if self.quotes.is_empty() && self.splice_depth > 0 {
             return None;
         }
         let mut i = n;
@@ -985,6 +987,9 @@ impl<'a> Parser<'a> {
         let sigil = matches!(first.kind, T::AtSplice | T::ColonSplice | T::IVar | T::Symbol);
         let name_span = Span::new(self.file, span.start + u32::from(sigil), span.end);
         let (help, edits) = self.glued_fix(len, name_span);
+        if self.quotes.is_empty() {
+            return Some(self.glued_name_outside_quote(span, name_span, help));
+        }
         let mut parts = Vec::new();
         while self.peek().span.start < span.end && !self.at(T::Eof) {
             let tok = self.peek();
@@ -1018,13 +1023,34 @@ impl<'a> Parser<'a> {
             list.len() as u32 - 1
         });
         self.report(
-            Diagnostic::error(codes::SPLICE_OUTSIDE_QUOTE, "a splice can't be part of a name")
+            Diagnostic::error(codes::MISPLACED_SPLICE, "a splice can't be part of a name")
                 .primary(span, "a splice inserts a whole name, not part of one")
                 .note("the text next to the splice is read as a separate name")
                 .suggest(help, edits, Applicability::MaybeIncorrect),
         );
         let name = index.map_or_else(|| Name::new("<error>"), splice_name);
         Some((Ident { name, span: name_span }, span))
+    }
+
+    /// [`Parser::glued_name`] outside a `quote`, where nothing is spliced:
+    /// skips the name at `span` (`name_span` without its `@` or `:`),
+    /// reports it as one E0111 and returns the name as written
+    /// (`bump_#{name}`), which no code can refer to, so a declaration of it
+    /// still parses and clashes with nothing. `help` builds the name in a
+    /// macro.
+    fn glued_name_outside_quote(&mut self, span: Span, name_span: Span, help: String) -> (Ident, Span) {
+        while self.peek().span.start < span.end && !self.at(T::Eof) {
+            self.bump();
+        }
+        let mut diag = Diagnostic::error(codes::MISPLACED_SPLICE, "`#{` starts a splice outside a `quote`")
+            .primary(span, "a splice only works inside `quote do … end`")
+            .note("inside one, a splice can't be part of a name either: it inserts a whole name")
+            .help(help);
+        if self.in_macro {
+            diag = diag.help("to build code in a macro, splice values into a `quote do … end` and return it");
+        }
+        self.report(diag);
+        (Ident { name: Name::new(self.text_of(name_span)), span: name_span }, span)
     }
 
     /// The help for the glued name of `len` tokens here, written
@@ -1215,10 +1241,17 @@ impl<'a> Parser<'a> {
     /// Whether the splice at the current `SpliceBegin`, outside any `quote`,
     /// reads as a comment written without a space after `#`: it starts a
     /// line, follows a complete expression, or ends a line after a `,`.
-    /// After `=`, `.` or `def` it is meant as code.
+    /// After `=`, `.` or `def` it is meant as code, and so is a splice
+    /// glued to a name (`bump_#{name}`, `#{name}_count`), which is part of
+    /// the name (see [`Parser::glued_len`]).
     fn stray_is_comment(&self) -> bool {
+        let prev = self.pos.checked_sub(1).map(|i| self.tokens[i]);
+        let after_name = prev.is_some_and(|t| matches!(t.kind, T::Ident | T::Const | T::IVar | T::Symbol));
+        if self.glued_len(0).is_some() || (after_name && !self.peek().space_before) {
+            return false;
+        }
         let ends_line = self.splice_len(0).is_some_and(|n| matches!(self.nth(n).kind, T::Newline | T::Eof));
-        match self.pos.checked_sub(1).map(|i| self.tokens[i].kind) {
+        match prev.map(|t| t.kind) {
             None | Some(T::Newline) => true,
             Some(T::Comma) => ends_line,
             Some(kind) => matches!(
@@ -1263,7 +1296,7 @@ impl<'a> Parser<'a> {
                 edits.push(Edit { span: end, replacement: String::new() });
             }
             self.report(
-                Diagnostic::error(codes::SPLICE_OUTSIDE_QUOTE, "a splice inside a splice")
+                Diagnostic::error(codes::MISPLACED_SPLICE, "a splice inside a splice")
                     .primary(span, "this is already macro code")
                     .note("the expression inside `#{…}` runs in the macro, so it uses values directly")
                     .suggest("remove the inner `#{` and `}`", edits, Applicability::MachineApplicable),
@@ -1276,7 +1309,7 @@ impl<'a> Parser<'a> {
             }
         }
         let after_hash = Span::new(self.file, begin.span.start + 1, begin.span.start + 1);
-        let mut diag = Diagnostic::error(codes::SPLICE_OUTSIDE_QUOTE, "`#{` starts a splice outside a `quote`")
+        let mut diag = Diagnostic::error(codes::MISPLACED_SPLICE, "`#{` starts a splice outside a `quote`")
             .primary(span, "a splice only works inside `quote do … end`")
             .note("outside a string, `#{` always starts a splice; a comment starts with `# `");
         diag = if comment || end.is_empty() {
@@ -1656,7 +1689,7 @@ impl<'a> Parser<'a> {
                 let default = if self.eat(T::Eq) { Some(self.parse_expr()) } else { None };
                 ItemKind::Field(Box::new(FieldDecl { name, ty, default, using: false }))
             }
-            T::SpliceBegin if self.quotes.is_empty() => {
+            T::SpliceBegin if self.quotes.is_empty() && self.glued_len(0).is_none() => {
                 // Most likely a comment written without a space after `#`.
                 self.stray_splice();
                 return None;
@@ -6326,6 +6359,22 @@ end
     fn missing_end_reports_opener() {
         let (_, diags) = parse_file(FileId(0), "def main\n  if x\n    puts 1\n  \nend\n");
         assert!(diags.iter().any(|d| d.code == codes::MISSING_END));
+    }
+
+    #[test]
+    fn names_glued_to_splices_outside_a_quote() {
+        // One E0111, never a comment, and the line is still the `def`.
+        let (file, diags) = parse_file(FileId(0), "def bump_#{name} = 1\ndef main\nend\n");
+        assert_eq!(diags.iter().map(|d| d.code.as_str()).collect::<Vec<_>>(), ["E0111"]);
+        assert!(diags.iter().flat_map(|d| &d.helps).all(|h| h.edits.is_empty() && !h.message.contains("comment")));
+        assert_eq!(file.items.len(), 2);
+        let ItemKind::Def(def) = &file.items[0].kind else { panic!("a def") };
+        assert_eq!(def.name.as_str(), "bump_#{name}");
+        assert!(matches!(def.body, FnBody::Expr(_)));
+        // A splice spaced from the text before it is still a comment.
+        let (messages, fixed) = fix_all("def main\n  x = 1 #{note}\n  #{TODO} later\n  p x\nend\n");
+        assert_eq!(messages.len(), 2);
+        assert_eq!(fixed, "def main\n  x = 1 # {note}\n  # {TODO} later\n  p x\nend\n");
     }
 
     #[test]

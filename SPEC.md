@@ -547,7 +547,9 @@ end
     glued to text, as in Ruby's `define_method("bump_#{name}")`:
     `def bump_#{name}` or `@#{name}_count` is E0111. The macro builds the
     name first (`fname = "bump_#{name}".to_sym`) and splices that
-    (`def #{fname}`).
+    (`def #{fname}`). Outside a `quote`, a splice glued to a name is never
+    read as a comment: it is one E0111, and the line is read as the
+    declaration it was written in.
   - **Calls:** macros are package members like any def, declared at the top
     level of a file (E0105 inside a type). `pkg.name(…)`, and
     `pkg.name args` as a statement or declaration, works wherever an

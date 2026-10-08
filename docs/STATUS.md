@@ -522,6 +522,17 @@ runs the stages; `wid_cli` is the `wid` binary.
   help. The parser reads the glued name as a splice of the
   `"bump_#{name}".to_sym` it meant, so the declaration parses and code
   using the generated name adds no errors.
+- Outside a `quote` too, a splice glued to a name (`def bump_#{name}`,
+  `#{prefix}_LIMIT = 3`, `hp_#{stat}: Int`) is one E0111 "`#{` starts a
+  splice outside a `quote`", noting that it can't be part of a name
+  either, with the help that builds the name in a macro (#61). It was
+  four errors, with a fix that read it as a comment (`def bump_# {name}`)
+  and lost `def main`. `glued_len` works outside a `quote` (not inside a
+  splice's expression), `stray_is_comment` never takes a splice glued to
+  a name for a comment, and the line is read as the declaration it was
+  written in, with the name as written, which no code can refer to. The
+  E0111 title is now "misplaced splice" (`codes::MISPLACED_SPLICE`), as it
+  also covers a splice inside a splice and one glued to a name.
 - Any type written where a `Type` is expected, or in `comptime` code, is a
   `Type` value: constructors (`name_of([]Int)`, `name_of(Int?)`,
   `name_of(^Node)`, `name_of((proc(Int) -> Int)?)`), generic instances and

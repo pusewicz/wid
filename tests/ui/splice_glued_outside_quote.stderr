@@ -1,0 +1,56 @@
+error[E0111]: `#{` starts a splice outside a `quote`
+ --> tests/ui/splice_glued_outside_quote.wid:5:5
+  |
+5 | def bump_#{name} -> Int = 1
+  |     ^^^^^^^^^^^^ a splice only works inside `quote do … end`
+  = note: inside one, a splice can't be part of a name either: it inserts a whole name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole: `bump_name = "bump_#{name}".to_sym`, then `#{bump_name}`
+  = see `wid explain E0111`
+
+error[E0111]: `#{` starts a splice outside a `quote`
+ --> tests/ui/splice_glued_outside_quote.wid:8:3
+  |
+8 |   hp_#{stat}: Int
+  |   ^^^^^^^^^^ a splice only works inside `quote do … end`
+  = note: inside one, a splice can't be part of a name either: it inserts a whole name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole: `hp_stat = "hp_#{stat}".to_sym`, then `#{hp_stat}`
+  = see `wid explain E0111`
+
+error[E0111]: `#{` starts a splice outside a `quote`
+  --> tests/ui/splice_glued_outside_quote.wid:11:1
+   |
+11 | #{prefix}_LIMIT = 3
+   | ^^^^^^^^^^^^^^^ a splice only works inside `quote do … end`
+   = note: inside one, a splice can't be part of a name either: it inserts a whole name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole: `prefix_limit = "#{prefix}_LIMIT".to_sym`, then `#{prefix_limit}`
+   = see `wid explain E0111`
+
+error[E0111]: `#{` starts a splice outside a `quote`
+  --> tests/ui/splice_glued_outside_quote.wid:15:3
+   |
+15 |   total_#{name} = value
+   |   ^^^^^^^^^^^^^ a splice only works inside `quote do … end`
+   = note: inside one, a splice can't be part of a name either: it inserts a whole name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole: `total_name = "total_#{name}".to_sym`, then `#{total_name}`
+   = see `wid explain E0111`
+
+error[E0111]: `#{` starts a splice outside a `quote`
+  --> tests/ui/splice_glued_outside_quote.wid:16:3
+   |
+16 |   #{name}_count = 1
+   |   ^^^^^^^^^^^^^ a splice only works inside `quote do … end`
+   = note: inside one, a splice can't be part of a name either: it inserts a whole name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole: `name_count = "#{name}_count".to_sym`, then `#{name_count}`
+   = see `wid explain E0111`
+
+error[E0111]: `#{` starts a splice outside a `quote`
+  --> tests/ui/splice_glued_outside_quote.wid:21:3
+   |
+21 |   #{TODO} call go
+   |   ^^^^^^^ a splice only works inside `quote do … end`
+   = note: outside a string, `#{` always starts a splice; a comment starts with `# `
+help: if this is a comment, add a space after `#`
+   |   # {TODO} call go
+   = see `wid explain E0111`
+
+error: could not compile due to 6 errors
