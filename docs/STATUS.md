@@ -1346,6 +1346,9 @@ the language server.
   call the collection is checked on its own and fills nothing, so no
   E0301 for it and no "missing argument" follow (`match_args` counts it
   like an unknown named argument).
+- A variable declared at package level (`buf: [4]U8 = ---`) is one E0108
+  (#123): `collect_item` records its name in `Checker::package_vars`, and
+  `undefined_explained` keeps its uses from being E0201 at each one.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
