@@ -1,5 +1,4 @@
-# Growing arena: allocations bump a pointer through blocks taken from a
-# backing allocator. Single frees are ignored; `free_all` resets the arena.
+# The arena allocator, `Arena`, and the header of the blocks it takes.
 
 # The header in front of every arena block's storage.
 private struct ArenaBlock
@@ -11,11 +10,19 @@ end
 # Bytes reserved in front of a block's storage for its `ArenaBlock` header.
 private ARENA_HEADER = 32
 
+# A growing arena: allocations bump a pointer through blocks taken from a
+# backing allocator. Single frees are ignored; `free_all` resets the arena.
 struct Arena
+  # The allocator the blocks come from.
   backing: Allocator
+  # The smallest block to take, in bytes; an allocation that doesn't fit
+  # takes a bigger one.
   block_size: Int = 64 * 1024
+  # The newest block, which allocations come from; nil before the first.
   current: ^ArenaBlock?
+  # The address of the newest allocation, which `resize` grows in place.
   last: UInt
+  # The size of the newest allocation, in bytes.
   last_size: Int
 
   # An empty arena that takes blocks of at least `block_size` bytes from

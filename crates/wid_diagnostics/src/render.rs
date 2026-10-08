@@ -277,8 +277,18 @@ fn render_edit_group(
     }
 }
 
-/// Renders every diagnostic followed by a summary line.
+/// Renders every diagnostic followed by a summary line for a command that
+/// compiles: `error: could not compile due to 2 errors`, or `warning: 1
+/// warning emitted`. Other commands word it with [`render_all_with`].
 pub fn render_all(diags: &Diagnostics, sources: &SourceMap, opts: RenderOptions) -> String {
+    render_all_with(diags, sources, opts, "could not compile due to")
+}
+
+/// Renders every diagnostic followed by a summary line. With errors, the
+/// line is `failure` and the counts: `could not import the header due to`
+/// gives `error: could not import the header due to 1 error`. With only
+/// warnings, it is `warning: 2 warnings emitted`.
+pub fn render_all_with(diags: &Diagnostics, sources: &SourceMap, opts: RenderOptions, failure: &str) -> String {
     let mut out = String::new();
     for diag in diags.iter() {
         out.push_str(&render(diag, sources, opts));
@@ -293,8 +303,8 @@ pub fn render_all(diags: &Diagnostics, sources: &SourceMap, opts: RenderOptions)
         };
         let summary = match (errors, warnings) {
             (0, w) => format!("{} emitted", plural(w, "warning")),
-            (e, 0) => format!("could not compile due to {}", plural(e, "error")),
-            (e, w) => format!("could not compile due to {} and {}", plural(e, "error"), plural(w, "warning")),
+            (e, 0) => format!("{failure} {}", plural(e, "error")),
+            (e, w) => format!("{failure} {} and {}", plural(e, "error"), plural(w, "warning")),
         };
         let sev = if errors > 0 { Severity::Error } else { Severity::Warning };
         let _ = writeln!(out, "{}: {}", p.severity(sev, sev.as_str()), p.bold(&summary));
@@ -401,9 +411,9 @@ pub fn render_json(diags: &Diagnostics, sources: &SourceMap) -> String {
 mod tests {
     use std::path::PathBuf;
 
-    use super::{RenderOptions, render, to_json};
+    use super::{RenderOptions, render, render_all, render_all_with, to_json};
     use crate::codes;
-    use crate::diagnostic::Diagnostic;
+    use crate::diagnostic::{Diagnostic, Diagnostics};
     use crate::source::{Expansion, FileId, SourceMap, Span};
 
     /// `lib.wid` defines `inner` and `outer`, whose `quote` calls `inner`.
@@ -464,6 +474,21 @@ error[E0301]: expected `Int`, found `String`
   = see `wid explain E0301`
 ";
         assert_eq!(text, expected);
+    }
+
+    #[test]
+    fn the_summary_line_says_what_failed() {
+        let sources = sources();
+        let mut diags = Diagnostics::new();
+        diags.push(error_at(FileId(0)));
+        let last = |text: String| text.lines().last().unwrap_or_default().to_string();
+        let opts = RenderOptions::default();
+        assert_eq!(last(render_all(&diags, &sources, opts)), "error: could not compile due to 1 error");
+        diags.push(Diagnostic::error(codes::TYPE_MISMATCH, "another").primary(Span::new(FileId(0), 0, 5), "here"));
+        assert_eq!(
+            last(render_all_with(&diags, &sources, opts, "could not import the header due to")),
+            "error: could not import the header due to 2 errors"
+        );
     }
 
     #[test]

@@ -7,4 +7,4 @@ error[E0307]: cannot apply `+` to `Int` and `String`
   |       ----- `String`
   = see `wid explain E0307`
 
-error: could not compile due to 1 error
+error: the documentation may be incomplete due to 1 error

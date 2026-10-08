@@ -24,5 +24,6 @@ progs.each do |chunk|
   File.write("#{dir}/main.wid", src.sub(/\n+\z/, "\n"))
   out, st = Open3.capture2e({ "WID_ROOT" => ROOT, "NO_COLOR" => "1" }, WID, "check", "main.wid", "-file", chdir: dir)
   puts "=== #{name.strip} (exit #{st.exitstatus})"
-  puts out.lines.reject { |l| l.start_with?("error: could not compile") }.join.rstrip
+  # Drops the summary line, "error: could not compile due to 1 error".
+  puts out.lines.reject { |l| l =~ /\Aerror: .* due to \d+ errors?/ }.join.rstrip
 end

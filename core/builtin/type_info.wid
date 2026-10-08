@@ -4,54 +4,95 @@
 
 # What kind of type a `TypeInfo` describes.
 enum TypeKind
-  int            # Int, I8…I64
-  uint           # UInt, U8…U64
+  # A signed integer: `Int`, `I8` … `I64`.
+  int
+  # An unsigned integer: `UInt`, `U8` … `U64`.
+  uint
+  # A float: `F32` or `F64`.
   float
+  # `Bool`.
   bool
+  # `Rune`, a Unicode code point.
   rune
+  # `String`.
   string
+  # `CString`, a NUL-terminated C string.
   cstring
+  # `RawPtr`, a pointer to anything.
   rawptr
+  # `TypeId`.
   typeid
+  # `Any`.
   any
-  pointer        # ^T
-  multi_pointer  # [^]T
-  array          # [N]T
-  slice          # []T
-  dynamic_array  # [dynamic]T
+  # A pointer, `^T`.
+  pointer
+  # A multi-pointer, `[^]T`.
+  multi_pointer
+  # A fixed array, `[N]T`.
+  array
+  # A slice, `[]T`.
+  slice
+  # A dynamic array, `[dynamic]T`.
+  dynamic_array
+  # A map, `map[K]V`.
   map
+  # A matrix, `matrix[R, C]T`.
   matrix
-  optional       # T? (including ^T?, whose elem is ^T)
+  # An optional, `T?`, including `^T?`, whose `elem` is `^T`.
+  optional
+  # A proc, `proc(A) -> R`.
   proc
+  # A struct.
   struct
+  # An enum.
   enum
+  # A tagged union.
   union
 end
 
 # A type, as the program sees it at run time.
 struct TypeInfo
-  name: String                 # as Wid displays the type: "Int", "[]Vec2", "Pool(Ball, 64)", "Meters"
+  # The type as Wid displays it: "Int", "[]Vec2", "Pool(Ball, 64)", "Meters".
+  name: String
+  # What kind of type it is.
   kind: TypeKind
+  # Its size in bytes.
   size: Int
+  # Its alignment in bytes.
   align: Int
-  elem: ^TypeInfo?             # pointee, element, map value, optional payload, enum backing type, proc return type
-  key: ^TypeInfo?              # map key
-  count: Int                   # [N]T: N; matrix[R, C]T: R
-  columns: Int                 # matrix[R, C]T: C
-  fields: []TypeInfoField      # struct fields in declaration order; proc parameters (offset 0)
-  members: []TypeInfoMember    # enum members, in declaration order
-  variants: []^TypeInfo        # union variants, in declaration order
+  # The pointee, element, map value, optional payload, enum backing type or
+  # proc return type; nil when there is none.
+  elem: ^TypeInfo?
+  # A map's key type; nil for every other kind.
+  key: ^TypeInfo?
+  # `N` of `[N]T`, and the rows `R` of `matrix[R, C]T`.
+  count: Int
+  # The columns `C` of `matrix[R, C]T`.
+  columns: Int
+  # A struct's fields in declaration order; a proc's parameters, with empty
+  # names and offset 0.
+  fields: []TypeInfoField
+  # An enum's members, in declaration order.
+  members: []TypeInfoMember
+  # A union's variants, in declaration order.
+  variants: []^TypeInfo
 end
 
 # A struct field or a proc parameter.
 struct TypeInfoField
+  # The field's name; empty for a proc parameter.
   name: String
+  # The field's type.
   type: ^TypeInfo
+  # Where the field starts, in bytes from the start of the struct; 0 for a
+  # proc parameter.
   offset: Int
 end
 
 # An enum member.
 struct TypeInfoMember
+  # The member's name.
   name: String
-  value: I64                   # a U64-backed member's bit pattern
+  # The member's value; a `U64`-backed member's bit pattern.
+  value: I64
 end

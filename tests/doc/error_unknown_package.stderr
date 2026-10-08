@@ -8,4 +8,4 @@ help: a similar package exists: `core:strings`
   | wid doc core:strings
   = see `wid explain E0601`
 
-error: could not compile due to 1 error
+error: could not write the documentation due to 1 error

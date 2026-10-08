@@ -7,4 +7,4 @@ help: document the file on its own with `-file`
   | wid doc shapes/shapes.wid -file
   = see `wid explain E0601`
 
-error: could not compile due to 1 error
+error: could not write the documentation due to 1 error

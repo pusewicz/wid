@@ -66,10 +66,16 @@ impl OptLevel {
 /// Everything that controls one compilation.
 #[derive(Clone, Debug)]
 pub struct Options {
-    /// The package directory, or a single file with `file_mode`.
+    /// The package directory, or a single file with `file_mode`. With
+    /// `file_mode`, an empty path means the command line named no file,
+    /// which is an error.
     pub target: PathBuf,
     /// Treat `target` as a single-file package.
     pub file_mode: bool,
+    /// The command running, without `wid`: `build` (the default), `run`,
+    /// `check` or `test`. Errors about the target show it on the command
+    /// line, like `wid check main.wid -file`.
+    pub command: String,
     /// The output executable path.
     pub out: Option<PathBuf>,
     /// The C optimization level.
@@ -110,6 +116,7 @@ impl Options {
         Options {
             target: target.into(),
             file_mode: false,
+            command: "build".to_string(),
             out: None,
             opt: OptLevel::Minimal,
             debug: false,

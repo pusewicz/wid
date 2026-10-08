@@ -1,6 +1,8 @@
-# Builder: a growable byte buffer for building strings piece by piece.
+# The string builder, `Builder`.
 
+# A growable byte buffer for building strings piece by piece.
 struct Builder
+  # The bytes written so far.
   buf: [dynamic]U8
 
   # An empty builder whose buffer grows with `allocator`.

@@ -402,6 +402,12 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   (packages are `-in:tests/doc/shapes` and the like) against `NAME.stdout`
   and `NAME.stderr`; a usage error expects the CLI's two lines on stderr.
   `tests/query/cmerged` is a package with a `cimport` without `as:`.
+- Every `core` package opens the file named after it (`core/mem/mem.wid`,
+  `core/builtin/builtin.wid`) with its package doc, and every public
+  declaration in `core` has a `# ` doc comment directly above it: types,
+  fields, enum members, methods, constants, overload sets and extensions.
+  Other file headers describe their file. `wid_driver/tests/core_docs.rs`
+  checks both.
 
 ## Done
 
@@ -957,6 +963,28 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   at the MSRV (1.88). Ubuntu doesn't package raylib, so `vendor:raylib` and
   `examples/taste` are covered on macOS only. `cimport` keeps doc comments
   from system headers, which is where Linux installs libraries.
+- Unknown-flag hints come from the flags the command takes: a double-dash
+  flag is offered its one-dash form only when the command takes it,
+  another command's flag says which command takes it, and `wid explain`
+  (which takes none) says to run it with no code to list every code.
+- The summary line after the diagnostics is worded per command
+  (`render_all_with`): `could not compile` stays with `build`, `run`,
+  `check` and `test`; `cimport` could not import the header, and `wid doc`
+  could not write the documentation, or warns that the page it printed may
+  be incomplete. The errdocs scripts accept every wording.
+- `-file` errors point into the command line (`wid check main.wid -file`)
+  for every command: no file named (E0206, or E0601 for `wid doc -file`,
+  as for `wid query`) offers the only `.wid` file of the directory and
+  dropping `-file`; a missing file offers a similar `.wid` file (`main` for
+  `main.wid` too) or lists those there; a directory offers dropping
+  `-file`. `Options::command` names the command for the message.
+- `core` docs: `core:builtin` has a package doc describing the prelude
+  (`builtin.wid`), `Arena`, `Pool`, `Tracker` and `Builder` are described
+  above their declarations instead of in file headers, and every public
+  `core` declaration, field and enum member has a doc comment, checked by
+  `wid_driver/tests/core_docs.rs`. `OS` and `ARCH` have a doc each, and the
+  prelude declares them when it is the package itself
+  (`wid doc core:builtin OS`).
 
 ## Next
 

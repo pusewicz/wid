@@ -7,4 +7,4 @@ error[E0601]: there is no package in the current directory
 help: name the package first, like `wid doc path/to/package shapez`
   = see `wid explain E0601`
 
-error: could not compile due to 1 error
+error: could not write the documentation due to 1 error

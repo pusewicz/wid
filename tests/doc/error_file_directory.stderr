@@ -1,0 +1,10 @@
+error[E0601]: `shapes` is a directory, not a file
+ --> command line:1:9
+  |
+1 | wid doc shapes -file
+  |         ^^^^^^ `-file` documents a single `.wid` file
+help: drop `-file` to document the package in `shapes`
+  | wid doc shapes
+  = see `wid explain E0601`
+
+error: could not write the documentation due to 1 error

@@ -6,17 +6,29 @@
 # package as `C` to write them the way `cimport` does: `import "core:c", as: :C`
 # gives `C.int`.
 
+# The bits in a `char`.
 CHAR_BIT = 8
+# The smallest `signed char`.
 SCHAR_MIN = -128
+# The largest `signed char`.
 SCHAR_MAX = 127
+# The largest `unsigned char`.
 UCHAR_MAX = 255
+# The smallest `short`.
 SHRT_MIN = -32768
+# The largest `short`.
 SHRT_MAX = 32767
+# The largest `unsigned short`.
 USHRT_MAX = 65535
+# The smallest `int`.
 INT_MIN = -2147483648
+# The largest `int`.
 INT_MAX = 2147483647
+# The largest `unsigned int`.
 UINT_MAX = 4294967295
+# The smallest `long` where it is 64 bits, as on 64-bit Unix (LP64).
 LONG_MIN = -9223372036854775808
+# The largest `long` where it is 64 bits, as on 64-bit Unix (LP64).
 LONG_MAX = 9223372036854775807
 
 # Returns the length of a NUL-terminated string, not counting the NUL.

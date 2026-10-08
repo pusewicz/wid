@@ -13,8 +13,12 @@
 # a test allocates with `context.allocator` and never frees fails it, with the
 # place each leaked block was allocated.
 
+# The state of one running test, which each `@[test]` method receives: its
+# expectations and log messages report through it.
 struct T
+  # The test's name, the method's.
   name: String
+  # How many failures the test has recorded so far.
   failures: Int
 
   # Records a failure unless `ok`.

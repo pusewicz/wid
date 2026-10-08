@@ -10,6 +10,7 @@ use wid_syntax::ast::ItemKind;
 
 use crate::Options;
 use crate::cimport;
+use crate::cmdline::{CommandLine, FileRequest, file_target};
 
 /// Finds the directory holding `core/`, `vendor/` and `runtime/`.
 pub fn find_wid_root(opts: &Options) -> PathBuf {
@@ -55,8 +56,20 @@ pub fn load_program(opts: &Options) -> (SourceMap, Option<ProgramInput>, Diagnos
     };
     let target = &opts.target;
     let (dir, files) = if opts.file_mode {
-        if !target.is_file() {
-            loader.fatal(format!("`{}` is not a file", target.display()));
+        // The errors point into the command line `wid check main.wid -file`.
+        let mut cmd = CommandLine::new(&format!("wid {}", opts.command));
+        let text = target.to_string_lossy();
+        let arg = (!text.is_empty()).then(|| (text.as_ref(), cmd.arg("", &text), target.clone()));
+        cmd.flag("-file");
+        let verb = match opts.command.as_str() {
+            "doc" => "document",
+            "query" => "read",
+            other => other,
+        };
+        let request = FileRequest { cmd: &cmd, arg, code: codes::UNKNOWN_IMPORT, verb, prefix: "" };
+        if let Err(pending) = file_target(Path::new("."), request) {
+            let file = cmd.add(&mut loader.sources);
+            loader.diags.push(pending(file));
             return (loader.sources, None, loader.diags);
         }
         let dir = target.parent().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."));
@@ -96,7 +109,14 @@ pub fn load_program(opts: &Options) -> (SourceMap, Option<ProgramInput>, Diagnos
         let files = loader.wid_files(&prelude_dir);
         let canon = prelude_dir.canonicalize().unwrap_or_else(|_| prelude_dir.clone());
         match loader.by_dir.get(&canon) {
-            Some(&id) => Some(id),
+            // The prelude is the package itself (`wid doc core:builtin`),
+            // which declares the target too.
+            Some(&id) => {
+                if !opts.file_mode {
+                    loader.add_target_file(id);
+                }
+                Some(id)
+            }
             None if !files.is_empty() => {
                 let id = loader.add_package("builtin".into(), "core:builtin".into(), prelude_dir, files);
                 loader.add_target_file(id);
@@ -161,7 +181,8 @@ impl Loader<'_> {
     /// Adds the prelude's `OS` and `ARCH` constants for the target.
     fn add_target_file(&mut self, prelude: PackageId) {
         let text = format!(
-            "# The target this program is compiled for, set with `-target:`.\nOS = Os.{}\nARCH = Arch.{}\n",
+            "# The operating system this program is compiled for, set with `-target:`.\nOS = Os.{}\n\
+             # The CPU architecture this program is compiled for, set with `-target:`.\nARCH = Arch.{}\n",
             self.opts.target_os, self.opts.target_arch
         );
         let text: Arc<str> = Arc::from(text);

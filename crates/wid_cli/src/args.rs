@@ -63,31 +63,63 @@ pub struct Parsed {
 
 const COMMANDS: &[&str] = &["build", "run", "check", "test", "doc", "query", "explain", "cimport", "version", "help"];
 
-const FLAGS: &[&str] = &[
+/// The flags `build`, `run` and `check` take, without their `:`; `test`
+/// takes `-filter` too.
+const BUILD_FLAGS: &[&str] = &[
     "-file",
-    "-out:",
-    "-o:",
+    "-out",
+    "-o",
     "-debug",
     "-keep-c",
-    "-cc:",
-    "-define:",
-    "-target:",
-    "-collection:",
+    "-cc",
+    "-define",
+    "-target",
+    "-collection",
     "-no-bounds-check",
-    "-sanitize:",
+    "-sanitize",
     "-json-errors",
-    "-filter:",
-    "-dump",
-    "-strip-prefix:",
-    "-include-dir:",
-    "-pkg-config:",
-    "-json",
-    "-private",
-    "-in:",
 ];
 
+/// The flags `wid doc` takes.
+const DOC_FLAGS: &[&str] = &["-json", "-private", "-file", "-json-errors", "-define", "-target", "-collection"];
+
+/// The flags `wid query` takes.
+const QUERY_FLAGS: &[&str] = &["-in", "-file", "-define", "-target", "-collection"];
+
+/// The flags `wid cimport` takes.
+const CIMPORT_FLAGS: &[&str] = &["-dump", "-strip-prefix", "-include-dir", "-pkg-config", "-define", "-json-errors"];
+
+/// The flags a command takes, for the hints about one it doesn't.
+fn command_flags(command: Command) -> Vec<&'static str> {
+    match command {
+        Command::Build | Command::Run | Command::Check => BUILD_FLAGS.to_vec(),
+        Command::Test => BUILD_FLAGS.iter().copied().chain(["-filter"]).collect(),
+        Command::Doc => DOC_FLAGS.to_vec(),
+        Command::Query => QUERY_FLAGS.to_vec(),
+        Command::Cimport => CIMPORT_FLAGS.to_vec(),
+        Command::Explain | Command::Version | Command::Help => Vec::new(),
+    }
+}
+
+/// The name a command is run with.
+pub fn command_name(command: Command) -> &'static str {
+    match command {
+        Command::Build => "build",
+        Command::Run => "run",
+        Command::Check => "check",
+        Command::Test => "test",
+        Command::Doc => "doc",
+        Command::Query => "query",
+        Command::Explain => "explain",
+        Command::Cimport => "cimport",
+        Command::Version => "version",
+        Command::Help => "help",
+    }
+}
+
 /// Flags that only one command takes.
-const COMMAND_FLAGS: &[(&str, &str)] = &[("-json", "doc"), ("-private", "doc"), ("-in", "query"), ("-dump", "cimport")];
+const COMMAND_FLAGS: &[(&str, &str)] =
+    &[("-json", "doc"), ("-private", "doc"), ("-in", "query"), ("-dump", "cimport"), ("-filter", "test")];
 
 /// Parses the arguments after the program name.
 pub fn parse(argv: &[String]) -> Result<Parsed, String> {
@@ -211,26 +243,42 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
             "-strip-prefix" => parsed.strip_prefixes.push(need("SDL_")?),
             "-include-dir" => parsed.include_dirs.push(PathBuf::from(need("path")?)),
             "-pkg-config" => parsed.pkg_config.push(need("raylib")?),
-            _ => {
-                if parsed.command == Command::Query && name == "-json" {
-                    return Err("`wid query` always prints JSON; drop `-json`".to_string());
-                }
-                if let Some((_, owner)) = COMMAND_FLAGS.iter().find(|(flag, _)| *flag == name) {
-                    return Err(format!("`{name}` only applies to `wid {owner}`"));
-                }
-                let names: Vec<&str> = FLAGS.iter().map(|f| f.trim_end_matches(':')).collect();
-                let hint = if name.starts_with("--") {
-                    format!("; Wid flags use one dash, like `{}`", &name[1..])
-                } else {
-                    wid_diagnostics::did_you_mean(name, names.iter().copied())
-                        .map(|f| format!("; did you mean `{f}`?"))
-                        .unwrap_or_default()
-                };
-                return Err(format!("unknown flag `{name}`{hint}"));
-            }
+            _ => return Err(unknown_flag(parsed.command, name)),
         }
     }
     Ok(parsed)
+}
+
+/// The message for a flag `command` doesn't take. A double-dash flag
+/// (`--debug`) is offered its one-dash form only when the command takes it.
+fn unknown_flag(command: Command, name: &str) -> String {
+    let accepted = command_flags(command);
+    let one_dash = name.strip_prefix('-').filter(|rest| rest.starts_with('-') && !rest.starts_with("--"));
+    if let Some(flag) = one_dash
+        && accepted.contains(&flag)
+    {
+        return format!("unknown flag `{name}`; Wid flags use one dash, like `{flag}`");
+    }
+    let flag = one_dash.unwrap_or(name);
+    if command == Command::Query && flag == "-json" {
+        return format!("`wid query` always prints JSON; drop `{name}`");
+    }
+    if let Some((_, owner)) = COMMAND_FLAGS.iter().find(|(f, _)| *f == flag) {
+        return if flag == name {
+            format!("`{name}` only applies to `wid {owner}`")
+        } else {
+            format!("unknown flag `{name}`; `{flag}` only applies to `wid {owner}`")
+        };
+    }
+    let hint = match wid_diagnostics::did_you_mean(flag, accepted.iter().copied()) {
+        Some(similar) => format!("; did you mean `{similar}`?"),
+        None if command == Command::Explain => {
+            "; `wid explain` takes no flags: to list every error code, run `wid explain` with no code".to_string()
+        }
+        None if accepted.is_empty() => format!("; `wid {}` takes no flags", command_name(command)),
+        None => String::new(),
+    };
+    format!("unknown flag `{name}`{hint}")
 }
 
 /// Returns the help text for a topic, or the general usage.
@@ -344,3 +392,42 @@ const FLAG_HELP: &str = "Flags:\n  \
     -sanitize:<name>       Enable a sanitizer, e.g. address\n  \
     -json-errors           Print diagnostics (and test results) as JSON\n  \
     -filter:<text>         `wid test`: run only tests whose name contains the text\n";
+
+#[cfg(test)]
+mod tests {
+    use super::parse;
+
+    /// The error `wid ARGS` stops with.
+    fn error(args: &str) -> String {
+        let argv: Vec<String> = args.split_whitespace().map(str::to_string).collect();
+        match parse(&argv) {
+            Ok(parsed) => panic!("`wid {args}` parsed: {parsed:?}"),
+            Err(message) => message,
+        }
+    }
+
+    #[test]
+    fn double_dash_offers_the_one_dash_flag_the_command_takes() {
+        assert_eq!(error("build --debug"), "unknown flag `--debug`; Wid flags use one dash, like `-debug`");
+        assert_eq!(error("doc --private"), "unknown flag `--private`; Wid flags use one dash, like `-private`");
+        assert_eq!(error("test --filter:x"), "unknown flag `--filter`; Wid flags use one dash, like `-filter`");
+    }
+
+    #[test]
+    fn double_dash_never_offers_a_flag_the_command_lacks() {
+        let list = "`wid explain` takes no flags: to list every error code, run `wid explain` with no code";
+        assert_eq!(error("explain --list"), format!("unknown flag `--list`; {list}"));
+        assert_eq!(error("explain -list"), format!("unknown flag `-list`; {list}"));
+        assert_eq!(error("build --private"), "unknown flag `--private`; `-private` only applies to `wid doc`");
+        assert_eq!(error("query --json"), "`wid query` always prints JSON; drop `--json`");
+        assert_eq!(error("check --filter:x"), "unknown flag `--filter`; `-filter` only applies to `wid test`");
+        assert_eq!(error("build --verbose"), "unknown flag `--verbose`");
+    }
+
+    #[test]
+    fn similar_flags_come_from_the_command() {
+        assert_eq!(error("build -debgu"), "unknown flag `-debgu`; did you mean `-debug`?");
+        assert_eq!(error("query -fiel"), "unknown flag `-fiel`; did you mean `-file`?");
+        assert_eq!(error("version -x"), "unknown flag `-x`; `wid version` takes no flags");
+    }
+}

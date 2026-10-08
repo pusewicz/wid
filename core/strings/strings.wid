@@ -8,6 +8,7 @@
 
 import "core:mem"
 
+# Trimming, searching, splitting, case, padding and parsing for strings.
 extend String
   # The string without leading and trailing whitespace.
   def strip -> String = self.lstrip.rstrip
@@ -253,6 +254,7 @@ extend String
   end
 end
 
+# Joining a slice of strings.
 extend []String
   # The strings joined with `sep` between them.
   def join(sep: String = "", allocator: Allocator = context.temp_allocator) -> String

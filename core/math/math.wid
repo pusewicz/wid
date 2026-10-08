@@ -1,42 +1,78 @@
 # core:math: constants, the C math library for `F32` and `F64`, interpolation
 # helpers, and 2D/3D vector and rectangle helpers for games.
 
+# π: half a turn, in radians.
 PI = 3.141592653589793
+# τ, or 2π: a full turn, in radians.
 TAU = 6.283185307179586
+# e, the base of the natural logarithm.
 E = 2.718281828459045
+# The square root of 2.
 SQRT2 = 1.4142135623730951
+# The natural logarithm of 2.
 LN2 = 0.6931471805599453
+# The natural logarithm of 10.
 LN10 = 2.302585092994046
+# The gap between 1 and the next `F32` above it.
 F32_EPSILON = 1.1920929e-07
+# The gap between 1 and the next `F64` above it.
 F64_EPSILON = 2.220446049250313e-16
 
-# Radians in one degree, and degrees in one radian.
+# Radians in one degree.
 RAD_PER_DEG = 0.017453292519943295
+# Degrees in one radian.
 DEG_PER_RAD = 57.29577951308232
 
+# The square root of `x`, for `F64` or `F32`.
 overload :sqrt, :sqrt_f64, :sqrt_f32
+# The cube root of `x`, for `F64` or `F32`.
 overload :cbrt, :cbrt_f64, :cbrt_f32
+# The sine of `x`, an angle in radians, for `F64` or `F32`.
 overload :sin, :sin_f64, :sin_f32
+# The cosine of `x`, an angle in radians, for `F64` or `F32`.
 overload :cos, :cos_f64, :cos_f32
+# The tangent of `x`, an angle in radians, for `F64` or `F32`.
 overload :tan, :tan_f64, :tan_f32
+# The arc sine of `x`, in radians from -π/2 to π/2, for `F64` or `F32`.
 overload :asin, :asin_f64, :asin_f32
+# The arc cosine of `x`, in radians from 0 to π, for `F64` or `F32`.
 overload :acos, :acos_f64, :acos_f32
+# The arc tangent of `x`, in radians from -π/2 to π/2, for `F64` or `F32`.
 overload :atan, :atan_f64, :atan_f32
+# The angle from the positive x axis to the point (`x`, `y`), in radians
+# from -π to π, for `F64` or `F32`.
 overload :atan2, :atan2_f64, :atan2_f32
+# The hyperbolic sine of `x`, for `F64` or `F32`.
 overload :sinh, :sinh_f64, :sinh_f32
+# The hyperbolic cosine of `x`, for `F64` or `F32`.
 overload :cosh, :cosh_f64, :cosh_f32
+# The hyperbolic tangent of `x`, for `F64` or `F32`.
 overload :tanh, :tanh_f64, :tanh_f32
+# e raised to the power `x`, for `F64` or `F32`.
 overload :exp, :exp_f64, :exp_f32
+# 2 raised to the power `x`, for `F64` or `F32`.
 overload :exp2, :exp2_f64, :exp2_f32
+# The natural logarithm of `x`, for `F64` or `F32`.
 overload :log, :log_f64, :log_f32
+# The base-2 logarithm of `x`, for `F64` or `F32`.
 overload :log2, :log2_f64, :log2_f32
+# The base-10 logarithm of `x`, for `F64` or `F32`.
 overload :log10, :log10_f64, :log10_f32
+# `x` raised to the power `y`, for `F64` or `F32`.
 overload :pow, :pow_f64, :pow_f32
+# `x` rounded down to a whole number, for `F64` or `F32`.
 overload :floor, :floor_f64, :floor_f32
+# `x` rounded up to a whole number, for `F64` or `F32`.
 overload :ceil, :ceil_f64, :ceil_f32
+# `x` rounded to the nearest whole number, halfway cases away from zero,
+# for `F64` or `F32`.
 overload :round, :round_f64, :round_f32
+# `x` rounded toward zero to a whole number, for `F64` or `F32`.
 overload :trunc, :trunc_f64, :trunc_f32
+# The length of the vector (`x`, `y`), without overflowing on the way,
+# for `F64` or `F32`.
 overload :hypot, :hypot_f64, :hypot_f32
+# The remainder of `x / y`, with the sign of `x`, for `F64` or `F32`.
 overload :fmod, :fmod_f64, :fmod_f32
 
 # `a` when `t` is 0, `b` when `t` is 1, and in between (or beyond) otherwise.
@@ -72,6 +108,7 @@ end
 # Returns true when `a` and `b` differ by at most `tolerance`.
 def close?(a: $T, b: T, tolerance: T) -> Bool = (a - b).abs <= tolerance
 
+# Tells NaN and the infinities from the other floats.
 extend F32, F64
   # Returns true for NaN, the only value not equal to itself.
   def nan? -> Bool = self != self
@@ -83,194 +120,248 @@ extend F32, F64
   def finite? -> Bool = !(self - self).nan?
 end
 
+# The square root of `x`; C's `sqrt` for `F64`.
 @[extern("sqrt")]
 def sqrt_f64(x: F64) -> F64
 end
 
+# The square root of `x`; C's `sqrtf` for `F32`.
 @[extern("sqrtf")]
 def sqrt_f32(x: F32) -> F32
 end
 
+# The cube root of `x`; C's `cbrt` for `F64`.
 @[extern("cbrt")]
 def cbrt_f64(x: F64) -> F64
 end
 
+# The cube root of `x`; C's `cbrtf` for `F32`.
 @[extern("cbrtf")]
 def cbrt_f32(x: F32) -> F32
 end
 
+# The sine of `x`, an angle in radians; C's `sin` for `F64`.
 @[extern("sin")]
 def sin_f64(x: F64) -> F64
 end
 
+# The sine of `x`, an angle in radians; C's `sinf` for `F32`.
 @[extern("sinf")]
 def sin_f32(x: F32) -> F32
 end
 
+# The cosine of `x`, an angle in radians; C's `cos` for `F64`.
 @[extern("cos")]
 def cos_f64(x: F64) -> F64
 end
 
+# The cosine of `x`, an angle in radians; C's `cosf` for `F32`.
 @[extern("cosf")]
 def cos_f32(x: F32) -> F32
 end
 
+# The tangent of `x`, an angle in radians; C's `tan` for `F64`.
 @[extern("tan")]
 def tan_f64(x: F64) -> F64
 end
 
+# The tangent of `x`, an angle in radians; C's `tanf` for `F32`.
 @[extern("tanf")]
 def tan_f32(x: F32) -> F32
 end
 
+# The arc sine of `x`, in radians from -π/2 to π/2; C's `asin` for `F64`.
 @[extern("asin")]
 def asin_f64(x: F64) -> F64
 end
 
+# The arc sine of `x`, in radians from -π/2 to π/2; C's `asinf` for `F32`.
 @[extern("asinf")]
 def asin_f32(x: F32) -> F32
 end
 
+# The arc cosine of `x`, in radians from 0 to π; C's `acos` for `F64`.
 @[extern("acos")]
 def acos_f64(x: F64) -> F64
 end
 
+# The arc cosine of `x`, in radians from 0 to π; C's `acosf` for `F32`.
 @[extern("acosf")]
 def acos_f32(x: F32) -> F32
 end
 
+# The arc tangent of `x`, in radians from -π/2 to π/2; C's `atan` for `F64`.
 @[extern("atan")]
 def atan_f64(x: F64) -> F64
 end
 
+# The arc tangent of `x`, in radians from -π/2 to π/2; C's `atanf` for `F32`.
 @[extern("atanf")]
 def atan_f32(x: F32) -> F32
 end
 
+# The angle from the positive x axis to the point (`x`, `y`), in radians
+# from -π to π; C's `atan2` for `F64`.
 @[extern("atan2")]
 def atan2_f64(y: F64, x: F64) -> F64
 end
 
+# The angle from the positive x axis to the point (`x`, `y`), in radians
+# from -π to π; C's `atan2f` for `F32`.
 @[extern("atan2f")]
 def atan2_f32(y: F32, x: F32) -> F32
 end
 
+# The hyperbolic sine of `x`; C's `sinh` for `F64`.
 @[extern("sinh")]
 def sinh_f64(x: F64) -> F64
 end
 
+# The hyperbolic sine of `x`; C's `sinhf` for `F32`.
 @[extern("sinhf")]
 def sinh_f32(x: F32) -> F32
 end
 
+# The hyperbolic cosine of `x`; C's `cosh` for `F64`.
 @[extern("cosh")]
 def cosh_f64(x: F64) -> F64
 end
 
+# The hyperbolic cosine of `x`; C's `coshf` for `F32`.
 @[extern("coshf")]
 def cosh_f32(x: F32) -> F32
 end
 
+# The hyperbolic tangent of `x`; C's `tanh` for `F64`.
 @[extern("tanh")]
 def tanh_f64(x: F64) -> F64
 end
 
+# The hyperbolic tangent of `x`; C's `tanhf` for `F32`.
 @[extern("tanhf")]
 def tanh_f32(x: F32) -> F32
 end
 
+# e raised to the power `x`; C's `exp` for `F64`.
 @[extern("exp")]
 def exp_f64(x: F64) -> F64
 end
 
+# e raised to the power `x`; C's `expf` for `F32`.
 @[extern("expf")]
 def exp_f32(x: F32) -> F32
 end
 
+# 2 raised to the power `x`; C's `exp2` for `F64`.
 @[extern("exp2")]
 def exp2_f64(x: F64) -> F64
 end
 
+# 2 raised to the power `x`; C's `exp2f` for `F32`.
 @[extern("exp2f")]
 def exp2_f32(x: F32) -> F32
 end
 
+# The natural logarithm of `x`; C's `log` for `F64`.
 @[extern("log")]
 def log_f64(x: F64) -> F64
 end
 
+# The natural logarithm of `x`; C's `logf` for `F32`.
 @[extern("logf")]
 def log_f32(x: F32) -> F32
 end
 
+# The base-2 logarithm of `x`; C's `log2` for `F64`.
 @[extern("log2")]
 def log2_f64(x: F64) -> F64
 end
 
+# The base-2 logarithm of `x`; C's `log2f` for `F32`.
 @[extern("log2f")]
 def log2_f32(x: F32) -> F32
 end
 
+# The base-10 logarithm of `x`; C's `log10` for `F64`.
 @[extern("log10")]
 def log10_f64(x: F64) -> F64
 end
 
+# The base-10 logarithm of `x`; C's `log10f` for `F32`.
 @[extern("log10f")]
 def log10_f32(x: F32) -> F32
 end
 
+# `x` raised to the power `y`; C's `pow` for `F64`.
 @[extern("pow")]
 def pow_f64(x: F64, y: F64) -> F64
 end
 
+# `x` raised to the power `y`; C's `powf` for `F32`.
 @[extern("powf")]
 def pow_f32(x: F32, y: F32) -> F32
 end
 
+# `x` rounded down to a whole number; C's `floor` for `F64`.
 @[extern("floor")]
 def floor_f64(x: F64) -> F64
 end
 
+# `x` rounded down to a whole number; C's `floorf` for `F32`.
 @[extern("floorf")]
 def floor_f32(x: F32) -> F32
 end
 
+# `x` rounded up to a whole number; C's `ceil` for `F64`.
 @[extern("ceil")]
 def ceil_f64(x: F64) -> F64
 end
 
+# `x` rounded up to a whole number; C's `ceilf` for `F32`.
 @[extern("ceilf")]
 def ceil_f32(x: F32) -> F32
 end
 
+# `x` rounded to the nearest whole number, halfway cases away from zero;
+# C's `round` for `F64`.
 @[extern("round")]
 def round_f64(x: F64) -> F64
 end
 
+# `x` rounded to the nearest whole number, halfway cases away from zero;
+# C's `roundf` for `F32`.
 @[extern("roundf")]
 def round_f32(x: F32) -> F32
 end
 
+# `x` rounded toward zero to a whole number; C's `trunc` for `F64`.
 @[extern("trunc")]
 def trunc_f64(x: F64) -> F64
 end
 
+# `x` rounded toward zero to a whole number; C's `truncf` for `F32`.
 @[extern("truncf")]
 def trunc_f32(x: F32) -> F32
 end
 
+# The length of the vector (`x`, `y`), without overflowing on the way;
+# C's `hypot` for `F64`.
 @[extern("hypot")]
 def hypot_f64(x: F64, y: F64) -> F64
 end
 
+# The length of the vector (`x`, `y`), without overflowing on the way;
+# C's `hypotf` for `F32`.
 @[extern("hypotf")]
 def hypot_f32(x: F32, y: F32) -> F32
 end
 
+# The remainder of `x / y`, with the sign of `x`; C's `fmod` for `F64`.
 @[extern("fmod")]
 def fmod_f64(x: F64, y: F64) -> F64
 end
 
+# The remainder of `x / y`, with the sign of `x`; C's `fmodf` for `F32`.
 @[extern("fmodf")]
 def fmod_f32(x: F32, y: F32) -> F32
 end

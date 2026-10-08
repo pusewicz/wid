@@ -12,4 +12,4 @@ help: document private declarations too
     | wid doc shapes secret_helper -private
     = see `wid explain E0604`
 
-error: could not compile due to 1 error
+error: could not write the documentation due to 1 error

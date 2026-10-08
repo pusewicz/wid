@@ -865,13 +865,22 @@ end
   libraries, through pkg-config) and the vendored `stb/image`,
   `stb/image_write`, `stb/truetype`, `stb/rect_pack` and `miniaudio`. `core:` holds
   `builtin` (the prelude), `mem`, `fmt`, `strings`, `os`, `math`, `c` and
-  `testing`.
+  `testing`. Each opens the file named after it with its package doc, and
+  documents every public declaration, so `wid doc core:<pkg>` has a summary
+  for each.
 - The CLI follows Odin. Commands: `wid run <dir> [-- args]`, `build`, `check`,
   `test`, `doc`, `fmt`, `explain`, `cimport`, `query`, `lsp` and `version`. Flags:
   `-out:`, `-o:none|minimal|size|speed|aggressive`, `-debug`, `-vet`,
   `-define:NAME=val`, `-collection:name=path`, `-target:os_arch`, `-file`,
   `-sanitize:address`, `-filter:` (for `test`), `-json` and `-private` (for
   `doc`), `-in:` (for `query`) and `-json-errors`.
+- `-file` makes the target a single `.wid` file instead of a package
+  directory, so it needs one: `wid check main.wid -file` (for `doc` and
+  `query`, a collection path can name it: `core:fmt/fmt.wid`). Naming no
+  file, a missing file or a directory is an error (E0206; E0601 for `doc`
+  and `query`) that points into the command line, with the only `.wid`
+  file of the directory or a similar one as a fix, and dropping `-file` as
+  the fix for a package directory.
 - **Docs.** `wid doc [package] [symbol]` shows documentation made from doc
   comments: the `# ` comment lines directly above a declaration (above its
   attributes too), with no blank line between; an enum member's sit above
@@ -1010,6 +1019,12 @@ help: unwrap it and handle the nil case
   close "did you mean" candidates the shorter one wins, then the one the name
   would resolve to first (a variable, a method of `self`, a package name, a
   field), then the first alphabetically.
+- The diagnostics end with a summary line that says what failed, in the
+  command's words: `error: could not compile due to 2 errors` for `build`,
+  `run`, `check` and `test`, `could not import the header due to …` for
+  `cimport`, and for `wid doc` `could not write the documentation due to …`,
+  or `the documentation may be incomplete due to …` when it still prints a
+  page. With only warnings it is `warning: 2 warnings emitted`.
 - `-json-errors` produces the same diagnostics with structured fix-its.
   `wid explain <code>` gives the long-form explanation with examples.
 - `wid query` answers questions about a package in JSON: `outline`,

@@ -42,7 +42,9 @@ def align_forward(address: UInt, align: Int) -> UInt
   (address + a - 1) & ~(a - 1)
 end
 
-# Kilobytes, megabytes and gigabytes, for sizing arenas: `4 * mem.MEGABYTE`.
+# Bytes in a kilobyte, for sizing arenas and buffers: `64 * mem.KILOBYTE`.
 KILOBYTE = 1024
+# Bytes in a megabyte, for sizing arenas and buffers: `4 * mem.MEGABYTE`.
 MEGABYTE = 1024 * 1024
+# Bytes in a gigabyte, for sizing arenas and buffers: `2 * mem.GIGABYTE`.
 GIGABYTE = 1024 * 1024 * 1024

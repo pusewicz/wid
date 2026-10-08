@@ -1,11 +1,14 @@
 package strings // import "core:strings"
 
 struct Builder
-    struct, defined at core/strings/builder.wid:3
+    A growable byte buffer for building strings piece by piece.
+
+    struct, defined at core/strings/builder.wid:4
 
 FIELDS
 
 buf: [dynamic]U8
+    The bytes written so far.
 
 METHODS
 
