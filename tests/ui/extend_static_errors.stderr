@@ -1,0 +1,61 @@
+error[E0204]: `Ball` has no field or method `bigg`
+  --> tests/ui/extend_static_errors.wid:19:10
+   |
+19 |   p Ball.bigg
+   |          ^^^^ not found on `Ball`
+help: did you mean `big`?
+   |   p Ball.big
+   = see `wid explain E0204`
+
+error[E0204]: `Int` has no field or method `answr`
+  --> tests/ui/extend_static_errors.wid:20:9
+   |
+20 |   p Int.answr
+   |         ^^^^^ not found on `Int`
+help: did you mean `answer`?
+   |   p Int.answer
+   = see `wid explain E0204`
+
+error[E0205]: `helper` is private to `Ball`
+  --> tests/ui/extend_static_errors.wid:21:10
+   |
+ 8 |   private def self.helper -> Int = 1
+   |                    ------ declared `private` here
+...
+21 |   p Ball.helper
+   |          ^^^^^^ called from outside `Ball`
+help: call a public method instead, or remove `private` from the declaration
+   = see `wid explain E0205`
+
+error[E0316]: `big` is defined for `Ball` by more than one `extend`
+  --> tests/ui/extend_static_errors.wid:22:10
+   |
+ 9 |   def self.big -> Ball = Ball.new(9)
+   |            --- one definition
+...
+14 |   def self.big -> Ball = Ball.new(1)
+   |            --- one definition
+...
+22 |   p Ball.big
+   |          ^^^ ambiguous method
+   = note: `extend` blocks do not override each other, even when one is more specific
+help: remove or rename one of the definitions
+   = see `wid explain E0316`
+
+error[E0204]: `grow` is an instance method; call it on a value of type `Ball`
+  --> tests/ui/extend_static_errors.wid:23:10
+   |
+23 |   p Ball.grow
+   |          ^^^^ needs a receiver
+help: to make it callable as `Ball.grow`, declare it `def self.grow`
+   = see `wid explain E0204`
+
+error[E0204]: `abs` is an instance method; call it on a value of type `Int`
+  --> tests/ui/extend_static_errors.wid:24:9
+   |
+24 |   p Int.abs
+   |         ^^^ needs a receiver
+help: call it on a value, like `x.abs`
+   = see `wid explain E0204`
+
+error: could not compile due to 6 errors

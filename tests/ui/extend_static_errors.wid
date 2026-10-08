@@ -1,0 +1,25 @@
+# `Type.name` reaches the `def self.` functions of `extend`s: misspelled,
+# private, defined by two `extend`s, or an instance method instead.
+struct Ball
+  r: Int
+end
+
+extend Ball
+  private def self.helper -> Int = 1
+  def self.big -> Ball = Ball.new(9)
+  def grow -> Ball = Ball.new(@r + 1)
+end
+
+extend Ball, Int
+  def self.big -> Ball = Ball.new(1)
+  def self.answer -> Int = 42
+end
+
+def main
+  p Ball.bigg
+  p Int.answr
+  p Ball.helper
+  p Ball.big
+  p Ball.grow
+  p Int.abs
+end

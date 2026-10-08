@@ -1640,6 +1640,16 @@ the language server.
   operator it rewrites too. The definition is kept, so its uses add no
   error. E0307's help for a missing comparison suggests
   `def <=>(other: T) -> Int`, and for `!=` `def ==`.
+- `def self.` in an `extend` (#135, SPEC "Smaller syntax rules"): `T.name`
+  looks for one after the type's own and included type-level functions
+  (`find_static_extension`), with the `extend`'s bindings, so it works for
+  structs, enums, unions, builtin types, aliases (`Vec2.zero` with
+  `Vec2 = [2]F32`), and generically over a pattern (`[]Int.none` from
+  `extend []$T`, `Pool(Ball, 4).capacity`). An enum's own member wins over
+  one. Two `extend`s that both add it are E0316 at the call, as for
+  instance methods; `private` ones are E0205 outside the type; a misspelled
+  one is suggested; and `Type.name` for an extension's instance method says
+  it is one, as for the type's own (it was "no field or method").
 
 ## Next
 
@@ -1780,7 +1790,6 @@ only on `main` and can run in parallel with the macro stack.
 7. **SPEC conformance audit: done** (at e73c919). Every finding was
    reproduced on main and filed as a GitHub issue, so the open issues are
    now its queue. In order of value:
-   - `def self.` in an `extend` (#135);
    - gcc-15 `-Werror` at `-o:speed` and `-o:aggressive`, and suite
      coverage of `-o:` (#130);
    - debug builds: `#line` and `-debug` at `-O0` (#141);

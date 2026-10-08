@@ -1,0 +1,11 @@
+Ball(r: 9)
+Ball(r: 3)
+Ball(r: 8)
+42
+42.0
+[0.0, 0.0]
+:north
+Ball(r: 1)
+[]
+["one"]
+4

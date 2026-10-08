@@ -103,7 +103,13 @@ end
   none. Inside a method, `@name` means `self.name`, and `@name(args)` calls
   the proc that field holds; methods are called by name.
 - **Smaller syntax rules:**
-  - `def self.name` declares a type-level function (`Vec2.zero`).
+  - `def self.name` declares a type-level function (`Vec2.zero`). In an
+    `extend` it is a type-level function of each type the `extend` applies
+    to, builtin types and aliases included (`extend Vec2` with
+    `def self.zero -> Vec2 = [0.0, 0.0]` gives `Vec2.zero`); in an
+    `extend` over a pattern it is generic over the matched type, like the
+    instance methods (`extend []$T` with `def self.none -> []T = {}` gives
+    `[]Int.none`).
   - `def -` with no parameters is unary minus.
   - `private def …` hides a declaration outside its package, or outside its
     type for methods: a private method can only be called from methods of the
@@ -424,9 +430,10 @@ end
   Module methods are generic over `Self`, checked for each type that includes
   them, and `@field` reads that type's fields. A module that nothing includes
   is never checked.
-- `extend T1, T2 … end` adds methods to existing types. That includes builtin
-  types and patterns such as `[]$T`. Extensions apply program-wide, and two
-  extensions that define the same method for a type are an error. The
+- `extend T1, T2 … end` adds methods, and `def self.` type-level functions,
+  to existing types. That includes builtin types and patterns such as
+  `[]$T`. Extensions apply program-wide, and two extensions that define the
+  same method for a type are an error. The
   methods of an `extend` of concrete types (`extend P`, `extend Int, F64`)
   are checked for each type it lists, whether or not anything calls them,
   like a struct's own; those of an `extend` over a pattern are generic,

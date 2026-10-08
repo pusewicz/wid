@@ -1,0 +1,74 @@
+# A `def self.` in an `extend` is a type-level function of each type the
+# `extend` applies to: a struct, an enum, a union, a builtin type, an alias
+# of one, or the types a pattern matches (SPEC "Smaller syntax rules").
+
+Vec2 = [2]F32
+
+struct Ball
+  r: Int
+end
+
+enum Dir
+  north
+  south
+end
+
+union Shape = Ball | Dir
+
+struct Pool($T, $N: Int)
+  items: [N]T
+end
+
+extend Ball
+  def self.big -> Ball = Ball.new(9)
+  def self.sized(r: Int) -> Self = Self.new(r)
+  def self.twice(r: Int) -> Ball = sized(r * 2)
+end
+
+extend Int, F64
+  def self.answer -> Self = 42
+end
+
+extend Vec2
+  def self.zero -> Vec2 = [0.0, 0.0]
+end
+
+extend Dir
+  def self.first -> Dir = :north
+end
+
+extend Shape
+  def self.unit -> Shape = Ball.new(1)
+end
+
+extend []$T
+  def self.none -> []T = {}
+end
+
+extend [dynamic]$T
+  def self.of(x: T) -> [dynamic]T
+    xs = [dynamic]T.new
+    xs << x
+    xs
+  end
+end
+
+extend Pool($T, $N)
+  def self.capacity -> Int = N
+end
+
+def main
+  p Ball.big
+  p Ball.sized(3)
+  p Ball.twice(4)
+  p Int.answer
+  p F64.answer
+  p Vec2.zero
+  p Dir.first
+  p Shape.unit
+  p []Int.none
+  xs = [dynamic]String.of("one")
+  defer free(xs)
+  p xs
+  p Pool(Ball, 4).capacity
+end

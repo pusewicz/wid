@@ -661,6 +661,7 @@ impl<'a> Checker<'a> {
         if let TyKind::Enum(_) = kind
             && args.is_empty()
             && self.find_method(ty, name.name).is_none()
+            && (enum_has(self) || !self.has_static_extension(ty, name.name))
         {
             if !enum_has(self) && self.members_incomplete(ty) {
                 return ir::Expr::new(ExprKind::Zero, self.types.unknown());
@@ -680,19 +681,7 @@ impl<'a> Checker<'a> {
                     return self.call_fn(decl, None, args, block, name.span, span);
                 }
                 DeclKind::Fn(_) => {
-                    let shown = self.types.display(ty);
-                    self.report(
-                        Diagnostic::error(
-                            codes::NO_SUCH_MEMBER,
-                            format!("`{}` is an instance method; call it on a value of type `{shown}`", name.as_str()),
-                        )
-                        .primary(name.span, "needs a receiver")
-                        .help(format!(
-                            "to make it callable as `{shown}.{}`, declare it `def self.{}`",
-                            name.as_str(),
-                            name.as_str()
-                        )),
-                    );
+                    self.instance_method_on_type(ty, name, decl);
                     return ir::Expr::new(ExprKind::Zero, self.types.unknown());
                 }
                 DeclKind::Const(_) => return self.const_ref_decl(decl, span, None),
@@ -707,12 +696,46 @@ impl<'a> Checker<'a> {
             self.owner_bindings = vec![(Name::new("Self"), ty)];
             return self.call_fn(decl, None, args, block, name.span, span);
         }
+        // A `def self.` of an `extend` that applies to the type, with `Self`
+        // (and a pattern's `$T`) bound to it, like its instance methods.
+        if let Some((decl, bindings)) = self.find_static_extension(ty, name) {
+            self.check_private_method(decl, ty, name.span);
+            self.owner_bindings = bindings;
+            return self.call_fn(decl, None, args, block, name.span, span);
+        }
+        if let Some(decl) = self.extension_member(ty, name.name)
+            && matches!(self.decls[decl.0 as usize].kind, DeclKind::Fn(f) if !f.is_static)
+        {
+            self.instance_method_on_type(ty, name, decl);
+            return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+        }
         if matches!(kind, TyKind::Unknown) {
             return ir::Expr::new(ExprKind::Zero, ty);
         }
         let _ = recv_span;
         self.no_member(ty, name.name, name.span, Access::Type);
         ir::Expr::new(ExprKind::Zero, self.types.unknown())
+    }
+
+    /// Reports `Type.name` for an instance method `decl` of the type: its
+    /// own, or one an `extend` adds.
+    fn instance_method_on_type(&mut self, ty: TyId, name: Ident, decl: DeclId) {
+        let shown = self.types.display(ty);
+        let method = name.as_str();
+        // Only a method of this package can be changed into a `def self.`.
+        let help = if self.decls[decl.0 as usize].loc.pkg == self.loc_at(name.span).pkg {
+            format!("to make it callable as `{shown}.{method}`, declare it `def self.{method}`")
+        } else {
+            format!("call it on a value, like `x.{method}`")
+        };
+        self.report(
+            Diagnostic::error(
+                codes::NO_SUCH_MEMBER,
+                format!("`{method}` is an instance method; call it on a value of type `{shown}`"),
+            )
+            .primary(name.span, "needs a receiver")
+            .help(help),
+        );
     }
 
     /// Finds a method or member constant declared on a type.
@@ -1267,6 +1290,10 @@ impl<'a> Checker<'a> {
                 None => Vec::new(),
             },
         };
+        // `Type.name` also reaches the `def self.` functions of `extend`s.
+        if matches!(access, Access::Type) {
+            methods.extend(self.static_extension_names(ty));
+        }
         methods.sort_unstable();
         methods.dedup();
         methods.retain(|m| !candidates.contains(m));

@@ -847,6 +847,36 @@ impl<'a> Checker<'a> {
         found.into_iter().next()
     }
 
+    /// The type-level function `name` (a `def self.`) that an `extend`
+    /// block adds to `ty`, with the bindings it applies under. Two blocks
+    /// that both add it are reported, as for instance methods.
+    pub fn find_static_extension(&mut self, ty: TyId, name: ast::Ident) -> Option<(DeclId, Vec<(Name, TyId)>)> {
+        let (decl, bindings) = self.find_extension(ty, name.name, name.span)?;
+        matches!(self.decls[decl.0 as usize].kind, DeclKind::Fn(f) if f.is_static).then_some((decl, bindings))
+    }
+
+    /// Whether an `extend` block adds the type-level function `name` to
+    /// `ty`, without reporting two that both add it.
+    pub fn has_static_extension(&mut self, ty: TyId, name: Name) -> bool {
+        self.extension_member(ty, name)
+            .is_some_and(|decl| matches!(self.decls[decl.0 as usize].kind, DeclKind::Fn(f) if f.is_static))
+    }
+
+    /// The names of the type-level functions `extend` blocks add to `ty`,
+    /// for suggestions.
+    pub fn static_extension_names(&mut self, ty: TyId) -> Vec<&'static str> {
+        let mut names = Vec::new();
+        for ext in self.extends_of(ty) {
+            let Some(members) = self.members.get(&ext) else { continue };
+            for (name, decl) in members {
+                if matches!(self.decls[decl.0 as usize].kind, DeclKind::Fn(f) if f.is_static) {
+                    names.push(name.as_str());
+                }
+            }
+        }
+        names
+    }
+
     /// The `extend` blocks whose methods `receiver` has.
     pub fn extends_of(&mut self, receiver: TyId) -> Vec<DeclId> {
         if matches!(self.types.kind(receiver), TyKind::Unknown) {
