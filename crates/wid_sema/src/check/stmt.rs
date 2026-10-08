@@ -799,10 +799,7 @@ impl<'a> Checker<'a> {
                         self.report(
                             Diagnostic::error(
                                 codes::TYPE_MISMATCH,
-                                format!(
-                                    "`when` on {} `{shown}` takes one of its variant types",
-                                    wid_diagnostics::a_or_an(&shown)
-                                ),
+                                format!("`when` on `{shown}` takes one of its variant types"),
                             )
                             .primary(pattern.span, "not a variant of this union"),
                         );

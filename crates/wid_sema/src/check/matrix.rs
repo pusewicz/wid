@@ -112,19 +112,16 @@ impl Checker<'_> {
         let [row, col] = args else {
             let shown = self.types.display(m.ty);
             self.report(
-                Diagnostic::error(
-                    codes::ARG_COUNT,
-                    format!("{} `{shown}` is indexed by row and column", wid_diagnostics::a_or_an(&shown)),
-                )
-                .primary(
-                    span,
-                    if args.len() == 1 {
-                        "found one index".to_string()
-                    } else {
-                        format!("found {} indices", args.len())
-                    },
-                )
-                .help("write `m[row, col]`; `m.row(i)` and `m.column(j)` copy out a whole row or column"),
+                Diagnostic::error(codes::ARG_COUNT, format!("`{shown}` is indexed by row and column"))
+                    .primary(
+                        span,
+                        if args.len() == 1 {
+                            "found one index".to_string()
+                        } else {
+                            format!("found {} indices", args.len())
+                        },
+                    )
+                    .help("write `m[row, col]`; `m.row(i)` and `m.column(j)` copy out a whole row or column"),
             );
             return ir::Expr::new(ExprKind::Zero, self.types.unknown());
         };

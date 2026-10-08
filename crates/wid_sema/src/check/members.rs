@@ -92,7 +92,14 @@ impl<'a> Checker<'a> {
         match self.field_index(base.ty, name) {
             Some((index, ty)) => ir::Expr::new(ExprKind::Field { base: Box::new(base), index }, ty),
             None => {
-                if self.using_lookup(base.ty, name, span).is_some() {
+                let hits = self.using_hits(base.ty, name);
+                if let [(_, _, first), _, ..] = hits[..] {
+                    let at = format!("@{first}.{name}");
+                    let fix = super::overloads::UsingFix { like: at.clone(), span, replacement: at };
+                    self.ambiguous_using(base.ty, name, span, &hits, fix);
+                    return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+                }
+                if !hits.is_empty() {
                     let mut inner = base;
                     while self.field_index(inner.ty, name).is_none()
                         && let Some((index, using_ty)) = self.using_lookup(inner.ty, name, span)
@@ -451,11 +458,7 @@ impl<'a> Checker<'a> {
                     self.report(
                         Diagnostic::error(
                             codes::NO_SUCH_MEMBER,
-                            format!(
-                                "`{}` is an instance method; call it on {} `{shown}` value",
-                                name.as_str(),
-                                wid_diagnostics::a_or_an(&shown)
-                            ),
+                            format!("`{}` is an instance method; call it on a value of type `{shown}`", name.as_str()),
                         )
                         .primary(name.span, "needs a receiver")
                         .help(format!(
@@ -654,7 +657,7 @@ impl<'a> Checker<'a> {
             let call_span = Span { start: name.span.end, ..span };
             let mut diag =
                 Diagnostic::error(codes::NOT_CALLABLE, format!("`{}` is a field, not a method", name.as_str()))
-                    .primary(name.span, format!("this field holds {} `{shown}`", wid_diagnostics::a_or_an(&shown)));
+                    .primary(name.span, format!("this field's type is `{shown}`"));
             if args.is_some_and(|a| a.is_empty()) && block.is_none() && call_span.end > call_span.start {
                 diag = diag.suggest_replace(
                     "read the field without `()`",
@@ -912,12 +915,11 @@ impl<'a> Checker<'a> {
         if source_nilable && to_ptr == Some(false) {
             let (fs, ts) = (self.types.display(v.ty), self.types.display(target));
             self.report(
-                Diagnostic::error(
-                    codes::INVALID_CONVERSION,
-                    format!("{} `{fs}` may be nil, but `{ts}` cannot be", wid_diagnostics::a_or_an(&fs)),
-                )
-                .primary(span, format!("converting to `{ts}` would hide a nil pointer"))
-                .help(format!("convert to `{ts}?` and unwrap it, for example with `guard p = x.to({ts}?) else … end`")),
+                Diagnostic::error(codes::INVALID_CONVERSION, format!("`{fs}` may be nil, but `{ts}` cannot be"))
+                    .primary(span, format!("converting to `{ts}` would hide a nil pointer"))
+                    .help(format!(
+                        "convert to `{ts}?` and unwrap it, for example with `guard p = x.to({ts}?) else … end`"
+                    )),
             );
             return Some(ir::Expr::new(ExprKind::Zero, target));
         }

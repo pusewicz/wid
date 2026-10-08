@@ -53,6 +53,17 @@ enum SelfMember {
     Method,
 }
 
+/// A field of `self` called like a method without `@`: the whole call,
+/// whether it passes arguments or a block, and whether the field holds a
+/// proc.
+#[derive(Clone, Copy)]
+struct FieldCall {
+    span: Span,
+    args: bool,
+    block: bool,
+    is_proc: bool,
+}
+
 impl<'a> Checker<'a> {
     /// Checks `e` against `expected` and coerces the result to it.
     pub fn expr_coerced(&mut self, e: &ast::Expr, ty: TyId) -> ir::Expr {
@@ -243,8 +254,7 @@ impl<'a> Checker<'a> {
                 Diagnostic::error(codes::TYPE_MISMATCH, format!("expected `{want_s}`, but this has no value"))
                     .primary(span, "this returns nothing")
                     .help(format!(
-                        "pass {} `{want_s}` here, or give the method a return type with `-> {want_s}`",
-                        wid_diagnostics::a_or_an(&want_s)
+                        "pass a value of type `{want_s}` here, or give the method a return type with `-> {want_s}`"
                     )),
             );
             return;
@@ -451,9 +461,12 @@ impl<'a> Checker<'a> {
             var.read = true;
         }
         if !self.declared_by_failed_macro(true, true) {
-            match self.self_field_owner(name) {
-                Some(owner) => self.undefined_field_name(name, span, owner),
-                None => self.undefined(name, span, candidates, "name"),
+            match self.self_field(name) {
+                Some((owner, _)) => self.undefined_field_name(name, span, owner, None),
+                None => {
+                    let fields = self.self_field_names();
+                    self.undefined_or_field(name, span, candidates, &fields, "name");
+                }
             }
         }
         ir::Expr::new(ExprKind::Zero, self.types.unknown())
@@ -461,14 +474,37 @@ impl<'a> Checker<'a> {
 
     /// The struct declaring `name` when it is a field of `self` in an
     /// instance method, its own or promoted by `using`, which a bare name
-    /// doesn't read.
-    fn self_field_owner(&mut self, name: Name) -> Option<TyId> {
+    /// doesn't read, and whether the field holds a proc.
+    fn self_field(&mut self, name: Name) -> Option<(TyId, bool)> {
         let self_ty = self.frame().self_ty?;
         self.frame().self_local?;
         match self.self_member(self_ty, name, &mut Vec::new())? {
-            SelfMember::Field { owner, .. } => Some(owner),
+            SelfMember::Field { owner, is_proc } => Some((owner, is_proc)),
             SelfMember::Method => None,
         }
+    }
+
+    /// The names of the fields that `@name` reads in an instance method:
+    /// the fields of `self`, then those each `using` field promotes.
+    fn self_field_names(&self) -> Vec<&'static str> {
+        let (Some(self_ty), Some(_)) = (self.frame().self_ty, self.frame().self_local) else { return Vec::new() };
+        let (mut names, mut types) = (Vec::new(), vec![self_ty]);
+        let mut next = 0;
+        while let Some(&ty) = types.get(next) {
+            next += 1;
+            let TyKind::Struct(id) = *self.types.kind(ty) else { continue };
+            for f in &self.types.struct_info(id).fields {
+                names.push(f.name.as_str());
+                let used = match *self.types.kind(f.ty) {
+                    TyKind::Pointer(t) => t,
+                    _ => f.ty,
+                };
+                if f.using && !types.contains(&used) {
+                    types.push(used);
+                }
+            }
+        }
+        names
     }
 
     /// Finds what `name` reaches in `ty`, as `self.name` does: the struct's
@@ -494,8 +530,9 @@ impl<'a> Checker<'a> {
         used.into_iter().find_map(|t| self.self_member(t, name, visited))
     }
 
-    /// Reports a bare read of a field of `self`, which needs `@`.
-    fn undefined_field_name(&mut self, name: Name, span: Span, owner: TyId) {
+    /// Reports a field of `self` named without `@`, which needs it: read as
+    /// a bare name (`call` is `None`) or called like a method.
+    fn undefined_field_name(&mut self, name: Name, span: Span, owner: TyId, call: Option<FieldCall>) {
         let shown = self.types.display(owner);
         let self_ty = self.frame().self_ty;
         let note = match self_ty {
@@ -505,17 +542,56 @@ impl<'a> Checker<'a> {
             }
             _ => format!("`{name}` is a field of `{shown}`"),
         };
-        self.report(
-            Diagnostic::error(codes::UNDEFINED_NAME, format!("undefined name `{name}`"))
-                .primary(span, "not found in this scope")
-                .note(format!("{note}; a bare name in a method is a variable or a method call, never a field"))
-                .suggest_replace(
-                    format!("read the field with `@{name}`, which means `self.{name}`"),
-                    span,
-                    format!("@{name}"),
-                    Applicability::MachineApplicable,
-                ),
-        );
+        let what = if call.is_some() { "method" } else { "name" };
+        let diag = Diagnostic::error(codes::UNDEFINED_NAME, format!("undefined {what} `{name}`"))
+            .primary(span, "not found in this scope")
+            .note(format!("{note}; a bare name in a method is a variable or a method call, never a field"));
+        let read = format!("read the field with `@{name}`, which means `self.{name}`");
+        let diag = match call {
+            None => diag.suggest_replace(read, span, format!("@{name}"), Applicability::MachineApplicable),
+            Some(FieldCall { is_proc: true, block: false, .. }) => diag.suggest_replace(
+                format!("call the proc the field holds with `@{name}.call`"),
+                span,
+                format!("@{name}.call"),
+                Applicability::MachineApplicable,
+            ),
+            Some(FieldCall { is_proc: true, .. }) => {
+                diag.help(format!("call the proc the field holds with `@{name}.call(…)`, without a block"))
+            }
+            // `hp()` reads the field: `@hp`.
+            Some(FieldCall { span, args: false, block: false, .. }) => {
+                diag.suggest_replace(read, span, format!("@{name}"), Applicability::MachineApplicable)
+            }
+            Some(_) => diag.help(format!("{read}, without arguments or a block")),
+        };
+        self.report(diag);
+    }
+
+    /// Reports a name without a receiver that several `using` fields of
+    /// `self` provide (`hits`), with the fix to reach it through the first
+    /// with `@`, and checks the call's arguments.
+    fn ambiguous_self_member(
+        &mut self,
+        name: Name,
+        hits: &[(u32, TyId, Name)],
+        args: &[ast::Arg],
+        block: bool,
+        name_span: Span,
+        span: Span,
+    ) {
+        let Some(self_ty) = self.frame().self_ty else { return };
+        let Some(&(_, first_ty, first)) = hits.first() else { return };
+        let at = format!("@{first}.{name}");
+        // A field called with nothing, `hp()`, is read as `@a.hp`; a method
+        // keeps its arguments, `@a.heal(1)`.
+        let reads =
+            matches!(self.self_member(first_ty, name, &mut Vec::new()), Some(SelfMember::Field { is_proc: false, .. }));
+        let fix_span = if reads && args.is_empty() && !block { span } else { name_span };
+        let fix = super::overloads::UsingFix { like: at.clone(), span: fix_span, replacement: at };
+        self.ambiguous_using(self_ty, name, name_span, hits, fix);
+        for a in args {
+            self.expr(&a.value, None);
+        }
     }
 
     /// Calls a method of the current type without an explicit receiver,
@@ -538,18 +614,22 @@ impl<'a> Checker<'a> {
                 Some((d, b)) => (d, b),
                 None => {
                     self.frame().self_local?;
-                    let recv = self.self_place(name_span, "this");
-                    let ident = ast::Ident { name, span: name_span };
-                    // A bare read of a promoted field isn't a call: `ident`
-                    // reports it with the fix to write `@name`.
-                    let bare = span == name_span && args.is_empty() && block.is_none();
-                    if bare
-                        && let Some(SelfMember::Field { is_proc: false, .. }) =
-                            self.self_member(self_ty, name, &mut Vec::new())
-                    {
+                    let member = self.self_member(self_ty, name, &mut Vec::new());
+                    // A bare name never reads a field, its own or promoted:
+                    // `ident` and `call` report it with the fix to write
+                    // `@name`. A promoted proc field can be called.
+                    let own_field = matches!(member, Some(SelfMember::Field { owner, .. }) if owner == self_ty);
+                    let hits = if own_field { Vec::new() } else { self.using_hits(self_ty, name) };
+                    if hits.len() > 1 {
+                        self.ambiguous_self_member(name, &hits, args, block.is_some(), name_span, span);
+                        return Some(ir::Expr::new(ExprKind::Zero, self.types.unknown()));
+                    }
+                    if own_field || matches!(member, Some(SelfMember::Field { is_proc: false, .. })) {
                         return None;
                     }
-                    if self.using_lookup(self_ty, name, name_span).is_some() {
+                    let recv = self.self_place(name_span, "this");
+                    let ident = ast::Ident { name, span: name_span };
+                    if !hits.is_empty() {
                         return Some(self.value_member(recv, name_span, ident, Some(args), block, span, None));
                     }
                     let v = self.container_method(&recv, ident, args, span);
@@ -1364,6 +1444,17 @@ impl<'a> Checker<'a> {
                         self.reject_block(b, &format!("`{}` does not take a block", name.as_str()));
                     }
                     return self.builtin_call(name.name, &call.args, span, expected);
+                }
+                if let Some((owner, is_proc)) = self.self_field(name.name) {
+                    if !self.declared_by_failed_macro(false, true) {
+                        let (args, block) = (!call.args.is_empty(), block.is_some());
+                        let field_call = FieldCall { span, args, block, is_proc };
+                        self.undefined_field_name(name.name, name.span, owner, Some(field_call));
+                    }
+                    for arg in &call.args {
+                        self.expr(&arg.value, None);
+                    }
+                    return ir::Expr::new(ExprKind::Zero, self.types.unknown());
                 }
                 let mut candidates = self.package_names(loc.pkg);
                 candidates.extend(BUILTINS.iter().copied());

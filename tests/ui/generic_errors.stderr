@@ -2,7 +2,7 @@ error[E0312]: `Node` contains itself
  --> tests/ui/generic_errors.wid:7:3
   |
 7 |   next: Node(T)
-  |   ^^^^ this field stores a `Node(Int)` by value
+  |   ^^^^ this field's `Node(Int)` is stored by value
   = note: a type cannot contain a full copy of itself, so it would have no finite size
 help: store a pointer instead
   |   next: ^Node(T)

@@ -135,10 +135,7 @@ impl<'a> Checker<'a> {
                 let field_ty = self.types.display(f.ty);
                 self.report(
                     Diagnostic::error(codes::RECURSIVE_TYPE, format!("`{name}` contains itself"))
-                        .primary(
-                            f.span,
-                            format!("this field stores {} `{field_ty}` by value", wid_diagnostics::a_or_an(&field_ty)),
-                        )
+                        .primary(f.span, format!("this field's `{field_ty}` is stored by value"))
                         .note(format!(
                             "`{culprit_name}` would need to contain a full copy of itself, so it has no finite size"
                         ))

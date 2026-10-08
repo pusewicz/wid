@@ -1,0 +1,18 @@
+struct Stats
+  mana: Int = 5
+end
+
+struct Player
+  using stats: Stats
+  health: Int = 100
+
+  def heal -> Int = helth + 1
+  def cast -> Int = mnaa - 1
+  def shout(volume: Int) -> Int = volum + healht
+  def self.make -> Int = helth
+end
+
+def main
+  pl = Player.new
+  p pl.heal + pl.cast + pl.shout(1) + Player.make
+end

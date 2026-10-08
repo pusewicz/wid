@@ -1,4 +1,4 @@
-error[E0315]: `Pool` takes a constant `Int` for `N`, but `RATE` is a `F64`
+error[E0315]: `Pool` takes a constant `Int` for `N`, but `RATE` has type `F64`
   --> tests/ui/generic_value_consts.wid:18:16
    |
 12 | struct Pool($T, $N: Int)
@@ -10,7 +10,7 @@ help: convert it explicitly with `.to(Int)`
    |   a: Pool(Int, RATE.to(Int)) = {}
    = see `wid explain E0315`
 
-error[E0315]: `Pool` takes a constant `Int` for `N`, but `NAME` is a `String`
+error[E0315]: `Pool` takes a constant `Int` for `N`, but `NAME` has type `String`
   --> tests/ui/generic_value_consts.wid:19:17
    |
 12 | struct Pool($T, $N: Int)
@@ -40,7 +40,7 @@ help: a similar name exists: `MAX`
    |   d: Pool(Int, MAX) = {}
    = see `wid explain E0201`
 
-error[E0315]: `Pool` takes a constant `Int` for `N`, but `RATE * 2` is a `F64`
+error[E0315]: `Pool` takes a constant `Int` for `N`, but `RATE * 2` has type `F64`
   --> tests/ui/generic_value_consts.wid:22:17
    |
 12 | struct Pool($T, $N: Int)

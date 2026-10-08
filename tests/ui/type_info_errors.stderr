@@ -25,7 +25,7 @@ error[E0906]: `type_info` can't describe `Type`, which exists only while compili
 help: describe a run-time type instead, like `type_info(Ball)` or `type_info(x)`
    = see `wid explain E0906`
 
-error[E0906]: `type_info` can't describe `Holder`: it holds a `Type`
+error[E0906]: `type_info` can't describe `Holder`: it holds a value of type `Type`
   --> tests/ui/type_info_errors.wid:21:18
    |
 21 |   puts type_info(Holder).size

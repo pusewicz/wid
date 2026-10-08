@@ -30,7 +30,7 @@ error[E0307]: cannot multiply `matrix[2, 3]F32` by `matrix[2, 3]F32`
 help: check the order of the operands, or transpose one with `.transpose`
   = see `wid explain E0307`
 
-error[E0302]: a `matrix[2, 3]F32` is indexed by row and column
+error[E0302]: `matrix[2, 3]F32` is indexed by row and column
  --> tests/ui/matrix_errors.wid:8:5
   |
 8 |   p d[1]

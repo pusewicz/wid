@@ -629,13 +629,32 @@ impl<'a> Checker<'a> {
 
     /// Reports an undefined name with suggestions.
     pub fn undefined(&mut self, name: Name, span: Span, candidates: Vec<&'static str>, what: &str) {
+        self.undefined_or_field(name, span, candidates, &[], what);
+    }
+
+    /// Reports an undefined name with suggestions among `candidates` and,
+    /// in an instance method, the fields of `self` (`fields`), which the
+    /// suggestion reads with `@`.
+    pub fn undefined_or_field(
+        &mut self,
+        name: Name,
+        span: Span,
+        candidates: Vec<&'static str>,
+        fields: &[&'static str],
+        what: &str,
+    ) {
         if self.undefined_explained(name, span) {
             return;
         }
         let text = name.as_str();
         let mut diag = Diagnostic::error(codes::UNDEFINED_NAME, format!("undefined {what} `{text}`"))
             .primary(span, "not found in this scope".to_string());
-        if let Some(best) = did_you_mean(text, candidates.iter().copied()) {
+        if let Some(best) = did_you_mean(text, candidates.iter().chain(fields).copied()) {
+            let best = if fields.contains(&best) && !candidates.contains(&best) {
+                format!("@{best}")
+            } else {
+                best.to_string()
+            };
             diag = diag.suggest_replace(
                 format!("a similar name exists: `{best}`"),
                 span,

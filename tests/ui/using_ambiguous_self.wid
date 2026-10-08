@@ -1,0 +1,24 @@
+struct Body
+  id: Int = 1
+  def push(n: Int) -> Int = n
+end
+
+struct Sprite
+  id: Int = 2
+  def push(n: Int) -> Int = n * 2
+end
+
+struct Player
+  using body: Body
+  using sprite: Sprite
+
+  def called -> Int = id()
+  def bare -> Int = id
+  def field -> Int = @id
+  def method -> Int = push(1)
+end
+
+def main
+  pl = Player.new
+  p pl.called + pl.bare + pl.field + pl.method
+end

@@ -1,0 +1,41 @@
+error[E0204]: `id` is ambiguous in `Player`
+  --> tests/ui/using_ambiguous_self.wid:15:23
+   |
+15 |   def called -> Int = id()
+   |                       ^^ both `body` and `sprite` provide `id`
+   = note: `using` promotes the members of several fields here, and more than one has this name
+help: name the field to read it through, like `@body.id`
+   |   def called -> Int = @body.id
+   = see `wid explain E0204`
+
+error[E0204]: `id` is ambiguous in `Player`
+  --> tests/ui/using_ambiguous_self.wid:16:21
+   |
+16 |   def bare -> Int = id
+   |                     ^^ both `body` and `sprite` provide `id`
+   = note: `using` promotes the members of several fields here, and more than one has this name
+help: name the field to read it through, like `@body.id`
+   |   def bare -> Int = @body.id
+   = see `wid explain E0204`
+
+error[E0204]: `id` is ambiguous in `Player`
+  --> tests/ui/using_ambiguous_self.wid:17:22
+   |
+17 |   def field -> Int = @id
+   |                      ^^^ both `body` and `sprite` provide `id`
+   = note: `using` promotes the members of several fields here, and more than one has this name
+help: name the field to read it through, like `@body.id`
+   |   def field -> Int = @body.id
+   = see `wid explain E0204`
+
+error[E0204]: `push` is ambiguous in `Player`
+  --> tests/ui/using_ambiguous_self.wid:18:23
+   |
+18 |   def method -> Int = push(1)
+   |                       ^^^^ both `body` and `sprite` provide `push`
+   = note: `using` promotes the members of several fields here, and more than one has this name
+help: name the field to read it through, like `@body.push`
+   |   def method -> Int = @body.push(1)
+   = see `wid explain E0204`
+
+error: could not compile due to 4 errors

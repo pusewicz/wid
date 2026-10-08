@@ -401,7 +401,7 @@ impl<'a> Checker<'a> {
                 let diag = Diagnostic::error(
                     codes::GENERIC_ARGS,
                     format!(
-                        "`{name}` takes a constant `{want}` for `{}`, but `{text}` is a `{shown}`",
+                        "`{name}` takes a constant `{want}` for `{}`, but `{text}` has type `{shown}`",
                         param.name.as_str()
                     ),
                 )
@@ -650,10 +650,7 @@ impl<'a> Checker<'a> {
                 let shown = self.types.display(fty);
                 self.report(
                     Diagnostic::error(codes::RECURSIVE_TYPE, format!("`{}` contains itself", d.name))
-                        .primary(
-                            f.name.span,
-                            format!("this field stores {} `{shown}` by value", wid_diagnostics::a_or_an(&shown)),
-                        )
+                        .primary(f.name.span, format!("this field's `{shown}` is stored by value"))
                         .note("a type cannot contain a full copy of itself, so it would have no finite size")
                         .suggest_replace(
                             "store a pointer instead",
