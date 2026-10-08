@@ -557,7 +557,11 @@ end
     constant; when `v` can only be a type (`distinct F64`,
     `proc(Int) -> Int`, `@[c] proc(I32)`), the line is that constant's
     declaration wherever it is, as `NAME = v` is. `quote` works only in a
-    `macro def`, the procs inside it included (E0910).
+    `macro def`, the procs inside it included (E0910). A `def` that
+    returns `Code` was meant to be a macro: it is E0910 at the `def`, with
+    the fix `macro def`, and a call of it among declarations counts as a
+    failed expansion, so the names it would have declared aren't reported
+    missing.
   - **Nested quotes:** a splice belongs to the innermost `quote` around
     it. In a `macro def` that a `quote` generates, the inner macro's
     `quote` is left as written when the outer macro expands; its splices

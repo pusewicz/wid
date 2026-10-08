@@ -983,6 +983,16 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `explain_macro_name` checks that the macro being lowered came from the
   name's expansion (`generated_macro`). `tests/run/macro_nested_quote`
   covers both ways to pass the value.
+- A `def` that returns `Code` is one E0910 at the `def`, "`make_const`
+  returns `Code`, but it is a `def`, not a `macro def`", with labels on
+  its `quote` and on a call among declarations and the machine-applicable
+  fix `macro def` (no fix in a type's body) (#102; a call among
+  declarations gave E0910 at the `quote`, E0108 with the help "move it
+  into `def main`" and E0201 for each name it would have declared).
+  `Checker::returns_code` and `not_a_macro_def` (once per `def`,
+  `MacroState::not_macros`) serve `resolve_item_macro`, `chosen_macro`
+  and `lower_quote`; the call among declarations runs
+  `failed_among_declarations`.
 - A proc parameter whose name a macro splices (`->(#{v}: Int) -> Int {
   #{v} * 2 }`), in a method body or a generated `def`, is the caller's
   name, as a block parameter's is: the proc's body and code spliced from

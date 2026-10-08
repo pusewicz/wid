@@ -1,0 +1,23 @@
+# A `def` that returns `Code` was meant to be a macro: one error at the
+# `def`, with the fix that makes it one, and none for the names its call
+# among declarations would have declared.
+def make_const(name: Symbol) -> Code
+  quote do
+    #{name} = 1
+  end
+end
+
+make_const :ONE
+
+struct Box
+  # Macros are package members, so there is no fix in a type's body.
+  def gen -> Code
+    quote do
+      1
+    end
+  end
+end
+
+def main
+  p ONE
+end

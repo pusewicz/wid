@@ -74,7 +74,7 @@ use std::collections::{HashMap, HashSet};
 use wid_diagnostics::{Applicability, Diagnostic, FileId, Span, codes};
 use wid_syntax::ast::{self, ExprKind as E, ItemKind, StmtKind, TypeKind, splice_index};
 use wid_syntax::lexer::{NameShape, name_shape};
-use wid_syntax::visit::{VisitMut, walk_expr, walk_item, walk_stmt, walk_type};
+use wid_syntax::visit::{Visit as _, VisitMut, walk_expr, walk_item, walk_stmt, walk_type};
 use wid_syntax::{Name, ast::Ident};
 
 use super::body::Dest;
@@ -167,6 +167,8 @@ pub(crate) struct MacroState {
     pub checked: HashMap<DeclId, bool>,
     /// Checked macros whose bodies failed to parse; they never run.
     pub unparsed: HashSet<DeclId>,
+    /// `def`s that return `Code` reported as not being macros (E0910).
+    pub not_macros: HashSet<DeclId>,
     /// Functions whose bodies had errors; a macro that reaches one never
     /// runs.
     pub failed: HashSet<FnId>,
@@ -580,6 +582,65 @@ impl<'a> Checker<'a> {
         ok
     }
 
+    /// Whether a declaration is a `def` (not a `macro def`) that returns
+    /// `Code`, which only a macro can use: it was meant to be one.
+    pub(super) fn returns_code(&mut self, decl: DeclId) -> bool {
+        let DeclKind::Fn(f) = self.decls[decl.0 as usize].kind else { return false };
+        if f.is_macro || f.ret.is_none() {
+            return false;
+        }
+        let code = self.types.code();
+        self.fn_sig(decl).ret == code
+    }
+
+    /// Reports a `def` that returns `Code`, which only a `macro def` can
+    /// (E0910), once per `def`, at the `def` with the fix that makes it a
+    /// macro: called among declarations (`call`) or building code with a
+    /// `quote` (`quote`, else the first one in its body).
+    pub(super) fn not_a_macro_def(&mut self, decl: DeclId, call: Option<Span>, quote: Option<Span>) {
+        if !self.macros.not_macros.insert(decl) {
+            return;
+        }
+        let d = &self.decls[decl.0 as usize];
+        let DeclKind::Fn(f) = d.kind else { return };
+        let (name, top_level) = (d.name, d.owner.is_none() && !f.is_static);
+        let def_kw = Span { end: f.sig_span.start + 3, ..f.sig_span };
+        let quote = quote.or_else(|| {
+            let mut find = FindQuote::default();
+            match &f.body {
+                ast::FnBody::Block(stmts) => find.visit_stmts(stmts),
+                ast::FnBody::Expr(e) => find.visit_expr(e),
+            }
+            find.0
+        });
+        let mut diag = Diagnostic::error(
+            codes::QUOTE_OUTSIDE_MACRO,
+            format!("`{name}` returns `Code`, but it is a `def`, not a `macro def`"),
+        )
+        .primary(def_kw, format!("`{name}` is declared as a method the program runs"));
+        if let Some(q) = quote {
+            diag = diag.secondary(q, "a `quote` builds code only inside a `macro def`");
+        }
+        if let Some(c) = call {
+            diag = diag.secondary(c, "called among declarations, where only a macro call can stand");
+        }
+        let diag = diag.note(
+            "a `macro def` runs while compiling, and the code its `quote` builds replaces each call; `Code` exists only then",
+        );
+        let diag = if top_level {
+            diag.suggest(
+                format!("make `{name}` a macro"),
+                vec![wid_diagnostics::Edit { span: def_kw.shrink_to_start(), replacement: "macro ".into() }],
+                Applicability::MachineApplicable,
+            )
+        } else {
+            diag.help(format!(
+                "declare `{name}` as a `macro def` at the top level of the file: macros are package members, not methods of a type"
+            ))
+        };
+        self.report(diag);
+    }
+
     /// Where a macro's own code first uses `Self`, if it does. Its `quote`
     /// bodies don't count, since generated code resolves `Self` where it
     /// lands; their splices, which the macro runs, do. A macro that uses
@@ -661,6 +722,13 @@ impl<'a> Checker<'a> {
     /// records the template, giving a `Code` value.
     pub fn lower_quote(&mut self, quote: &ast::QuoteExpr, span: Span) -> ir::Expr {
         if !self.macros.in_macro {
+            // A `def` that returns `Code` was meant to be a macro.
+            if let Some(decl) = self.body.frames.last().and_then(|f| f.decl)
+                && self.returns_code(decl)
+            {
+                self.not_a_macro_def(decl, None, Some(span));
+                return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+            }
             let diag = Diagnostic::error(codes::QUOTE_OUTSIDE_MACRO, "`quote` only works inside a `macro def`")
                 .primary(span, "this is not inside a macro")
                 .note("a `quote` builds code for a macro to return, and the macro's caller gets that code in place of the call");
@@ -2534,6 +2602,22 @@ fn enum_member_line(stmt: &ast::Stmt) -> Option<ast::EnumMember> {
             _ => None,
         },
         _ => None,
+    }
+}
+
+/// Finds the first `quote` in a method's body.
+#[derive(Default)]
+struct FindQuote(Option<Span>);
+
+impl wid_syntax::visit::Visit for FindQuote {
+    fn visit_expr(&mut self, e: &ast::Expr) {
+        if self.0.is_some() {
+            return;
+        }
+        match &e.kind {
+            E::Quote(_) => self.0 = Some(e.span),
+            _ => wid_syntax::visit::shared::walk_expr(self, e),
+        }
     }
 }
 
