@@ -651,8 +651,8 @@ impl<'a> Checker<'a> {
 
     /// Reports an undefined name with suggestions among `candidates`, which
     /// hold `own.methods`, and `own.fields`, which the suggestion reads with
-    /// `@`. A method of the current type is what a name close to it most
-    /// likely meant, so that fix applies without review.
+    /// `@`. A suggestion is a guess at a misspelling, so its fix is one to
+    /// review.
     pub fn undefined_near(&mut self, name: Name, span: Span, candidates: &[&'static str], own: &SelfNames, what: &str) {
         if self.undefined_explained(name, span) {
             return;
@@ -661,14 +661,13 @@ impl<'a> Checker<'a> {
         let mut diag = Diagnostic::error(codes::UNDEFINED_NAME, format!("undefined {what} `{text}`"))
             .primary(span, "not found in this scope".to_string());
         if let Some(best) = own.closest(text, candidates) {
-            let (best, applicability) = if own.methods.contains(&best) {
-                (best.to_string(), wid_diagnostics::Applicability::MachineApplicable)
-            } else if candidates.contains(&best) {
-                (best.to_string(), wid_diagnostics::Applicability::MaybeIncorrect)
-            } else {
-                (format!("@{best}"), wid_diagnostics::Applicability::MaybeIncorrect)
-            };
-            diag = diag.suggest_replace(format!("a similar name exists: `{best}`"), span, best, applicability);
+            let best = if candidates.contains(&best) { best.to_string() } else { format!("@{best}") };
+            diag = diag.suggest_replace(
+                format!("a similar name exists: `{best}`"),
+                span,
+                best,
+                wid_diagnostics::Applicability::MaybeIncorrect,
+            );
         }
         self.report(diag);
     }

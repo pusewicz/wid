@@ -667,9 +667,10 @@ runs the stages; `wid_cli` is the `wid` binary.
 - Inside a method of a type, a misspelled name or call close to a method
   that a call without a receiver reaches (its own, mixed in with `include`,
   added by `extend`, or promoted by `using`; only type-level ones in a
-  `def self.`) suggests it with a machine-applicable fix: `heall(1)` gets
-  `heal(1)` (#54). Ties go to a variable, then a method, then a package
-  name, then a field (`Checker::self_names`, `SelfNames`).
+  `def self.`) suggests it: `heall(1)` gets `heal(1)` (#54). Like every
+  "did you mean", the fix is `MaybeIncorrect`, a guess to review. Ties go
+  to a variable, then a method, then a package name, then a field
+  (`Checker::self_names`, `SelfNames`).
 - `@name(args)` calls the proc a field of `self` holds, its own or promoted
   by `using`, like `self.name(args)` (#55; `@cb()` was E0301 and E0105).
   The parser reads it as `Callee::IVar` when the `(` follows the name with
