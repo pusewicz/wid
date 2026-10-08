@@ -538,7 +538,10 @@ impl<'a> Checker<'a> {
             }
         }
         self.lower_stmts(else_body, Dest::Discard);
-        let diverges = self.current_block_diverges();
+        // A branch that failed to parse, or that Odin's `or_return` stands
+        // for, was reported; it is taken to leave the scope.
+        let reported = !else_body.is_empty() && else_body.iter().all(|s| matches!(s.kind, ast::StmtKind::Error));
+        let diverges = self.current_block_diverges() || reported;
         self.pop_scope();
         let else_block = self.end_block();
         if !diverges {

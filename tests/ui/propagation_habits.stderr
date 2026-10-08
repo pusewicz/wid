@@ -1,0 +1,198 @@
+error[E0105]: Wid writes `=` where Odin writes `:=`
+  --> tests/ui/propagation_habits.wid:26:9
+   |
+26 |   total := 0
+   |         ^^ Odin's declaration operator
+   = note: the first assignment to a name declares it, as in `count = 0`
+help: write `=`
+   |   total = 0
+   = see `wid explain E0105`
+
+error[E0105]: Wid writes a `guard` where Odin writes `or_return`
+  --> tests/ui/propagation_habits.wid:27:20
+   |
+27 |   a := count(text) or_return
+   |                    ^^^^^^^^^ Odin's error propagation operator
+   = note: Wid has no shorthand propagation operators: a `guard` handles the error where it happens, and its `else` branch passes it on
+help: handle the error with `guard`
+   |   guard a = count(text) else |err|
+   |     return err
+   |   end
+   = see `wid explain E0105`
+
+error[E0105]: Wid writes a `guard` where Odin writes `or_return`
+  --> tests/ui/propagation_habits.wid:28:19
+   |
+28 |   b = count(text) or_return
+   |                   ^^^^^^^^^ Odin's error propagation operator
+   = note: Wid has no shorthand propagation operators: a `guard` handles the error where it happens, and its `else` branch passes it on
+help: handle the error with `guard`
+   |   guard b = count(text) else |err|
+   |     return err
+   |   end
+   = see `wid explain E0105`
+
+error[E0105]: Wid writes a `guard` where Odin writes `or_return`
+  --> tests/ui/propagation_habits.wid:29:18
+   |
+29 |   c, d := pair() or_return
+   |                  ^^^^^^^^^ Odin's error propagation operator
+   = note: Wid has no shorthand propagation operators: a `guard` handles the error where it happens, and its `else` branch passes it on
+help: handle the error with `guard`
+   |   guard c, d = pair() else |err|
+   |     return err
+   |   end
+   = see `wid explain E0105`
+
+error[E0105]: Wid writes a `guard` where Odin writes `or_return`
+  --> tests/ui/propagation_habits.wid:30:11
+   |
+30 |   check() or_return
+   |           ^^^^^^^^^ Odin's error propagation operator
+   = note: Wid has no shorthand propagation operators: a `guard` handles the error where it happens, and its `else` branch passes it on
+help: handle the error with `guard`
+   |   guard check() else |err|
+   |     return err
+   |   end
+   = see `wid explain E0105`
+
+error[E0105]: Wid writes a `guard` where Odin writes `or_return`
+  --> tests/ui/propagation_habits.wid:31:15
+   |
+31 |   count(text) or_return
+   |               ^^^^^^^^^ Odin's error propagation operator
+   = note: Wid has no shorthand propagation operators: a `guard` handles the error where it happens, and its `else` branch passes it on
+help: handle the error with `guard`
+   |   guard count(text) else |err|
+   |     return err
+   |   end
+   = see `wid explain E0105`
+
+error[E0105]: Wid writes a `guard` where Odin writes `or_return`
+  --> tests/ui/propagation_habits.wid:32:18
+   |
+32 |   e = count text or_return
+   |                  ^^^^^^^^^ Odin's error propagation operator
+   = note: Wid has no shorthand propagation operators: a `guard` handles the error where it happens, and its `else` branch passes it on
+help: handle the error with `guard`
+   |   guard e = count text else |err|
+   |     return err
+   |   end
+   = see `wid explain E0105`
+
+error[E0201]: Wid writes a `guard` where Zig writes `try`
+  --> tests/ui/propagation_habits.wid:33:7
+   |
+33 |   f = try count(text)
+   |       ^^^ Zig's error propagation operator
+   = note: Wid has no shorthand propagation operators: a `guard` handles the error where it happens, and its `else` branch passes it on
+help: handle the error with `guard`
+   |   guard f = count(text) else |err|
+   |     return err
+   |   end
+   = see `wid explain E0201`
+
+error[E0201]: Wid writes a `guard` where Zig writes `try`
+  --> tests/ui/propagation_habits.wid:34:3
+   |
+34 |   try check()
+   |   ^^^ Zig's error propagation operator
+   = note: Wid has no shorthand propagation operators: a `guard` handles the error where it happens, and its `else` branch passes it on
+help: handle the error with `guard`
+   |   guard check() else |err|
+   |     return err
+   |   end
+   = see `wid explain E0201`
+
+error[E0201]: Wid writes a `guard` where Zig writes `try`
+  --> tests/ui/propagation_habits.wid:41:7
+   |
+41 |   n = try count(text)
+   |       ^^^ Zig's error propagation operator
+   = note: Wid has no shorthand propagation operators: a `guard` handles the error where it happens, and its `else` branch passes it on
+help: handle the error with `guard`
+   |   guard n = count(text) else |err|
+   |     return {}, err
+   |   end
+   = see `wid explain E0201`
+
+error[E0201]: Wid writes a `guard` where Zig writes `try`
+  --> tests/ui/propagation_habits.wid:42:5
+   |
+42 |   p try(count(text)) + 1
+   |     ^^^ Zig's error propagation operator
+   = note: Wid has no shorthand propagation operators: a `guard` handles the error where it happens, and its `else` branch passes it on
+help: bind the values with `guard a = f() else |err| … end` on a line of their own, and use them here
+   = see `wid explain E0201`
+
+error[E0105]: Wid writes a `guard` where Odin writes `or_return`
+  --> tests/ui/propagation_habits.wid:47:15
+   |
+47 |   v = maybe() or_return
+   |               ^^^^^^^^^ Odin's error propagation operator
+   = note: Wid has no shorthand propagation operators: a `guard` handles the error where it happens, and its `else` branch passes it on
+help: handle the error with `guard`
+   |   guard v = maybe() else
+   |     return nil
+   |   end
+   = see `wid explain E0105`
+
+error[E0201]: Wid writes a `guard` where Zig writes `try`
+  --> tests/ui/propagation_habits.wid:48:7
+   |
+48 |   w = try count("x")
+   |       ^^^ Zig's error propagation operator
+   = note: Wid has no shorthand propagation operators: a `guard` handles the error where it happens, and its `else` branch passes it on
+help: handle the error with `guard`
+   |   guard w = count("x") else
+   |     return nil
+   |   end
+   = see `wid explain E0201`
+
+error[E0105]: Wid writes a `guard` where Odin writes `or_return`
+  --> tests/ui/propagation_habits.wid:53:22
+   |
+53 |   return count(text) or_return
+   |                      ^^^^^^^^^ Odin's error propagation operator
+   = note: Wid has no shorthand propagation operators: a `guard` handles the error where it happens, and its `else` branch passes it on
+help: bind the values with `guard a = f() else |err| … end`, and pass `err` on in its `else` branch
+   = see `wid explain E0105`
+
+error[E0105]: Wid writes `=` where Odin writes `:=`
+  --> tests/ui/propagation_habits.wid:58:5
+   |
+58 |   n :=
+   |     ^^ Odin's declaration operator
+   = note: the first assignment to a name declares it, as in `count = 0`
+help: write `=`
+   |   n =
+help: and write the value after it, on this line
+   = see `wid explain E0105`
+
+error[E0201]: Wid writes a `guard` where Zig writes `try`
+  --> tests/ui/propagation_habits.wid:64:7
+   |
+64 |   q = try count("main")
+   |       ^^^ Zig's error propagation operator
+   = note: Wid has no shorthand propagation operators: a `guard` handles the error where it happens, and its `else` branch passes it on
+help: handle the error with `guard`
+   |   guard q = count("main") else
+   |     return
+   |   end
+help: this method returns nothing, so it can't pass the error on: handle it in the `else` branch
+   = see `wid explain E0201`
+
+error[E0105]: Wid writes a `guard` where Odin writes `or_return`
+  --> tests/ui/propagation_habits.wid:66:22
+   |
+66 |   r := count("main") or_return
+   |                      ^^^^^^^^^ Odin's error propagation operator
+   = note: Wid has no shorthand propagation operators: a `guard` handles the error where it happens, and its `else` branch passes it on
+help: handle the error with `guard`
+   |   guard r = count("main") else
+   |     return
+   |   end
+help: this method returns nothing, so it can't pass the error on: handle it in the `else` branch
+   = see `wid explain E0105`
+
+error: could not compile due to 17 errors

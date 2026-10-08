@@ -11,6 +11,8 @@ use crate::visit::{VisitMut, walk_expr, walk_type};
 use Keyword as K;
 use TokenKind as T;
 
+mod habits;
+
 /// Lexes and parses one file.
 pub fn parse_file(file: FileId, text: &str) -> (File, Diagnostics) {
     let lexed = lex(file, text);
@@ -219,6 +221,9 @@ struct Parser<'a> {
     /// missing operand: a line end, after which a bracket left open on the
     /// line is reported by that error, not by one of its own.
     cut_operand: Option<Span>,
+    /// The return types of the methods and procs being parsed, innermost
+    /// last, for the fix that writes a `guard` (see `habits.rs`).
+    returns: Vec<Option<TypeExpr>>,
 }
 
 /// Binding powers for infix operators.
@@ -327,6 +332,7 @@ impl<'a> Parser<'a> {
             inserted: Vec::new(),
             stmt_line: 0,
             cut_operand: None,
+            returns: Vec::new(),
         }
     }
 
@@ -2297,6 +2303,7 @@ impl<'a> Parser<'a> {
             }
         }
         let sig_span = def_tok.span.to(self.prev_span());
+        self.returns.push(ret.clone());
         let mut body = if self.eat(T::Eq) {
             self.skip_newlines();
             FnBody::Expr(Box::new(self.parse_expr_cmd()))
@@ -2311,6 +2318,7 @@ impl<'a> Parser<'a> {
             self.expect_end();
             FnBody::Block(body)
         };
+        self.returns.pop();
         for found in &array_params {
             self.report_array_value_param(is_macro, found, &mut params, &mut ret, &mut body);
         }
@@ -3501,9 +3509,11 @@ impl<'a> Parser<'a> {
                     None => StmtKind::Error,
                 }
             }
+            T::Ident if self.at_walrus() => self.parse_walrus(),
             T::Ident | T::SpliceBegin if self.is_decl_start() => self.parse_decl(),
             _ => self.parse_expr_or_assign(),
         };
+        let kind = if self.at_or_return() { self.or_return(start, kind) } else { kind };
         let mut stmt = Stmt { kind, span: start.to(self.prev_span()), attrs };
         while self.at_modifier() {
             let kw = self.bump();
@@ -4094,12 +4104,14 @@ impl<'a> Parser<'a> {
         let idx = self.tokens.partition_point(|t| t.span.start <= tok.span.start);
         let tight_next = self.tokens.get(idx).is_some_and(|n| !n.space_before);
         match tok.kind {
+            // `f or_return` is `f` followed by Odin's `or_return` (see
+            // `habits.rs`), not a call with an argument.
+            T::Ident => self.text_of(tok.span) != "or_return",
             T::Int
             | T::Float
             | T::Str(_)
             | T::StrBegin
             | T::Symbol
-            | T::Ident
             | T::Const
             | T::IVar
             | T::Arrow
@@ -5568,6 +5580,7 @@ impl<'a> Parser<'a> {
             );
         }
         let ret = if self.eat(T::Arrow) { Some(self.parse_type()) } else { None };
+        self.returns.push(ret.clone());
         let body = if left_open {
             // The line ended with the parameter list (reported), and the
             // body with it.
@@ -5586,6 +5599,7 @@ impl<'a> Parser<'a> {
             self.error_expected("`{` or `do` to start the proc body");
             Vec::new()
         };
+        self.returns.pop();
         self.pop_def_scope();
         Expr { kind: ExprKind::Lambda(Box::new(Lambda { params, ret, body })), span: arrow.span.to(self.prev_span()) }
     }

@@ -1,0 +1,9 @@
+# A method of the program's own named `try` is called as usual: only a
+# `try` that names nothing is Zig's propagation shorthand (E0201).
+def try(n: Int) -> Int = n + 1
+
+def main
+  p try(2)
+  x = try try(3)
+  p x
+end

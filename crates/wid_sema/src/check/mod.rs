@@ -17,6 +17,7 @@ mod matrix;
 mod members;
 mod operators;
 mod overloads;
+mod propagation;
 mod record;
 mod runtime;
 mod stmt;

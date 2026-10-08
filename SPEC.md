@@ -513,8 +513,12 @@ end
   after `else` (or `|err|`) and ends with `end`: a branch written on the
   guard's own line (`guard x = v else return 0`) is E0105, whose fix moves it
   to its own line. There are no shorthand propagation operators such as
-  `or_return` or `?`. `guard cond else … end` also works with a plain `Bool`
-  condition.
+  Odin's `or_return`, Zig's `try` or Rust's `?`: `or_return` is E0105 and a
+  `try` that names no method E0201, each one error whose fix writes the
+  `guard` (its `else` branch returns `err`, `{}, err` or `nil` as the
+  method's return type needs), and the line is checked as that `guard`.
+  Odin's `x := v` is E0105 with the fix `x = v`. `guard cond else … end`
+  also works with a plain `Bool` condition.
 - By convention a failing function returns `{}, err` if its type is
   `(T, Error)` and `nil` if its type is `T?`. Silently dropping an `Error`
   (alone or as the last of several values), or a union returned as the last

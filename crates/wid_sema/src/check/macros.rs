@@ -865,6 +865,10 @@ impl<'a> Checker<'a> {
         candidates: &[&'static str],
         own: &super::SelfNames,
     ) -> ir::Expr {
+        // Zig's `try f()`.
+        if let Some(payload) = self.try_habit(name, args, span) {
+            return payload;
+        }
         let loc = self.loc_at(name.span);
         let similar = own.closest(name.as_str(), candidates).map(Name::new);
         let near_macro = similar

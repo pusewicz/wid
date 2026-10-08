@@ -1663,6 +1663,26 @@ the language server.
   `_ = …` is a machine-applicable fix that writes `_ = ` before the
   statement. `_ = v` is a discard, as `a, _ = …` was: it declared a
   variable `_`, so a second `_ = …` of another type was E0301.
+- Odin's and Zig's error habits (#139, SPEC "Errors"), one error each, in
+  the form of #164's `::` ("Wid writes `.` where Ruby writes `::`"):
+  `a, b := v` is E0105 "Wid writes `=` where Odin writes `:=`" with the fix
+  `=` (`Parser::parse_walrus` in `parser/habits.rs`); before a line that
+  starts a statement of its own (`value_cut`, #164's rule for an operator
+  at a line end), the value is missing too, which the same error says.
+  `… or_return` after an assignment, a `:=` or a call is one E0105 "Wid
+  writes a `guard` where Odin writes `or_return`", whose fix rewrites the
+  line as the `guard` that passes the error on (`return err`,
+  `return {}, err` or `return nil` from the method's written return type,
+  which the parser keeps in `Parser::returns`; a method returning nothing
+  gets a plain `return`, to review). The line is read as that `guard`, with
+  an `else` branch of one `StmtKind::Error`, which `lower_guard` takes as
+  leaving the scope (so is a branch that failed to parse), or as `_ = f()`
+  for a bare `f() or_return`. `f or_return` isn't a command call. `try f()`
+  where no method is named `try` is E0201 "Wid writes a `guard` where Zig
+  writes `try`" (`Checker::try_habit`), with the `guard` as the fix when
+  the call ends a statement that assigns it or is the statement, and it
+  evaluates to the values before the error, so nothing after it is
+  reported.
 
 ## Next
 
@@ -1808,7 +1828,6 @@ only on `main` and can run in parallel with the macro stack.
    - debug builds: `#line` and `-debug` at `-O0` (#141);
    - three cascades, including spurious E0203 when a package fails to load
      (#138);
-   - error values (#139);
    - library and runtime gaps (#140);
    - CLI flags and tests (#142);
    - diagnostics without a fix (#145);

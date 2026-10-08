@@ -1,0 +1,73 @@
+# Odin's `:=` and `or_return` and Zig's `try` are one error each, whose fix
+# writes `=` or the `guard` that passes the error on; the names they bind
+# keep the values' types, so nothing after them adds an error.
+struct Level
+  n: Int
+end
+
+def count(text: String) -> (Int, Error)
+  return {}, :empty if text.empty?
+  return text.size, nil
+end
+
+def pair -> (Int, Int, Error)
+  return 1, 2, nil
+end
+
+def check -> Error
+  nil
+end
+
+def maybe -> Int?
+  nil
+end
+
+def all(text: String) -> Error
+  total := 0
+  a := count(text) or_return
+  b = count(text) or_return
+  c, d := pair() or_return
+  check() or_return
+  count(text) or_return
+  e = count text or_return
+  f = try count(text)
+  try check()
+  total += a + b + c + d + e + f
+  p total
+  nil
+end
+
+def load(text: String) -> (Level, Error)
+  n = try count(text)
+  p try(count(text)) + 1
+  return Level.new(n), nil
+end
+
+def first -> Int?
+  v = maybe() or_return
+  w = try count("x")
+  v + w
+end
+
+def again(text: String) -> (Int, Error)
+  return count(text) or_return
+end
+
+# `:=` at the end of its line, before a statement: one error.
+def cut -> Int
+  n :=
+  p 1
+  0
+end
+
+def main
+  q = try count("main")
+  p q
+  r := count("main") or_return
+  p r
+  _ = all("x")
+  _ = load("x")
+  p first
+  _ = again("x")
+  p cut
+end
