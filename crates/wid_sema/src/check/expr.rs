@@ -623,7 +623,8 @@ impl<'a> Checker<'a> {
     }
 
     /// Finds what `name` reaches in `ty`, as `self.name` does: the struct's
-    /// own members first, then each `using` field in order.
+    /// own members first (its fields, its methods, those its modules mix in
+    /// and those `extend` blocks add), then each `using` field in order.
     pub(super) fn self_member(&mut self, ty: TyId, name: Name, visited: &mut Vec<TyId>) -> Option<SelfMember> {
         let ty = match *self.types.kind(ty) {
             TyKind::Pointer(t) => t,
@@ -637,7 +638,10 @@ impl<'a> Checker<'a> {
             let is_proc = matches!(self.types.kind(fty), TyKind::Proc(_));
             return Some(SelfMember::Field { owner: ty, is_proc });
         }
-        if self.find_method(ty, name).is_some() || self.find_included(ty, name).is_some() {
+        if self.find_method(ty, name).is_some()
+            || self.find_included(ty, name).is_some()
+            || self.extension_member(ty, name).is_some()
+        {
             return Some(SelfMember::Method { owner: ty });
         }
         let TyKind::Struct(id) = *self.types.kind(ty) else { return None };

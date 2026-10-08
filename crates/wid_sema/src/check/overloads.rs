@@ -897,7 +897,8 @@ impl Checker<'_> {
 
     /// Returns true when a value of type `ty` (or the struct it points to)
     /// has a field or method `name`, directly or through its own `using`
-    /// fields.
+    /// fields. Its methods are its own, those its modules mix in and those
+    /// `extend` blocks add.
     fn provides(&mut self, ty: TyId, name: Name, visited: &mut Vec<TyId>) -> bool {
         let inner = match self.types.kind(ty) {
             TyKind::Pointer(t) => *t,
@@ -910,6 +911,7 @@ impl Checker<'_> {
         if self.field_index(inner, name).is_some()
             || self.find_method(inner, name).is_some()
             || self.find_included(inner, name).is_some()
+            || self.extension_member(inner, name).is_some()
         {
             return true;
         }

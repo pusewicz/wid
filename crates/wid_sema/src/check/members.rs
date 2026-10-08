@@ -231,11 +231,8 @@ impl<'a> Checker<'a> {
             let module = self.decls[d.0 as usize].owner?;
             return is_method(self, d).then_some(MethodOrigin::Included(module));
         }
-        for ext in self.extends_of(ty) {
-            let own = self.members.get(&ext).and_then(|m| m.get(&name)).copied();
-            if let Some(d) = own.or_else(|| self.module_member(ext, name, &mut Vec::new())) {
-                return is_method(self, d).then_some(MethodOrigin::Extended);
-            }
+        if let Some(d) = self.extension_member(ty, name) {
+            return is_method(self, d).then_some(MethodOrigin::Extended);
         }
         let TyKind::Struct(id) = *self.types.kind(ty) else { return None };
         let used: Vec<TyId> = self.types.struct_info(id).fields.iter().filter(|f| f.using).map(|f| f.ty).collect();

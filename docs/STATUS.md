@@ -1329,6 +1329,12 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   modules) is still checked per use, so the code that nothing lowers, and
   that `wid query` can record nothing for, is only generic code nothing
   uses.
+- `using` promotes the methods `extend` blocks add to the field's type
+  (#92, SPEC "Data and behavior"): `provides` and `self_member` consult
+  `extension_member`, as the did-you-mean candidates already did, so a
+  bare `zap(1)`, `self.zap(1)` and `pl.zap(1)` reach `self.mob.zap(1)`,
+  transitively, two fields providing it are E0204 until the access names
+  one, and `@zap(1)` says `zap` is a promoted method.
 
 ## Next
 

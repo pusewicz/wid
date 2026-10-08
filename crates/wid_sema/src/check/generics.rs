@@ -856,6 +856,19 @@ impl<'a> Checker<'a> {
         extends.into_iter().filter(|&ext| self.extend_bindings(ext, receiver).is_some()).collect()
     }
 
+    /// The member `name` that an `extend` block adds to `receiver`, its own
+    /// or mixed into the `extend` with `include`, without reporting two
+    /// `extend` blocks that both add it (see [`Self::find_extension`]).
+    pub fn extension_member(&mut self, receiver: TyId, name: Name) -> Option<DeclId> {
+        for ext in self.extends_of(receiver) {
+            let own = self.members.get(&ext).and_then(|m| m.get(&name)).copied();
+            if let Some(d) = own.or_else(|| self.module_member(ext, name, &mut Vec::new())) {
+                return Some(d);
+            }
+        }
+        None
+    }
+
     /// The bindings, `Self` among them, under which the first target of
     /// `extend` block `ext` that matches `receiver` applies to it.
     fn extend_bindings(&mut self, ext: DeclId, receiver: TyId) -> Option<Vec<(Name, TyId)>> {

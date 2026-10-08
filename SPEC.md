@@ -350,9 +350,12 @@ end
   so `2.0 * xf` works.
 - There is no inheritance. `using base: Entity` (or `using base: ^Entity`)
   promotes another struct's fields and methods into this one, so `player.hp`
-  and `@hp` reach `player.base.hp`. Promotion is transitive. The struct's own
-  members win over promoted ones, and a name that two `using` fields provide
-  is an error until the access names the field.
+  and `@hp` reach `player.base.hp`. Its methods include those its modules
+  mix in and those `extend` blocks add, which are methods of the type too:
+  `heal(1)` in a method of the struct and `player.heal(1)` reach
+  `player.base.heal(1)`. Promotion is transitive. The struct's own members
+  win over promoted ones, and a name that two `using` fields provide is an
+  error until the access names the field.
 - `module Name … end` holds methods and constants (no fields). `include Name`
   in a struct, enum, module or `extend` mixes its methods in at compile time.
   Module methods are generic over `Self`, checked for each type that includes

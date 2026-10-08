@@ -1,0 +1,41 @@
+error[E0204]: `@zip` reads a field, but `zip` is a method
+  --> tests/ui/using_extension_errors.wid:22:24
+   |
+22 |   def at_name -> Int = @zip(1)
+   |                        ^^^^ `P` has no field `zip`
+   = note: `zip` is a method of `Mob`, promoted into `P` by `using`
+   = note: `@name` reads a field of `self`; methods are called by name
+help: call the method: `zip(1)`
+   |   def at_name -> Int = zip(1)
+   = see `wid explain E0204`
+
+error[E0201]: undefined method `zipp`
+  --> tests/ui/using_extension_errors.wid:23:21
+   |
+23 |   def typo -> Int = zipp(1)
+   |                     ^^^^ not found in this scope
+help: a similar name exists: `zip`
+   |   def typo -> Int = zip(1)
+   = see `wid explain E0201`
+
+error[E0204]: `zap` is ambiguous in `Both`
+  --> tests/ui/using_extension_errors.wid:29:21
+   |
+29 |   def bare -> Int = zap(1)
+   |                     ^^^ both `mob` and `shield` provide `zap`
+   = note: `using` promotes the members of several fields here, and more than one has this name
+help: name the field to read it through, like `@mob.zap`
+   |   def bare -> Int = @mob.zap(1)
+   = see `wid explain E0204`
+
+error[E0204]: `zap` is ambiguous in `Both`
+  --> tests/ui/using_extension_errors.wid:35:39
+   |
+35 |   p pl.at_name + pl.typo + b.bare + b.zap(2)
+   |                                       ^^^ both `mob` and `shield` provide `zap`
+   = note: `using` promotes the members of several fields here, and more than one has this name
+help: name the field to read it through, like `.mob.zap`
+   |   p pl.at_name + pl.typo + b.bare + b.mob.zap(2)
+   = see `wid explain E0204`
+
+error: could not compile due to 4 errors

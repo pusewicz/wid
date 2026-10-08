@@ -1,0 +1,36 @@
+# A method that an `extend` block adds to a `using` field's type is
+# promoted like the type's own: two fields that provide it make the name
+# ambiguous, `@name` names no field, and a misspelling suggests it.
+struct Mob
+  hp: Int
+end
+
+struct Shield
+  hp: Int
+end
+
+extend Mob, Shield
+  def zap(n: Int) -> Int = n
+end
+
+extend Mob
+  def zip(n: Int) -> Int = n
+end
+
+struct P
+  using mob: Mob
+  def at_name -> Int = @zip(1)
+  def typo -> Int = zipp(1)
+end
+
+struct Both
+  using mob: Mob
+  using shield: Shield
+  def bare -> Int = zap(1)
+end
+
+def main
+  pl = P.new
+  b = Both.new
+  p pl.at_name + pl.typo + b.bare + b.zap(2)
+end
