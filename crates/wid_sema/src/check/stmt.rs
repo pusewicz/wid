@@ -54,6 +54,40 @@ fn mentions(e: &ast::Expr, name: Name) -> usize {
     count.1
 }
 
+/// The first `break` in a loop's body that leaves that loop: not one in a
+/// nested loop, nor one in a block, which leaves the call that takes the
+/// block, nor one in a proc or in compile-time code.
+fn loop_break(body: &[ast::Stmt]) -> Option<Span> {
+    use wid_syntax::visit::shared::{Visit, walk_expr, walk_stmt};
+    struct Find(Option<Span>);
+    impl Visit for Find {
+        fn visit_stmt(&mut self, stmt: &ast::Stmt) {
+            match stmt.kind {
+                _ if self.0.is_some() => {}
+                S::Break(_) => self.0 = Some(stmt.span),
+                _ => walk_stmt(self, stmt),
+            }
+        }
+        fn visit_expr(&mut self, e: &ast::Expr) {
+            match &e.kind {
+                E::While { .. } | E::Loop(_) | E::For(_) | E::Lambda(_) | E::Comptime(_) | E::Quote(_) => {}
+                E::Call(call) => {
+                    if let ast::Callee::Method { recv, .. } = &call.callee {
+                        self.visit_expr(recv);
+                    }
+                    for arg in &call.args {
+                        self.visit_expr(&arg.value);
+                    }
+                }
+                _ => walk_expr(self, e),
+            }
+        }
+    }
+    let mut find = Find(None);
+    body.iter().for_each(|s| find.visit_stmt(s));
+    find.0
+}
+
 impl<'a> Checker<'a> {
     /// Lowers a statement list, delivering the value of the last statement
     /// to `dest`.
@@ -89,6 +123,10 @@ impl<'a> Checker<'a> {
                 E::Paren(inner) if matches!(inner.kind, E::If(_)) => {
                     let wrapped = ast::Stmt { kind: S::Expr((**inner).clone()), span: stmt.span, attrs: Vec::new() };
                     self.lower_tail(&wrapped, dest);
+                }
+                E::While { .. } | E::Loop(_) | E::For(_) => {
+                    let value = self.loop_value(e, true);
+                    self.deliver(value, dest, e.span);
                 }
                 _ => {
                     let expected = self.dest_type(dest);
@@ -1191,6 +1229,71 @@ impl<'a> Checker<'a> {
         self.body.exits.pop();
         let block = self.end_block();
         self.emit(Stmt::Loop { body: block, continue_label, break_label });
+    }
+
+    /// Lowers a loop where a value goes. A loop is a statement, so it has
+    /// no value (E0323), with one exception: at the end of a body whose
+    /// value is wanted (`tail`), a loop that never finishes (`loop do` or
+    /// `while true` without a `break` that leaves it) is `Never`, as a
+    /// `panic` is there, since no code after it runs. The loop is lowered
+    /// either way, so the variables it reads count as read.
+    pub(super) fn loop_value(&mut self, e: &ast::Expr, tail: bool) -> ir::Expr {
+        self.begin_block();
+        self.lower_expr_stmt(e);
+        let block = self.end_block();
+        let endless = super::body::stmts_diverge(&block.stmts);
+        if endless && tail {
+            for s in block.stmts {
+                self.emit(s);
+            }
+            return ir::Expr::new(ExprKind::Zero, self.types.never());
+        }
+        // Otherwise the loop was lowered only to be checked: its code isn't
+        // kept, so the code after it isn't unreachable.
+        let label = if tail { "the last line gives the value, but a loop has none" } else { "used as a value here" };
+        let mut diag = Diagnostic::error(codes::NOT_A_VALUE, "loops do not produce a value").primary(e.span, label);
+        if endless {
+            // `x = loop do … end`: nothing after the loop runs.
+            diag = diag
+                .note("a loop that never finishes may end a method or a branch in place of its value, but it is no value anywhere else")
+                .help("write the loop as a statement of its own: nothing after it runs, so it needs no value");
+            self.report(diag);
+            return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+        }
+        diag = match &e.kind {
+            E::Loop(body) | E::While { body, .. } if loop_break(body).is_some() => {
+                let at = loop_break(body).expect("checked above");
+                diag.secondary(at, "`break` leaves the loop here, and the code after it runs")
+            }
+            E::While { cond, until, .. } => {
+                let span = match &**cond {
+                    ast::Cond::Expr(c) => c.span,
+                    ast::Cond::Bind { value, .. } => value.span,
+                };
+                let when = if *until { "true" } else { "false" };
+                diag.secondary(span, format!("the loop ends when this is {when}, and the code after it runs"))
+            }
+            E::For(f) => {
+                diag.secondary(f.iter.span, "the loop ends after the last of these, and the code after it runs")
+            }
+            _ => diag,
+        };
+        diag = diag.note(
+            "only a loop that never finishes, like `loop do` without a `break`, may end a method or a branch \
+             without a value after it",
+        );
+        diag = if tail {
+            let indent = self.indent_at(e.span);
+            diag.suggest(
+                "give the value on a line after the loop",
+                vec![wid_diagnostics::Edit { span: e.span.shrink_to_end(), replacement: format!("\n{indent}…") }],
+                Applicability::HasPlaceholders,
+            )
+        } else {
+            diag.help("assign the value to a variable inside the loop, and use the variable after it")
+        };
+        self.report(diag);
+        ir::Expr::new(ExprKind::Zero, self.types.unknown())
     }
 
     fn lower_for(&mut self, f: &ast::ForExpr, span: Span) {

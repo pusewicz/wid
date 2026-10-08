@@ -1470,6 +1470,16 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `v: Vec2? = [1.0, 2.0]`, `[2]F32? = [1.0, nil]` and `H: F32? = 0.5`
   work in declarations, fields, arguments and returns, and an error in
   the literal names `T`'s rule (`300` doesn't fit in `U8`).
+- A method or branch may end in a loop that never finishes (#132, SPEC
+  "Types"): `loop_value` (`check/stmt.rs`) lowers a loop where a value
+  goes as a statement, and at the end of a body whose value is wanted
+  (`lower_tail`), a loop whose `Stmt::Loop` diverges (no `break` to it,
+  and a constant condition) is `Never`, as `-> Never` bodies already
+  checked. Anywhere else, or when it can finish, it is E0323, which now
+  points at what ends it (the `break`, found by `loop_break` outside
+  nested loops, blocks and procs; the condition; the iterated value) and
+  offers the value on a line after the loop. The loop is lowered either
+  way, so the locals it reads aren't E0203.
 
 ## Next
 
@@ -1610,7 +1620,6 @@ only on `main` and can run in parallel with the macro stack.
 7. **SPEC conformance audit: done** (at e73c919). Every finding was
    reproduced on main and filed as a GitHub issue, so the open issues are
    now its queue. In order of value:
-   - methods ending in an endless loop (#132);
    - `<=>` deriving the comparisons, and the definable operator set (#134);
    - `def self.` in an `extend` (#135);
    - gcc-15 `-Werror` at `-o:speed` and `-o:aggressive`, and suite

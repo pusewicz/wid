@@ -14,7 +14,12 @@ error[E0323]: loops do not produce a value
  --> tests/ui/block_by_ref_temp.wid:7:3
   |
 7 |   while false
-  |   ^^^^^^^^^^^ used as a value here
+  |   ^^^^^^^^^^^ the last line gives the value, but a loop has none
+  |         ----- the loop ends when this is false, and the code after it runs
+  = note: only a loop that never finishes, like `loop do` without a `break`, may end a method or a branch without a value after it
+help: give the value on a line after the loop
+  |   end
+  |   …
   = see `wid explain E0323`
 
 error: could not compile due to 2 errors

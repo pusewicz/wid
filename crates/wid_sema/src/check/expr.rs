@@ -149,13 +149,7 @@ impl<'a> Checker<'a> {
             }
             E::If(if_expr) => self.if_value(if_expr, expected, e.span),
             E::Ternary { cond, then, else_ } => self.ternary(cond, then, else_, expected, e.span),
-            E::While { .. } | E::Loop(_) | E::For(_) => {
-                self.report(
-                    Diagnostic::error(codes::NOT_A_VALUE, "loops do not produce a value")
-                        .primary(e.span, "used as a value here"),
-                );
-                ir::Expr::new(ExprKind::Zero, self.types.unknown())
-            }
+            E::While { .. } | E::Loop(_) | E::For(_) => self.loop_value(e, false),
             E::Error => ir::Expr::new(ExprKind::Zero, self.types.unknown()),
             // A bound that failed to parse (`[..]`) was reported already.
             E::Range { lo, hi, .. } if [lo, hi].into_iter().flatten().any(|b| matches!(b.kind, E::Error)) => {

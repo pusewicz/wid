@@ -1,0 +1,55 @@
+# A loop that can finish has no value, so it can't end a method that
+# returns one (#132). Each error points at what ends the loop; the
+# variables the loop reads count as read.
+
+def find(n: Int) -> Int
+  i = 0
+  loop do
+    break if i * i >= n
+    i += 1
+  end
+end
+
+def scan(n: Int) -> Int
+  i = 0
+  while true
+    if i > n
+      break
+    end
+    i += 1
+  end
+end
+
+def count(n: Int) -> Int
+  i = 0
+  while i < n
+    i += 1
+  end
+end
+
+def first(xs: []Int) -> Int
+  for x in xs
+    return x if x > 1
+  end
+end
+
+def pick(c: Bool, n: Int) -> Int
+  if c
+    1
+  else
+    until n > 3
+      n += 1
+    end
+  end
+end
+
+def main
+  p find(10), scan(2), count(2), first([1, 2]), pick(true, 0)
+  y = while true
+    break
+  end
+  z = loop do
+    return
+  end
+  p y, z
+end

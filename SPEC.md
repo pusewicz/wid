@@ -231,6 +231,14 @@ end
   `os.exit`. Their body must end in `panic`, an endless loop or another
   `-> Never` call, and a call to one ends the code path, so it satisfies
   `guard … else`.
+- **Loops are statements:** a loop has no value (E0323), except that a loop
+  no `break` leaves (`loop do`, `while true`, `until false`) never
+  finishes, so it is `Never`-typed at the end of a method or a branch
+  whose value is wanted, as `panic` is: `def find(n: Int) -> Int` may end
+  in a `loop do` that `return`s. A `break` in a nested loop or in a block
+  doesn't leave the outer loop. A loop that can finish there is E0323,
+  which points at the `break`, the condition or the iterated value that
+  ends it and offers to add the value on a line after the loop.
 - **`caller_location`** is a `Location` (`file`, `line`, `column`, `proc`).
   As a parameter default, `loc: Location = caller_location`, it is the
   location of the call, which is how `t.expect` and allocators report where
