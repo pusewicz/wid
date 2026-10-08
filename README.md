@@ -18,8 +18,8 @@ wid run .
 
 Status: design phase. See [SPEC.md](SPEC.md).
 
-Editor support: [Vim](extras/vim), and the language server for Neovim and VS
-Code ([docs/editors.md](docs/editors.md)).
+Editor support: [Vim](extras/vim), and the language server for Neovim, Vim and
+VS Code ([docs/editors.md](docs/editors.md)).
 
 ## Building
 
