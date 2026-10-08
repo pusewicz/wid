@@ -1,0 +1,42 @@
+# A map key is a type whose `==` is the built-in one (E0332): not a slice,
+# a dynamic array, a union or a proc, a struct holding one, or a struct
+# with its own `==`. Generic code is checked for the keys it is used with.
+struct Money
+  cents: Int
+
+  def ==(other: Money) -> Bool = @cents == other.cents
+end
+
+struct Tagged
+  name: String
+  parts: []Int
+end
+
+union Shape = Money | Int
+
+struct Index($K)
+  entries: map[K]Int
+end
+
+def tally(xs: []$T) -> Int
+  seen = map[T]Bool.new
+  defer free(seen)
+  for x in xs
+    seen[x] = true
+  end
+  seen.size
+end
+
+def main
+  a = map[[]Int]Int.new
+  b = map[Money]Int.new
+  c = map[Shape?]Int.new
+  d = map[proc(Int) -> Int]Int.new
+  e = map[Tagged]Int.new
+  f = Index([dynamic]U8).new
+  g = Index([4]U8).new
+  p a.size + b.size + c.size + d.size + e.size + f.entries.size + g.entries.size
+  shapes: [2]Shape
+  p tally(shapes)
+  p tally([1, 2])
+end

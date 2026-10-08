@@ -116,7 +116,13 @@ typedef struct wid_RawMap {
 
 static_assert(sizeof(wid_RawDyn) == 40 && sizeof(wid_RawMap) == 40, "the compiler assumes 40-byte containers");
 
-/** Describes the slot layout of one map type. */
+/**
+ * Describes the slot layout of one map type. Keys are equal when `==` says
+ * so: a key type whose bytes don't decide that (one holding a float, where
+ * `-0.0` is `0.0`, a string inside a struct, an optional or padding) has a
+ * `key_hash` and a `key_eq` the compiler generates; the others are hashed
+ * and compared by their bytes, and a `String` by its text.
+ */
 typedef struct wid_MapInfo {
     wid_Int key_size;
     wid_Int value_size;
@@ -125,7 +131,29 @@ typedef struct wid_MapInfo {
     wid_Int value_offset;
     wid_Int align;
     bool string_key;
+    uint64_t (*key_hash)(const void *key);
+    bool (*key_eq)(const void *a, const void *b);
 } wid_MapInfo;
+
+/** Feeds `len` bytes into a map key's FNV-1a hash `h`. */
+static inline uint64_t wid_hash_feed(uint64_t h, const void *data, wid_Int len) {
+    const uint8_t *p = data;
+    for (wid_Int i = 0; i < len; i++) {
+        h ^= p[i];
+        h *= 0x100000001b3ull;
+    }
+    return h;
+}
+/** Feeds a float into a map key's hash, with `-0.0` hashed as `0.0`. */
+static inline uint64_t wid_hash_f64(uint64_t h, double v) {
+    if (v == 0) v = 0;
+    return wid_hash_feed(h, &v, sizeof v);
+}
+/** Feeds an `F32` into a map key's hash, with `-0.0` hashed as `0.0`. */
+static inline uint64_t wid_hash_f32(uint64_t h, float v) {
+    if (v == 0) v = 0;
+    return wid_hash_feed(h, &v, sizeof v);
+}
 
 /** A text sink: a C stream, or a growable buffer owned by an allocator. */
 typedef struct wid_Writer {
@@ -1056,16 +1084,16 @@ void wid_dyn_free(wid_RawDyn *d, wid_Int size, wid_Location loc) {
 enum : uint8_t { WID_SLOT_EMPTY = 0, WID_SLOT_FULL = 1 };
 
 static uint64_t wid_hash_bytes_(const void *data, wid_Int len) {
-    const uint8_t *p = data;
-    uint64_t h = 0xcbf29ce484222325ull;
-    for (wid_Int i = 0; i < len; i++) {
-        h ^= p[i];
-        h *= 0x100000001b3ull;
-    }
+    uint64_t h = wid_hash_feed(0xcbf29ce484222325ull, data, len);
     return h ? h : 1;
 }
 
+/* A hash is never 0. */
 static uint64_t wid_map_hash_(const wid_MapInfo *info, const void *key) {
+    if (info->key_hash) {
+        uint64_t h = info->key_hash(key);
+        return h ? h : 1;
+    }
     if (info->string_key) {
         const wid_String *s = key;
         return wid_hash_bytes_(s->data, s->len);
@@ -1074,6 +1102,7 @@ static uint64_t wid_map_hash_(const wid_MapInfo *info, const void *key) {
 }
 
 static bool wid_map_key_eq_(const wid_MapInfo *info, const void *a, const void *b) {
+    if (info->key_eq) return info->key_eq(a, b);
     if (info->string_key) return wid_string_eq(*(const wid_String *)a, *(const wid_String *)b);
     return memcmp(a, b, (size_t)info->key_size) == 0;
 }

@@ -197,11 +197,127 @@ impl Gen<'_> {
         let val_off = (key_off + ks).div_ceil(va.max(1)) * va.max(1);
         let slot = (val_off + vs).div_ceil(align) * align;
         let string_key = matches!(self.p.types.kind(self.p.types.base(k)), TyKind::String);
+        let (hash, eq) = self.key_fns(k).unwrap_or_else(|| ("nullptr".to_string(), "nullptr".to_string()));
         let _ = writeln!(
             self.helper_protos,
-            "static const wid_MapInfo {name} = {{{ks}, {vs}, {slot}, {key_off}, {val_off}, {align}, {string_key}}};"
+            "static const wid_MapInfo {name} = {{{ks}, {vs}, {slot}, {key_off}, {val_off}, {align}, {string_key}, {hash}, {eq}}};"
         );
         name
+    }
+
+    /// The functions that hash and compare map keys of type `k` the way
+    /// `==` compares them, for a key whose bytes don't decide that: one
+    /// holding a float (`-0.0 == 0.0`), a string inside a struct, an
+    /// optional or padding. `None` for one the runtime hashes and compares
+    /// by its bytes, or a `String` by its text.
+    fn key_fns(&mut self, k: TyId) -> Option<(String, String)> {
+        if matches!(self.p.types.kind(self.p.types.base(k)), TyKind::String) || self.bytes_decide_eq(k) {
+            return None;
+        }
+        let (hash, eq) = (format!("wid_keyhash_{}", k.0), format!("wid_keyeq_{}", k.0));
+        if !self.helpers_done.insert(("keyfns", k)) {
+            return Some((hash, eq));
+        }
+        let cty = self.c_type(k);
+        let mut feed = String::new();
+        self.hash_feed(k, "(*key)", 1, &mut feed);
+        let cmp = self.eq_expr(k, "(*x)", "(*y)");
+        let _ = writeln!(self.helper_protos, "static uint64_t {hash}(const void *p);");
+        let _ = writeln!(self.helper_protos, "static bool {eq}(const void *a, const void *b);");
+        let _ = writeln!(
+            self.helper_bodies,
+            "static uint64_t {hash}(const void *p) {{\n    const {cty} *key = p;\n    uint64_t h = 0xcbf29ce484222325ull;\n{feed}    return h;\n}}\n"
+        );
+        let _ = writeln!(
+            self.helper_bodies,
+            "static bool {eq}(const void *a, const void *b) {{\n    const {cty} *x = a;\n    const {cty} *y = b;\n    return {cmp};\n}}\n"
+        );
+        Some((hash, eq))
+    }
+
+    /// Whether two values of `ty` are `==` exactly when their bytes are the
+    /// same: integers, enums and pointers, and structs, arrays and tuples
+    /// of them without padding.
+    fn bytes_decide_eq(&self, ty: TyId) -> bool {
+        let types = &self.p.types;
+        let base = types.base(ty);
+        let packed = |parts: &[TyId]| {
+            parts.iter().all(|t| self.bytes_decide_eq(*t))
+                && parts.iter().map(|t| types.size_of(*t)).sum::<u64>() == types.size_of(base)
+        };
+        match types.kind(base) {
+            TyKind::Int(_)
+            | TyKind::Bool
+            | TyKind::Rune
+            | TyKind::Enum(_)
+            | TyKind::Error
+            | TyKind::Pointer(_)
+            | TyKind::MultiPointer(_)
+            | TyKind::RawPtr
+            | TyKind::CString
+            | TyKind::TypeId => true,
+            TyKind::Optional(_) => types.optional_is_pointer(base),
+            TyKind::Struct(id) => {
+                let fields: Vec<TyId> = types.struct_info(*id).fields.iter().map(|f| f.ty).collect();
+                packed(&fields)
+            }
+            TyKind::Tuple(elems) => packed(elems),
+            TyKind::Array(elem, n) => *n > 0 && self.bytes_decide_eq(*elem),
+            _ => false,
+        }
+    }
+
+    /// Writes the statements that feed the value `v` (an lvalue of type
+    /// `ty`) into the map key hash `h`, the way `==` sees it: a float with
+    /// `-0.0` as `0.0`, a string by its text, an optional's value only when
+    /// it has one, and no padding.
+    fn hash_feed(&mut self, ty: TyId, v: &str, depth: usize, out: &mut String) {
+        let pad = "    ".repeat(depth);
+        let base = self.p.types.base(ty);
+        match self.p.types.kind(base).clone() {
+            TyKind::String => {
+                let _ = writeln!(out, "{pad}h = wid_hash_feed(h, &{v}.len, sizeof {v}.len);");
+                let _ = writeln!(out, "{pad}h = wid_hash_feed(h, {v}.data, {v}.len);");
+            }
+            TyKind::Float(FloatTy::F32) => {
+                let _ = writeln!(out, "{pad}h = wid_hash_f32(h, {v});");
+            }
+            TyKind::Float(_) => {
+                let _ = writeln!(out, "{pad}h = wid_hash_f64(h, {v});");
+            }
+            TyKind::Struct(id) => {
+                let fields = self.p.types.struct_info(id).fields.clone();
+                for (i, f) in fields.iter().enumerate() {
+                    let access = self.field_access(v, false, true, base, i as u32);
+                    self.hash_feed(f.ty, &access, depth, out);
+                }
+            }
+            TyKind::Tuple(elems) => {
+                for (i, e) in elems.iter().enumerate() {
+                    self.hash_feed(*e, &format!("{v}.f{i}"), depth, out);
+                }
+            }
+            TyKind::Array(elem, n) => self.hash_feed_elems(elem, n, v, depth, out),
+            TyKind::Matrix(elem, r, c) => self.hash_feed_elems(elem, u64::from(r) * u64::from(c), v, depth, out),
+            TyKind::Optional(inner) if !self.p.types.optional_is_pointer(base) => {
+                let _ = writeln!(out, "{pad}h = wid_hash_feed(h, &{v}.has, sizeof {v}.has);");
+                let _ = writeln!(out, "{pad}if ({v}.has) {{");
+                self.hash_feed(inner, &format!("{v}.value"), depth + 1, out);
+                let _ = writeln!(out, "{pad}}}");
+            }
+            _ => {
+                let _ = writeln!(out, "{pad}h = wid_hash_feed(h, &{v}, sizeof {v});");
+            }
+        }
+    }
+
+    /// Feeds the `n` elements of the array or matrix `v` into the hash.
+    fn hash_feed_elems(&mut self, elem: TyId, n: u64, v: &str, depth: usize, out: &mut String) {
+        let pad = "    ".repeat(depth);
+        let i = format!("i{depth}");
+        let _ = writeln!(out, "{pad}for (wid_Int {i} = 0; {i} < {n}; {i}++) {{");
+        self.hash_feed(elem, &format!("{v}.data[{i}]"), depth + 1, out);
+        let _ = writeln!(out, "{pad}}}");
     }
 
     /// Returns a C expression comparing `a` and `b` of type `ty` for equality.

@@ -23,7 +23,8 @@ struct MapInfo {
     key_offset: u64,
     value_offset: u64,
     align: u64,
-    string_key: bool,
+    /// The key type, which keys are hashed and compared by, as `==` does.
+    key: TyId,
 }
 
 impl<'c> Interp<'c> {
@@ -782,25 +783,14 @@ impl<'c> Interp<'c> {
         let key_offset = 16u64.div_ceil(ka.max(1)) * ka.max(1);
         let value_offset = (key_offset + ks).div_ceil(va.max(1)) * va.max(1);
         let slot_size = (value_offset + vs).div_ceil(align) * align;
-        let string_key = matches!(self.kind(k), TyKind::String);
-        MapInfo { key_size: ks, slot_size, key_offset, value_offset, align, string_key }
+        MapInfo { key_size: ks, slot_size, key_offset, value_offset, align, key: k }
     }
 
-    fn map_key_bytes(&self, info: MapInfo, key: Addr) -> R<Vec<u8>> {
-        if info.string_key {
-            let s = self.rd(key, 16)?;
-            return self.string_bytes(&s);
-        }
-        self.rd(key, info.key_size)
-    }
-
+    /// Hashes the key at `key` the way `==` compares it; never 0.
     fn map_hash(&self, info: MapInfo, key: Addr) -> R<u64> {
-        let bytes = self.map_key_bytes(info, key)?;
+        let bytes = self.rd(key, info.key_size)?;
         let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-        for b in bytes {
-            h ^= u64::from(b);
-            h = h.wrapping_mul(0x0000_0100_0000_01b3);
-        }
+        self.key_hash(info.key, &bytes, &mut h)?;
         Ok(if h == 0 { 1 } else { h })
     }
 
@@ -812,7 +802,7 @@ impl<'c> Interp<'c> {
         }
         let mask = cap - 1;
         let mut i = (hash & mask as u64) as i64;
-        let wanted = self.map_key_bytes(info, key)?;
+        let wanted = self.rd(key, info.key_size)?;
         for _ in 0..cap {
             let slot = slots + i as u64 * info.slot_size;
             let head = self.rd(slot, 16)?;
@@ -820,7 +810,7 @@ impl<'c> Interp<'c> {
                 return Ok((i, false));
             }
             if u64::from_le_bytes(word(&head[8..])) == hash
-                && self.map_key_bytes(info, slot + info.key_offset)? == wanted
+                && self.equal(info.key, &self.rd(slot + info.key_offset, info.key_size)?, &wanted)?
             {
                 return Ok((i, true));
             }

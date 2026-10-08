@@ -1,0 +1,78 @@
+error[E0332]: `[dynamic]U8` can't be a map key
+  --> tests/ui/map_key_errors.wid:18:16
+   |
+18 |   entries: map[K]Int
+   |                ^ this key type
+   = note: in `Index([dynamic]U8)`
+   = note: `[dynamic]U8` has no `==`: it views or owns memory that may change
+help: key it by a fixed array (`[4]Int`) or a `String`
+   = see `wid explain E0332`
+
+error[E0332]: `Shape` can't be a map key
+  --> tests/ui/map_key_errors.wid:22:14
+   |
+22 |   seen = map[T]Bool.new
+   |              ^ this key type
+...
+40 |   p tally(shapes)
+   |     ------------- `tally[Shape]` is checked for these types because of this call
+   = note: `Shape` has no `==`
+help: key it by an enum, or by a struct of the values that tell its variants apart
+   = see `wid explain E0332`
+
+error[E0332]: `[]Int` can't be a map key
+  --> tests/ui/map_key_errors.wid:31:11
+   |
+31 |   a = map[[]Int]Int.new
+   |           ^^^^^ this key type
+   = note: `[]Int` has no `==`: it views or owns memory that may change
+help: key it by a fixed array (`[4]Int`) or a `String`
+   = see `wid explain E0332`
+
+error[E0332]: `Money` can't be a map key
+  --> tests/ui/map_key_errors.wid:32:11
+   |
+32 |   b = map[Money]Int.new
+   |           ^^^^^ this key type
+   = note: `Money` defines its own `==`, and a map finds keys with the built-in one, comparing every field
+help: key the map by the values `Money`'s `==` compares, like one of its fields
+   = see `wid explain E0332`
+
+error[E0301]: `Shape` is a union, which can be nil already
+  --> tests/ui/map_key_errors.wid:33:11
+   |
+33 |   c = map[Shape?]Int.new
+   |           ^^^^^^ `Shape?` adds nothing to `Shape`
+   = note: a union's zero value is `nil`: it holds one of its variants or nothing, and works as an error value
+help: remove the `?`
+   |   c = map[Shape]Int.new
+   = see `wid explain E0301`
+
+error[E0332]: `Shape` can't be a map key
+  --> tests/ui/map_key_errors.wid:33:11
+   |
+33 |   c = map[Shape?]Int.new
+   |           ^^^^^^ this key type
+   = note: `Shape` has no `==`
+help: key it by an enum, or by a struct of the values that tell its variants apart
+   = see `wid explain E0332`
+
+error[E0332]: `proc(Int) -> Int` can't be a map key
+  --> tests/ui/map_key_errors.wid:34:11
+   |
+34 |   d = map[proc(Int) -> Int]Int.new
+   |           ^^^^^^^^^^^^^^^^ this key type
+   = note: `proc(Int) -> Int` has no `==`
+help: key it by a number, a string, an enum or a struct of them
+   = see `wid explain E0332`
+
+error[E0332]: `Tagged` can't be a map key
+  --> tests/ui/map_key_errors.wid:35:11
+   |
+35 |   e = map[Tagged]Int.new
+   |           ^^^^^^ this key type
+   = note: `[]Int` has no `==`: it views or owns memory that may change, and `Tagged` holds one
+help: key it by a fixed array (`[4]Int`) or a `String`
+   = see `wid explain E0332`
+
+error: could not compile due to 8 errors

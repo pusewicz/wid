@@ -1689,6 +1689,22 @@ the language server.
   stops at `last` before stepping past it, so `start.upto(255)` on a `U8`
   ends (it looped forever, and a signed one overflowed at its maximum).
   `core/builtin/numbers_test.wid` covers them.
+- Map keys (#140, SPEC "Collections"): a map finds a key with the built-in
+  `==`. Key types whose bytes don't decide it (a float, where `-0.0` is
+  `0.0`, a string inside a struct, an optional, padding) get a
+  `wid_keyhash_N` and a `wid_keyeq_N` in the generated C, which
+  `wid_MapInfo` points at (`key_fns` in `wid_codegen_c/src/helpers.rs`;
+  the runtime's `wid_hash_feed`, `wid_hash_f64` and `wid_hash_f32` feed
+  them); integers, enums, pointers and padding-free structs and arrays of
+  them stay compared by their bytes, and a `String` by its text. A struct
+  key with a `String` field used to compare the string's pointer, and one
+  with padding or an optional key could miss at `-o:speed`. The
+  interpreter hashes and compares keys by their type the same way
+  (`key_hash` and `equal`). A key type whose `==` isn't the built-in one
+  (a slice, dynamic array, union or proc, a struct holding one, or a
+  struct with its own `==`) is E0332 where the map type is written,
+  checked once types are complete (`check/map_keys.rs`), with the instance
+  or call that uses a generic one.
 
 ## Next
 

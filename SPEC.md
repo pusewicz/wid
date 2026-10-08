@@ -331,9 +331,16 @@ end
     A zero-valued container adopts `context.allocator` when it first grows.
   - As in Odin, growing a dynamic array or map while iterating it, or while
     holding a pointer into it, invalidates the iteration and the pointer.
-  - Map keys are numbers, runes, bools, enums, pointers or strings. `m[k]`
-    returns `V?`, `m[k] = v` stores, and `m[k] += 1` starts from zero for a
-    missing key. Maps also have `.has_key?`, `.delete` and `.size`.
+  - A map key is any type whose `==` is the built-in one: a number, rune,
+    bool, enum, pointer or string, or a struct (without its own `==`), fixed
+    array, tuple or optional of them. Any other key type (a slice, a dynamic
+    array, a union, a proc, or a struct with its own `==`) is E0332. A key
+    is found by that `==`: `0.0` and `-0.0` are one key, also inside a
+    struct, array or optional key, a string is compared by its text, padding
+    doesn't count, and a NaN key is never found, since `NaN == NaN` is
+    false. `m[k]` returns `V?`, `m[k] = v` stores, and `m[k] += 1` starts
+    from zero for a missing key. Maps also have `.has_key?`, `.delete` and
+    `.size`.
 - **Strings** are byte views:
   - `.size` counts bytes, `s[i]` is a `U8`, and `s[a...b]` slices bytes.
   - `for r in s` iterates runes, and `for r, i in s` adds the byte offset.

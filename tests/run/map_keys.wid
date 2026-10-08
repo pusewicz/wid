@@ -1,0 +1,74 @@
+# A map finds a key with the built-in `==` (SPEC "Collections"): `-0.0` is
+# `0.0`, also inside a struct, array or optional key, a string inside a
+# struct is compared by its text, padding is ignored, and a NaN key is never
+# found. Compile-time maps (`comptime`) find the same keys.
+
+struct Cell
+  x: Int
+  y: Int
+end
+
+struct Named
+  name: String
+  rank: U8
+end
+
+struct Pt
+  x: F64
+  y: F32
+end
+
+def join(a: String, b: String) -> String = "#{a}#{b}"
+
+def lookups -> [8]Int
+  out: [8]Int
+  cells = map[Cell]Int.new
+  cells[Cell.new(1, 2)] = 1
+  out[0] = cells[Cell.new(1, 2)] || -1
+  names = map[Named]Int.new
+  names[Named.new(join("a", "b"), 3)] = 2
+  out[1] = names[Named.new("ab", 3)] || -1
+  pts = map[Pt]Int.new
+  pts[Pt.new(-0.0, 0.0)] = 3
+  out[2] = pts[Pt.new(0.0, -0.0)] || -1
+  floats = map[F64]Int.new
+  floats[0.0] = 4
+  out[3] = floats[-0.0] || -1
+  opts = map[F32?]Int.new
+  opts[nil] = 5
+  negative_zero: F32 = -0.0
+  zero: F32 = 0.0
+  opts[negative_zero] = 6
+  out[4] = (opts[nil] || -1) * 10 + (opts[zero] || -1)
+  arrays = map[[2]F32]Int.new
+  arrays[[0.0, 1.0]] = 7
+  out[5] = arrays[[-0.0, 1.0]] || -1
+  nan = 0.0 / 0.0
+  floats[nan] = 8
+  out[6] = floats[nan] || -1
+  out[7] = floats.size
+  free(cells)
+  free(names)
+  free(pts)
+  free(floats)
+  free(opts)
+  free(arrays)
+  out
+end
+
+AT_COMPILE_TIME = comptime lookups
+
+def main
+  p lookups
+  p AT_COMPILE_TIME
+  ranks = map[Named]Int.new
+  defer free(ranks)
+  ranks[Named.new("ada", 1)] = 10
+  ranks[Named.new(join("a", "da"), 1)] += 5
+  ranks[Named.new("bob", 2)] = 20
+  p ranks.size
+  p ranks[Named.new("ada", 1)]
+  p ranks.has_key?(Named.new("bob", 2))
+  ranks.delete(Named.new(join("b", "ob"), 2))
+  p ranks.size
+end

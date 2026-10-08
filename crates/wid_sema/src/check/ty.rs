@@ -226,8 +226,9 @@ impl<'a> Checker<'a> {
                 let t = self.resolve_shallow(inner, ctx);
                 self.types.intern(TyKind::Dynamic(t))
             }
-            T::Map(k, v) => {
-                let k = self.resolve_shallow(k, ctx);
+            T::Map(key, v) => {
+                let k = self.resolve_shallow(key, ctx);
+                self.note_map_key(k, key.span, self.resolving_instance(ctx.self_ty));
                 let v = self.resolve_shallow(v, ctx);
                 self.types.intern(TyKind::Map(k, v))
             }

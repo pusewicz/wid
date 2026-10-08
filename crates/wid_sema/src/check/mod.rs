@@ -13,6 +13,7 @@ mod index;
 mod inline;
 mod items;
 mod macros;
+mod map_keys;
 mod matrix;
 mod members;
 mod operators;
@@ -38,6 +39,14 @@ use crate::ir::{self, FnId, LocalId};
 use crate::types::{Abi, TyId, TypeTable};
 
 pub(crate) use body::Body;
+
+/// A map key type written at `span` (see `Checker::check_map_keys`).
+pub(crate) struct MapKeySite {
+    pub key: TyId,
+    pub span: Span,
+    pub within: Option<TyId>,
+    pub call: Option<(String, Span)>,
+}
 
 /// Identifies a package-level (or member) declaration.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
@@ -257,6 +266,11 @@ pub(crate) struct Checker<'a> {
     /// generic instance: their size is checked once it is (see
     /// `check_type_size`).
     pub size_checks: Vec<(TyId, Span, Option<TyId>)>,
+    /// The key types of the map types written, by where, checked once
+    /// every type is complete (see `check_map_keys`): with the generic
+    /// struct instance whose fields hold the map, or the generic method
+    /// instance and the call that created it.
+    pub map_keys: Vec<MapKeySite>,
     /// For a variable that a field or element write left unread (see
     /// `write_place`), by its declaration's span: the first such write,
     /// which an unused-variable error points at.
@@ -398,6 +412,7 @@ fn run(
         pending_types: Vec::new(),
         shallow: 0,
         size_checks: Vec::new(),
+        map_keys: Vec::new(),
         write_only: HashMap::new(),
         loop_copies: HashMap::new(),
         errors: Vec::new(),
@@ -441,6 +456,7 @@ fn run(
     checker.check_all_roots();
     let (tests, test_runner) = checker.collect_tests();
     checker.drain_queue();
+    checker.check_map_keys();
     let mut roots: Vec<FnId> = main.into_iter().chain(tests.iter().map(|t| t.func)).chain(test_runner).collect();
     roots.extend(
         checker

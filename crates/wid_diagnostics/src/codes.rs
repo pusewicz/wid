@@ -103,6 +103,7 @@ codes! {
     TYPE_TOO_LARGE = "E0329", "type is too large";
     PREDICATE_RETURN = "E0330", "`?` method does not return `Bool`";
     UNDEFINABLE_OPERATOR = "E0331", "operator that can't be defined";
+    INVALID_MAP_KEY = "E0332", "type can't be a map key";
 
     // Errors and control flow.
     IGNORED_ERROR = "E0401", "`Error` result ignored";

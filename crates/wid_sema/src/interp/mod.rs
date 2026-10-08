@@ -1227,6 +1227,64 @@ impl<'c> Interp<'c> {
             _ => a == b,
         })
     }
+
+    /// Feeds a map key into the FNV-1a hash `h` the way `==` compares it,
+    /// as the runtime's generated `wid_keyhash_*` functions do: a float with
+    /// `-0.0` as `0.0`, a string by its text, an optional's value only when
+    /// it has one, and no padding.
+    fn key_hash(&self, ty: TyId, v: &[u8], h: &mut u64) -> R<()> {
+        let feed = |h: &mut u64, bytes: &[u8]| {
+            for b in bytes {
+                *h ^= u64::from(*b);
+                *h = h.wrapping_mul(0x0000_0100_0000_01b3);
+            }
+        };
+        let types = self.p.types;
+        match self.kind(ty) {
+            TyKind::String => {
+                let text = self.string_bytes(v)?;
+                feed(h, &(text.len() as u64).to_le_bytes());
+                feed(h, &text);
+            }
+            TyKind::Float(_) => {
+                let x = as_f64(self.decode(ty, v));
+                let x = if x == 0.0 { 0.0 } else { x };
+                feed(h, &x.to_bits().to_le_bytes());
+            }
+            TyKind::Struct(id) => {
+                for f in &types.struct_info(*id).fields {
+                    self.key_hash(f.ty, &slice(v, f.offset, types.size_of(f.ty)), h)?;
+                }
+            }
+            TyKind::Array(elem, _) | TyKind::Matrix(elem, _, _) => {
+                let s = types.size_of(*elem);
+                let n = match self.kind(ty) {
+                    TyKind::Array(_, n) => *n,
+                    TyKind::Matrix(_, r, c) => u64::from(*r) * u64::from(*c),
+                    _ => 0,
+                };
+                for i in 0..n {
+                    self.key_hash(*elem, &slice(v, i * s, s), h)?;
+                }
+            }
+            TyKind::Tuple(ts) => {
+                let parts: Vec<(u64, u64)> = ts.iter().map(|t| types.layout(*t)).collect();
+                for (t, off) in ts.iter().zip(crate::types::offsets(&parts)) {
+                    self.key_hash(*t, &slice(v, off, types.size_of(*t)), h)?;
+                }
+            }
+            TyKind::Optional(inner) if !self.optional_is_pointer(ty) => {
+                let s = types.size_of(*inner);
+                let has = v.get(s as usize).copied().unwrap_or(0) != 0;
+                feed(h, &[u8::from(has)]);
+                if has {
+                    self.key_hash(*inner, &slice(v, 0, s), h)?;
+                }
+            }
+            _ => feed(h, v),
+        }
+        Ok(())
+    }
 }
 
 /// Whether an expression names storage, so its address can be taken.
