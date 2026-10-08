@@ -191,6 +191,7 @@ pub fn cimport_dump(request: &DumpRequest) -> (SourceMap, Result<String, Diagnos
             .iter()
             .map(|d| std::path::absolute(d).unwrap_or_else(|_| d.clone()))
             .collect(),
+        command_line: true,
     };
     let result = match cimport::import(&spec, &dir, &[], &mut sources) {
         Ok(imported) => Ok(imported.rendered.source),

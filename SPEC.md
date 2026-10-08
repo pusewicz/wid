@@ -891,7 +891,11 @@ end
 
 - `cimport` uses libclang to turn the functions, structs, unions, enums,
   typedefs, constants and simple macros of a header into a package of Wid
-  declarations. `wid cimport --dump <header>` prints that package.
+  declarations. `wid cimport --dump <header>` prints that package. Its
+  flags `-strip-prefix:`, `-include-dir:`, `-pkg-config:` and `-define:`
+  stand for the options below, it looks for the header from the current
+  directory, and its errors name those flags where a `cimport` line's name
+  the options (E0701: "add its directory with `-include-dir:`").
 - **Namespaces.** With `as: :stbi`, the declarations live under `stbi.` in
   the file that imports them, like an `import`, and other packages don't see
   them. Without `as:`, they join the package's own namespace, exactly as if

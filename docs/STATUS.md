@@ -1456,6 +1456,12 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   (`clang_getCursorReferenced`, through implicit casts, parentheses and
   chains of such macros) and names the function type's parameters from it,
   as for function-pointer globals. It was `def alias(arg0, arg1, arg2)`.
+- `wid cimport --dump`'s errors name its flags (#147, SPEC "C and C++
+  interop"): `cimport::Spec::command_line` makes E0701's help say
+  `-include-dir:`, `-pkg-config:` and `-define:` and "relative to the
+  current directory" (a `cimport` line's keep `include_dirs:`,
+  `pkg_config:` and `define:`), and the help for a missing pkg-config no
+  longer offers `link:`. Tested by `crates/wid_driver/tests/cimport_dump.rs`.
 
 ## Next
 
