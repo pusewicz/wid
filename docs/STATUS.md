@@ -1243,8 +1243,13 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   silently ignored (`wid explain -debug E0206`, `wid check -filter:x .`,
   `wid doc -out:x core:fmt`); `args::parse` now checks each flag against
   the command's own list (`command_flags`) and stops with a usage error
-  (status 2) naming the commands that take it. A unit test parses every
-  flag each command's help lists. Without `-file`, a target that isn't a
+  (status 2) naming the commands that take it. `wid check` has its own
+  list (`CHECK_FLAGS`: `-file`, `-define`, `-target`, `-collection`,
+  `-json-errors`) and help (`CHECK_FLAG_HELP`), without the flags for
+  building C (`-out`, `-o`, `-debug`, `-keep-c`, `-cc`, `-no-bounds-check`,
+  `-sanitize`), which changed nothing it reports: the interpreter always
+  runs with `-debug`'s checks. A unit test parses every flag each command's
+  help lists and checks the help lists exactly the flags the command takes. Without `-file`, a target that isn't a
   package directory (`cmdline::dir_target`, from `load_program`) points
   into the command line like the `-file` errors: a missing directory
   suggests a similar package directory next to it, or `name.wid -file`; a

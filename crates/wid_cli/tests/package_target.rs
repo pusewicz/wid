@@ -233,12 +233,13 @@ fn flags_of_other_commands_are_usage_errors() {
     for (args, message) in [
         (
             "explain -debug E0206",
-            "`-debug` doesn't apply to `wid explain`; `wid build`, `wid run`, `wid check` and `wid test` take it",
+            "`-debug` doesn't apply to `wid explain`; `wid build`, `wid run` and `wid test` take it",
         ),
         ("check -filter:x .", "`-filter` doesn't apply to `wid check`; only `wid test` takes it"),
+        ("doc -out:x core:fmt", "`-out` doesn't apply to `wid doc`; `wid build`, `wid run` and `wid test` take it"),
         (
-            "doc -out:x core:fmt",
-            "`-out` doesn't apply to `wid doc`; `wid build`, `wid run`, `wid check` and `wid test` take it",
+            "check main.wid -file -out:foo -keep-c -o:speed",
+            "`-out` doesn't apply to `wid check`; `wid build`, `wid run` and `wid test` take it",
         ),
     ] {
         let (status, err) = run(&dir, args);

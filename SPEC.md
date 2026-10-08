@@ -996,10 +996,16 @@ end
   `-out:`, `-o:none|minimal|size|speed|aggressive`, `-debug`, `-vet`,
   `-define:NAME=val`, `-collection:name=path`, `-target:os_arch`, `-file`,
   `-sanitize:address`, `-filter:` (for `test`), `-json` and `-private` (for
-  `doc`), `-in:` (for `query`), `-check` (for `fmt`) and `-json-errors`. A
-  flag another command takes is an error that names the commands taking it
-  (`wid explain -debug`: "`-debug` doesn't apply to `wid explain`"), never
-  silently ignored; like every usage error, it exits with status 2.
+  `doc`), `-in:` (for `query`), `-check` (for `fmt`) and `-json-errors`.
+  `check` generates no C, so it takes only the flags that change what is
+  checked: `-file`, `-define:`, `-target:`, `-collection:` and
+  `-json-errors`; the flags for building C (`-out:`, `-o:`, `-debug`,
+  `-keep-c`, `-cc:`, `-no-bounds-check`, `-sanitize:`) belong to `build`,
+  `run` and `test`. Compile-time code runs with `-debug`'s checks whatever
+  the flags. A flag another command takes is an error that names the
+  commands taking it (`wid explain -debug`: "`-debug` doesn't apply to
+  `wid explain`"), never silently ignored; like every usage error, it exits
+  with status 2.
 - Without `-file`, the target of `build`, `run`, `check` and `test` is a
   package directory. One that isn't is an error (E0206) that points into the
   command line: a missing directory, with a similar package directory next
