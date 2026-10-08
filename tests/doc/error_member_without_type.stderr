@@ -7,4 +7,4 @@ help: `Player.heal` has that name; name its type first
   | wid doc shapes Player.heal
   = see `wid explain E0602`
 
-error: could not compile due to 1 error
+error: could not write the documentation due to 1 error

@@ -961,6 +961,11 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   flag is offered its one-dash form only when the command takes it,
   another command's flag says which command takes it, and `wid explain`
   (which takes none) says to run it with no code to list every code.
+- The summary line after the diagnostics is worded per command
+  (`render_all_with`): `could not compile` stays with `build`, `run`,
+  `check` and `test`; `cimport` could not import the header, and `wid doc`
+  could not write the documentation, or warns that the page it printed may
+  be incomplete. The errdocs scripts accept every wording.
 
 ## Next
 

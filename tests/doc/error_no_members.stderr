@@ -8,4 +8,4 @@ help: document `MAX_BALLS` itself
   | wid doc shapes MAX_BALLS
   = see `wid explain E0603`
 
-error: could not compile due to 1 error
+error: could not write the documentation due to 1 error

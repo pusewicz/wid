@@ -7,7 +7,7 @@ use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use wid_diagnostics::{Diagnostics, RenderOptions, SourceMap, render_all, render_json, to_json};
+use wid_diagnostics::{Diagnostics, RenderOptions, SourceMap, render_all_with, render_json, to_json};
 use wid_driver::Options;
 
 use args::{Command, Parsed};
@@ -50,12 +50,16 @@ fn error_line(message: &str) -> String {
     if color_stderr() { format!("\x1b[1;31merror\x1b[0m: {message}") } else { format!("error: {message}") }
 }
 
+/// How the summary line of `build`, `run`, `check` and `test` starts.
+const COMPILE: &str = "could not compile due to";
+
 /// Prints diagnostics in the requested format and returns true on errors.
-fn report(diags: &Diagnostics, sources: &SourceMap, parsed: &Parsed) -> bool {
+/// With errors, the summary line after them is `failure` and the counts.
+fn report(diags: &Diagnostics, sources: &SourceMap, parsed: &Parsed, failure: &str) -> bool {
     if parsed.json_errors {
         println!("{}", render_json(diags, sources));
     } else if !diags.is_empty() {
-        eprint!("{}", render_all(diags, sources, RenderOptions { color: color_stderr() }));
+        eprint!("{}", render_all_with(diags, sources, RenderOptions { color: color_stderr() }, failure));
     }
     diags.has_errors()
 }
@@ -99,7 +103,7 @@ fn cimport(parsed: &Parsed) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(diags) => {
-            report(&diags, &sources, parsed);
+            report(&diags, &sources, parsed, "could not import the header due to");
             ExitCode::FAILURE
         }
     }
@@ -174,13 +178,13 @@ fn check(parsed: &Parsed) -> ExitCode {
     let mut opts = options(parsed);
     opts.check_all_packages = false;
     let checked = wid_driver::check(&opts);
-    if report(&checked.diags, &checked.sources, parsed) { ExitCode::from(1) } else { ExitCode::SUCCESS }
+    if report(&checked.diags, &checked.sources, parsed, COMPILE) { ExitCode::from(1) } else { ExitCode::SUCCESS }
 }
 
 fn build(parsed: &Parsed) -> ExitCode {
     let opts = options(parsed);
     let built = wid_driver::build(&opts);
-    if report(&built.checked.diags, &built.checked.sources, parsed) {
+    if report(&built.checked.diags, &built.checked.sources, parsed, COMPILE) {
         return ExitCode::from(1);
     }
     ExitCode::SUCCESS
@@ -193,7 +197,7 @@ fn test(parsed: &Parsed) -> ExitCode {
         println!("{}", test_json(&run));
         return if run.passed() { ExitCode::SUCCESS } else { ExitCode::from(1) };
     }
-    if report(&run.checked.diags, &run.checked.sources, parsed) {
+    if report(&run.checked.diags, &run.checked.sources, parsed, COMPILE) {
         return ExitCode::from(1);
     }
     let color = std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none();
@@ -242,7 +246,7 @@ fn run(parsed: &Parsed) -> ExitCode {
         opts.out = Some(dir.join(name));
     }
     let built = wid_driver::build(&opts);
-    if report(&built.checked.diags, &built.checked.sources, parsed) {
+    if report(&built.checked.diags, &built.checked.sources, parsed, COMPILE) {
         return ExitCode::from(1);
     }
     let Some(exe) = built.exe else { return ExitCode::from(1) };

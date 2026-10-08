@@ -10,4 +10,4 @@ error[E0603]: struct `Player` has no member `helth`
    = note: its members are `base`, `boost`, `create`, `greet`, `heal`, `hp`, `kills`, `move`, `name` and `pos`
    = see `wid explain E0603`
 
-error: could not compile due to 1 error
+error: could not write the documentation due to 1 error

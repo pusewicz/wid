@@ -29,7 +29,10 @@ ENV["WID_CC"] ||= "clang"
 ROOT = File.expand_path("..", __dir__)
 WID = ENV.fetch("WID_BIN", "#{ROOT}/target/debug/wid")
 WORK = ENV["WID_WORK"] || Dir.mktmpdir("wid-errdocs")
-TRAILER = /\A(error: could not compile due to|warning: \d+ warnings? emitted)/
+# The summary line after the diagnostics; each command words its errors
+# differently ("could not compile due to 1 error", "could not write the
+# documentation due to 2 errors"), but always ends with the counts.
+TRAILER = /\A(error: .* due to \d+ errors?( and \d+ warnings?)?|warning: \d+ warnings? emitted)\z/
 
 Block = Struct.new(:lang, :label, :body, :section, :line)
 

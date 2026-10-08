@@ -150,14 +150,19 @@ pub struct Printed {
 
 /// Renders a result the way `wid doc` prints it: the page on stdout (as
 /// JSON with `json`) and the diagnostics on stderr (as JSON with
-/// `json_errors`).
+/// `json_errors`). The summary line after the diagnostics says whether a
+/// page was written despite the errors.
 pub fn print(out: &DocOutput, json: bool, json_errors: bool, color: bool) -> Printed {
     let stderr = if json_errors {
         wid_diagnostics::render_json(&out.diags, &out.sources) + "\n"
     } else if out.diags.is_empty() {
         String::new()
     } else {
-        wid_diagnostics::render_all(&out.diags, &out.sources, wid_diagnostics::RenderOptions { color })
+        let failure = match out.page {
+            Some(_) => "the documentation may be incomplete due to",
+            None => "could not write the documentation due to",
+        };
+        wid_diagnostics::render_all_with(&out.diags, &out.sources, wid_diagnostics::RenderOptions { color }, failure)
     };
     let stdout = match &out.page {
         Some(page) if json => render_json(page) + "\n",

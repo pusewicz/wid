@@ -1010,6 +1010,12 @@ help: unwrap it and handle the nil case
   close "did you mean" candidates the shorter one wins, then the one the name
   would resolve to first (a variable, a method of `self`, a package name, a
   field), then the first alphabetically.
+- The diagnostics end with a summary line that says what failed, in the
+  command's words: `error: could not compile due to 2 errors` for `build`,
+  `run`, `check` and `test`, `could not import the header due to …` for
+  `cimport`, and for `wid doc` `could not write the documentation due to …`,
+  or `the documentation may be incomplete due to …` when it still prints a
+  page. With only warnings it is `warning: 2 warnings emitted`.
 - `-json-errors` produces the same diagnostics with structured fix-its.
   `wid explain <code>` gives the long-form explanation with examples.
 - `wid query` answers questions about a package in JSON: `outline`,
