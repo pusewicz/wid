@@ -1,0 +1,45 @@
+# Built at `-o:speed` (-O2), where gcc warns about more than at the default
+# level (#130), so the generated C and the runtime must stay clean there:
+# `core:os` with paths that fit its stack buffer and longer ones that take
+# the heap, strings, maps, dynamic arrays and wrapping arithmetic.
+import "core:os"
+import "core:strings"
+
+def main
+  puts os.exists?("tests/run/opt_speed.wid")
+  long = "tests/run/#{"x".repeat(600)}.wid"
+  puts long.size
+  puts os.exists?(long), os.dir?(long), os.dir?("tests/run")
+  _, err = os.read_file(long)
+  p err
+  p os.get_env("WID_#{"Y".repeat(300)}")
+  # Next to the executable, so concurrent runs don't share the file.
+  path = "#{os.args[0]}-#{"z".repeat(200)}.txt"
+  p os.write_file(path, "one\n".to([]U8))
+  guard data = os.read_file(path) else |e|
+    p e
+    return
+  end
+  p data.to(String)
+  free(data)
+  p os.remove(path), os.exists?(path)
+
+  words = [dynamic]String.new
+  defer free(words)
+  for w in "the quick brown fox jumps over the lazy dog".split(" ")
+    words << w
+  end
+  counts = map[String]Int.new
+  defer free(counts)
+  for w in words
+    counts[w] += 1
+  end
+  puts words.size, counts.size, counts["the"] || 0
+
+  x: I8 = 127
+  y: U8 = 255
+  big = 9223372036854775807
+  puts x + 1, y + 1, big + 1
+  v: [4]I32 = [2147483647, -2147483648, 1, 2]
+  p v + v, v * 3, -v
+end

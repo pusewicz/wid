@@ -967,9 +967,10 @@ end
 ## Toolchain and CLI
 
 - The compiler is written in Rust. It emits C23 and calls the host C compiler
-  (clang ≥ 19 or gcc ≥ 15); `cimport` also needs libclang. The output has
-  `#line` directives, so lldb, gdb and sanitizers point at `.wid` sources.
-  `-keep-c` keeps the generated C.
+  (clang ≥ 19 or gcc ≥ 15); `cimport` also needs libclang. The generated C
+  compiles without warnings under `-std=c23 -Wall -Wextra -Wpedantic` at
+  every `-o:` level. The output has `#line` directives, so lldb, gdb and
+  sanitizers point at `.wid` sources. `-keep-c` keeps the generated C.
 - **Tests.** `wid test <dir>` builds the package together with its
   `_test.wid` files (which other builds skip) and runs every `@[test]` method:
   a package-level `def name(t: ^testing.T)` from `core:testing`.

@@ -1283,6 +1283,22 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   error ends `wid` with status 1 and a message. `wid_cli/tests/closed_pipe.rs`
   closes stdout, or stderr, before each command writes, and stops reading
   `wid query outline` after 10 bytes.
+- gcc-15 `-Werror` at `-o:speed` and `-o:aggressive` (#130): every program
+  failed at -O2 and -O3 with `-Wstringop-overflow` and
+  `-Walloc-size-larger-than` in `wid_os_cstr_`, which gcc couldn't prove
+  allocates `s.len + 1` bytes for a non-negative length. It now refuses a
+  length no string can have (below 0, or `PTRDIFF_MAX` and up) as a failed
+  allocation. The suite builds each run test at one level, so
+  `tests/run/opt_speed` (`-o:speed`) and `tests/run/opt_aggressive`
+  (`-o:aggressive`) now build broad programs at -O2 and -O3 with both
+  compilers (the first takes `core:os` through paths that fit its stack
+  buffer and longer ones that take the heap); they add about 3 seconds
+  to the suite, where building every run test at both levels with both
+  compilers would add about 100. `scripts/opt_levels.rb` compiles the C
+  of every run test at every level (`WID_FLAGS=-debug` for debug builds);
+  run it after changing the runtime or the emitter. Every run test is
+  clean at -O0, -O1, -Os, -O2 and -O3 with clang 20 and gcc 15, in
+  release and `-debug` builds.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
@@ -1588,8 +1604,6 @@ only on `main` and can run in parallel with the macro stack.
    - methods ending in an endless loop (#132);
    - `<=>` deriving the comparisons, and the definable operator set (#134);
    - `def self.` in an `extend` (#135);
-   - gcc-15 `-Werror` at `-o:speed` and `-o:aggressive`, and suite
-     coverage of `-o:` (#130);
    - debug builds: `#line` and `-debug` at `-O0` (#141);
    - three cascades, including spurious E0203 when a package fails to load
      (#138);

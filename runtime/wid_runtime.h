@@ -1456,12 +1456,16 @@ static int32_t wid_os_error_(int e) {
     }
 }
 
-/* Copies `s` into a NUL-terminated string: `small` when it fits, else the heap. */
+/* Copies `s` into a NUL-terminated string: `small` when it fits, else the
+ * heap. A length no string can have gives nullptr, as a failed allocation
+ * does; the bound also lets gcc prove the size of the allocation at -O2. */
 static char *wid_os_cstr_(wid_String s, char *small, size_t n) {
-    char *out = (size_t)s.len < n ? small : malloc((size_t)s.len + 1);
+    if (s.len < 0 || s.len >= PTRDIFF_MAX) return nullptr;
+    size_t len = (size_t)s.len;
+    char *out = len < n ? small : malloc(len + 1);
     if (!out) return nullptr;
-    if (s.len > 0) memcpy(out, s.data, (size_t)s.len);
-    out[s.len] = '\0';
+    if (len > 0) memcpy(out, s.data, len);
+    out[len] = '\0';
     return out;
 }
 

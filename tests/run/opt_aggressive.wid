@@ -1,0 +1,73 @@
+# Built at `-o:aggressive` (-O3), where gcc inlines and vectorizes the most
+# and warns about more than at the default level (#130), so the generated C
+# and the runtime must stay clean there: generics, unions, optionals,
+# element-wise and matrix math, string building, procs and `type_info`.
+import "core:strings"
+
+enum Shape : U8
+  circle
+  square
+end
+
+struct Body
+  name: String
+  shape: Shape
+  pos: [2]F32
+  vel: [2]F32
+end
+
+union Value = Int | String | Body
+
+def describe(v: Value) -> String
+  case v
+  when Int then "int #{v}"
+  when String then "string #{v.size}"
+  else "a body"
+  end
+end
+
+def largest(xs: []$T) -> T?
+  return nil if xs.empty?
+  best = xs[0]
+  for x in xs
+    best = x if x > best
+  end
+  best
+end
+
+def twice(f: proc(Int) -> Int, x: Int) -> Int = f(f(x))
+def inc(x: Int) -> Int = x + 1
+
+def main
+  bodies = [dynamic]Body.new
+  defer free(bodies)
+  4.times do |i|
+    f = i.to(F32)
+    bodies << Body.new("b#{i}", i.even? ? :circle : :square, [f, f * 2.0], [1.0, -0.5])
+  end
+  for b, i in bodies
+    bodies[i].pos = b.pos + b.vel * 2.0
+  end
+  p bodies[3]
+  p largest([3, 9, 2]), largest([1.5, -2.0])
+  puts describe(7), describe("seven"), describe(bodies[0])
+
+  sb = strings.Builder.create
+  defer sb.destroy
+  for b in bodies
+    sb.write(b.name)
+    sb.write_byte(44)
+  end
+  puts sb.string
+
+  m: matrix[3, 3]Int = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+  p m * m, m.transpose * 2
+  f: matrix[2, 2]F64 = [0.5, 1.5, -2.0, 4.0]
+  p f * f, -f
+  bytes: [8]U8 = [250, 251, 252, 253, 254, 255, 0, 1]
+  p bytes + 10, bytes * 2
+
+  puts twice(method(:inc), 40)
+  info = type_info(Body)
+  puts info.size
+end
