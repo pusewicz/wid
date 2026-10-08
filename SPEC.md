@@ -119,7 +119,10 @@ end
     So a `?` written right after a type's name or its closing `)`
     (`Int?`, `rl.Color?`, `Pool(Ball, 64)?`, `(proc(Int) -> Int)?`) ends
     that type, written in place, unless a conditional's `:` follows it:
-    `t = Int?` is the type `Int?` (a value goes there, E0323).
+    `t = Int?` is the type `Int?` (a value goes there, E0323). In `C.int?`
+    the `?` is read as part of the name, as in a predicate's, but `core:c`
+    has no member `int?`: `C.int?` is the optional C type wherever it is
+    written, like `C.int`.
   - A call argument is a type when no expression reads the same way and
     `,` or `)` follows it (in a call without parentheses, also the end of
     the statement or an `if`/`unless` modifier, as in `n = size_of Int?`):

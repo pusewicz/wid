@@ -482,6 +482,12 @@ runs the stages; `wid_cli` is the `wid` binary.
   found end of line". Line ends
   put back this way are taken back when a speculative type parse rewinds,
   and a constant whose value holds a parse error no longer adds E0327.
+- A C type of `core:c` written as a value (`t = C.int?`, `u = C.size_t`)
+  is the type written in place, like `t = Int?`: one E0323 with the help
+  that fits it (`nil` for the optional), instead of an undefined member
+  `int?` or `int` (#41). The checker recognizes the C type name, with the
+  `?` the lexer glues to a lowercase name taken off, where the member
+  lookup fails; predicates like `xs.empty?` are untouched.
 - Any type written where a `Type` is expected, or in `comptime` code, is a
   `Type` value: constructors (`name_of([]Int)`, `name_of(Int?)`,
   `name_of(^Node)`, `name_of((proc(Int) -> Int)?)`), generic instances and

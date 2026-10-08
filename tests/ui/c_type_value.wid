@@ -1,0 +1,12 @@
+# A C type of `core:c` written as a value is a type, like `Int?`: one
+# E0323 whose help fits it. In `C.int?` the lexer reads `int?` as one name,
+# like a predicate's, but `int` is the type. Predicates are unaffected.
+import "core:c", as: :C
+
+def main
+  t = C.int?
+  u = C.size_t
+  xs = [1, 2]
+  x: C.int? = nil
+  p t, u, xs.empty?, x.nil?, C.INT_MAX
+end
