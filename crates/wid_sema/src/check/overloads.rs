@@ -5,25 +5,61 @@ use std::rc::Rc;
 
 use wid_diagnostics::{Applicability, Diagnostic, Span, and_list, codes, did_you_mean};
 use wid_syntax::Name;
-use wid_syntax::ast;
+use wid_syntax::ast::{self, splice_index};
 
 use super::expr::is_untyped;
 use super::generics::{collect_params, lookup};
+use super::macros::MacroCall;
 use super::{Checker, DeclId, DeclKind, FnSig};
 use crate::ir::{self, ExprKind};
 use crate::types::{TyId, TyKind};
 
-/// How well an argument fits a parameter.
+/// How well an argument fits a parameter. A macro's `Code` parameter takes
+/// any argument (`Code`), below every typed fit.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Fit {
     No,
+    Code,
     Converts,
     Exact,
 }
 
+/// How well a member fits a call: its exact parameter matches, then its
+/// typed ones (exact or converting), so a member whose `Code` parameter
+/// takes an argument ranks below one with a typed parameter for it.
+type Score = (usize, usize);
+
 /// An overload member that fits a call: its declaration, bindings,
-/// instantiated signature and number of exact parameter matches.
-type Scored = (DeclId, Vec<(Name, TyId)>, FnSig, usize);
+/// instantiated signature and [`Score`].
+type Scored = (DeclId, Vec<(Name, TyId)>, FnSig, Score);
+
+/// The score of a member whose parameters fit the arguments like `fits`,
+/// or `None` when one doesn't fit.
+fn score(fits: &[Fit]) -> Option<Score> {
+    if fits.contains(&Fit::No) {
+        return None;
+    }
+    let exact = fits.iter().filter(|f| **f == Fit::Exact).count();
+    let typed = fits.iter().filter(|f| **f != Fit::Code).count();
+    Some((exact, typed))
+}
+
+/// Keeps the members that fit best.
+fn keep_best(scored: &mut Vec<Scored>) {
+    let best = scored.iter().map(|s| s.3).max();
+    scored.retain(|s| Some(s.3) == best);
+}
+
+/// What choosing among an overload set's members learned about one
+/// argument of a call that may expand a macro (see
+/// [`Checker::choose_with_macros`]).
+#[derive(Clone)]
+enum Probe {
+    /// The argument names a type.
+    Type(TyId),
+    /// The argument's value, lowered without keeping its code.
+    Value(ir::Expr),
+}
 
 /// The fix for an ambiguous `using` member: write `replacement` over
 /// `span`, shown in the help as `like`.
@@ -90,12 +126,36 @@ impl Checker<'_> {
                 );
                 continue;
             }
+            if f.is_macro && is_operator(o.name.as_str()) {
+                let def_span = self.decls[decl.0 as usize].span;
+                self.report(
+                    Diagnostic::error(
+                        codes::OPERATOR_MACRO,
+                        format!("the macro `{}` can't be part of the operator set `{}`", m.as_str(), o.name.as_str()),
+                    )
+                    .primary(m.span, "a macro in an operator's set")
+                    .secondary(def_span, "declared with `macro def` here")
+                    .note("operators are methods of types, which the program runs; a macro only expands where it is called by name")
+                    .help(format!(
+                        "list `def`s in `{}`, which may call the macro, or call the macro by its own name",
+                        o.name.as_str()
+                    )),
+                );
+                continue;
+            }
             let mut own = Vec::new();
             for p in &f.params {
                 collect_params(&p.ty, &mut own);
             }
-            if f.block.is_some() || !own.is_empty() {
-                let reason = if f.block.is_some() { "it takes a block" } else { "it has `$` type parameters" };
+            let splat = f.params.iter().any(|p| p.splat);
+            if f.block.is_some() || !own.is_empty() || splat {
+                let reason = if f.block.is_some() {
+                    "it takes a block"
+                } else if splat {
+                    "it collects arguments with a `*` parameter"
+                } else {
+                    "it has `$` type parameters"
+                };
                 let def_span = self.decls[decl.0 as usize].span;
                 self.report(
                     Diagnostic::error(
@@ -104,7 +164,11 @@ impl Checker<'_> {
                     )
                     .primary(m.span, "not allowed in an overload set")
                     .secondary(def_span, "declared here")
-                    .note("a call picks a member by its argument types, which needs concrete parameter types")
+                    .note(if splat {
+                        "a call picks a member by the number and types of its arguments, which a `*` parameter leaves open"
+                    } else {
+                        "a call picks a member by its argument types, which needs concrete parameter types"
+                    })
                     .help(format!("remove `:{}` from the set and call it by its own name", m.as_str())),
                 );
                 continue;
@@ -211,13 +275,93 @@ impl Checker<'_> {
         name_span: Span,
         span: Span,
     ) -> ir::Expr {
-        if let Some(named) = args.iter().find_map(|a| a.name) {
-            self.report(
-                Diagnostic::error(codes::BAD_NAMED_ARG, "overloaded calls take positional arguments")
-                    .primary(named.span, "the argument types choose the method, not the names")
-                    .help(format!("remove `{}:`", named.as_str())),
-            );
+        self.reject_named_args(args);
+        let values = self.lower_overload_args(args);
+        let exprs: Vec<&ast::Expr> = args.iter().map(|a| &a.value).collect();
+        self.call_with_values(set, receiver, owner, &exprs, values, name_span, span)
+    }
+
+    /// Calls a package-level overload set, written `name(args)` or
+    /// `pkg.name(args)` (`shown`). When macros are among its members, the
+    /// member is chosen before the arguments are lowered
+    /// ([`Checker::choose_with_macros`]), since a macro takes its
+    /// arguments as code, symbols, types or compile-time values. A macro
+    /// chosen expands with the expected type.
+    pub fn call_package_set(
+        &mut self,
+        set: DeclId,
+        shown: &str,
+        args: &[ast::Arg],
+        (name_span, span): (Span, Span),
+        expected: Option<TyId>,
+    ) -> ir::Expr {
+        if !self.set_has_macros(set) {
+            return self.call_overloaded(set, None, None, args, name_span, span);
         }
+        let call = MacroCall { decl: set, shown: shown.to_string(), args, block: None, name_span, span };
+        let Some((chosen, sig)) = self.choose_for_call(&call) else {
+            // The macro it was meant to call may have declared variables.
+            self.failed_expansion(span);
+            return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+        };
+        if self.is_macro(chosen) {
+            let call = self.chosen_macro_call(call, chosen);
+            return self.call_macro(call, expected);
+        }
+        let values = self.lower_overload_args(args);
+        let exprs: Vec<&ast::Expr> = args.iter().map(|a| &a.value).collect();
+        self.call_member(chosen, (Vec::new(), sig), (None, None), &exprs, values, (name_span, span))
+    }
+
+    /// Whether a declaration is an overload set with macros among its
+    /// members.
+    pub(super) fn set_has_macros(&mut self, decl: DeclId) -> bool {
+        matches!(self.decls[decl.0 as usize].kind, DeclKind::Overload(_))
+            && self.overload_members(decl).iter().any(|&m| self.is_macro(m))
+    }
+
+    /// Chooses the member that a call of an overload set with macros among
+    /// its members (`call.decl`) runs, with its signature, before any
+    /// argument is lowered for the call ([`Checker::choose_with_macros`]).
+    /// `None` means an error was reported.
+    pub(super) fn choose_for_call(&mut self, call: &MacroCall<'_>) -> Option<(DeclId, FnSig)> {
+        if self.reject_named_args(call.args) {
+            return None;
+        }
+        let members = self.overload_members(call.decl);
+        let (chosen, sig) = self.choose_with_macros(call.decl, &members, call.args, call.span)?;
+        if self.is_macro(chosen) {
+            self.check_visible(chosen, call.name_span);
+        }
+        Some((chosen, sig))
+    }
+
+    /// The call of the macro that a call of an overload set chose, shown by
+    /// the macro's name (qualified like the call's).
+    pub(super) fn chosen_macro_call<'e>(&self, call: MacroCall<'e>, member: DeclId) -> MacroCall<'e> {
+        let name = self.decls[member.0 as usize].name;
+        let shown = match call.shown.rsplit_once('.') {
+            Some((pkg, _)) => format!("{pkg}.{name}"),
+            None => name.to_string(),
+        };
+        MacroCall { decl: member, shown, ..call }
+    }
+
+    /// Reports named arguments in a call of an overload set, whose members
+    /// are chosen by the arguments' types. Returns whether there were any.
+    fn reject_named_args(&mut self, args: &[ast::Arg]) -> bool {
+        let Some(named) = args.iter().find_map(|a| a.name) else { return false };
+        self.report(
+            Diagnostic::error(codes::BAD_NAMED_ARG, "overloaded calls take positional arguments")
+                .primary(named.span, "the argument types choose the method, not the names")
+                .help(format!("remove `{}:`", named.as_str())),
+        );
+        true
+    }
+
+    /// Lowers the arguments of an overloaded call in order, spilling earlier
+    /// ones that a later one could change.
+    fn lower_overload_args(&mut self, args: &[ast::Arg]) -> Vec<ir::Expr> {
         let mut values = Vec::new();
         for a in args {
             self.begin_block();
@@ -231,8 +375,122 @@ impl Checker<'_> {
             }
             values.push(v);
         }
+        values
+    }
+
+    /// Chooses the member of a package-level overload set with macros among
+    /// its members, before any argument is lowered for the call. A macro's
+    /// parameters take arguments by kind: a `Code` parameter any argument
+    /// (ranking below every typed fit), a `Symbol` parameter a symbol
+    /// literal and a `Type` parameter a type. Its other parameters, and a
+    /// `def`'s, take values by type as usual; an argument is lowered to
+    /// find its type, without keeping the code, only when a member needs
+    /// it. Reports a call that no member, or several, fit. `None` means an
+    /// error was reported.
+    fn choose_with_macros(
+        &mut self,
+        set: DeclId,
+        members: &[DeclId],
+        args: &[ast::Arg],
+        span: Span,
+    ) -> Option<(DeclId, FnSig)> {
         let exprs: Vec<&ast::Expr> = args.iter().map(|a| &a.value).collect();
-        self.call_with_values(set, receiver, owner, &exprs, values, name_span, span)
+        let mut probes: Vec<Option<Probe>> = vec![None; exprs.len()];
+        let mut scored: Vec<Scored> = Vec::new();
+        for &c in members {
+            let sig = self.fn_sig(c);
+            if sig.params.len() != exprs.len() || sig.receiver.is_some() {
+                continue;
+            }
+            let is_macro = self.is_macro(c);
+            let mut fits = Vec::with_capacity(exprs.len());
+            for (i, p) in sig.params.iter().enumerate() {
+                fits.push(self.probe_fit(&mut probes, &exprs, i, p.ty, is_macro));
+            }
+            if let Some(score) = score(&fits) {
+                scored.push((c, Vec::new(), sig, score));
+            }
+        }
+        // An argument with errors was reported while it was lowered.
+        if probes.iter().flatten().any(|p| self.probe_failed(p)) {
+            return None;
+        }
+        keep_best(&mut scored);
+        if scored.len() == 1 {
+            let (chosen, _, sig, _) = scored.pop().expect("invariant: exactly one member fits best");
+            return Some((chosen, sig));
+        }
+        // The report shows every argument's type.
+        let mut values = Vec::with_capacity(exprs.len());
+        for i in 0..exprs.len() {
+            match self.probe(&mut probes, &exprs, i) {
+                Probe::Value(v) => values.push(v),
+                Probe::Type(t) => values.push(ir::Expr::new(ExprKind::Int(i128::from(t.0)), self.types.type_ty())),
+            }
+        }
+        if values.iter().any(|v| matches!(self.types.kind(v.ty), TyKind::Unknown)) {
+            return None;
+        }
+        let set_name = self.decls[set.0 as usize].name;
+        self.report_overload_failure(set_name, members, &scored, &exprs, &values, None, false, span);
+        None
+    }
+
+    /// How argument `i` fits a parameter of type `param` of a member that
+    /// is a macro (`is_macro`) or not, probing the argument once if needed.
+    fn probe_fit(
+        &mut self,
+        probes: &mut [Option<Probe>],
+        exprs: &[&ast::Expr],
+        i: usize,
+        param: TyId,
+        is_macro: bool,
+    ) -> Fit {
+        let kind = self.types.kind(self.types.base(param)).clone();
+        if is_macro {
+            match kind {
+                TyKind::Code => return Fit::Code,
+                TyKind::Symbol => {
+                    let literal = matches!(exprs[i].kind, ast::ExprKind::Symbol(n) if splice_index(n).is_none());
+                    return if literal { Fit::Exact } else { Fit::No };
+                }
+                _ => {}
+            }
+        }
+        match self.probe(probes, exprs, i) {
+            Probe::Type(_) if matches!(kind, TyKind::Type) => Fit::Exact,
+            Probe::Type(_) => Fit::No,
+            Probe::Value(v) if matches!(self.types.kind(v.ty), TyKind::Unknown) => Fit::No,
+            Probe::Value(v) => self.fit(exprs[i], &v, param),
+        }
+    }
+
+    /// What argument `i` of a call is: a type it names, or its value,
+    /// lowered without keeping the code (once).
+    fn probe(&mut self, probes: &mut [Option<Probe>], exprs: &[&ast::Expr], i: usize) -> Probe {
+        if let Some(p) = &probes[i] {
+            return p.clone();
+        }
+        let p = match self.named_type(exprs[i]) {
+            Some(t) => Probe::Type(t),
+            None => {
+                self.begin_block();
+                let v = self.expr(exprs[i], None);
+                self.end_block();
+                Probe::Value(v)
+            }
+        };
+        probes[i] = Some(p.clone());
+        p
+    }
+
+    /// Whether probing an argument reported an error.
+    fn probe_failed(&self, probe: &Probe) -> bool {
+        let ty = match probe {
+            Probe::Type(t) => *t,
+            Probe::Value(v) => v.ty,
+        };
+        matches!(self.types.kind(ty), TyKind::Unknown)
     }
 
     /// Calls a method, or the best-fitting member of an overload set, with
@@ -267,13 +525,11 @@ impl Checker<'_> {
                     }
                     let fits: Vec<Fit> =
                         args.iter().zip(&values).zip(&sig.params).map(|((a, v), p)| self.fit(a, v, p.ty)).collect();
-                    if fits.iter().all(|f| *f != Fit::No) {
-                        let exact = fits.iter().filter(|f| **f == Fit::Exact).count();
-                        scored.push((c, subst, sig, exact));
+                    if let Some(score) = score(&fits) {
+                        scored.push((c, subst, sig, score));
                     }
                 }
-                let best = scored.iter().map(|s| s.3).max();
-                scored.retain(|s| Some(s.3) == best);
+                keep_best(&mut scored);
                 if scored.len() != 1 {
                     let set_name = self.decls[decl.0 as usize].name;
                     let has_receiver = receiver.is_some();
@@ -311,6 +567,22 @@ impl Checker<'_> {
                 (decl, subst, sig)
             }
         };
+        self.call_member(chosen, (subst, sig), (receiver, owner), args, values, (name_span, span))
+    }
+
+    /// Calls a method chosen for a call, with its bindings and instantiated
+    /// signature, the receiver and owner as for
+    /// [`Checker::call_with_values`], and arguments that are already
+    /// lowered.
+    fn call_member(
+        &mut self,
+        chosen: DeclId,
+        (subst, sig): (Vec<(Name, TyId)>, FnSig),
+        (receiver, owner): (Option<ir::Expr>, Option<TyId>),
+        args: &[&ast::Expr],
+        values: Vec<ir::Expr>,
+        (name_span, span): (Span, Span),
+    ) -> ir::Expr {
         let mut lowered: Vec<ir::Expr> = receiver.into_iter().collect();
         for ((a, v), p) in args.iter().zip(values).zip(&sig.params) {
             let v = if is_untyped(a) { self.expr_coerced(a, p.ty) } else { self.coerce(v, p.ty, a.span) };
@@ -439,8 +711,12 @@ impl Checker<'_> {
                 _ => None,
             }
         } else {
+            // A macro's `Code`, `Symbol` or `Type` parameter takes an
+            // argument by its kind, which no conversion changes.
+            let by_kind = |t: TyId| matches!(self.types.kind(t), TyKind::Code | TyKind::Symbol | TyKind::Type);
             (0..values.len())
                 .find(|&i| tied.iter().any(|t| t.2.params[i].ty != tied[0].2.params[i].ty))
+                .filter(|&i| !tied.iter().any(|t| by_kind(t.2.params[i].ty)))
                 .map(|i| (i, tied[0].2.params[i].ty))
         };
         diag = match conversion {
@@ -506,7 +782,9 @@ impl Checker<'_> {
         };
         let mut out = Vec::new();
         for c in candidates {
-            if !self.generic_names(c).is_empty() {
+            // A macro named like an operator is reported where it is
+            // declared (E0915); operators are never macros.
+            if !self.generic_names(c).is_empty() || self.is_macro(c) {
                 continue;
             }
             let sig = self.fn_sig(c);
@@ -742,6 +1020,11 @@ impl Checker<'_> {
             );
         }
     }
+}
+
+/// Whether a method name is an operator's, like `+`, `<=>` or `[]=`.
+pub(super) fn is_operator(name: &str) -> bool {
+    super::operator_name(name, false).is_some() || super::operator_name(name, true).is_some()
 }
 
 /// `PlayerState` → `player_state`, for suggested field names.

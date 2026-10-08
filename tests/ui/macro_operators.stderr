@@ -1,0 +1,54 @@
+error[E0915]: a macro can't be named like the operator `+`
+ --> tests/ui/macro_operators.wid:7:11
+  |
+7 | macro def +(a: Code, b: Code) -> Code
+  |           ^ operators are methods, not macros
+  = note: `a + b` calls a method of `a`'s type, or a package-level `def`, when the program runs, while a macro only expands where it is called by name
+help: give the macro a name and call it by that name, like `add(…)`
+  | macro def add(a: Code, b: Code) -> Code
+help: to keep the operator, define it with `def +` in the left operand's type, or at package level; its body may call a macro
+  = see `wid explain E0915`
+
+error[E0915]: a macro can't be named like the operator `[]`
+  --> tests/ui/macro_operators.wid:13:11
+   |
+13 | macro def [](v: Code, i: Code) -> Code
+   |           ^^ operators are methods, not macros
+   = note: `a[i]` calls a method of `a`'s type when the program runs, while a macro only expands where it is called by name
+help: give the macro a name and call it by that name, like `index(…)`
+   | macro def index(v: Code, i: Code) -> Code
+help: to keep the operator, define it with `def []` in the operand's type; its body may call a macro
+   = see `wid explain E0915`
+
+error[E0915]: a macro can't be named like the operator `-`
+  --> tests/ui/macro_operators.wid:19:11
+   |
+19 | macro def -(v: Code) -> Code
+   |           ^ operators are methods, not macros
+   = note: `-a` calls a method of `a`'s type when the program runs, while a macro only expands where it is called by name
+help: give the macro a name and call it by that name, like `neg(…)`
+   | macro def neg(v: Code) -> Code
+help: to keep the operator, define it with `def -` in the operand's type; its body may call a macro
+   = see `wid explain E0915`
+
+error[E0915]: the macro `scale` can't be part of the operator set `*`
+  --> tests/ui/macro_operators.wid:34:14
+   |
+26 | macro def scale(v: Code, by: Code) -> Code
+   |           ----- declared with `macro def` here
+...
+34 | overload :*, :scale, :scale_v
+   |              ^^^^^^ a macro in an operator's set
+   = note: operators are methods of types, which the program runs; a macro only expands where it is called by name
+help: list `def`s in `*`, which may call the macro, or call the macro by its own name
+   = see `wid explain E0915`
+
+error[E0307]: `+` is not defined for `V`
+  --> tests/ui/macro_operators.wid:38:5
+   |
+38 |   p a + V.new(2), a * a
+   |     ^^^^^^^^^^^^ both sides are `V`
+help: define the operator on `V`: `def +(other: V) -> V`
+   = see `wid explain E0307`
+
+error: could not compile due to 5 errors

@@ -1,0 +1,48 @@
+error[E0316]: `all_of` cannot be part of an overload set because it collects arguments with a `*` parameter
+  --> tests/ui/macro_overload_errors.wid:35:17
+   |
+29 | macro def all_of(*names: Symbol) -> Code
+   |           ------ declared here
+...
+35 | overload :many, :all_of, :from_text
+   |                 ^^^^^^^ not allowed in an overload set
+   = note: a call picks a member by the number and types of its arguments, which a `*` parameter leaves open
+help: remove `:all_of` from the set and call it by its own name
+   = see `wid explain E0316`
+
+error[E0108]: statements must be inside a method
+  --> tests/ui/macro_overload_errors.wid:38:1
+   |
+38 | pick "text"
+   | ^^^^^^^^^^^ this call is outside any `def`
+   = note: `from_text` is a method, not a macro; only a macro call can stand among declarations
+help: move it into `def main … end`, which runs when the program starts
+   = see `wid explain E0108`
+
+error[E0316]: several members of `either` take (integer literal, integer literal)
+  --> tests/ui/macro_overload_errors.wid:41:5
+   |
+41 |   p either(1, 2)
+   |     ^^^^^^^^^^^^ `first_code` and `second_code` fit equally well
+   = note: the members are `first_code(e: Code, n: Int)`, `second_code(n: Int, e: Code)`
+help: call one member by name, like `first_code(…)`
+   = see `wid explain E0316`
+
+error[E0316]: no member of `pick` takes (Bool)
+  --> tests/ui/macro_overload_errors.wid:42:5
+   |
+42 |   p pick(true)
+   |     ^^^^^^^^^^ called with (Bool)
+   = note: the members are `from_int(n: Int)`, `from_text(s: String)`
+help: convert an argument with `.to(T)` so that one member's parameter types match
+   = see `wid explain E0316`
+
+error[E0303]: overloaded calls take positional arguments
+  --> tests/ui/macro_overload_errors.wid:43:10
+   |
+43 |   p pick(n: 1)
+   |          ^ the argument types choose the method, not the names
+help: remove `n:`
+   = see `wid explain E0303`
+
+error: could not compile due to 5 errors

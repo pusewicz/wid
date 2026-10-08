@@ -1,0 +1,197 @@
+error[E0911]: the macro `make_struct` splices the name `Odd-Name` where a struct's name goes
+  --> tests/ui/macro_spliced_names.wid:15:1
+   |
+15 | make_struct "Odd-Name"
+   | ^^^^^^^^^^^^^^^^^^^^^^ `make_struct` expands here
+  ::: tests/ui/macro_spliced_names.wid:8:12
+   |
+ 8 |     struct #{n}
+   |            ---- `Odd-Name` is spliced here
+   = note: a struct's name starts with a capital letter, followed by letters, digits and `_`
+help: build a name that follows this rule, like `Odd_Name`, before `.to_sym`
+   = see `wid explain E0911`
+
+error[E0911]: the macro `make_struct` splices the name `lower` where a struct's name goes
+  --> tests/ui/macro_spliced_names.wid:16:1
+   |
+16 | make_struct "lower"
+   | ^^^^^^^^^^^^^^^^^^^ `make_struct` expands here
+  ::: tests/ui/macro_spliced_names.wid:8:12
+   |
+ 8 |     struct #{n}
+   |            ---- `lower` is spliced here
+   = note: a struct's name starts with a capital letter, followed by letters, digits and `_`
+help: build a name that follows this rule, like `Lower`, before `.to_sym`
+   = see `wid explain E0911`
+
+error[E0911]: the macro `make_method` splices the name `a b` where a method's name goes
+  --> tests/ui/macro_spliced_names.wid:25:1
+   |
+25 | make_method "a b"
+   | ^^^^^^^^^^^^^^^^^ `make_method` expands here
+  ::: tests/ui/macro_spliced_names.wid:21:9
+   |
+21 |     def #{n} -> Int = 1
+   |         ---- `a b` is spliced here
+   = note: a method's name starts with a lowercase letter or `_`, followed by letters, digits and `_`, maybe ending in `?` or `!`; or it is an operator, like `+`
+help: build a name that follows this rule, like `a_b`, before `.to_sym`
+   = see `wid explain E0911`
+
+error[E0911]: the macro `make_method` splices the name `Upper` where a method's name goes
+  --> tests/ui/macro_spliced_names.wid:26:1
+   |
+26 | make_method "Upper"
+   | ^^^^^^^^^^^^^^^^^^^ `make_method` expands here
+  ::: tests/ui/macro_spliced_names.wid:21:9
+   |
+21 |     def #{n} -> Int = 1
+   |         ---- `Upper` is spliced here
+   = note: a method's name starts with a lowercase letter or `_`, followed by letters, digits and `_`, maybe ending in `?` or `!`; or it is an operator, like `+`
+help: build a name that follows this rule, like `upper`, before `.to_sym`
+   = see `wid explain E0911`
+
+error[E0911]: the macro `make_field` splices the name `x-y` where a field's name goes
+  --> tests/ui/macro_spliced_names.wid:37:1
+   |
+37 | make_field "x-y"
+   | ^^^^^^^^^^^^^^^^ `make_field` expands here
+  ::: tests/ui/macro_spliced_names.wid:32:7
+   |
+32 |       #{f}: Int
+   |       ---- `x-y` is spliced here
+   = note: a field's name starts with a lowercase letter or `_`, followed by letters, digits and `_`
+help: build a name that follows this rule, like `x_y`, before `.to_sym`
+   = see `wid explain E0911`
+
+error[E0911]: the macro `make_enum` splices the name `two words` where an enum member goes
+  --> tests/ui/macro_spliced_names.wid:49:1
+   |
+49 | make_enum "two words"
+   | ^^^^^^^^^^^^^^^^^^^^^ `make_enum` expands here
+  ::: tests/ui/macro_spliced_names.wid:44:7
+   |
+44 |       #{m}
+   |       ---- `two words` is spliced here
+   = note: an enum member starts with a lowercase letter or `_`, followed by letters, digits and `_`
+help: build a name that follows this rule, like `two_words`, before `.to_sym`
+   = see `wid explain E0911`
+
+error[E0911]: the macro `enum_of` splices the name `Big` where an enum member goes
+  --> tests/ui/macro_spliced_names.wid:67:1
+   |
+67 | enum_of :small, :Big
+   | ^^^^^^^^^^^^^^^^^^^^ `enum_of` expands here
+  ::: tests/ui/macro_spliced_names.wid:62:7
+   |
+62 |       #{lines}
+   |       -------- `Big` is spliced here
+   = note: an enum member starts with a lowercase letter or `_`, followed by letters, digits and `_`
+help: pass a name that follows this rule, like `:big`
+   | enum_of :small, :big
+   = see `wid explain E0911`
+
+error[E0911]: the macro `make_constant` splices the name `A B` where an assigned name goes
+  --> tests/ui/macro_spliced_names.wid:76:1
+   |
+76 | make_constant "A B"
+   | ^^^^^^^^^^^^^^^^^^^ `make_constant` expands here
+  ::: tests/ui/macro_spliced_names.wid:72:5
+   |
+72 |     #{n} = 1
+   |     ---- `A B` is spliced here
+   = note: an assigned name starts with a letter or `_`, followed by letters, digits and `_`
+help: build a name that follows this rule, like `A_B`, before `.to_sym`
+   = see `wid explain E0911`
+
+error[E0911]: the macro `make_param` splices the name `p q` where a parameter's name goes
+  --> tests/ui/macro_spliced_names.wid:85:1
+   |
+85 | make_param "p q"
+   | ^^^^^^^^^^^^^^^^ `make_param` expands here
+  ::: tests/ui/macro_spliced_names.wid:81:15
+   |
+81 |     def takes(#{n}: Int) -> Int = #{n}
+   |               ---- `p q` is spliced here
+   = note: a parameter's name starts with a lowercase letter or `_`, followed by letters, digits and `_`
+help: build a name that follows this rule, like `p_q`, before `.to_sym`
+   = see `wid explain E0911`
+
+error[E0911]: the macro `read_field` splices the name `9lives` where a field's name goes
+   --> tests/ui/macro_spliced_names.wid:127:20
+    |
+127 |   def get -> Int = read_field("9lives")
+    |                    ^^^^^^^^^^^^^^^^^^^^ `read_field` expands here
+   ::: tests/ui/macro_spliced_names.wid:98:5
+    |
+ 98 |     @#{f}
+    |     ----- `9lives` is spliced here
+    = note: a field's name starts with a lowercase letter or `_`, followed by letters, digits and `_`
+help: build a name that follows this rule, like `_9lives`, before `.to_sym`
+    = see `wid explain E0911`
+
+error[E0911]: the macro `local` splices the name `end` where an assigned name goes
+   --> tests/ui/macro_spliced_names.wid:131:5
+    |
+131 |   p local("end"), local("")
+    |     ^^^^^^^^^^^^ `local` expands here
+   ::: tests/ui/macro_spliced_names.wid:90:5
+    |
+ 90 |     #{n} = 1
+    |     ---- `end` is spliced here
+    = note: an assigned name starts with a letter or `_`, followed by letters, digits and `_`, and isn't a reserved word like `end`
+help: build a name that follows this rule, like `end_`, before `.to_sym`
+    = see `wid explain E0911`
+
+error[E0911]: the macro `local` splices an empty name where an assigned name goes
+   --> tests/ui/macro_spliced_names.wid:131:19
+    |
+131 |   p local("end"), local("")
+    |                   ^^^^^^^^^ `local` expands here
+   ::: tests/ui/macro_spliced_names.wid:90:5
+    |
+ 90 |     #{n} = 1
+    |     ---- an empty name is spliced here
+    = note: an assigned name starts with a letter or `_`, followed by letters, digits and `_`
+help: build the name from letters, digits and `_` before `.to_sym` makes it a `Symbol`
+    = see `wid explain E0911`
+
+error[E0911]: the macro `call_method` splices the name `a.b` where a field's or method's name goes
+   --> tests/ui/macro_spliced_names.wid:132:5
+    |
+132 |   p call_method(1, "a.b"), typed_zero("int"), named_arg("x?")
+    |     ^^^^^^^^^^^^^^^^^^^^^ `call_method` expands here
+   ::: tests/ui/macro_spliced_names.wid:105:15
+    |
+105 |     #{target}.#{n}
+    |               ---- `a.b` is spliced here
+    = note: a field's or method's name starts with a lowercase letter or `_`, followed by letters, digits and `_`; a method's may end in `?` or `!`
+help: build a name that follows this rule, like `a_b`, before `.to_sym`
+    = see `wid explain E0911`
+
+error[E0911]: the macro `typed_zero` splices the name `int` where a type's name goes
+   --> tests/ui/macro_spliced_names.wid:132:28
+    |
+132 |   p call_method(1, "a.b"), typed_zero("int"), named_arg("x?")
+    |                            ^^^^^^^^^^^^^^^^^ `typed_zero` expands here
+   ::: tests/ui/macro_spliced_names.wid:112:11
+    |
+112 |     zero: #{t} = {}
+    |           ---- `int` is spliced here
+    = note: a type's name starts with a capital letter, followed by letters, digits and `_`
+help: build a name that follows this rule, like `Int`, before `.to_sym`
+    = see `wid explain E0911`
+
+error[E0911]: the macro `named_arg` splices the name `x?` where a named argument goes
+   --> tests/ui/macro_spliced_names.wid:132:47
+    |
+132 |   p call_method(1, "a.b"), typed_zero("int"), named_arg("x?")
+    |                                               ^^^^^^^^^^^^^^^ `named_arg` expands here
+   ::: tests/ui/macro_spliced_names.wid:120:15
+    |
+120 |     Point.new(#{f}: 1)
+    |               ---- `x?` is spliced here
+    = note: a named argument starts with a lowercase letter or `_`, followed by letters, digits and `_`
+help: build a name that follows this rule, like `x_`, before `.to_sym`
+    = see `wid explain E0911`
+
+error: could not compile due to 15 errors

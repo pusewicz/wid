@@ -1,0 +1,44 @@
+# Code spliced among a generated enum's members whose lines are neither
+# members (a name alone, `name = value`) nor declarations: one E0911 per
+# line of the `quote`, at the call.
+macro def make_enum(name: Symbol, *members: Symbol) -> Code
+  lines = [dynamic]Code.new
+  for m in members
+    lines << quote do
+      #{m} + 1
+    end
+  end
+  quote do
+    enum #{name}
+      red
+      #{lines}
+    end
+  end
+end
+
+make_enum :Color, :green, :blue
+
+# A macro called in a generated enum's body can't add members either; the
+# generated enum gets them from splices.
+macro def more_members -> Code
+  quote do
+    yellow
+  end
+end
+
+macro def with_more(name: Symbol) -> Code
+  quote do
+    enum #{name}
+      red
+      more_members()
+    end
+  end
+end
+
+with_more :Shade
+
+def main
+  c: Color = :green
+  s: Shade = :red
+  p c, s
+end

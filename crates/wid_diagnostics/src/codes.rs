@@ -146,6 +146,7 @@ codes! {
     MACRO_ARGUMENT = "E0912", "macro argument of the wrong kind";
     MACRO_DECLARATION = "E0913", "declaration a macro can't generate";
     ENUM_MEMBER_MACRO = "E0914", "enum member named like a macro";
+    OPERATOR_MACRO = "E0915", "macro named like an operator";
 }
 
 /// Looks up a registered code by its text, case-insensitively.

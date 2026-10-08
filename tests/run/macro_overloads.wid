@@ -1,0 +1,87 @@
+# Macros in `overload` sets: the call picks a member by the arguments'
+# types as usual, and a macro member expands where the call is.
+
+# Two macros.
+macro def inc_int(e: Int) -> Code
+  quote do
+    #{e} + 1
+  end
+end
+
+macro def inc_text(e: String) -> Code
+  quote do
+    "#{#{e}}!"
+  end
+end
+
+overload :inc, :inc_int, :inc_text
+
+# A macro and a `def`. A `Code` parameter takes any argument, but ranks
+# below every typed parameter, even one that converts the argument.
+macro def describe_code(e: Code) -> Code
+  quote do
+    "code with the value #{#{e}}"
+  end
+end
+
+def describe_int(x: Int) -> String = "the integer #{x}"
+def describe_f32(x: F32) -> String = "the F32 #{x}"
+
+overload :describe, :describe_code, :describe_int, :describe_f32
+
+# Symbols and types choose by their kind.
+macro def label_symbol(s: Symbol) -> Code
+  quote do
+    "the symbol #{#{s.to_s}}"
+  end
+end
+
+macro def label_type(t: Type) -> Code
+  quote do
+    "the type #{#{t.name}}, #{#{t}.size} bytes"
+  end
+end
+
+def label_text(s: String) -> String = "the text #{s}"
+
+overload :label, :label_symbol, :label_type, :label_text
+
+# A macro chosen in an expression gets the type the call is expected to
+# have, like a macro called by name.
+macro def doubled(e: Code) -> Code
+  quote do
+    #{e} * 2
+  end
+end
+
+def doubled_text(s: String) -> String = "#{s}#{s}"
+
+overload :twice, :doubled, :doubled_text
+
+# Among declarations, a call of a set expands the macro it chooses.
+macro def constant_named(name: Symbol) -> Code
+  quote do
+    #{name} = 7
+  end
+end
+
+macro def constant_sized(t: Type) -> Code
+  quote do
+    WORD = #{t}.size
+  end
+end
+
+overload :constant, :constant_named, :constant_sized
+
+constant :LUCKY
+constant I32
+
+def main
+  p inc(41), inc("hi")
+  count = 2
+  puts describe(1), describe(count), describe(0.5), describe(true), describe(count > 1)
+  puts label(:hp), label(I16), label("hp")
+  half: F32 = twice(0.25)
+  p half, twice(count), twice("ab")
+  p LUCKY, WORD
+end

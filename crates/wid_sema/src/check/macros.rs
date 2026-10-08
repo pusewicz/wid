@@ -73,6 +73,7 @@ use std::collections::{HashMap, HashSet};
 
 use wid_diagnostics::{Applicability, Diagnostic, FileId, Span, codes};
 use wid_syntax::ast::{self, ExprKind as E, ItemKind, StmtKind, TypeKind, splice_index};
+use wid_syntax::lexer::{NameShape, name_shape};
 use wid_syntax::visit::{VisitMut, walk_expr, walk_item, walk_stmt, walk_type};
 use wid_syntax::{Name, ast::Ident};
 
@@ -965,8 +966,10 @@ impl<'a> Checker<'a> {
             files,
             file_ids,
             file_locs,
+            texts: &self.source_texts,
             errors: Vec::new(),
             splices: Vec::new(),
+            bad_names: HashSet::new(),
         };
         let stmts = ex.code(result, None);
         let (errors, splices) = (ex.errors, ex.splices);
@@ -1374,9 +1377,14 @@ struct Expander<'x> {
     files: &'x mut Vec<VirtualFile>,
     file_ids: &'x mut HashMap<(u32, FileId), u32>,
     file_locs: &'x HashMap<FileId, DeclLoc>,
+    /// The text of each real file, to quote code in messages.
+    texts: &'x HashMap<FileId, std::sync::Arc<str>>,
     errors: Vec<Diagnostic>,
     /// The code spliced in from outside the expansion so far.
     splices: Vec<Splice>,
+    /// Names from `Symbol`s reported as not fitting where they were
+    /// spliced, so each is reported once.
+    bad_names: HashSet<Name>,
 }
 
 impl Expander<'_> {
@@ -1401,6 +1409,15 @@ impl Expander<'_> {
         Respan { from: template.file, to }.visit_stmts(&mut body);
         Splicer { ex: self, values: &fragment.values }.visit_stmts(&mut body);
         body
+    }
+
+    /// The source text of a span, in a real file or a virtual one.
+    fn text(&self, span: Span) -> Option<&str> {
+        let mut file = span.file;
+        while let Some(i) = file.expansion_index() {
+            file = self.files.get(i as usize)?.template;
+        }
+        self.texts.get(&file)?.get(span.start as usize..span.end as usize)
     }
 
     /// The virtual file of a template file in this expansion.
@@ -1485,6 +1502,129 @@ fn code_shape(e: &ast::Expr) -> &'static str {
     }
 }
 
+/// A place where a splice puts a name. A name from a `Symbol` must be one
+/// the lexer would read there, since a macro can build a `Symbol` from any
+/// text (`str.to_sym`).
+#[derive(Clone, Copy)]
+enum NamePlace {
+    /// A method's name: `def #{name}`, an `overload` set's.
+    Method,
+    /// What `x.#{name}` reads or calls: a field or a method.
+    Access,
+    /// A field's name: `#{name}: T` in a struct, `@#{name}`.
+    Field,
+    /// A parameter's name, of a method, a proc or a block.
+    Param,
+    /// A variable bound by `for`, `guard` or `if v =`.
+    Variable,
+    /// A name declared with a type, `#{name}: T = v`: a variable, or among
+    /// generated declarations a field or a constant.
+    Declared,
+    /// A spliced assignment target, `#{name} = v`: a variable, or among
+    /// declarations a constant.
+    Target,
+    /// A named argument.
+    Argument,
+    /// An enum member.
+    Member,
+    /// A type's name, with what declares it (`a struct`), or `a type`
+    /// where a type goes.
+    Type(&'static str),
+    /// A constant's name.
+    Const,
+    /// An identifier in an expression: a variable, a method or a constant.
+    Expr,
+}
+
+impl NamePlace {
+    /// What the place is, for messages: "a struct's name".
+    fn describe(self) -> String {
+        match self {
+            NamePlace::Method => "a method's name".into(),
+            NamePlace::Access => "a field's or method's name".into(),
+            NamePlace::Field => "a field's name".into(),
+            NamePlace::Param => "a parameter's name".into(),
+            NamePlace::Variable => "a variable's name".into(),
+            NamePlace::Declared => "a declared name".into(),
+            NamePlace::Target => "an assigned name".into(),
+            NamePlace::Argument => "a named argument".into(),
+            NamePlace::Member => "an enum member".into(),
+            NamePlace::Type(what) => format!("{what}'s name"),
+            NamePlace::Const => "a constant's name".into(),
+            NamePlace::Expr => "an identifier".into(),
+        }
+    }
+
+    /// Whether a name the lexer reads as `shape` fits the place.
+    fn fits(self, shape: NameShape) -> bool {
+        match self {
+            NamePlace::Method | NamePlace::Access => matches!(shape, NameShape::Ident { .. } | NameShape::Operator),
+            NamePlace::Field | NamePlace::Param | NamePlace::Variable | NamePlace::Argument | NamePlace::Member => {
+                shape == NameShape::Ident { suffixed: false }
+            }
+            NamePlace::Declared | NamePlace::Target => {
+                matches!(shape, NameShape::Ident { suffixed: false } | NameShape::Const)
+            }
+            NamePlace::Type(_) | NamePlace::Const => shape == NameShape::Const,
+            NamePlace::Expr => matches!(shape, NameShape::Ident { .. } | NameShape::Const),
+        }
+    }
+
+    /// The rule a name in this place follows.
+    fn rule(self) -> String {
+        const REST: &str = "followed by letters, digits and `_`";
+        let what = self.describe();
+        match self {
+            NamePlace::Method => format!(
+                "{what} starts with a lowercase letter or `_`, {REST}, maybe ending in `?` or `!`; or it is an operator, like `+`"
+            ),
+            NamePlace::Access => {
+                format!("{what} starts with a lowercase letter or `_`, {REST}; a method's may end in `?` or `!`")
+            }
+            NamePlace::Field | NamePlace::Param | NamePlace::Variable | NamePlace::Argument | NamePlace::Member => {
+                format!("{what} starts with a lowercase letter or `_`, {REST}")
+            }
+            NamePlace::Declared | NamePlace::Target | NamePlace::Expr => {
+                format!("{what} starts with a letter or `_`, {REST}")
+            }
+            NamePlace::Type(_) | NamePlace::Const => format!("{what} starts with a capital letter, {REST}"),
+        }
+    }
+
+    /// Whether names in this place start with a capital letter.
+    fn capitalized(self) -> bool {
+        matches!(self, NamePlace::Type(_) | NamePlace::Const)
+    }
+
+    /// Whether names in this place start with a lowercase letter or `_`.
+    fn lowercase(self) -> bool {
+        !self.capitalized() && !matches!(self, NamePlace::Declared | NamePlace::Target | NamePlace::Expr)
+    }
+}
+
+/// A name close to `text` that fits `place`, for a help: other characters
+/// become `_`, the first letter takes the place's case, and a reserved
+/// word gets a trailing `_`.
+fn suggest_name(text: &str, place: NamePlace) -> Option<String> {
+    let mut out: String = text.chars().map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' }).collect();
+    if place.capitalized() {
+        out = out.trim_start_matches(|c: char| c == '_' || c.is_ascii_digit()).to_string();
+        let first = out.chars().next()?;
+        out.replace_range(..first.len_utf8(), &first.to_uppercase().to_string());
+    } else {
+        if place.lowercase() && out.starts_with(|c: char| c.is_ascii_uppercase()) {
+            out[..1].make_ascii_lowercase();
+        }
+        if out.starts_with(|c: char| c.is_ascii_digit()) {
+            out.insert(0, '_');
+        }
+    }
+    if name_shape(&out) == NameShape::Keyword {
+        out.push('_');
+    }
+    (out != text && place.fits(name_shape(&out))).then_some(out)
+}
+
 /// An identifier expression: a constant name if it starts with an
 /// uppercase letter, like the parser reads it.
 fn name_expr(name: Name, span: Span) -> ast::Expr {
@@ -1503,6 +1643,141 @@ fn single_expr(stmts: &[ast::Stmt]) -> Option<&ast::Expr> {
 impl Splicer<'_, '_> {
     fn value(&self, i: u32) -> Option<SpliceValue> {
         self.values.get(i as usize).cloned()
+    }
+
+    /// Checks that a name from a `Symbol`, spliced at `at`, is one the
+    /// lexer would read in `place` (E0911 at the call, once per name).
+    /// Returns whether it is.
+    fn check_name(&mut self, name: Name, at: Span, place: NamePlace) -> bool {
+        let text = name.as_str();
+        let shape = name_shape(text);
+        if place.fits(shape) {
+            return true;
+        }
+        if !self.ex.bad_names.insert(name) {
+            return false;
+        }
+        let macro_name = self.ex.name;
+        let (shown, label) = if text.is_empty() {
+            ("an empty name".to_string(), "an empty name is spliced here".to_string())
+        } else {
+            (format!("the name `{text}`"), format!("`{text}` is spliced here"))
+        };
+        let note = match shape {
+            NameShape::Keyword => format!("{}, and isn't a reserved word like `{text}`", place.rule()),
+            _ => place.rule(),
+        };
+        let diag = Diagnostic::error(
+            codes::SPLICE_MISMATCH,
+            format!("the macro `{macro_name}` splices {shown} where {} goes", place.describe()),
+        )
+        .primary(self.ex.call, format!("`{macro_name}` expands here"))
+        .secondary(at, label)
+        .note(note);
+        // A symbol argument can be rewritten at the call; a computed name
+        // is built by the macro.
+        let argument = self.ex.symbols.iter().find(|(n, _)| *n == name).map(|(_, s)| *s);
+        let diag = match (suggest_name(text, place), argument) {
+            (Some(better), Some(arg)) => diag.suggest_replace(
+                format!("pass a name that follows this rule, like `:{better}`"),
+                arg,
+                format!(":{better}"),
+                Applicability::MaybeIncorrect,
+            ),
+            (Some(better), None) => {
+                diag.help(format!("build a name that follows this rule, like `{better}`, before `.to_sym`"))
+            }
+            (None, _) => diag.help("build the name from letters, digits and `_` before `.to_sym` makes it a `Symbol`"),
+        };
+        self.ex.errors.push(diag);
+        false
+    }
+
+    /// Replaces a name placeholder with the name its splice gives, checked
+    /// for `place`.
+    fn name_in(&mut self, ident: &mut Ident, place: NamePlace) {
+        if let Some(i) = ident.splice_index()
+            && let Some(name) = self.name_for(i, ident.span, place)
+        {
+            *ident = Ident { name, span: self.name_span(name, ident.span) };
+        }
+    }
+
+    /// Replaces the name placeholders that a declaration declares, each
+    /// checked for its place, before the walk reaches them.
+    fn item_names(&mut self, item: &mut ast::Item) {
+        match &mut item.kind {
+            ItemKind::Def(f) => {
+                self.name_in(&mut f.name, NamePlace::Method);
+                for p in &mut f.params {
+                    self.name_in(&mut p.name, NamePlace::Param);
+                }
+                if let Some(b) = &mut f.block {
+                    self.name_in(&mut b.name, NamePlace::Param);
+                }
+            }
+            ItemKind::Struct(s) => self.name_in(&mut s.name, NamePlace::Type("a struct")),
+            ItemKind::Enum(e) => {
+                self.name_in(&mut e.name, NamePlace::Type("an enum"));
+                for m in &mut e.members {
+                    self.name_in(&mut m.name, NamePlace::Member);
+                }
+            }
+            ItemKind::Union(u) => self.name_in(&mut u.name, NamePlace::Type("a union")),
+            ItemKind::Module(m) => self.name_in(&mut m.name, NamePlace::Type("a module")),
+            ItemKind::Const(c) => self.name_in(&mut c.name, NamePlace::Const),
+            ItemKind::Field(f) => self.name_in(&mut f.name, NamePlace::Field),
+            ItemKind::Overload(o) => {
+                self.name_in(&mut o.name, NamePlace::Method);
+                for m in &mut o.members {
+                    self.name_in(m, NamePlace::Method);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Replaces the name placeholders that an expression binds or calls,
+    /// each checked for its place, before the walk reaches them.
+    fn expr_names(&mut self, e: &mut ast::Expr) {
+        let cond = |this: &mut Self, c: &mut ast::Cond| {
+            if let ast::Cond::Bind { name, .. } = c {
+                this.name_in(name, NamePlace::Variable);
+            }
+        };
+        match &mut e.kind {
+            E::Member { name, .. } => self.name_in(name, NamePlace::Access),
+            E::Call(call) => {
+                match &mut call.callee {
+                    ast::Callee::Name(name) => self.name_in(name, NamePlace::Expr),
+                    ast::Callee::Method { name, .. } => self.name_in(name, NamePlace::Access),
+                    ast::Callee::IVar(name) => self.name_in(name, NamePlace::Field),
+                }
+                if let Some(block) = &mut call.block {
+                    for p in &mut block.params {
+                        self.name_in(&mut p.name, NamePlace::Param);
+                    }
+                }
+            }
+            E::For(f) => {
+                for b in &mut f.bindings {
+                    self.name_in(&mut b.name, NamePlace::Variable);
+                }
+            }
+            E::Lambda(lambda) => {
+                for p in &mut lambda.params {
+                    self.name_in(&mut p.name, NamePlace::Param);
+                }
+            }
+            E::If(if_expr) | E::ComptimeIf(if_expr) => {
+                cond(self, &mut if_expr.cond);
+                for (c, _) in &mut if_expr.elifs {
+                    cond(self, c);
+                }
+            }
+            E::While { cond: c, .. } => cond(self, c),
+            _ => {}
+        }
     }
 
     /// Reports a splice whose value doesn't fit where it is (E0911).
@@ -1535,6 +1810,13 @@ impl Splicer<'_, '_> {
             return false;
         }
         let at = inner.span;
+        // A name from a `Symbol` is checked as a name first.
+        if let SpliceValue::Symbol(n) = value
+            && !self.check_name(n, at, NamePlace::Target)
+        {
+            *inner = ast::Expr { kind: E::Error, span: at };
+            return true;
+        }
         let spliced = self.expr_for(i, at);
         // A constant's name is a target among declarations, where
         // `NAME = value` declares the constant; in a method,
@@ -1634,6 +1916,7 @@ impl Splicer<'_, '_> {
         let Some(value) = self.value(i) else { return error };
         let kind = match value {
             SpliceValue::Code(c) => return self.code_expr(c, at, "an expression").unwrap_or(error),
+            SpliceValue::Symbol(n) if !self.check_name(n, at, NamePlace::Expr) => return error,
             SpliceValue::Symbol(n) => return name_expr(n, self.name_span(n, at)),
             SpliceValue::Type(t) => E::Type(Box::new(ast::TypeExpr { kind: TypeKind::Spliced(t.0), span: at })),
             SpliceValue::Int(v) => {
@@ -1678,11 +1961,12 @@ impl Splicer<'_, '_> {
         ast::Expr { kind, span: at }
     }
 
-    /// The name a splice in a name position stands for.
-    fn name_for(&mut self, i: u32, at: Span) -> Option<Name> {
+    /// The name a splice in a name position stands for. A name from a
+    /// `Symbol` is checked for `place`.
+    fn name_for(&mut self, i: u32, at: Span, place: NamePlace) -> Option<Name> {
         let value = self.value(i)?;
         match value {
-            SpliceValue::Symbol(n) => return Some(n),
+            SpliceValue::Symbol(n) => return self.check_name(n, at, place).then_some(n),
             SpliceValue::Code(c) => {
                 let stmts = self.ex.code(c, None);
                 if let Some(ast::Expr { kind: E::Ident(n) | E::Const(n), .. }) = single_expr(&stmts) {
@@ -1707,6 +1991,7 @@ impl Splicer<'_, '_> {
         let Some(value) = self.value(i) else { return error };
         match &value {
             SpliceValue::Type(t) => return ast::TypeExpr { kind: TypeKind::Spliced(t.0), span: at },
+            SpliceValue::Symbol(n) if !self.check_name(*n, at, NamePlace::Type("a type")) => return error,
             SpliceValue::Symbol(n) => {
                 let segment = Ident { name: *n, span: self.name_span(*n, at) };
                 return ast::TypeExpr { kind: TypeKind::Path { segments: vec![segment], args: Vec::new() }, span: at };
@@ -1744,6 +2029,9 @@ impl Splicer<'_, '_> {
                     .into_iter()
                     .map(|n| match literal {
                         true => ast::Expr { kind: E::Symbol(n), span: self.literal_span(n, e.span) },
+                        false if !self.check_name(n, e.span, NamePlace::Expr) => {
+                            ast::Expr { kind: E::Error, span: e.span }
+                        }
                         false => name_expr(n, self.name_span(n, e.span)),
                     })
                     .collect(),
@@ -1765,6 +2053,134 @@ impl Splicer<'_, '_> {
                 "only declarations go here: `def`, `struct`, constants and the like, or macro calls",
             );
         }
+    }
+
+    /// The enum member a `Symbol` spliced at `at` names, if its name can
+    /// be a member's.
+    fn symbol_member(&mut self, name: Name, at: Span) -> Option<ast::EnumMember> {
+        if !self.check_name(name, at, NamePlace::Member) {
+            return None;
+        }
+        let span = self.name_span(name, at);
+        Some(ast::EnumMember { name: Ident { name, span }, value: None })
+    }
+
+    /// Sorts the lines of code spliced at `at` among an enum's members:
+    /// a name alone or `name = value` is a member, and the other lines are
+    /// declarations. A line that is neither is E0911, one per line.
+    fn enum_lines(
+        &mut self,
+        stmts: Vec<ast::Stmt>,
+        at: Span,
+        members: &mut Vec<ast::EnumMember>,
+        body: &mut Vec<ast::Item>,
+    ) {
+        let mut rest = Vec::new();
+        for stmt in stmts {
+            match enum_member_line(&stmt) {
+                // A capitalized name alone is reported, not taken for a
+                // statement.
+                Some(member) if self.check_name(member.name.name, at, NamePlace::Member) => members.push(member),
+                Some(_) => {}
+                None => rest.push(stmt),
+            }
+        }
+        let mut statements = Vec::new();
+        body.extend(lines_to_items(rest, &mut statements));
+        for stmt in statements {
+            let name = self.ex.name;
+            let fragment = match self.ex.text(stmt.span) {
+                Some(text) if !text.contains('\n') && text.len() <= 40 => format!("`{text}`"),
+                _ => "a statement".to_string(),
+            };
+            self.ex.errors.push(
+                Diagnostic::error(
+                    codes::SPLICE_MISMATCH,
+                    format!("the macro `{name}` splices {fragment} where an enum member goes"),
+                )
+                .primary(self.ex.call, format!("`{name}` expands here"))
+                .secondary(stmt.span, "this line is neither a member nor a declaration")
+                .secondary(at, "it is spliced here, among an enum's members")
+                .help("each line spliced among an enum's members is a member, written as a name alone (`#{name}`) or `name = value`, or a declaration such as a `def`"),
+            );
+        }
+    }
+
+    /// Takes the splices alone on a line in an enum's body that give
+    /// members (of `Symbol`s or code), each with the number of written
+    /// members before it, counted before the walk splices their names.
+    fn take_member_splices(&mut self, e: &mut ast::EnumDecl) -> Vec<(usize, SpliceValue, Span)> {
+        let mut spliced = Vec::new();
+        for it in std::mem::take(&mut e.body) {
+            if let ItemKind::Splice(i) = it.kind
+                && let Some(
+                    value @ (SpliceValue::Symbol(_)
+                    | SpliceValue::Symbols(_)
+                    | SpliceValue::Code(_)
+                    | SpliceValue::Codes(_)),
+                ) = self.value(i)
+            {
+                let before = |s: Span| s.file == it.span.file && s.start < it.span.start;
+                let at = e.members.iter().filter(|m| before(m.name.span)).count();
+                spliced.push((at, value, it.span));
+                continue;
+            }
+            e.body.push(it);
+        }
+        spliced
+    }
+
+    /// Inserts the members that splices in an enum's body give, each in
+    /// its place among the written members (see [`Splicer::enum_lines`]
+    /// for code); the code's other lines join the body.
+    fn insert_member_splices(&mut self, e: &mut ast::EnumDecl, spliced: Vec<(usize, SpliceValue, Span)>) {
+        let mut added = 0;
+        for (at, value, span) in spliced {
+            let mut members = Vec::new();
+            match value {
+                SpliceValue::Symbol(n) => members.extend(self.symbol_member(n, span)),
+                SpliceValue::Symbols(names) => {
+                    for n in names {
+                        members.extend(self.symbol_member(n, span));
+                    }
+                }
+                SpliceValue::Code(c) => {
+                    let stmts = self.ex.code(c, Some(span));
+                    self.enum_lines(stmts, span, &mut members, &mut e.body);
+                }
+                SpliceValue::Codes(codes) => {
+                    for c in codes {
+                        let stmts = self.ex.code(c, Some(span));
+                        self.enum_lines(stmts, span, &mut members, &mut e.body);
+                    }
+                }
+                _ => {}
+            }
+            let count = members.len();
+            e.members.splice(at + added..at + added, members);
+            added += count;
+        }
+    }
+}
+
+/// A line of code spliced among an enum's members as a member, if it is
+/// one: a name alone, or `name = value`. A capitalized name alone is taken
+/// too, for its name to be reported.
+fn enum_member_line(stmt: &ast::Stmt) -> Option<ast::EnumMember> {
+    if !stmt.attrs.is_empty() {
+        return None;
+    }
+    match &stmt.kind {
+        StmtKind::Expr(ast::Expr { kind: E::Ident(name) | E::Const(name), span }) => {
+            Some(ast::EnumMember { name: Ident { name: *name, span: *span }, value: None })
+        }
+        StmtKind::Assign { targets, op: None, values } => match (targets.as_slice(), values.as_slice()) {
+            ([ast::Expr { kind: E::Ident(name), span }], [value]) => {
+                Some(ast::EnumMember { name: Ident { name: *name, span: *span }, value: Some(value.clone()) })
+            }
+            _ => None,
+        },
+        _ => None,
     }
 }
 
@@ -1842,30 +2258,6 @@ impl VisitMut for Splicer<'_, '_> {
         }
     }
 
-    fn visit_stmt(&mut self, stmt: &mut ast::Stmt) {
-        let StmtKind::Assign { targets, .. } = &mut stmt.kind else {
-            walk_stmt(self, stmt);
-            return;
-        };
-        // The targets are substituted first, so that a spliced one can be
-        // checked (`splice_target`); the walk then visits the rest.
-        let mut done = Vec::with_capacity(targets.len());
-        for mut target in std::mem::take(targets) {
-            if let Some(list) = self.list_for(&target) {
-                done.extend(list);
-                continue;
-            }
-            if !self.splice_target(&mut target) {
-                self.visit_expr(&mut target);
-            }
-            done.push(target);
-        }
-        walk_stmt(self, stmt);
-        if let StmtKind::Assign { targets, .. } = &mut stmt.kind {
-            *targets = done;
-        }
-    }
-
     fn visit_items(&mut self, items: &mut Vec<ast::Item>) {
         for mut item in std::mem::take(items) {
             if let ItemKind::Splice(i) = item.kind {
@@ -1899,30 +2291,53 @@ impl VisitMut for Splicer<'_, '_> {
     }
 
     fn visit_item(&mut self, item: &mut ast::Item) {
-        // In an enum body, `Symbol`s spliced alone on a line are members.
+        let spliced = match &mut item.kind {
+            ItemKind::Enum(e) => self.take_member_splices(e),
+            _ => Vec::new(),
+        };
+        self.item_names(item);
+        walk_item(self, item);
         if let ItemKind::Enum(e) = &mut item.kind {
-            let mut body = Vec::with_capacity(e.body.len());
-            for it in std::mem::take(&mut e.body) {
-                let value = match it.kind {
-                    ItemKind::Splice(i) => self.value(i),
-                    _ => None,
-                };
-                let names = match value {
-                    Some(SpliceValue::Symbol(n)) => vec![n],
-                    Some(SpliceValue::Symbols(ns)) => ns,
-                    _ => {
-                        body.push(it);
-                        continue;
-                    }
-                };
-                for n in names {
-                    let span = self.name_span(n, it.span);
-                    e.members.push(ast::EnumMember { name: Ident { name: n, span }, value: None });
+            self.insert_member_splices(e, spliced);
+        }
+    }
+
+    fn visit_stmt(&mut self, stmt: &mut ast::Stmt) {
+        match &mut stmt.kind {
+            StmtKind::Decl { names, .. } => {
+                for name in names {
+                    self.name_in(name, NamePlace::Declared);
                 }
             }
-            e.body = body;
+            StmtKind::Guard { names, err, .. } => {
+                for name in names.iter_mut().chain(err) {
+                    self.name_in(name, NamePlace::Variable);
+                }
+            }
+            StmtKind::Assign { targets, .. } => {
+                // The targets are substituted first, so that a spliced one
+                // can be checked (`splice_target`); the walk then visits
+                // the rest.
+                let mut done = Vec::with_capacity(targets.len());
+                for mut target in std::mem::take(targets) {
+                    if let Some(list) = self.list_for(&target) {
+                        done.extend(list);
+                        continue;
+                    }
+                    if !self.splice_target(&mut target) {
+                        self.visit_expr(&mut target);
+                    }
+                    done.push(target);
+                }
+                walk_stmt(self, stmt);
+                if let StmtKind::Assign { targets, .. } = &mut stmt.kind {
+                    *targets = done;
+                }
+                return;
+            }
+            _ => {}
         }
-        walk_item(self, item);
+        walk_stmt(self, stmt);
     }
 
     fn visit_expr(&mut self, e: &mut ast::Expr) {
@@ -1952,13 +2367,17 @@ impl VisitMut for Splicer<'_, '_> {
                     }
                     return;
                 }
-                match (self.name_for(i, span), &e.kind) {
+                let place = if matches!(e.kind, E::IVar(_)) { NamePlace::Field } else { NamePlace::Expr };
+                match (self.name_for(i, span, place), &e.kind) {
                     (Some(name), E::IVar(_)) => e.kind = E::IVar(name),
                     (Some(name), _) => *e = name_expr(name, self.name_span(name, span)),
                     (None, _) => e.kind = E::Error,
                 }
             }
-            _ => walk_expr(self, e),
+            _ => {
+                self.expr_names(e);
+                walk_expr(self, e);
+            }
         }
     }
 
@@ -1983,7 +2402,7 @@ impl VisitMut for Splicer<'_, '_> {
                 continue;
             }
             if let Some(name) = &mut arg.name {
-                self.visit_ident(name);
+                self.name_in(name, NamePlace::Argument);
             }
             self.visit_expr(&mut arg.value);
             args.push(arg);
@@ -1991,11 +2410,7 @@ impl VisitMut for Splicer<'_, '_> {
     }
 
     fn visit_ident(&mut self, ident: &mut Ident) {
-        if let Some(i) = ident.splice_index()
-            && let Some(name) = self.name_for(i, ident.span)
-        {
-            *ident = Ident { name, span: self.name_span(name, ident.span) };
-        }
+        self.name_in(ident, NamePlace::Expr);
     }
 
     fn visit_type(&mut self, ty: &mut ast::TypeExpr) {

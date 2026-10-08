@@ -1,3 +1,17 @@
+error[E0911]: the macro `record` splices the name `hp` where a struct's name goes
+  --> tests/ui/macro_syntax/main.wid:55:3
+   |
+55 |   record :hp, Int, 100
+   |   ^^^^^^^^^^^^^^^^^^^^ `record` expands here
+  ::: tests/ui/macro_syntax/main.wid:12:12
+   |
+12 |     struct #{name}
+   |            ------- `hp` is spliced here
+   = note: a struct's name starts with a capital letter, followed by letters, digits and `_`
+help: pass a name that follows this rule, like `:Hp`
+   |   record :Hp, Int, 100
+   = see `wid explain E0911`
+
 error[E0911]: the macro `record` splices a `[]Symbol` where a declaration goes
   --> tests/ui/macro_syntax/main.wid:55:3
    |
@@ -10,4 +24,4 @@ error[E0911]: the macro `record` splices a `[]Symbol` where a declaration goes
 help: splice `Code` or `[]Code` among declarations; `Symbol`s go among the members of an `enum`
    = see `wid explain E0911`
 
-error: could not compile due to 1 error
+error: could not compile due to 2 errors

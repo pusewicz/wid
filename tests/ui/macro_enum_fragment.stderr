@@ -1,0 +1,34 @@
+error[E0911]: the macro `make_enum` splices `#{m} + 1` where an enum member goes
+  --> tests/ui/macro_enum_fragment.wid:19:1
+   |
+19 | make_enum :Color, :green, :blue
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `make_enum` expands here
+  ::: tests/ui/macro_enum_fragment.wid:8:7
+   |
+ 8 |       #{m} + 1
+   |       -------- this line is neither a member nor a declaration
+...
+14 |       #{lines}
+   |       -------- it is spliced here, among an enum's members
+help: each line spliced among an enum's members is a member, written as a name alone (`#{name}`) or `name = value`, or a declaration such as a `def`
+   = see `wid explain E0911`
+
+error[E0201]: undefined macro `yellow`
+  --> tests/ui/macro_enum_fragment.wid:25:5
+   |
+25 |     yellow
+   |     ^^^^^^ no macro with this name is in scope
+  ::: tests/ui/macro_enum_fragment.wid:33:7
+   |
+33 |       more_members()
+   |       -------------- `more_members` expands here
+  ::: tests/ui/macro_enum_fragment.wid:38:1
+   |
+38 | with_more :Shade
+   | ---------------- `with_more` expands here
+   = note: a call among declarations runs a macro, and the declarations it generates take the call's place
+   = note: an enum's members are fixed before the macros in its body run, so a macro can't add members
+help: splice the members into the generated `enum` itself: code of names alone or `name = value`, alone on a line in its body
+   = see `wid explain E0201`
+
+error: could not compile due to 2 errors

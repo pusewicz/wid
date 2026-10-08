@@ -1,0 +1,45 @@
+# Calls of `overload` sets with macros among their members.
+
+macro def first_code(e: Code, n: Int) -> Code
+  quote do
+    #{e} + #{n}
+  end
+end
+
+macro def second_code(n: Int, e: Code) -> Code
+  quote do
+    #{e} + #{n}
+  end
+end
+
+# A `Code` parameter takes any argument, so these two tie on `(1, 2)`.
+overload :either, :first_code, :second_code
+
+macro def from_int(n: Int) -> Code
+  quote do
+    #{n}
+  end
+end
+
+def from_text(s: String) -> String = s
+
+overload :pick, :from_int, :from_text
+
+# A member that collects its arguments with `*` can't be chosen by them.
+macro def all_of(*names: Symbol) -> Code
+  quote do
+    0
+  end
+end
+
+overload :many, :all_of, :from_text
+
+# Among declarations, a set's call must choose a macro.
+pick "text"
+
+def main
+  p either(1, 2)
+  p pick(true)
+  p pick(n: 1)
+  p many("x")
+end
