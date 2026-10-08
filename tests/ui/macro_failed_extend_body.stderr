@@ -3,6 +3,10 @@ error[E0204]: `Type` has no field or method `methods`
   |
 8 |   n = t.methods.size
   |         ^^^^^^^ not found on `Type`
+  = note: a `Type` value answers only `.name`, `.size`, `.align` and `.fields`
+  = note: `.methods` works on a type written by name, like `Vec2.methods`, and on `Self`
+help: take the methods instead of the type: a `[]MethodInfo` parameter, given `Vec2.methods`
+help: in a macro, call the macro in the type's body and read `Self.methods`
   = see `wid explain E0204`
 
 error: could not compile due to 1 error

@@ -1,0 +1,22 @@
+error[E0204]: `Type` has no field or method `methods`
+ --> tests/ui/type_value_members.wid:8:39
+  |
+8 | def count_methods(t: Type) -> Int = t.methods.size
+  |                                       ^^^^^^^ not found on `Type`
+  = note: a `Type` value answers only `.name`, `.size`, `.align` and `.fields`
+  = note: `.methods` works on a type written by name, like `Vec2.methods`, and on `Self`
+help: take the methods instead of the type: a `[]MethodInfo` parameter, given `Vec2.methods`
+help: in a macro, call the macro in the type's body and read `Self.methods`
+  = see `wid explain E0204`
+
+error[E0204]: `Type` has no field or method `nmae`
+  --> tests/ui/type_value_members.wid:10:39
+   |
+10 | def type_label(t: Type) -> String = t.nmae
+   |                                       ^^^^ not found on `Type`
+   = note: a `Type` value answers only `.name`, `.size`, `.align` and `.fields`
+help: did you mean `name`?
+   | def type_label(t: Type) -> String = t.name
+   = see `wid explain E0204`
+
+error: could not compile due to 2 errors

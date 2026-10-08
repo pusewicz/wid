@@ -457,6 +457,11 @@ runs the stages; `wid_cli` is the `wid` binary.
   E0323's help fits the type: `.new` only for `[dynamic]T` and `map[K]V`,
   `nil` for an optional, a proc literal for a proc type, `&x` for a pointer
   and `{}` otherwise.
+- A member a `Type` value doesn't have (E0204, `no_type_value_member`) lists
+  what it answers (`.name`, `.size`, `.align`, `.fields`) and suggests the
+  closest; for `.methods` it offers a `[]MethodInfo` parameter given
+  `T.methods` with the type written by name, or `Self.methods` in a macro
+  called in the type's body (#31).
 - Named constants as generic value arguments: `Pool(Ball, MAX)`,
   `Pool(Ball, MAX * 2)`, `Pool(Ball, (N))` and `comptime` results work like
   the literal, in types and in calls (`Checker::value_generic_arg`). A

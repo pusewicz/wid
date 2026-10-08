@@ -925,6 +925,11 @@ impl<'a> Checker<'a> {
         let shown_name = if is_ivar { format!("@{name}") } else { name.as_str().to_string() };
         let mut diag = Diagnostic::error(codes::NO_SUCH_MEMBER, format!("`{shown}` has no {what} `{shown_name}`"))
             .primary(span, format!("not found on `{shown}`"));
+        if matches!(self.types.kind(ty), TyKind::Type) {
+            let diag = self.no_type_value_member(name, span, diag);
+            self.report(diag);
+            return;
+        }
         let user_type = matches!(self.types.kind(ty), TyKind::Struct(_) | TyKind::Enum(_));
         if let Some((_, wid)) = SYNONYMS
             .iter()
