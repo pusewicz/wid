@@ -637,6 +637,12 @@ runs the stages; `wid_cli` is the `wid` binary.
   expansion (#25); after a macro call at package level fails (a splice that
   doesn't fit, or an error in the macro's own code), no missing member of
   any type is reported, since it may have generated an `extend` (#29).
+- A local whose value holds a parse error anywhere (`x = add(a:`,
+  `z = [1, add(2 - )]`, either name of `a, b = pair(1 * )`) is not reported
+  as unused either, though the value's type is known (#58).
+  `holds_parse_error` walks the whole expression with the new read-only
+  `wid_syntax::visit::Visit` (generated with `VisitMut` from one macro), so
+  constants, array lengths and type arguments see errors at any depth too.
 - Errors in code a macro spliced in from its call site (a `Code` argument,
   a name from a `Symbol`) point at the splice in the `quote` and list the
   calls, in both renderers; a name the macro computed is named in the

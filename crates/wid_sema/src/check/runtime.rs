@@ -2,6 +2,8 @@
 
 use wid_diagnostics::{Applicability, Diagnostic, Span, codes};
 use wid_syntax::ast::{self, ExprKind as E};
+use wid_syntax::visit::Visit;
+use wid_syntax::visit::shared::{walk_expr, walk_item, walk_stmt, walk_type};
 
 use super::Checker;
 use crate::ir::{self, Builtin, ExprKind, Stmt};
@@ -337,13 +339,44 @@ impl<'a> Checker<'a> {
     }
 }
 
-/// Whether an operand of `e` failed to parse, so the parser has reported it.
+/// Whether any part of `e` failed to parse (or a splice in it failed to
+/// expand), anywhere in it: an operand, a call's argument, an element, a
+/// block's statement. The error has been reported already.
 pub(super) fn holds_parse_error(e: &ast::Expr) -> bool {
-    match &e.kind {
-        E::Error => true,
-        E::Ternary { cond, then, else_ } => [cond, then, else_].iter().any(|x| holds_parse_error(x)),
-        E::Binary { lhs, rhs, .. } => holds_parse_error(lhs) || holds_parse_error(rhs),
-        E::Unary { expr, .. } | E::Paren(expr) => holds_parse_error(expr),
-        _ => false,
+    let mut find = FindParseError(false);
+    find.visit_expr(e);
+    find.0
+}
+
+/// Sets its flag at the first node that failed to parse.
+struct FindParseError(bool);
+
+impl Visit for FindParseError {
+    fn visit_expr(&mut self, e: &ast::Expr) {
+        self.0 |= matches!(e.kind, E::Error);
+        if !self.0 {
+            walk_expr(self, e);
+        }
+    }
+
+    fn visit_stmt(&mut self, s: &ast::Stmt) {
+        self.0 |= matches!(s.kind, ast::StmtKind::Error);
+        if !self.0 {
+            walk_stmt(self, s);
+        }
+    }
+
+    fn visit_item(&mut self, item: &ast::Item) {
+        self.0 |= matches!(item.kind, ast::ItemKind::Error);
+        if !self.0 {
+            walk_item(self, item);
+        }
+    }
+
+    fn visit_type(&mut self, ty: &ast::TypeExpr) {
+        self.0 |= matches!(ty.kind, ast::TypeKind::Error);
+        if !self.0 {
+            walk_type(self, ty);
+        }
     }
 }

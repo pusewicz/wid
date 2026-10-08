@@ -1,0 +1,53 @@
+error[E0105]: expected an expression, found end of line
+  --> tests/ui/unused_after_nested_parse_error.wid:10:13
+   |
+10 |   x = add(a:
+   |             ^ expected the value of `a`
+help: write the value after `a:` on this line
+   = see `wid explain E0105`
+
+error[E0105]: expected an expression, found `)`
+  --> tests/ui/unused_after_nested_parse_error.wid:15:15
+   |
+15 |   x = add(1 + )
+   |               ^ expected an expression
+   = see `wid explain E0105`
+
+error[E0105]: expected an expression, found `)`
+  --> tests/ui/unused_after_nested_parse_error.wid:16:23
+   |
+16 |   y: Int = add(a: 1 * )
+   |                       ^ expected an expression
+   = see `wid explain E0105`
+
+error[E0105]: expected an expression, found `)`
+  --> tests/ui/unused_after_nested_parse_error.wid:17:19
+   |
+17 |   z = [1, add(2 - ), 3]
+   |                   ^ expected an expression
+   = see `wid explain E0105`
+
+error[E0105]: expected an expression, found `)`
+  --> tests/ui/unused_after_nested_parse_error.wid:21:19
+   |
+21 |   a, b = pair(1 * )
+   |                   ^ expected an expression
+   = see `wid explain E0105`
+
+error[E0105]: expected an expression, found `)`
+  --> tests/ui/unused_after_nested_parse_error.wid:22:21
+   |
+22 |   c, d = 1, add(2 - )
+   |                     ^ expected an expression
+   = see `wid explain E0105`
+
+error[E0203]: `w` is assigned but never read
+  --> tests/ui/unused_after_nested_parse_error.wid:28:3
+   |
+28 |   w = add(1)
+   |   ^ this value is never used
+help: if this is intentional, prefix the name with an underscore
+   |   _w = add(1)
+   = see `wid explain E0203`
+
+error: could not compile due to 7 errors
