@@ -4226,7 +4226,7 @@ impl<'a> Parser<'a> {
                 if self.at(T::LParen) && !self.peek().space_before {
                     return self.parse_call_with_parens(Callee::Name(name), span);
                 }
-                if self.struct_literal_ahead() {
+                if self.struct_literal_ahead(true) {
                     return self.parse_struct_literal(simple(ExprKind::Const(name.name)));
                 }
                 simple(ExprKind::Const(name.name))
@@ -4550,7 +4550,7 @@ impl<'a> Parser<'a> {
         let name = match &callee {
             Callee::Name(name) | Callee::IVar(name) | Callee::Method { name, .. } => *name,
         };
-        if is_constant_name(name.as_str()) && self.struct_literal_ahead() {
+        if is_constant_name(name.as_str()) && self.struct_literal_ahead(false) {
             let call = Call { callee, args, block: None, parens: true };
             let ty = Expr { kind: ExprKind::Call(Box::new(call)), span: start.to(self.prev_span()) };
             return self.parse_struct_literal(ty);
@@ -4563,9 +4563,16 @@ impl<'a> Parser<'a> {
     }
 
     /// Whether a `{` written right after the token before (a constant, as
-    /// in `Foo{`) starts a struct literal: anything but a block's `|x|`.
-    fn struct_literal_ahead(&self) -> bool {
-        self.at(T::LBrace) && !self.peek().space_before && !matches!(self.nth(1).kind, T::Pipe | T::OrOr)
+    /// in `Foo{`, or a generic instance, `Pool(Int, 4){`) starts a struct
+    /// literal: anything but a block's `|x|`. After a constant (`spaced`),
+    /// one after a space on the same line does too (`Foo { a: 1 }`, as Rust
+    /// and Go write it), since a constant never takes a block.
+    fn struct_literal_ahead(&self, spaced: bool) -> bool {
+        let prev = self.prev_span();
+        self.at(T::LBrace)
+            && (!self.peek().space_before
+                || (spaced && self.line_of(self.peek().span.start) == self.line_of(prev.start)))
+            && !matches!(self.nth(1).kind, T::Pipe | T::OrOr)
     }
 
     /// Parses `{…}` after the type `ty` (`Foo`, `geo.Vec2`,
@@ -4590,7 +4597,13 @@ impl<'a> Parser<'a> {
             kind: Items::Args,
         };
         let errors = self.diags.len();
-        let mut edits = vec![Edit { span: open, replacement: ".new(".into() }];
+        // `Foo { a: 1 }` becomes `Foo.new(a: 1)`: the spaces around the
+        // braces on their lines go with them.
+        let same_line = |p: &Self, a: Span, b: Span| p.line_of(a.start) == p.line_of(b.start);
+        let first = self.peek();
+        let open_end =
+            if first.kind != T::RBrace && same_line(self, first.span, open) { first.span.start } else { open.end };
+        let mut edits = vec![Edit { span: Span::new(self.file, ty.span.end, open_end), replacement: ".new(".into() }];
         let mut args = Vec::new();
         // The list's own report that it was left open, which this error
         // replaces: the diagnostics and last error position before it.
@@ -4638,7 +4651,9 @@ impl<'a> Parser<'a> {
             }
             None if self.at(T::RBrace) => {
                 let close = self.bump().span;
-                edits.push(Edit { span: close, replacement: ")".into() });
+                let last = self.tokens[self.pos - 2].span;
+                let start = if same_line(self, last, close) { last.end } else { close.start };
+                edits.push(Edit { span: Span::new(self.file, start, close.end), replacement: ")".into() });
                 true
             }
             None => {
@@ -4833,7 +4848,7 @@ impl<'a> Parser<'a> {
                         let name_span = name.span;
                         expr =
                             self.parse_nested_command_call(Callee::Method { recv: expr, name, safe }, start, name_span);
-                    } else if is_constant_name(name.as_str()) && self.struct_literal_ahead() {
+                    } else if is_constant_name(name.as_str()) && self.struct_literal_ahead(true) {
                         // `geo.Vec2{x: 1}`: a constant never takes a block.
                         let span = start.to(name.span);
                         let ty = Expr { kind: ExprKind::Member { recv: Box::new(expr), name, safe }, span };
@@ -6500,5 +6515,20 @@ end
         assert_eq!(fixed, "X = Foo.new(a: 1)\ndef main\nend\n");
         // A block after a call stays one.
         assert!(codes_of("def main\n  xs.each{ |x| p x }\n  Foo.bar{ p 1 }\nend\n").is_empty());
+        // With a space before the `{`, after a constant: a constant never
+        // takes a block, so it is the same mistake.
+        let src = "W = Foo { a: 1 }\ndef main\n  w = geo.Vec2 { x: 1, y: 2 }\n  e = Foo { }\n  \
+                   m = Foo {\n    a: 1,\n  }\n  p w, e, m\nend\n";
+        let (messages, fixed) = fix_all(src);
+        assert_eq!(messages, ["Wid has no struct literal syntax"; 4]);
+        assert_eq!(
+            fixed,
+            "W = Foo.new(a: 1)\ndef main\n  w = geo.Vec2.new(x: 1, y: 2)\n  e = Foo.new()\n  \
+             m = Foo.new(\n    a: 1,\n  )\n  p w, e, m\nend\n"
+        );
+        // After a generic instance, a spaced `{` is a block, and a `{ |x|`
+        // after a constant is one too.
+        assert!(codes_of("def main\n  Pool(Int, 4) { p 1 }\nend\n").is_empty());
+        assert!(!codes_of("def main\n  Foo { |x| p x }\nend\n").contains(&"E0113"));
     }
 }

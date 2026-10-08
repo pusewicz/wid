@@ -55,8 +55,8 @@ end
   methods must return `Bool`. Source files use the `.wid` extension.
 - **Blocks** can be written `do |x| … end` or `{ |x| … }`. A `{` right after a
   call opens a block; anywhere else, `{}` is the zero-value literal. A type
-  never takes a block: `Vec2{…}` is struct literal syntax, which Wid doesn't
-  have (E0113; see structs).
+  never takes a block: `Vec2{…}` and `Vec2 {…}` are struct literal syntax,
+  which Wid doesn't have (E0113; see structs).
 - **Declarations.** The first assignment declares a variable: `x = 1`,
   `speed: F32 = 120.0`, or `grid: [4][4]U8`. Variables are zero-initialized,
   and `= ---` opts out. As in Ruby, a name that starts with an uppercase letter
@@ -291,8 +291,12 @@ end
   (`def self.create`). There is no struct literal syntax: a type followed
   directly by `{` (`Vec2{x: 1.0}`, `geo.Vec2{1.0, 2.0}`, `Pool(Int, 4){}`,
   as in Odin, Go, Rust or Zig) is E0113, with a fix that writes the `new`
-  call, and is read as that call. `==` compares structs field by field when
-  every field is comparable; define `==` to customize it.
+  call, and is read as that call. A constant never takes a block, so a `{`
+  after a space on the constant's line is the same mistake (`Foo { a: 1 }`,
+  `geo.Vec2 { … }`), unless it opens a block's `|x|`; after a generic
+  instance, a spaced `{` (`Pool(Int, 4) { … }`) is a call's block. `==`
+  compares structs field by field when every field is comparable; define
+  `==` to customize it.
 - **Fields are always public**, as in Odin: code reads and writes them
   directly (`hero.hp`, `hero.hp = 3`, `@hp` inside a method). There are no
   getter or setter methods and no accessor macros like Ruby's `attr_reader`,

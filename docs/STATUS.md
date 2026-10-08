@@ -927,6 +927,13 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   to review that removes a binary operator; the closer is no longer
   consumed, so it still closes its bracket (#85; `[1, 2 +]` also got
   "expected `]`" with a fix that added a second `]`).
+- `Foo { a: 1 }` and `geo.Vec2 { x: 1.0 }`, with a space before the `{` as
+  Rust and Go write it, are #60's single E0113 with the fix `Foo.new(a: 1)`
+  (#86; it was E0323 and E0105). A constant never takes a block, so
+  `struct_literal_ahead` accepts a spaced `{` on the constant's line, but
+  not after a generic instance (`Pool(Int, 4) { … }` is a call's block) or
+  before a block's `|x|`. The fix takes the spaces inside the braces with
+  them (`Foo { }` becomes `Foo.new()`).
 - A C compiler without C23 (one that rejects `-std=c23`, like gcc 13 or
   clang 17, or lacks `<stdckdint.h>` or `#embed`) is E0702 "the C compiler
   `cc` doesn't support C23", with the first line of its `--version`, the
