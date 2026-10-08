@@ -1,0 +1,10 @@
+# A name the imported package doesn't declare, with the closest of its
+# public names.
+import "./geo"
+
+def main
+  p geo.Missing(Int).new
+  p geo.Boxx(Int).new
+  p geo.aera(2)
+  p geo.Secret
+end

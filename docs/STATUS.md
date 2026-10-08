@@ -539,6 +539,15 @@ runs the stages; `wid_cli` is the `wid` binary.
   `-> N`, a field `slot: N`) is E0322 with a fix that writes its declared
   type, and a value parameter must be declared `$N: Int`: another type is
   E0315 at the declaration with a fix (#37).
+- Diagnostics around type names: a type parameter used as a value
+  (`def f -> Int = T` in `struct S($T)`) is E0323 "`T` is a type, not a
+  value" pointing at `$T`, with a `size_of(T)` fix where an integer is
+  expected (it was E0201, undefined constant `T`); calling a generic struct
+  (`Local(Int)`) suggests `Local(Int).new` (it suggested `Local.new(Int)`);
+  kinds take the article they sound with ("a union", not "an union"); and a
+  name an imported package lacks is "`geo` has no member `Missing`" with a
+  did-you-mean over the package's public names, or a list of them when
+  there are few (it read "undefined member of `geo` `Missing`") (#38).
 - Macro syntax: `quote` bodies holding statements and declarations, with
   splices in every expression, type, declaration and name position (`#{x}`,
   `@#{f}`, `:#{s}`), splices outside a `quote` (E0111), variadic

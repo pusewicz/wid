@@ -204,6 +204,10 @@ end
     an included module don't see the struct's generic parameters.
   - Type arguments are inferred from the arguments. A `[N]T` or `[dynamic]T`
     argument matches a `[]$T` parameter.
+  - A type parameter is a type, not a value: in generic code, `T` alone
+    where a value is expected is an error, even when a package constant is
+    named `T`. `size_of(T)` and `type_info(T)` are values about it, and a
+    `t: Type` parameter takes it.
   - Generic code is checked once per set of type arguments, like a template:
     using `<` on a `T` is fine as long as every `T` it is used with has `<`.
     Generic methods that are never called are not checked.

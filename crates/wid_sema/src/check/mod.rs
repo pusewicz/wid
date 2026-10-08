@@ -73,10 +73,14 @@ pub(crate) enum DeclKind<'a> {
 }
 
 impl DeclKind<'_> {
-    /// The kind of declaration with its article, like "an enum".
+    /// The kind of declaration with its article, like "an enum". The
+    /// article follows the sound: "a union", "an overload set".
     pub fn a_describe(&self) -> String {
         let what = self.describe();
-        let article = if what.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" };
+        let article = match self {
+            DeclKind::Enum(_) | DeclKind::Overload(_) | DeclKind::Extend(_) => "an",
+            DeclKind::Fn(_) | DeclKind::Const(_) | DeclKind::Struct(_) | DeclKind::Union(_) | DeclKind::Module => "a",
+        };
         format!("{article} {what}")
     }
 

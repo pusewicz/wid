@@ -1,0 +1,35 @@
+error[E0201]: `geo` has no member `Missing`
+ --> tests/ui/missing_package_member/main.wid:6:9
+  |
+6 |   p geo.Missing(Int).new
+  |         ^^^^^^^ not declared in `geo`
+  = note: `geo` declares `Box`, `area`
+  = see `wid explain E0201`
+
+error[E0201]: `geo` has no member `Boxx`
+ --> tests/ui/missing_package_member/main.wid:7:9
+  |
+7 |   p geo.Boxx(Int).new
+  |         ^^^^ not declared in `geo`
+help: a similar name exists: `geo.Box`
+  |   p geo.Box(Int).new
+  = see `wid explain E0201`
+
+error[E0201]: `geo` has no member `aera`
+ --> tests/ui/missing_package_member/main.wid:8:9
+  |
+8 |   p geo.aera(2)
+  |         ^^^^ not declared in `geo`
+help: a similar name exists: `geo.area`
+  |   p geo.area(2)
+  = see `wid explain E0201`
+
+error[E0201]: `geo` has no member `Secret`
+ --> tests/ui/missing_package_member/main.wid:9:9
+  |
+9 |   p geo.Secret
+  |         ^^^^^^ not declared in `geo`
+  = note: `geo` declares `Box`, `area`
+  = see `wid explain E0201`
+
+error: could not compile due to 4 errors

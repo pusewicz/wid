@@ -1,0 +1,9 @@
+struct Box($T)
+  value: T
+end
+
+def area(n: Int) -> Int = n * n
+
+private struct Secrets
+  code: Int
+end

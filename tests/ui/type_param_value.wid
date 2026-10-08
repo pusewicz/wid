@@ -1,0 +1,20 @@
+# A type parameter names a type, not a value: in a generic struct's
+# methods, in a generic method, and in an `extend`.
+struct Slot($T)
+  value: T
+
+  def width -> Int = T
+  def kind -> String = T
+end
+
+def first_size(xs: []$E) -> Int = E
+
+extend Slot($U)
+  def label -> String = U
+end
+
+def main
+  s: Slot(Int) = {}
+  p s.width, s.kind, s.label
+  p first_size([1, 2])
+end

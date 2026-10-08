@@ -454,6 +454,60 @@ impl<'a> Checker<'a> {
         false
     }
 
+    /// Reports a type parameter, like `T` in a method of `Box(Int)`, used
+    /// as a value (`def f -> Int = T`), where it is bound to `ty`. Where an
+    /// integer is expected, the fix takes the type's size.
+    pub(super) fn type_param_as_value(&mut self, name: Name, ty: TyId, span: Span, expected: Option<TyId>) {
+        let shown = self.types.display(ty);
+        let mut diag = Diagnostic::error(codes::NOT_A_VALUE, format!("`{name}` is a type, not a value"))
+            .primary(span, "expected a value here");
+        let decl = self.body.frames.last().and_then(|f| f.decl);
+        if let Some(at) = decl.and_then(|d| self.generic_param_span(d, name)) {
+            diag = diag.secondary(at, format!("`{name}` is a type parameter, `{shown}` here"));
+        }
+        let help = format!(
+            "`size_of({name})` and `type_info({name})` are values about a type; a `Type` parameter, like `t: Type`, takes the type itself"
+        );
+        diag = match expected {
+            Some(t) if self.types.is_int(t) => diag
+                .suggest_replace(
+                    format!("for the size of `{name}` in bytes, write `size_of({name})`"),
+                    span,
+                    format!("size_of({name})"),
+                    wid_diagnostics::Applicability::MaybeIncorrect,
+                )
+                .note(help),
+            _ => diag.help(help),
+        };
+        self.report(diag);
+    }
+
+    /// Where generic parameter `name` of a declaration is introduced: in
+    /// the header of its struct or `extend`, or in one of its parameters.
+    fn generic_param_span(&self, decl: DeclId, name: Name) -> Option<Span> {
+        let d = &self.decls[decl.0 as usize];
+        let mut types: Vec<&ast::TypeExpr> = Vec::new();
+        if let Some(owner) = d.owner {
+            match self.decls[owner.0 as usize].kind {
+                DeclKind::Struct(s) => {
+                    if let Some(g) = s.generics.iter().find(|g| g.name.name == name) {
+                        return Some(g.span);
+                    }
+                }
+                DeclKind::Extend(e) => types.extend(&e.targets),
+                _ => {}
+            }
+        }
+        if let DeclKind::Fn(f) = d.kind {
+            types.extend(f.params.iter().map(|p| &p.ty));
+        }
+        types.into_iter().find_map(|t| {
+            let mut find = FindParam { name, span: None };
+            find.visit_type(&mut t.clone());
+            find.span
+        })
+    }
+
     /// Whether a value parameter's argument is a value, or names a type or
     /// generic parameter, or an undefined constant.
     fn value_arg_kind(&mut self, e: &ast::Expr, loc: super::DeclLoc, subst: &[(Name, TyId)]) -> ValueArg {
@@ -828,6 +882,24 @@ impl VisitMut for ConstNames {
             && let [only] = segments.as_slice()
         {
             self.0.push(only.name);
+        }
+        walk_type(self, ty);
+    }
+}
+
+/// Finds where a type introduces generic parameter `$name`.
+struct FindParam {
+    name: Name,
+    span: Option<Span>,
+}
+
+impl VisitMut for FindParam {
+    fn visit_type(&mut self, ty: &mut ast::TypeExpr) {
+        if let ast::TypeKind::Param(n) = &ty.kind
+            && n.name == self.name
+            && self.span.is_none()
+        {
+            self.span = Some(ty.span);
         }
         walk_type(self, ty);
     }

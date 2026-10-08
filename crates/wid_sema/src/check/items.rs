@@ -281,8 +281,7 @@ impl<'a> Checker<'a> {
                             )),
                     ),
                     Some(other) => {
-                        let what = other.describe();
-                        let article = if what.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" };
+                        let what = other.a_describe();
                         let help = if matches!(other, DeclKind::Enum(_)) {
                             format!("enum values carry no data; keep `{}` in a struct next to the enum", f.name.as_str())
                         } else {
@@ -291,7 +290,7 @@ impl<'a> Checker<'a> {
                         self.report(
                             Diagnostic::error(
                                 codes::UNEXPECTED_TOKEN,
-                                format!("{article} {what} cannot declare fields"),
+                                format!("{what} cannot declare fields"),
                             )
                             .primary(f.name.span, "fields belong inside a `struct`")
                             .help(help),
