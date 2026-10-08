@@ -192,7 +192,7 @@ impl<'a> Checker<'a> {
                 ir::Expr::new(ExprKind::Zero, self.types.unknown())
             }
             E::Comptime(body) => self.comptime_expr(body, expected, e.span),
-            E::ComptimeIf(if_expr) => self.comptime_if_value(if_expr, expected),
+            E::ComptimeIf(if_expr) => self.comptime_if_value(if_expr, expected, e.span),
             E::Quote(quote) => self.lower_quote(quote, e.span),
             // Expansion replaces every splice of a `quote`; the parser
             // reports one anywhere else.
@@ -945,14 +945,21 @@ impl<'a> Checker<'a> {
         expected: Option<TyId>,
         span: Span,
     ) -> ir::Expr {
-        if is_untyped(lhs)
-            && is_untyped(rhs)
-            && let Some(v) = self.fold_const(
-                &ast::Expr { kind: E::Binary { op, lhs: Box::new(lhs.clone()), rhs: Box::new(rhs.clone()) }, span },
-                self.loc(),
-            )
-        {
-            return self.const_with_expected(v, if op.is_comparison() { None } else { expected }, span);
+        let value_expected = if op.is_comparison() { None } else { expected };
+        if is_untyped(lhs) && is_untyped(rhs) {
+            let whole =
+                ast::Expr { kind: E::Binary { op, lhs: Box::new(lhs.clone()), rhs: Box::new(rhs.clone()) }, span };
+            let loc = self.loc();
+            if let Some(v) = self.fold_const_for(&whole, loc, &[], value_expected) {
+                // `1 << 70` is named as 2^70 when it doesn't fit.
+                if op == ast::BinOp::Shl
+                    && value_expected.is_none_or(|t| self.types.is_int(t))
+                    && self.shift_overflows(&whole, &v, loc, value_expected)
+                {
+                    return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+                }
+                return self.const_with_expected(v, value_expected, span);
+            }
         }
         if matches!(op, ast::BinOp::And | ast::BinOp::Or) {
             return self.logical(op, lhs, rhs, span);
@@ -1893,7 +1900,7 @@ impl<'a> Checker<'a> {
                 None => ir::Expr::new(ExprKind::Zero, self.types.unknown()),
             };
         }
-        match self.fold_const(default, loc) {
+        match self.fold_const_for(default, loc, &[], Some(ty)) {
             Some(c) => {
                 let v = self.const_with_expected(c, Some(ty), default.span);
                 self.coerce(v, ty, default.span)

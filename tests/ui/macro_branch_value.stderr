@@ -36,6 +36,21 @@ error[E0301]: expected `Int`, found `String`
    = note: this ends a branch of the `case` on the last line of `mixed`'s code, which gives the call's value, and the code around the call uses that value
    = see `wid explain E0301`
 
+error[E0324]: this `comptime if` is used as a value but has no `else`
+  --> tests/ui/macro_branch_value.wid:26:5
+   |
+26 |     comptime if #{flag}
+   |     ^^^^^^^^^^^^^^^^^^^ when the condition is false there is no value
+  ::: tests/ui/macro_branch_value.wid:37:7
+   |
+37 |   z = only_when(true)
+   |       --------------- `only_when` expands here
+help: add an `else` branch with the value to use
+   |     else
+   |       …
+   |     end
+   = see `wid explain E0324`
+
 error[E0323]: this expression has no value
   --> tests/ui/macro_branch_value.wid:27:7
    |
@@ -49,4 +64,4 @@ error[E0323]: this expression has no value
 help: if the value isn't needed, call `only_when` as a statement of its own: then its last line needs no value
    = see `wid explain E0323`
 
-error: could not compile due to 4 errors
+error: could not compile due to 5 errors

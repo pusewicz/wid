@@ -1,0 +1,30 @@
+# A macro called without arguments may omit `()` wherever a constant is
+# computed: a constant's value, alone or in arithmetic, with or without a
+# type, an array length and an enum member's value.
+macro def five -> Code
+  quote do
+    5
+  end
+end
+
+X = five
+SUM = five + 1
+TYPED: Int = five
+TWICE = five * five
+
+enum Level
+  low = five
+  high
+end
+
+struct Buffer
+  data: [five]U8
+end
+
+def main
+  p X, SUM, TYPED, TWICE
+  xs: [five]Int = {}
+  ys: [five + 1]Int = {}
+  p xs.size, ys.size, Buffer.new.data.size
+  p Level.low.to(Int), Level.high.to(Int)
+end

@@ -1,0 +1,8 @@
+error[E0201]: undefined constant `Foo`
+ --> tests/ui/type_alias_undefined.wid:4:8
+  |
+4 | Size = Foo
+  |        ^^^ not found in this scope
+  = see `wid explain E0201`
+
+error: could not compile due to 1 error

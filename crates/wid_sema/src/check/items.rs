@@ -35,10 +35,12 @@ impl ConstValue {
 }
 
 /// Whether an expression needs the interpreter to be evaluated at compile
-/// time, rather than plain folding of literals.
-fn needs_interpreter(e: &ast::Expr) -> bool {
+/// time, rather than plain folding of literals. `names_macro` says whether
+/// a bare name is a macro, called without `()` like `X = five`.
+fn needs_interpreter(e: &ast::Expr, names_macro: &impl Fn(&ast::Expr, Name) -> bool) -> bool {
     use ast::ExprKind as E;
     match &e.kind {
+        E::Ident(name) => names_macro(e, *name),
         E::Comptime(_)
         | E::ComptimeIf(_)
         | E::Call(_)
@@ -51,13 +53,23 @@ fn needs_interpreter(e: &ast::Expr) -> bool {
         | E::Zero
         | E::Nil => true,
         E::Str(parts) => parts.iter().any(|p| matches!(p, ast::StrPart::Interp(_))),
-        E::Paren(inner) | E::Unary { expr: inner, .. } => needs_interpreter(inner),
-        E::Binary { lhs, rhs, .. } => needs_interpreter(lhs) || needs_interpreter(rhs),
+        E::Paren(inner) | E::Unary { expr: inner, .. } => needs_interpreter(inner, names_macro),
+        E::Binary { lhs, rhs, .. } => needs_interpreter(lhs, names_macro) || needs_interpreter(rhs, names_macro),
         _ => false,
     }
 }
 
 impl<'a> Checker<'a> {
+    /// Whether a constant expression written at `loc` needs the
+    /// interpreter (see [`needs_interpreter`]).
+    fn const_needs_interpreter(&self, e: &ast::Expr, loc: DeclLoc) -> bool {
+        needs_interpreter(e, &|ident, name| {
+            // A macro's own code names macros where the macro is.
+            let loc = self.virtual_file(ident.span.file).map_or(loc, |v| v.loc);
+            self.lookup_pkg(loc.pkg, name).or_else(|| self.lookup_prelude(name)).is_some_and(|d| self.is_macro(d))
+        })
+    }
+
     /// Registers every declaration of every package.
     pub(super) fn collect(&mut self) {
         let input = self.input;
@@ -670,10 +682,19 @@ impl<'a> Checker<'a> {
         let errors_before = self.diags.error_count();
         let ctx = super::ty::TyCtx { loc: d.loc, self_ty: None, subst: Default::default() };
         let declared = c.ty.as_ref().map(|t| self.resolve_type(t, &ctx));
-        let folded = self.fold_const(&c.value, d.loc);
+        let folded = match self.fold_const_for(&c.value, d.loc, &[], declared) {
+            // `Y: Int = 1 << 70` is named as 2^70 (reported).
+            Some(v)
+                if declared.is_some_and(|t| self.types.is_int(t))
+                    && self.shift_overflows(&c.value, &v, d.loc, declared) =>
+            {
+                None
+            }
+            folded => folded,
+        };
         let value = match folded {
             Some(v) => Some(v),
-            None if needs_interpreter(&c.value) => {
+            None if self.const_needs_interpreter(&c.value, d.loc) => {
                 self.interpret_const(&c.value, declared, d.loc).map(ConstValue::Typed)
             }
             // Names, or arithmetic on them, that didn't fold: `X = Foo`
@@ -779,7 +800,7 @@ impl<'a> Checker<'a> {
             ast::ExprKind::Comptime(body) => {
                 self.comptime_value(ComptimeCode::Stmts(body), expected, loc, expr.span, true)
             }
-            _ if needs_interpreter(expr) => {
+            _ if self.const_needs_interpreter(expr, loc) => {
                 self.comptime_value(ComptimeCode::Expr(expr), expected, loc, expr.span, false)
             }
             _ => None,
@@ -795,6 +816,21 @@ impl<'a> Checker<'a> {
     /// Like [`Checker::fold_const`], where the generic value parameters
     /// bound in `subst` are constants too.
     pub fn fold_const_in(&mut self, expr: &ast::Expr, loc: DeclLoc, subst: &[(Name, TyId)]) -> Option<ConstValue> {
+        self.fold_const_for(expr, loc, subst, None)
+    }
+
+    /// Like [`Checker::fold_const_in`], for a value of type `target`, which
+    /// an error names (`Int` when it is `None`). A shift whose result
+    /// doesn't fit in the 128 bits constants are folded in, like
+    /// `1 << 200`, is reported (E0311) and folds to 0, so nothing else
+    /// reports it again.
+    pub fn fold_const_for(
+        &mut self,
+        expr: &ast::Expr,
+        loc: DeclLoc,
+        subst: &[(Name, TyId)],
+        target: Option<TyId>,
+    ) -> Option<ConstValue> {
         use ast::ExprKind as E;
         Some(match &expr.kind {
             E::Int(v) => ConstValue::Int(i128::try_from(*v).ok()?),
@@ -811,7 +847,7 @@ impl<'a> Checker<'a> {
                 }
                 ConstValue::Str(s)
             }
-            E::Paren(inner) => self.fold_const_in(inner, loc, subst)?,
+            E::Paren(inner) => self.fold_const_for(inner, loc, subst, target)?,
             E::Const(name) => {
                 // A value parameter, like `N` in a method of `Pool(Ball, 64)`.
                 if let Some(t) = super::generics::lookup(subst, *name)
@@ -838,7 +874,7 @@ impl<'a> Checker<'a> {
                 }
             }
             E::Unary { op, expr: inner } => {
-                let v = self.fold_const_in(inner, loc, subst)?;
+                let v = self.fold_const_for(inner, loc, subst, target)?;
                 match (op, v) {
                     (ast::UnOp::Neg, ConstValue::Int(i)) => ConstValue::Int(-i),
                     (ast::UnOp::Neg, ConstValue::Float(f)) => ConstValue::Float(-f),
@@ -848,12 +884,88 @@ impl<'a> Checker<'a> {
                 }
             }
             E::Binary { op, lhs, rhs } => {
-                let l = self.fold_const_in(lhs, loc, subst)?;
-                let r = self.fold_const_in(rhs, loc, subst)?;
+                // Operands of a comparison have a type of their own, and a
+                // shift's amount has nothing to do with its value's.
+                let operand = if op.is_comparison() { None } else { target };
+                let l = self.fold_const_for(lhs, loc, subst, operand)?;
+                let amount = if *op == ast::BinOp::Shl { None } else { operand };
+                let r = self.fold_const_for(rhs, loc, subst, amount)?;
+                if *op == ast::BinOp::Shl
+                    && let (ConstValue::Int(a), ConstValue::Int(b)) = (&l, &r)
+                    && shift_value(*a, *b) == Some(None)
+                {
+                    self.report_shift_overflow(expr.span, *a, *b, target);
+                    return Some(ConstValue::Int(0));
+                }
                 fold_binary(*op, l, r)?
             }
             _ => return None,
         })
+    }
+
+    /// Reports a constant shift, `expr` (in parentheses or not), whose
+    /// folded value `v` doesn't fit in `target` (E0311), naming the value
+    /// as a power of two. Returns whether it did. Untyped constant
+    /// arithmetic may go past every integer type in between, so this
+    /// checks where the value gets its type.
+    pub(super) fn shift_overflows(
+        &mut self,
+        expr: &ast::Expr,
+        v: &ConstValue,
+        loc: DeclLoc,
+        target: Option<TyId>,
+    ) -> bool {
+        let mut e = expr;
+        while let ast::ExprKind::Paren(inner) = &e.kind {
+            e = inner;
+        }
+        let ast::ExprKind::Binary { op: ast::BinOp::Shl, lhs, rhs } = &e.kind else { return false };
+        if !matches!(v, ConstValue::Int(_)) {
+            return false;
+        }
+        match (self.fold_const(lhs, loc), self.fold_const(rhs, loc)) {
+            (Some(ConstValue::Int(a)), Some(ConstValue::Int(b))) => self.report_shift_overflow(e.span, a, b, target),
+            _ => false,
+        }
+    }
+
+    /// Reports `a << b` at `span` when its value doesn't fit in `target`,
+    /// or in `Int` when that isn't an integer type (E0311), and returns
+    /// whether it did.
+    fn report_shift_overflow(&mut self, span: Span, a: i128, b: i128, target: Option<TyId>) -> bool {
+        use crate::types::IntTy;
+        let Some(value) = shift_value(a, b) else { return false };
+        let it = match target.map(|t| self.types.kind(self.types.base(t))) {
+            Some(TyKind::Int(it)) => *it,
+            _ => IntTy::Int,
+        };
+        let (name, (lo, hi)) = (it.name(), it.range());
+        if value.is_some_and(|v| lo <= v && v <= hi) {
+            return false;
+        }
+        let text = self.source_text(span);
+        let shown = power_of_two(a, b);
+        let mut diag =
+            Diagnostic::error(codes::CONSTANT_OVERFLOW, format!("`{text}` is {shown}, which doesn't fit in `{name}`"))
+                .primary(span, format!("`{name}` holds values from {lo} to {hi}"));
+        diag = match max_shift(a, lo, hi) {
+            Some(k) => diag.help(format!("the largest shift of `{a}` that fits in `{name}` is `{a} << {k}`")),
+            None => diag.help("use a value in range"),
+        };
+        // A type that holds the value, of the same signedness if one does.
+        let wider = value.and_then(|v| {
+            let holds = |t: &IntTy| {
+                let (l, h) = t.range();
+                l <= v && v <= h && !matches!(t, IntTy::Int | IntTy::UInt)
+            };
+            let same = IntTy::ALL.into_iter().find(|t| holds(t) && (t.range().0 < 0) == (lo < 0));
+            same.or_else(|| IntTy::ALL.into_iter().find(holds))
+        });
+        if let Some(w) = wider {
+            diag = diag.help(format!("or give the value a type that holds it, like `{}`", w.name()));
+        }
+        self.report(diag);
+        true
     }
 
     /// Gives an untyped constant its default type.
@@ -950,8 +1062,11 @@ fn fold_binary(op: ast::BinOp, l: ConstValue, r: ConstValue) -> Option<ConstValu
             B::BitAnd => Int(a & b),
             B::BitOr => Int(a | b),
             B::BitXor => Int(a ^ b),
-            B::Shl => Int(a.checked_shl(u32::try_from(b).ok()?)?),
-            B::Shr => Int(a.checked_shr(u32::try_from(b).ok()?)?),
+            B::Shl => Int(shift_value(a, b)??),
+            B::Shr => match u32::try_from(b).ok()? {
+                b if b < 128 => Int(a >> b),
+                _ => Int(if a < 0 { -1 } else { 0 }),
+            },
             B::Eq => Bool(a == b),
             B::Ne => Bool(a != b),
             B::Lt => Bool(a < b),
@@ -977,6 +1092,39 @@ fn fold_binary(op: ast::BinOp, l: ConstValue, r: ConstValue) -> Option<ConstValu
         },
         _ => return None,
     })
+}
+
+/// The value of a constant `a << b`: `None` for a negative amount, which
+/// isn't folded, and `Some(None)` when the value doesn't fit in the 128
+/// bits constants are folded in, like `1 << 200`.
+fn shift_value(a: i128, b: i128) -> Option<Option<i128>> {
+    let b = u32::try_from(b).ok()?;
+    Some(match a {
+        0 => Some(0),
+        _ if b < 128 && a.wrapping_shl(b) >> b == a => Some(a << b),
+        _ => None,
+    })
+}
+
+/// `a << b` as a power of two, like `2^200`, `-2^64` or `3 * 2^130`.
+fn power_of_two(a: i128, b: i128) -> String {
+    let sign = if a < 0 { "-" } else { "" };
+    // `4 << 200` is 2^202.
+    let zeros = a.unsigned_abs().trailing_zeros();
+    let odd = a.unsigned_abs() >> zeros;
+    let exp = b.saturating_add(i128::from(zeros));
+    match odd {
+        1 => format!("{sign}2^{exp}"),
+        _ => format!("{sign}{odd} * 2^{exp}"),
+    }
+}
+
+/// The largest `k` for which `a << k` is within `lo..=hi`, if `a` is.
+fn max_shift(a: i128, lo: i128, hi: i128) -> Option<u32> {
+    if a == 0 || a < lo || a > hi {
+        return None;
+    }
+    (0..127u32).take_while(|&k| a.checked_mul(1i128 << k).is_some_and(|v| lo <= v && v <= hi)).last()
 }
 
 fn fold_float(op: ast::BinOp, a: f64, b: f64) -> Option<ConstValue> {

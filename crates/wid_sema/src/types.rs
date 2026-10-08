@@ -639,8 +639,12 @@ impl TypeTable {
         self.layout(ty).1
     }
 
-    /// Returns `(size, align)` for 64-bit targets. A size that doesn't fit
-    /// in a `u64` is `u64::MAX`; it belongs to a type over
+    /// Returns `(size, align)` for 64-bit targets: those of the type in the
+    /// generated C, which `size_of`, `align_of`, field offsets and both
+    /// kinds of `type_info` tables share. C has no empty types, so a struct
+    /// without fields takes a byte (see [`aggregate_wide`]), as does the
+    /// payload of a union without variants, and `[0]T` one element. A size
+    /// that doesn't fit in a `u64` is `u64::MAX`; it belongs to a type over
     /// [`MAX_TYPE_SIZE`], which the checker reports where the type is
     /// written, so code generation never sees one.
     pub fn layout(&self, ty: TyId) -> (u64, u64) {
@@ -671,9 +675,10 @@ impl TypeTable {
             }
             TyKind::TypeId | TyKind::Type | TyKind::Code | TyKind::Symbol => fixed(8, 8),
             TyKind::Any => fixed(16, 8),
+            // The C array of `[0]T` has one element: C has no empty arrays.
             TyKind::Array(elem, n) => {
                 let (s, a) = self.wide_layout(*elem);
-                (s.saturating_mul(u128::from(*n)), a)
+                (s.saturating_mul(u128::from((*n).max(1))), a)
             }
             TyKind::Matrix(elem, r, c) => {
                 let (s, a) = self.wide_layout(*elem);
@@ -709,50 +714,11 @@ impl TypeTable {
         }
     }
 
-    /// How many bytes a type takes in the generated C, without overflow,
-    /// when that is over [`MAX_TYPE_SIZE`]; `None` when the type fits.
+    /// How many bytes a type takes, without overflow, when that is over
+    /// [`MAX_TYPE_SIZE`]; `None` when the type fits.
     pub fn oversize(&self, ty: TyId) -> Option<u128> {
-        let size = self.c_layout(ty).0;
+        let size = self.wide_layout(ty).0;
         (size > u128::from(MAX_TYPE_SIZE)).then_some(size)
-    }
-
-    /// `(size, align)` of a type as C lays out the generated code: those of
-    /// [`TypeTable::wide_layout`], except that the C code gives a struct or
-    /// union without members one byte and an `[0]T` array one element, which
-    /// Wid counts as empty.
-    pub fn c_layout(&self, ty: TyId) -> (u128, u64) {
-        match self.kind(ty) {
-            TyKind::Array(elem, n) => {
-                let (s, a) = self.c_layout(*elem);
-                (s.saturating_mul(u128::from((*n).max(1))), a)
-            }
-            TyKind::Matrix(elem, r, c) => {
-                let (s, a) = self.c_layout(*elem);
-                (s.saturating_mul(u128::from(*r)).saturating_mul(u128::from(*c)), a)
-            }
-            TyKind::Optional(inner) if !self.optional_is_pointer(ty) => aggregate_wide([self.c_layout(*inner), (1, 1)]),
-            TyKind::Tuple(elems) => aggregate_wide(elems.iter().map(|e| self.c_layout(*e))),
-            TyKind::Struct(id) => {
-                let info = self.struct_info(*id);
-                let (size, align) = match info.fields.is_empty() {
-                    true => (1, 1),
-                    false => aggregate_wide(info.fields.iter().map(|f| self.c_layout(f.ty))),
-                };
-                (size.max(u128::from(info.size)), align.max(info.align))
-            }
-            TyKind::Union(id) => {
-                let info = self.union_info(*id);
-                let payload = info
-                    .variants
-                    .iter()
-                    .map(|v| self.c_layout(*v))
-                    .fold((1, 1), |(s, a), (vs, va)| (s.max(vs), a.max(va)));
-                let (size, align) = aggregate_wide([(4, 4), payload]);
-                (size.max(u128::from(info.size)), align.max(info.align))
-            }
-            TyKind::Distinct(id) => self.c_layout(self.distincts[id.0 as usize].base),
-            _ => self.wide_layout(ty),
-        }
     }
 
     /// Returns true when `T?` is represented as a nullable pointer.
@@ -852,13 +818,20 @@ fn align_up(offset: u128, align: u64) -> u128 {
 
 /// Lays out fields in order with natural alignment, returning `(size, align)`.
 /// Sizes saturate instead of overflowing, like [`TypeTable::wide_layout`].
+/// Without fields it takes one byte: C has no empty structs, so the
+/// generated C gives one a `char`.
 pub fn aggregate_wide(parts: impl IntoIterator<Item = (u128, u64)>) -> (u128, u64) {
     let mut offset = 0u128;
     let mut align = 1u64;
+    let mut empty = true;
     for (s, a) in parts {
         let a = a.max(1);
         offset = align_up(offset, a).saturating_add(s);
         align = align.max(a);
+        empty = false;
+    }
+    if empty {
+        return (1, 1);
     }
     (align_up(offset, align), align)
 }

@@ -1,0 +1,22 @@
+# A `comptime if` used as a value needs an `else`, like any `if` (E0324),
+# whether or not a branch is chosen here: with another target, or other
+# constants, none may be.
+FAST = true
+
+def main
+  # No branch is chosen.
+  a = comptime if false
+    5
+  end
+  # A branch is chosen.
+  b = comptime if FAST
+    6
+  end
+  # An `elsif` chain without a final `else`.
+  c = comptime if OS == :freestanding
+    7
+  elsif !FAST
+    8
+  end
+  p a, b, c
+end

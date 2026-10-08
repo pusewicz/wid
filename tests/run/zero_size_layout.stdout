@@ -1,0 +1,24 @@
+Empty
+  size_of:      size 1, align 1
+  compile time: size 1
+  run time:     size 1, align 1, count 0
+Pair
+  size_of:      size 2, align 1
+  compile time: size 2, x@1
+  run time:     size 2, align 1, count 0 e@0 x@1
+[0]Int
+  size_of:      size 8, align 8
+  compile time: size 8, count 0
+  run time:     size 8, align 8, count 0
+Holder
+  size_of:      size 16, align 8
+  compile time: size 16, flag@8, tail@9
+  run time:     size 16, align 8, count 0 none@0 flag@8 tail@9
+[3]Empty and Empty?
+  size_of:      3 and 2
+  run time:     size 3, align 1, count 3
+  run time:     size 2, align 1, count 0
+7
+true
+0
+true

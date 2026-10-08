@@ -1,0 +1,61 @@
+# C has no empty types, so Wid lays out the types that would be empty as
+# the generated C does: a struct without fields takes a byte and `[0]T` one
+# element's space, though its length is 0. `size_of`, `align_of`, field
+# offsets and compile-time `type_info` agree with the run-time tables, which
+# C computes with `sizeof` and `offsetof`.
+struct Empty
+end
+
+struct Pair
+  e: Empty
+  x: I8
+end
+
+struct Holder
+  none: [0]Int
+  flag: Bool
+  tail: [0]Empty
+end
+
+# Prints a run-time table: its size, alignment and field offsets.
+def table(t: ^TypeInfo)
+  offsets = ""
+  for f in t.fields
+    offsets = "#{offsets} #{f.name}@#{f.offset}"
+  end
+  puts "  run time:     size #{t.size}, align #{t.align}, count #{t.count}#{offsets}"
+end
+
+def main
+  puts "Empty"
+  puts "  size_of:      size #{size_of(Empty)}, align #{align_of(Empty)}"
+  puts "  compile time: size #{comptime type_info(Empty).size}"
+  table(type_info(Empty))
+
+  puts "Pair"
+  puts "  size_of:      size #{size_of(Pair)}, align #{align_of(Pair)}"
+  puts "  compile time: size #{comptime type_info(Pair).size}, x@#{comptime Pair.fields[1].offset}"
+  table(type_info(Pair))
+
+  puts "[0]Int"
+  puts "  size_of:      size #{size_of([0]Int)}, align #{align_of([0]Int)}"
+  puts "  compile time: size #{comptime type_info([0]Int).size}, count #{comptime type_info([0]Int).count}"
+  table(type_info([0]Int))
+
+  puts "Holder"
+  puts "  size_of:      size #{size_of(Holder)}, align #{align_of(Holder)}"
+  puts "  compile time: size #{comptime type_info(Holder).size}, flag@#{comptime Holder.fields[1].offset}, tail@#{comptime Holder.fields[2].offset}"
+  table(type_info(Holder))
+
+  puts "[3]Empty and Empty?"
+  puts "  size_of:      #{size_of([3]Empty)} and #{size_of(Empty?)}"
+  table(type_info([3]Empty))
+  table(type_info(Empty?))
+
+  # Allocating by the reported size gives the whole object.
+  pair = alloc(Pair)
+  pair.x = 7
+  h = Holder.new(flag: true)
+  p pair.x, h.flag, h.none.size, h.none == Holder.new.none
+  free(pair)
+end

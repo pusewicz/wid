@@ -133,7 +133,14 @@ impl<'a> Checker<'a> {
         let result = self.new_local(None, result_ty);
         match code {
             ComptimeCode::Stmts(stmts) => {
-                let dest = if expected.is_some() || stmts.last().is_some_and(produces_value) {
+                // A `comptime if` without `else` there has no value, like an
+                // `if`: `comptime do … end` with one last is a statement.
+                let gives_value = |s: &ast::Stmt| {
+                    produces_value(s)
+                        && !matches!(&s.kind, ast::StmtKind::Expr(e)
+                            if matches!(&e.kind, ast::ExprKind::ComptimeIf(i) if i.else_.is_none()))
+                };
+                let dest = if expected.is_some() || stmts.last().is_some_and(gives_value) {
                     Dest::Local(result, result_ty)
                 } else {
                     Dest::Discard
@@ -421,8 +428,21 @@ impl<'a> Checker<'a> {
     }
 
     /// Lowers a `comptime if` in a method body: only the branch whose
-    /// condition holds is checked and compiled.
-    pub fn lower_comptime_if(&mut self, if_expr: &ast::IfExpr, dest: Dest) {
+    /// condition holds is checked and compiled. `span` covers the whole
+    /// `comptime if … end`.
+    pub fn lower_comptime_if(&mut self, if_expr: &ast::IfExpr, dest: Dest, span: Span) {
+        // Used as a value, it needs an `else` like any `if`, whether or not
+        // a branch is chosen here: with another target or other constants,
+        // none may be.
+        if if_expr.else_.is_none() && matches!(dest, Dest::Local(..)) {
+            let diag = self.missing_else(
+                codes::MISSING_RETURN,
+                span,
+                "`comptime if`",
+                "when the condition is false there is no value",
+            );
+            self.report(diag);
+        }
         let loc = self.loc();
         let branches = std::iter::once((&if_expr.cond, &if_expr.then)).chain(if_expr.elifs.iter().map(|(c, b)| (c, b)));
         for (i, (cond, body)) in branches.enumerate() {
@@ -441,11 +461,11 @@ impl<'a> Checker<'a> {
     }
 
     /// `comptime if` used as a value.
-    pub fn comptime_if_value(&mut self, if_expr: &ast::IfExpr, expected: Option<TyId>) -> ir::Expr {
+    pub fn comptime_if_value(&mut self, if_expr: &ast::IfExpr, expected: Option<TyId>, span: Span) -> ir::Expr {
         let ty = expected.unwrap_or_else(|| self.types.unknown());
         let local = self.new_local(None, ty);
         self.emit(Stmt::Let { local, init: None });
-        self.lower_comptime_if(if_expr, Dest::Local(local, ty));
+        self.lower_comptime_if(if_expr, Dest::Local(local, ty), span);
         let ty = self.local_ty(local);
         ir::Expr::new(ExprKind::Local(local), ty)
     }

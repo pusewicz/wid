@@ -172,6 +172,13 @@ end
   type, the field or union variant that takes its struct or union over the
   limit, an array literal, or a call of a generic method whose instance
   would return one.
+- **Layout** is the generated C's: `size_of`, `align_of`, field offsets,
+  `T.size` and `T.fields` at compile time and `type_info` at run time all
+  report the layout the program uses. C has no empty types, so a struct
+  without fields takes 1 byte, `[0]T` takes the space of one element
+  (`size_of([0]Int)` is 8) while its length stays 0 for everything else,
+  and a union without variants is laid out as its C counterpart, a tag and
+  one byte.
 - **Distinct types** are declared as constants, `Meters = distinct F64`, and
   each declaration is a new type with the base type's representation and
   operators. Untyped literals convert to it; typed values convert with `.to`
@@ -473,11 +480,16 @@ end
   what the built program would. It always runs with the checks of a `-debug`
   build: bounds, nil and integer overflow.
 - **Constants** are evaluated while compiling. Literal arithmetic stays
-  untyped (`SIZE = 4 * 64`). Struct literals, `T.size`, other constants of
+  untyped (`SIZE = 4 * 64`) and exact, past every integer type in between
+  (`(1 << 100) >> 90` is `1024`); a value that doesn't fit its type is
+  E0311, which names a shift's value as a power of two (`1 << 200` is
+  2^200), whatever the shift amount. Struct literals, `T.size`, other constants of
   any type, enum members, indexing other constants and the like evaluate too
   (`ORIGIN = Vec2.new(x: 0.0, y: 0.0)`, `START = ORIGIN`,
   `FACING: Dir = :north`). Calling a method needs `comptime`, so every place
-  where code runs at compile time says so (E0327 suggests adding it). The
+  where code runs at compile time says so (E0327 suggests adding it). A
+  macro expands without it, and one without arguments may omit `()` there
+  as anywhere (`X = five`, `[five]Int`, an enum member's `a = five`). The
   value's names resolve as in a method: an undefined one is E0201 with a
   did-you-mean.
 - `comptime` code can use constants, literals and any Wid method, but not the
@@ -500,7 +512,9 @@ end
   the others are only parsed, so a branch may `cimport` a header or call an API
   that exists on one platform only. Declaration-level conditions run once every
   declaration outside them is known, in source order. A struct's fields can't
-  be conditional.
+  be conditional. Used as a value (`n = comptime if … end`), it needs an
+  `else`, like `if`, even when a branch is chosen: on another target none
+  may be (E0324).
 - `OS` and `ARCH` hold the target, as members of the prelude enums `Os`
   (`:darwin`, `:linux`, `:windows`, `:freebsd`, …) and `Arch` (`:arm64`,
   `:amd64`, `:wasm32`, …). `-target:os_arch` sets them (default: the host).

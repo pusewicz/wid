@@ -1170,7 +1170,12 @@ impl<'c> Interp<'c> {
             }
             TyKind::Array(elem, _) | TyKind::Matrix(elem, _, _) => {
                 let s = types.size_of(*elem);
-                let n = a.len() as u64 / s.max(1);
+                // `[0]T` takes an element's space it doesn't use.
+                let n = match self.kind(ty) {
+                    TyKind::Array(_, n) => *n,
+                    TyKind::Matrix(_, r, c) => u64::from(*r) * u64::from(*c),
+                    _ => 0,
+                };
                 for i in 0..n {
                     if !self.equal(*elem, &slice(a, i * s, s), &slice(b, i * s, s))? {
                         return Ok(false);

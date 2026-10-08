@@ -22,13 +22,23 @@ error[E0201]: undefined constant `Bar`
   = see `wid explain E0201`
 
 error[E0327]: a constant can't call `width` without `comptime`
-  --> tests/ui/const_undefined_name.wid:12:5
+  --> tests/ui/const_undefined_name.wid:14:5
    |
-12 | W = width
+14 | W = width
    |     ^^^^^ this method would run while compiling
    = note: constants are computed at compile time; `comptime` marks code that runs then
 help: run the initializer with `comptime`
    | W = comptime width
    = see `wid explain E0327`
 
-error: could not compile due to 4 errors
+error[E0327]: a constant can't call `width` without `comptime`
+  --> tests/ui/const_undefined_name.wid:15:5
+   |
+15 | V = width * 2
+   |     ^^^^^ this method would run while compiling
+   = note: constants are computed at compile time; `comptime` marks code that runs then
+help: run the initializer with `comptime`
+   | V = comptime width * 2
+   = see `wid explain E0327`
+
+error: could not compile due to 5 errors
