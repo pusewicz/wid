@@ -799,17 +799,8 @@ impl<'a> Checker<'a> {
         for ext in extends {
             let own = self.members.get(&ext).and_then(|m| m.get(&name)).copied();
             let Some(method) = own.or_else(|| self.module_member(ext, name, &mut Vec::new())) else { continue };
-            for pattern in self.extend_targets(ext) {
-                if matches!(self.types.kind(pattern), TyKind::Slice(_))
-                    && !matches!(self.types.kind(receiver), TyKind::Slice(_))
-                {
-                    continue;
-                }
-                let mut bindings = vec![(Name::new("Self"), receiver)];
-                if self.unify(pattern, receiver, &mut bindings) {
-                    found.push((method, bindings));
-                    break;
-                }
+            if let Some(bindings) = self.extend_bindings(ext, receiver) {
+                found.push((method, bindings));
             }
         }
         if found.len() > 1 {
@@ -829,6 +820,32 @@ impl<'a> Checker<'a> {
             self.report(diag);
         }
         found.into_iter().next()
+    }
+
+    /// The `extend` blocks whose methods `receiver` has.
+    pub fn extends_of(&mut self, receiver: TyId) -> Vec<DeclId> {
+        if matches!(self.types.kind(receiver), TyKind::Unknown) {
+            return Vec::new();
+        }
+        let extends = self.extends.clone();
+        extends.into_iter().filter(|&ext| self.extend_bindings(ext, receiver).is_some()).collect()
+    }
+
+    /// The bindings, `Self` among them, under which the first target of
+    /// `extend` block `ext` that matches `receiver` applies to it.
+    fn extend_bindings(&mut self, ext: DeclId, receiver: TyId) -> Option<Vec<(Name, TyId)>> {
+        for pattern in self.extend_targets(ext) {
+            if matches!(self.types.kind(pattern), TyKind::Slice(_))
+                && !matches!(self.types.kind(receiver), TyKind::Slice(_))
+            {
+                continue;
+            }
+            let mut bindings = vec![(Name::new("Self"), receiver)];
+            if self.unify(pattern, receiver, &mut bindings) {
+                return Some(bindings);
+            }
+        }
+        None
     }
 
     /// Records the `extend` declarations of all packages.

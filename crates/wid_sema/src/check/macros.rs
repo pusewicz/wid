@@ -70,7 +70,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use wid_diagnostics::{Applicability, Diagnostic, FileId, Span, codes, did_you_mean};
+use wid_diagnostics::{Applicability, Diagnostic, FileId, Span, codes};
 use wid_syntax::ast::{self, ExprKind as E, ItemKind, StmtKind, TypeKind, splice_index};
 use wid_syntax::visit::{VisitMut, walk_expr, walk_item, walk_type};
 use wid_syntax::{Name, ast::Ident};
@@ -592,21 +592,23 @@ impl<'a> Checker<'a> {
     }
 
     /// Reports a call of a method that doesn't exist (E0201) and checks its
-    /// arguments. A call that may have been meant for a macro counts as a
-    /// failed expansion, so the variables its code would have declared
-    /// aren't reported missing after it: one whose name is close to a
-    /// macro's (`countr :hits`, which the error suggests replacing), or one
-    /// standing alone as a statement with a symbol argument whose name is
-    /// close to no other.
+    /// arguments, suggesting one of `candidates` or of `own` (see
+    /// [`Checker::undefined_near`]). A call that may have been meant for a
+    /// macro counts as a failed expansion, so the variables its code would
+    /// have declared aren't reported missing after it: one whose name is
+    /// close to a macro's (`countr :hits`, which the error suggests
+    /// replacing), or one standing alone as a statement with a symbol
+    /// argument whose name is close to no other.
     pub fn undefined_call(
         &mut self,
         name: Ident,
         args: &[ast::Arg],
         span: Span,
-        candidates: Vec<&'static str>,
+        candidates: &[&'static str],
+        own: &super::SelfNames,
     ) -> ir::Expr {
         let loc = self.loc_at(name.span);
-        let similar = did_you_mean(name.as_str(), candidates.iter().copied()).map(Name::new);
+        let similar = own.closest(name.as_str(), candidates).map(Name::new);
         let near_macro = similar
             .and_then(|n| self.lookup_pkg(loc.pkg, n).or_else(|| self.lookup_prelude(n)))
             .filter(|&d| self.is_macro(d));
@@ -632,7 +634,7 @@ impl<'a> Checker<'a> {
                         );
                     }
                 }
-                None => self.undefined(name.name, name.span, candidates, "method"),
+                None => self.undefined_near(name.name, name.span, candidates, own, "method"),
             }
         }
         for arg in args {

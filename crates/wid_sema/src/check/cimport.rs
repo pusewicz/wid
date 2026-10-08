@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use wid_diagnostics::{Applicability, Diagnostic, Span, codes, did_you_mean};
+use wid_diagnostics::{Applicability, Diagnostic, Span, and_list, codes, did_you_mean};
 use wid_syntax::Name;
 use wid_syntax::ast;
 
@@ -295,7 +295,7 @@ impl<'a> Checker<'a> {
             format!(
                 "`{}` is ambiguous: {} {} become `{}` in Wid",
                 skipped.wid_name,
-                listed.join(" and "),
+                and_list(&listed),
                 if all.len() == 2 { "both" } else { "all" },
                 skipped.wid_name
             ),

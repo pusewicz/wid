@@ -48,18 +48,19 @@ pub(super) const BUILTINS: &[&str] = &[
 
 /// What a name reaches through `self`: a field of the struct `owner` (its
 /// own, or one `using` promotes), or a method.
-enum SelfMember {
+pub(super) enum SelfMember {
     Field { owner: TyId, is_proc: bool },
     Method,
 }
 
 /// A field of `self` called like a method without `@`: the whole call,
-/// whether it passes arguments or a block, and whether the field holds a
-/// proc.
+/// whether it passes arguments, in parentheses or not, or a block, and
+/// whether the field holds a proc.
 #[derive(Clone, Copy)]
 struct FieldCall {
     span: Span,
     args: bool,
+    parens: bool,
     block: bool,
     is_proc: bool,
 }
@@ -450,11 +451,15 @@ impl<'a> Checker<'a> {
         if self.report_capture(name, span) {
             return ir::Expr::new(ExprKind::Zero, self.types.unknown());
         }
+        // Names resolve to a variable, then a method of `self`, then a
+        // declaration of the package; ties in a suggestion go the same way.
         let vars = self.visible_var_names();
+        let own = self.self_names(false);
         let mut candidates = vars.clone();
+        candidates.extend(&own.methods);
         candidates.extend(self.package_names(loc.pkg));
         candidates.extend(BUILTINS.iter().copied());
-        if let Some(best) = wid_diagnostics::did_you_mean(name.as_str(), candidates.iter().copied())
+        if let Some(best) = own.closest(name.as_str(), &candidates)
             && vars.contains(&best)
             && let Some(var) = self.find_var(Name::new(best))
         {
@@ -463,13 +468,87 @@ impl<'a> Checker<'a> {
         if !self.declared_by_failed_macro(true, true) {
             match self.self_field(name) {
                 Some((owner, _)) => self.undefined_field_name(name, span, owner, None),
-                None => {
-                    let fields = self.self_field_names();
-                    self.undefined_or_field(name, span, candidates, &fields, "name");
-                }
+                None => self.undefined_near(name, span, &candidates, &own, "name"),
             }
         }
         ir::Expr::new(ExprKind::Zero, self.types.unknown())
+    }
+
+    /// What a name without a receiver may have meant here, for "did you
+    /// mean" hints: the methods a call without a receiver reaches, and the
+    /// fields `@name` reads; for a call (`calls`), only the fields that hold
+    /// a proc, which `@name(…)` calls.
+    pub(super) fn self_names(&mut self, calls: bool) -> super::SelfNames {
+        super::SelfNames { methods: self.self_method_names(), fields: self.self_field_names(calls) }
+    }
+
+    /// The names of the methods a call without a receiver reaches in a
+    /// method of a type, as [`Self::implicit_self_call`] finds them: the
+    /// type's own, those its modules mix in and those `extend` blocks add,
+    /// then in an instance method those each `using` field promotes. A
+    /// type-level method reaches only type-level methods. Sorted, since
+    /// ties in a suggestion go to the first.
+    fn self_method_names(&mut self) -> Vec<&'static str> {
+        let Some(self_ty) = self.frame().self_ty else { return Vec::new() };
+        let instance = self.frame().self_local.is_some();
+        let mut names = Vec::new();
+        let mut types = vec![self_ty];
+        let mut next = 0;
+        while let Some(&ty) = types.get(next) {
+            next += 1;
+            // A promoted method is called on the field's value.
+            let promoted = next > 1;
+            for (name, decl) in self.method_decls(ty) {
+                let callable = match self.decls[decl.0 as usize].kind {
+                    DeclKind::Fn(f) if promoted => !f.is_static,
+                    DeclKind::Fn(f) => instance || f.is_static,
+                    DeclKind::Overload(_) => instance,
+                    _ => false,
+                };
+                let word = name.as_str().starts_with(|c: char| c.is_alphabetic() || c == '_');
+                if callable && word && !names.contains(&name.as_str()) {
+                    names.push(name.as_str());
+                }
+            }
+            if !instance {
+                break;
+            }
+            let TyKind::Struct(id) = *self.types.kind(ty) else { continue };
+            for f in &self.types.struct_info(id).fields {
+                let used = match *self.types.kind(f.ty) {
+                    TyKind::Pointer(t) => t,
+                    _ => f.ty,
+                };
+                if f.using && !types.contains(&used) {
+                    types.push(used);
+                }
+            }
+        }
+        names.sort_unstable();
+        names
+    }
+
+    /// The methods of `ty` by name: its own, then those its modules mix in,
+    /// then those `extend` blocks add.
+    fn method_decls(&mut self, ty: TyId) -> Vec<(Name, super::DeclId)> {
+        let mut owners: Vec<super::DeclId> = self.type_decl(ty).into_iter().collect();
+        owners.extend(self.extends_of(ty));
+        let mut next = 0;
+        while let Some(&owner) = owners.get(next) {
+            next += 1;
+            for m in self.includes_of(owner) {
+                if !owners.contains(&m) {
+                    owners.push(m);
+                }
+            }
+        }
+        let mut methods = Vec::new();
+        for owner in owners {
+            if let Some(members) = self.members.get(&owner) {
+                methods.extend(members.iter().map(|(n, d)| (*n, *d)));
+            }
+        }
+        methods
     }
 
     /// The struct declaring `name` when it is a field of `self` in an
@@ -485,8 +564,9 @@ impl<'a> Checker<'a> {
     }
 
     /// The names of the fields that `@name` reads in an instance method:
-    /// the fields of `self`, then those each `using` field promotes.
-    fn self_field_names(&self) -> Vec<&'static str> {
+    /// the fields of `self`, then those each `using` field promotes; with
+    /// `procs`, only those that hold a proc.
+    fn self_field_names(&self, procs: bool) -> Vec<&'static str> {
         let (Some(self_ty), Some(_)) = (self.frame().self_ty, self.frame().self_local) else { return Vec::new() };
         let (mut names, mut types) = (Vec::new(), vec![self_ty]);
         let mut next = 0;
@@ -494,7 +574,9 @@ impl<'a> Checker<'a> {
             next += 1;
             let TyKind::Struct(id) = *self.types.kind(ty) else { continue };
             for f in &self.types.struct_info(id).fields {
-                names.push(f.name.as_str());
+                if !procs || matches!(self.types.kind(f.ty), TyKind::Proc(_)) {
+                    names.push(f.name.as_str());
+                }
                 let used = match *self.types.kind(f.ty) {
                     TyKind::Pointer(t) => t,
                     _ => f.ty,
@@ -509,7 +591,7 @@ impl<'a> Checker<'a> {
 
     /// Finds what `name` reaches in `ty`, as `self.name` does: the struct's
     /// own members first, then each `using` field in order.
-    fn self_member(&mut self, ty: TyId, name: Name, visited: &mut Vec<TyId>) -> Option<SelfMember> {
+    pub(super) fn self_member(&mut self, ty: TyId, name: Name, visited: &mut Vec<TyId>) -> Option<SelfMember> {
         let ty = match *self.types.kind(ty) {
             TyKind::Pointer(t) => t,
             _ => ty,
@@ -549,14 +631,19 @@ impl<'a> Checker<'a> {
         let read = format!("read the field with `@{name}`, which means `self.{name}`");
         let diag = match call {
             None => diag.suggest_replace(read, span, format!("@{name}"), Applicability::MachineApplicable),
-            Some(FieldCall { is_proc: true, block: false, .. }) => diag.suggest_replace(
-                format!("call the proc the field holds with `@{name}.call`"),
-                span,
-                format!("@{name}.call"),
-                Applicability::MachineApplicable,
-            ),
+            // `on_hit(3)` is `@on_hit(3)`, and `on_hit 3` too.
+            Some(FieldCall { is_proc: true, block: false, args, parens, span: call_span }) => {
+                let (at, text) = if parens || !args {
+                    (span, format!("@{name}"))
+                } else {
+                    let written = self.source_text(Span { start: span.end, ..call_span });
+                    (call_span, format!("@{name}({})", written.trim()))
+                };
+                let help = format!("call the proc the field holds with `@{name}(…)`");
+                diag.suggest_replace(help, at, text, Applicability::MachineApplicable)
+            }
             Some(FieldCall { is_proc: true, .. }) => {
-                diag.help(format!("call the proc the field holds with `@{name}.call(…)`, without a block"))
+                diag.help(format!("call the proc the field holds with `@{name}(…)`, without a block"))
             }
             // `hp()` reads the field: `@hp`.
             Some(FieldCall { span, args: false, block: false, .. }) => {
@@ -1447,8 +1534,8 @@ impl<'a> Checker<'a> {
                 }
                 if let Some((owner, is_proc)) = self.self_field(name.name) {
                     if !self.declared_by_failed_macro(false, true) {
-                        let (args, block) = (!call.args.is_empty(), block.is_some());
-                        let field_call = FieldCall { span, args, block, is_proc };
+                        let (args, parens, block) = (!call.args.is_empty(), call.parens, block.is_some());
+                        let field_call = FieldCall { span, args, parens, block, is_proc };
                         self.undefined_field_name(name.name, name.span, owner, Some(field_call));
                     }
                     for arg in &call.args {
@@ -1456,13 +1543,16 @@ impl<'a> Checker<'a> {
                     }
                     return ir::Expr::new(ExprKind::Zero, self.types.unknown());
                 }
-                let mut candidates = self.package_names(loc.pkg);
+                let own = self.self_names(true);
+                let mut candidates = own.methods.clone();
+                candidates.extend(self.package_names(loc.pkg));
                 candidates.extend(BUILTINS.iter().copied());
-                self.undefined_call(*name, &call.args, span, candidates)
+                self.undefined_call(*name, &call.args, span, &candidates, &own)
             }
             ast::Callee::Method { recv, name, safe } => {
                 self.member_call(recv, *name, Some(&call.args), block, *safe, span, expected)
             }
+            ast::Callee::IVar(name) => self.ivar_call(*name, &call.args, block, span),
         }
     }
 

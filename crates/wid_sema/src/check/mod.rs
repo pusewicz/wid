@@ -47,6 +47,23 @@ pub(crate) struct DeclLoc {
     pub file: usize,
 }
 
+/// What a name without a receiver may have meant in a method of a type, for
+/// "did you mean" hints: the methods a call without a receiver reaches, and
+/// the fields that `@name` reads.
+#[derive(Default)]
+pub(crate) struct SelfNames {
+    pub methods: Vec<&'static str>,
+    pub fields: Vec<&'static str>,
+}
+
+impl SelfNames {
+    /// The name closest to `name` among `candidates` (which hold the
+    /// methods, in the order names resolve) and then the fields.
+    pub fn closest(&self, name: &str, candidates: &[&'static str]) -> Option<&'static str> {
+        did_you_mean(name, candidates.iter().chain(&self.fields).copied())
+    }
+}
+
 /// A declaration together with its syntax.
 #[derive(Clone, Debug)]
 pub(crate) struct Decl<'a> {
@@ -629,32 +646,22 @@ impl<'a> Checker<'a> {
 
     /// Reports an undefined name with suggestions.
     pub fn undefined(&mut self, name: Name, span: Span, candidates: Vec<&'static str>, what: &str) {
-        self.undefined_or_field(name, span, candidates, &[], what);
+        self.undefined_near(name, span, &candidates, &SelfNames::default(), what);
     }
 
-    /// Reports an undefined name with suggestions among `candidates` and,
-    /// in an instance method, the fields of `self` (`fields`), which the
-    /// suggestion reads with `@`.
-    pub fn undefined_or_field(
-        &mut self,
-        name: Name,
-        span: Span,
-        candidates: Vec<&'static str>,
-        fields: &[&'static str],
-        what: &str,
-    ) {
+    /// Reports an undefined name with suggestions among `candidates`, which
+    /// hold `own.methods`, and `own.fields`, which the suggestion reads with
+    /// `@`. A suggestion is a guess at a misspelling, so its fix is one to
+    /// review.
+    pub fn undefined_near(&mut self, name: Name, span: Span, candidates: &[&'static str], own: &SelfNames, what: &str) {
         if self.undefined_explained(name, span) {
             return;
         }
         let text = name.as_str();
         let mut diag = Diagnostic::error(codes::UNDEFINED_NAME, format!("undefined {what} `{text}`"))
             .primary(span, "not found in this scope".to_string());
-        if let Some(best) = did_you_mean(text, candidates.iter().chain(fields).copied()) {
-            let best = if fields.contains(&best) && !candidates.contains(&best) {
-                format!("@{best}")
-            } else {
-                best.to_string()
-            };
+        if let Some(best) = own.closest(text, candidates) {
+            let best = if candidates.contains(&best) { best.to_string() } else { format!("@{best}") };
             diag = diag.suggest_replace(
                 format!("a similar name exists: `{best}`"),
                 span,

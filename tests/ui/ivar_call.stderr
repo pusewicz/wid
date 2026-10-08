@@ -1,0 +1,92 @@
+error[E0305]: `hp` is a field, not a method
+  --> tests/ui/ivar_call.wid:17:23
+   |
+17 |   def health -> Int = @hp()
+   |                       ^^^ this field's type is `Int`
+help: read the field without `()`
+   |   def health -> Int = @hp
+   = see `wid explain E0305`
+
+error[E0305]: `hp` is a field, not a method
+  --> tests/ui/ivar_call.wid:18:23
+   |
+18 |   def scaled -> Int = @hp(2)
+   |                       ^^^ this field's type is `Int`
+help: read the field without arguments or a block
+   = see `wid explain E0305`
+
+error[E0204]: `@heal` reads a field, but `heal` is a method
+  --> tests/ui/ivar_call.wid:19:23
+   |
+19 |   def healed -> Int = @heal(1)
+   |                       ^^^^^ `Player` has no field `heal`
+   = note: `@name` reads a field of `self`; methods are called by name
+help: call the method: `heal(1)`
+   |   def healed -> Int = heal(1)
+   = see `wid explain E0204`
+
+error[E0204]: `@push` names a method of `Body`, not a field
+  --> tests/ui/ivar_call.wid:20:23
+   |
+20 |   def pushed -> Int = @push(3)
+   |                       ^^^^^ instance variables only reach fields
+help: call the method: `push(3)`
+   |   def pushed -> Int = push(3)
+   = see `wid explain E0204`
+
+error[E0204]: `Player` has no field `@on_hitt`
+  --> tests/ui/ivar_call.wid:21:20
+   |
+21 |   def hit -> Int = @on_hitt(3)
+   |                    ^^^^^^^^ not found on `Player`
+help: did you mean `@on_hit`?
+   |   def hit -> Int = @on_hit(3)
+   = see `wid explain E0204`
+
+error[E0319]: `on_hit` does not take a block
+  --> tests/ui/ivar_call.wid:22:35
+   |
+22 |   def blocked -> Int = @on_hit(3) do
+   |                                   ^^ this block is never called
+   |                        ------- `on_hit` is a proc
+help: remove the block
+   = see `wid explain E0319`
+
+error[E0204]: `id` is ambiguous in `Player`
+  --> tests/ui/ivar_call.wid:25:23
+   |
+25 |   def either -> Int = @id()
+   |                       ^^^ both `body` and `sprite` provide `id`
+   = note: `using` promotes the members of several fields here, and more than one has this name
+help: name the field to read it through, like `@body.id`
+   |   def either -> Int = @body.id
+   = see `wid explain E0204`
+
+error[E0201]: undefined method `on_hit`
+  --> tests/ui/ivar_call.wid:26:24
+   |
+26 |   def command -> Int = on_hit 3
+   |                        ^^^^^^ not found in this scope
+   = note: `on_hit` is a field of `Player`; a bare name in a method is a variable or a method call, never a field
+help: call the proc the field holds with `@on_hit(…)`
+   |   def command -> Int = @on_hit(3)
+   = see `wid explain E0201`
+
+error[E0201]: undefined method `on_hitt`
+  --> tests/ui/ivar_call.wid:27:21
+   |
+27 |   def near -> Int = on_hitt(3)
+   |                     ^^^^^^^ not found in this scope
+help: a similar name exists: `@on_hit`
+   |   def near -> Int = @on_hit(3)
+   = see `wid explain E0201`
+
+error[E0209]: `@on_hit` only exists inside a method of a type
+  --> tests/ui/ivar_call.wid:30:20
+   |
+30 | def loose -> Int = @on_hit(3)
+   |                    ^^^^^^^ there is no receiver here
+help: define this method inside a `struct` or `enum` to use `self` and `@fields`
+   = see `wid explain E0209`
+
+error: could not compile due to 10 errors

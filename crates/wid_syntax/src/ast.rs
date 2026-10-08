@@ -681,6 +681,9 @@ pub enum Callee {
         /// `&.` safe navigation.
         safe: bool,
     },
+    /// `@name(…)`: calls the proc a field of `self` holds. The span covers
+    /// the `@`.
+    IVar(Ident),
 }
 
 /// One call argument.

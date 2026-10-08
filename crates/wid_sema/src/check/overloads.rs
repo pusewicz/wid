@@ -3,7 +3,7 @@
 
 use std::rc::Rc;
 
-use wid_diagnostics::{Applicability, Diagnostic, Span, codes, did_you_mean};
+use wid_diagnostics::{Applicability, Diagnostic, Span, and_list, codes, did_you_mean};
 use wid_syntax::Name;
 use wid_syntax::ast;
 
@@ -416,7 +416,7 @@ impl Checker<'_> {
                 codes::NO_MATCHING_OVERLOAD,
                 format!("several members of `{set_name}` take ({shown_args})"),
             )
-            .primary(span, format!("{} fit equally well", names.join(" and ")))
+            .primary(span, format!("{} fit equally well", and_list(&names)))
             .note(format!("the members are {}", listing.join(", ")))
         };
         let conversion = if tied.is_empty() {
@@ -550,10 +550,14 @@ impl Checker<'_> {
     /// first.
     pub fn ambiguous_using(&mut self, ty: TyId, name: Name, span: Span, hits: &[(u32, TyId, Name)], fix: UsingFix) {
         let names: Vec<String> = hits.iter().map(|(_, _, n)| format!("`{n}`")).collect();
+        let label = match names.as_slice() {
+            [a, b] => format!("both {a} and {b} provide `{name}`"),
+            _ => format!("{} all provide `{name}`", and_list(&names)),
+        };
         let shown = self.types.display(ty);
         self.report(
             Diagnostic::error(codes::NO_SUCH_MEMBER, format!("`{name}` is ambiguous in `{shown}`"))
-                .primary(span, format!("both {} provide `{name}`", names.join(" and ")))
+                .primary(span, label)
                 .note("`using` promotes the members of several fields here, and more than one has this name")
                 .suggest_replace(
                     format!("name the field to read it through, like `{}`", fix.like),

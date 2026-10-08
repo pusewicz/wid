@@ -85,53 +85,100 @@ impl<'a> Checker<'a> {
 
     /// Lowers `@name`.
     pub fn ivar(&mut self, name: Name, span: Span) -> ir::Expr {
+        match self.ivar_owner(name, span, "", None) {
+            Some((owner, index, ty)) => ir::Expr::new(ExprKind::Field { base: Box::new(owner), index }, ty),
+            None => ir::Expr::new(ExprKind::Zero, self.types.unknown()),
+        }
+    }
+
+    /// Lowers `@name(args)`, which calls the proc that a field of `self`
+    /// holds, like `self.name(args)`: `name` is the `@name` at the start.
+    /// Another field is E0305, as `self.hp()` is, and a method is called
+    /// by name instead (E0204).
+    pub fn ivar_call(&mut self, name: Ident, args: &[ast::Arg], block: Option<&ast::BlockArg>, span: Span) -> ir::Expr {
+        // The fix for a method shows the call without `@`: `heal(1)`.
+        let args_end = block.map_or(span.end, |b| b.span.start);
+        let written = self.source_text(Span { start: name.span.end, end: args_end, ..span });
+        let written = written.trim_end();
+        let shown_args = if written.contains('\n') || written.chars().count() > 24 { "(…)" } else { written };
+        let empty = (args.is_empty() && block.is_none()).then_some(span);
+        let Some((owner, index, fty)) = self.ivar_owner(name.name, name.span, shown_args, empty) else {
+            for a in args {
+                self.expr(&a.value, None);
+            }
+            return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+        };
+        let field = ir::Expr::new(ExprKind::Field { base: Box::new(owner), index }, fty);
+        if matches!(self.types.kind(fty), TyKind::Proc(_)) {
+            self.reject_builtin_block(block, name, "a proc");
+            return self.call_proc(field, args, span);
+        }
+        self.field_called(name, field, Some(args), block, span)
+    }
+
+    /// Finds the field `@name` reads, its own or promoted by `using`: the
+    /// struct value that declares it, with the field's index and type.
+    /// Reports a name that reaches no field: `called` is the argument list
+    /// `@name(…)` was written with, which the fix for a method keeps, and
+    /// `empty_call` the whole call when it passes nothing (`@hp()`), which
+    /// the fix for an ambiguous field reads (`@body.hp`).
+    fn ivar_owner(
+        &mut self,
+        name: Name,
+        span: Span,
+        called: &str,
+        empty_call: Option<Span>,
+    ) -> Option<(ir::Expr, u32, TyId)> {
         let base = self.self_place(span, &format!("`@{name}`"));
         if matches!(self.types.kind(base.ty), TyKind::Unknown) {
-            return base;
+            return None;
         }
-        match self.field_index(base.ty, name) {
-            Some((index, ty)) => ir::Expr::new(ExprKind::Field { base: Box::new(base), index }, ty),
-            None => {
-                let hits = self.using_hits(base.ty, name);
-                if let [(_, _, first), _, ..] = hits[..] {
-                    let at = format!("@{first}.{name}");
-                    let fix = super::overloads::UsingFix { like: at.clone(), span, replacement: at };
-                    self.ambiguous_using(base.ty, name, span, &hits, fix);
-                    return ir::Expr::new(ExprKind::Zero, self.types.unknown());
-                }
-                if !hits.is_empty() {
-                    let mut inner = base;
-                    while self.field_index(inner.ty, name).is_none()
-                        && let Some((index, using_ty)) = self.using_lookup(inner.ty, name, span)
-                    {
-                        inner = ir::Expr::new(ExprKind::Field { base: Box::new(inner), index }, using_ty);
-                        if let TyKind::Pointer(t) = *self.types.kind(using_ty) {
-                            inner = ir::Expr::new(ExprKind::Deref(Box::new(inner)), t);
-                        }
-                    }
-                    if let Some((i, t)) = self.field_index(inner.ty, name) {
-                        return ir::Expr::new(ExprKind::Field { base: Box::new(inner), index: i }, t);
-                    }
-                    let shown = self.types.display(inner.ty);
-                    self.report(
-                        Diagnostic::error(
-                            codes::NO_SUCH_MEMBER,
-                            format!("`@{name}` names a method of `{shown}`, not a field"),
-                        )
-                        .primary(span, "instance variables only reach fields")
-                        .suggest_replace(
-                            "call the method",
-                            span,
-                            name.as_str().to_string(),
-                            Applicability::MaybeIncorrect,
-                        ),
-                    );
-                    return ir::Expr::new(ExprKind::Zero, self.types.unknown());
-                }
-                self.no_member(base.ty, name, span, true);
-                ir::Expr::new(ExprKind::Zero, self.types.unknown())
+        if let Some((index, ty)) = self.field_index(base.ty, name) {
+            return Some((base, index, ty));
+        }
+        let hits = self.using_hits(base.ty, name);
+        if let [(_, first_ty, first), _, ..] = hits[..] {
+            let at = format!("@{first}.{name}");
+            let reads = |this: &mut Self| {
+                let member = this.self_member(first_ty, name, &mut Vec::new());
+                matches!(member, Some(super::expr::SelfMember::Field { is_proc: false, .. }))
+            };
+            let fix_span = match empty_call {
+                Some(call) if reads(self) => call,
+                _ => span,
+            };
+            let fix = super::overloads::UsingFix { like: at.clone(), span: fix_span, replacement: at };
+            self.ambiguous_using(base.ty, name, span, &hits, fix);
+            return None;
+        }
+        if hits.is_empty() {
+            self.no_member(base.ty, name, span, Some(called));
+            return None;
+        }
+        let mut inner = base;
+        while self.field_index(inner.ty, name).is_none()
+            && let Some((index, using_ty)) = self.using_lookup(inner.ty, name, span)
+        {
+            inner = ir::Expr::new(ExprKind::Field { base: Box::new(inner), index }, using_ty);
+            if let TyKind::Pointer(t) = *self.types.kind(using_ty) {
+                inner = ir::Expr::new(ExprKind::Deref(Box::new(inner)), t);
             }
         }
+        if let Some((index, ty)) = self.field_index(inner.ty, name) {
+            return Some((inner, index, ty));
+        }
+        let shown = self.types.display(inner.ty);
+        self.report(
+            Diagnostic::error(codes::NO_SUCH_MEMBER, format!("`@{name}` names a method of `{shown}`, not a field"))
+                .primary(span, "instance variables only reach fields")
+                .suggest_replace(
+                    format!("call the method: `{name}{called}`"),
+                    span,
+                    name.as_str().to_string(),
+                    Applicability::MaybeIncorrect,
+                ),
+        );
+        None
     }
 
     /// Classifies the left side of a member access without lowering values.
@@ -485,7 +532,7 @@ impl<'a> Checker<'a> {
             return ir::Expr::new(ExprKind::Zero, ty);
         }
         let _ = recv_span;
-        self.no_member(ty, name.name, name.span, false);
+        self.no_member(ty, name.name, name.span, None);
         ir::Expr::new(ExprKind::Zero, self.types.unknown())
     }
 
@@ -653,36 +700,44 @@ impl<'a> Checker<'a> {
             }
         }
         if let Some((index, fty)) = self.field_index(ty, name.name) {
-            let shown = self.types.display(fty);
-            let call_span = Span { start: name.span.end, ..span };
-            let mut diag =
-                Diagnostic::error(codes::NOT_CALLABLE, format!("`{}` is a field, not a method", name.as_str()))
-                    .primary(name.span, format!("this field's type is `{shown}`"));
-            if args.is_some_and(|a| a.is_empty()) && block.is_none() && call_span.end > call_span.start {
-                diag = diag.suggest_replace(
-                    "read the field without `()`",
-                    call_span,
-                    "",
-                    Applicability::MachineApplicable,
-                );
-            } else {
-                diag = diag.help("read the field without arguments or a block");
-            }
-            self.report(diag);
-            if let Some(args) = args {
-                for a in args {
-                    self.expr(&a.value, None);
-                }
-            }
-            return ir::Expr::new(ExprKind::Field { base: Box::new(base), index }, fty);
+            let field = ir::Expr::new(ExprKind::Field { base: Box::new(base), index }, fty);
+            return self.field_called(name, field, args, block, span);
         }
-        self.no_member(ty, name.name, name.span, false);
+        self.no_member(ty, name.name, name.span, None);
         if let Some(args) = args {
             for a in args {
                 self.expr(&a.value, None);
             }
         }
         ir::Expr::new(ExprKind::Zero, self.types.unknown())
+    }
+
+    /// Reports a field that holds no proc called like a method (E0305),
+    /// checks the arguments, and reads the field.
+    fn field_called(
+        &mut self,
+        name: Ident,
+        field: ir::Expr,
+        args: Option<&[ast::Arg]>,
+        block: Option<&ast::BlockArg>,
+        span: Span,
+    ) -> ir::Expr {
+        let shown = self.types.display(field.ty);
+        let call_span = Span { start: name.span.end, ..span };
+        let mut diag = Diagnostic::error(codes::NOT_CALLABLE, format!("`{}` is a field, not a method", name.as_str()))
+            .primary(name.span, format!("this field's type is `{shown}`"));
+        if args.is_some_and(|a| a.is_empty()) && block.is_none() && call_span.end > call_span.start {
+            diag = diag.suggest_replace("read the field without `()`", call_span, "", Applicability::MachineApplicable);
+        } else {
+            diag = diag.help("read the field without arguments or a block");
+        }
+        self.report(diag);
+        if let Some(args) = args {
+            for a in args {
+                self.expr(&a.value, None);
+            }
+        }
+        field
     }
 
     /// Reports a block passed to a field, proc or built-in method, none of
@@ -927,8 +982,11 @@ impl<'a> Checker<'a> {
         Some(ir::Expr::new(ExprKind::Cast { kind, expr: Box::new(v) }, target))
     }
 
-    /// Reports a missing field or method with suggestions.
-    pub fn no_member(&mut self, ty: TyId, name: Name, span: Span, is_ivar: bool) {
+    /// Reports a missing field or method with suggestions. `ivar` is set for
+    /// `@name`, to the argument list it was called with, if any, which the
+    /// fix for a method keeps.
+    pub fn no_member(&mut self, ty: TyId, name: Name, span: Span, ivar: Option<&str>) {
+        let is_ivar = ivar.is_some();
         if self.report_skipped_field(ty, name, span) {
             return;
         }
@@ -955,7 +1013,7 @@ impl<'a> Checker<'a> {
                     .primary(span, format!("`{shown}` has no field `{name}`"))
                     .note("`@name` reads a field of `self`; methods are called by name")
                     .suggest_replace(
-                        format!("call the method: `{name}`"),
+                        format!("call the method: `{name}{}`", ivar.unwrap_or_default()),
                         span,
                         name.as_str(),
                         Applicability::MachineApplicable,

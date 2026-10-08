@@ -58,14 +58,14 @@ error[E0705]: `LIB_TWICE` from `lib.h` was not imported
 help: write a small C function in a `.c` file of the package that calls the macro, and declare it with `@[extern]`
   = see `wid explain E0705`
 
-error[E0704]: `log` is ambiguous: `lib_Log` and `lib_log` both become `log` in Wid
+error[E0704]: `log` is ambiguous: `lib_LOG`, `lib_Log` and `lib_log` all become `log` in Wid
   --> tests/ui/cimport_errors/main.wid:10:7
    |
 10 |   lib.log(1.0)
-   |       ^^^ cimport left both out
+   |       ^^^ cimport left all of them out
    = note: cimport turns C names into Wid names with fixed rules, and these end up the same
-help: give the others their own names, so `log` means `lib_Log`
-   | cimport "lib.h", as: :lib, strip_prefix: "lib_", types: {lib_Pair: [3]F32, lib_Pare: [2]F32}, names: {lib_log: :log_2}
+help: give the others their own names, so `log` means `lib_LOG`
+   | cimport "lib.h", as: :lib, strip_prefix: "lib_", types: {lib_Pair: [3]F32, lib_Pare: [2]F32}, names: {lib_Log: :log_2, lib_log: :log_3}
    = see `wid explain E0704`
 
 error[E0707]: `Handle` is opaque, so it can only be used through a pointer
