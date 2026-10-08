@@ -1,0 +1,19 @@
+# A line that ends with an operator goes on to the next line, unless that
+# line starts like a statement (`p x`, `y = 2`, `return`) and is indented
+# no deeper than the statement's first line: then the operand is missing,
+# which is one error at the end of the line (it also closes a bracket left
+# open there), and the next line is checked on its own. A value on such a
+# line still continues the expression.
+def main
+  x = (1 +
+  p   x
+  y = 2 *
+  p y
+  z = [1, 2 +
+  p z
+  w = 1 +
+    2
+  v = w *
+  w
+  p v
+end

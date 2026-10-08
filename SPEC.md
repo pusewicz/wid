@@ -140,7 +140,12 @@ end
   - A line that ends with an operator or `,`, or a next line that starts with
     `.method`, continues the statement. A declaration or an `end` starting
     the next line never does: `X = 1 +` followed by `def main` is missing
-    its operand. Inside `( )` and `[ ]`, a line end after a complete
+    its operand. After an operator, nor does a line indented no deeper
+    than the statement's first line that starts like a statement: a call
+    without parentheses (`p x`), an assignment or a variable's declaration
+    (`y = 2`, `n: Int`), or `return`, `break`, `next`, `defer` or `guard`.
+    So `x = (1 +` followed by `p x` at `x`'s indentation is missing its
+    operand (and its `)`). Inside `( )` and `[ ]`, a line end after a complete
     expression may only lead to a `,` or the closer: anything else on the
     next line means the bracket was left open at the end of the line (a
     value indented under the list's first line is read as its next item,

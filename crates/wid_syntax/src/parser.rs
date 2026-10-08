@@ -1,6 +1,6 @@
 //! A recursive-descent parser with Pratt expression parsing and error recovery.
 
-use wid_diagnostics::{Applicability, Diagnostic, Diagnostics, Edit, FileId, Span, codes};
+use wid_diagnostics::{Applicability, Diagnostic, Diagnostics, Edit, FileId, Help, Label, Span, codes};
 
 use crate::ast::*;
 use crate::intern::Name;
@@ -210,6 +210,15 @@ struct Parser<'a> {
     /// line (see [`Parser::insert_line_end`]), in order, so a speculative
     /// parse that is rewound takes them back.
     inserted: Vec<usize>,
+    /// The line where the statement or declaration being parsed starts. A
+    /// later line indented no deeper starts a new one, so it can't be the
+    /// operand after an operator that ends a line (see
+    /// [`Parser::operand_cut`]).
+    stmt_line: usize,
+    /// Where [`Parser::missing_operand_at_line_end`] last reported a
+    /// missing operand: a line end, after which a bracket left open on the
+    /// line is reported by that error, not by one of its own.
+    cut_operand: Option<Span>,
 }
 
 /// Binding powers for infix operators.
@@ -316,6 +325,8 @@ impl<'a> Parser<'a> {
             uninferred: Vec::new(),
             array_params: None,
             inserted: Vec::new(),
+            stmt_line: 0,
+            cut_operand: None,
         }
     }
 
@@ -583,6 +594,30 @@ impl<'a> Parser<'a> {
     fn unclosed(&mut self, open: Span, last: Span, closer: &str, what: &str) {
         let at = last.shrink_to_end();
         let bracket = self.text_of(open);
+        // The line's end was just reported by an operator with nothing after
+        // it: that error says the bracket is never closed too, and its fix
+        // that removes the operator closes it.
+        if self.cut_operand == Some(at)
+            && self.last_error_at == Some(at.start)
+            && let Some(diag) = self.diags.last_mut()
+            && diag.primary_span() == Some(at)
+        {
+            let message = format!("this `{bracket}` is never closed");
+            diag.labels.push(Label { span: open, message, primary: false, splice: false });
+            let close = Edit { span: at, replacement: closer.into() };
+            match diag.helps.iter_mut().find(|h| !h.edits.is_empty()) {
+                Some(help) if help.edits.last().is_some_and(|e| e.span.end == at.end) => {
+                    help.message = format!("{} and close the `{bracket}`", help.message);
+                    help.edits.push(close);
+                }
+                _ => diag.helps.push(Help {
+                    message: format!("close the `{bracket}`"),
+                    edits: vec![close],
+                    applicability: Applicability::MachineApplicable,
+                }),
+            }
+            return;
+        }
         self.report(
             Diagnostic::error(codes::UNEXPECTED_TOKEN, format!("expected {what}, found end of line"))
                 .primary(at, format!("expected `{closer}`"))
@@ -1730,6 +1765,14 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_item(&mut self, ctx: ItemCtx) -> Option<Item> {
+        let here = self.line_of(self.peek().span.start);
+        let line = std::mem::replace(&mut self.stmt_line, here);
+        let item = self.parse_item_here(ctx);
+        self.stmt_line = line;
+        item
+    }
+
+    fn parse_item_here(&mut self, ctx: ItemCtx) -> Option<Item> {
         let start = self.peek().span;
         let doc = self.doc_before(start.start);
         let attrs = self.parse_attrs();
@@ -3404,6 +3447,14 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_stmt(&mut self) -> Stmt {
+        let here = self.line_of(self.peek().span.start);
+        let line = std::mem::replace(&mut self.stmt_line, here);
+        let stmt = self.parse_stmt_here();
+        self.stmt_line = line;
+        stmt
+    }
+
+    fn parse_stmt_here(&mut self) -> Stmt {
         let attrs = self.parse_attrs();
         let decl_kw = |kind| {
             matches!(
@@ -3825,7 +3876,11 @@ impl<'a> Parser<'a> {
                 _ => {
                     let op = binop_of(tok.kind).expect("infix token has a binop");
                     self.skip_newlines();
-                    let rhs = self.parse_expr_bp(rbp, false);
+                    let rhs = if self.operand_cut(tok) {
+                        self.missing_operand_at_line_end(lhs.span, tok)
+                    } else {
+                        self.parse_expr_bp(rbp, false)
+                    };
                     let span = lhs.span.to(rhs.span);
                     lhs = Expr { kind: ExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) }, span };
                 }
@@ -4595,6 +4650,71 @@ impl<'a> Parser<'a> {
         };
         self.report(diag);
         true
+    }
+
+    /// Whether the line ended after the operator `op` (just consumed), and
+    /// the next line, indented no deeper than the line where the statement
+    /// starts, starts a statement of its own (see
+    /// [`Parser::statement_ahead`]), as in `x = (1 +` followed by `p x`:
+    /// it can't be the operand. A declaration or an `end` starting the
+    /// next line is reported where it is parsed.
+    fn operand_cut(&self, op: Token) -> bool {
+        let next = self.peek();
+        let line = self.line_of(next.span.start);
+        !starts_declaration(next.kind)
+            && line > self.line_of(op.span.start)
+            && self.indent_of_line(line) <= self.indent_of_line(self.stmt_line)
+            && self.statement_ahead()
+    }
+
+    /// Whether what starts here reads as a statement and not as a value: a
+    /// call without parentheses (`p x`, of a name that isn't a local), an
+    /// assignment (`y = 2`, `@hp -= 1`), a variable's declaration
+    /// (`n: Int`), or `return`, `break`, `next`, `defer` or `guard`.
+    fn statement_ahead(&self) -> bool {
+        let tok = self.peek();
+        match tok.kind {
+            T::Kw(K::Return | K::Break | K::Next | K::Defer | K::Guard) => true,
+            T::Ident | T::IVar => {
+                let next = self.nth(1);
+                let local = tok.kind == T::Ident && self.is_local(Name::new(self.text_of(tok.span)));
+                next.kind == T::Eq
+                    || is_assign_op(next.kind)
+                    || (tok.kind == T::Ident && self.is_decl_start())
+                    || (tok.kind == T::Ident && !local && self.can_start_command_arg(next))
+            }
+            _ => false,
+        }
+    }
+
+    /// Reports the operand missing after `op`, which ends its line (see
+    /// [`Parser::operand_cut`]), with a fix that removes the operator after
+    /// the left operand at `lhs`, and puts back the line end so the next
+    /// line is parsed on its own. Returns the error placeholder for the
+    /// operand.
+    fn missing_operand_at_line_end(&mut self, lhs: Span, op: Token) -> Expr {
+        let at = op.span.shrink_to_end();
+        let text = self.text_of(op.span);
+        self.report(
+            Diagnostic::error(
+                codes::UNEXPECTED_TOKEN,
+                format!("expected an expression after `{text}`, found end of line"),
+            )
+            .primary(at, "expected an expression")
+            .secondary(op.span, format!("`{text}` needs a value after it"))
+            .note("the next line is a statement of its own: it starts like one, indented no deeper than this statement's first line")
+            .suggest(
+                format!("remove the `{text}`"),
+                vec![Edit { span: Span::new(self.file, lhs.end, op.span.end), replacement: String::new() }],
+                Applicability::MaybeIncorrect,
+            )
+            .help(format!(
+                "or write the missing value after `{text}`, on this line or on the next one indented deeper"
+            )),
+        );
+        self.restore_line_end(op.span);
+        self.cut_operand = Some(at);
+        Expr { kind: ExprKind::Error, span: at }
     }
 
     /// Reports a `quote` whose code is in braces (`quote { 1 }`, at `open`),
@@ -6492,6 +6612,33 @@ end
         // A conditional's `:` before a symbol, and a symbol argument, are
         // not `::`.
         parse_ok("def main\n  x = n ? A : :b\n  f :a, x\nend\n");
+    }
+
+    #[test]
+    fn operators_continue_unless_a_statement_follows() {
+        // After an operator at the end of a line, a line indented no
+        // deeper than the statement's first line that starts a statement
+        // (`p x`, `y = 1`, `return`) is one: one error, whose fix removes
+        // the operator and closes a bracket left open on the line, and the
+        // next line is its own statement.
+        for (line, fixed, next) in
+            [("x = (1 +", "x = (1)", "p x"), ("x = 2 *", "x = 2", "y = x"), ("x = [1, 2 +", "x = [1, 2]", "return x")]
+        {
+            let src = format!("def main\n  {line}\n  {next}\nend\n");
+            let (messages, out) = apply_fixes(&src, Applicability::MaybeIncorrect);
+            assert_eq!(messages.len(), 1, "{src:?}");
+            assert!(messages[0].ends_with("found end of line"), "{src:?}");
+            assert_eq!(out, format!("def main\n  {fixed}\n  {next}\nend\n"), "{src:?}");
+            let file = parse_file(FileId(0), &src).0;
+            let ItemKind::Def(def) = &file.items[0].kind else { panic!("a def") };
+            let FnBody::Block(body) = &def.body else { panic!("a block body") };
+            assert_eq!(body.len(), 2, "{src:?}");
+        }
+        // Lines indented deeper go on, also from an operator in a list
+        // whose own lines are indented less, and at package level, and so
+        // does a value on a line indented no deeper (`wid fmt` indents it).
+        parse_ok("def main\n  x = a +\n      b +\n      c\n  y = f(\n    a +\n    b\n  )\nend\nX = 1 +\n  2\n");
+        parse_ok("def main\n  t = 1\n  if t > 1 &&\n  t < 100\n    p t\n  end\n  u = t +\n  f(t)\n  p u\nend\n");
     }
 
     #[test]

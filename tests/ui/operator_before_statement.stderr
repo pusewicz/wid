@@ -1,0 +1,39 @@
+error[E0105]: expected an expression after `+`, found end of line
+ --> tests/ui/operator_before_statement.wid:8:11
+  |
+8 |   x = (1 +
+  |           ^ expected an expression
+  |       - this `(` is never closed
+  |          - `+` needs a value after it
+  = note: the next line is a statement of its own: it starts like one, indented no deeper than this statement's first line
+help: remove the `+` and close the `(`
+  |   x = (1)
+help: or write the missing value after `+`, on this line or on the next one indented deeper
+  = see `wid explain E0105`
+
+error[E0105]: expected an expression after `*`, found end of line
+  --> tests/ui/operator_before_statement.wid:10:10
+   |
+10 |   y = 2 *
+   |          ^ expected an expression
+   |         - `*` needs a value after it
+   = note: the next line is a statement of its own: it starts like one, indented no deeper than this statement's first line
+help: remove the `*`
+   |   y = 2
+help: or write the missing value after `*`, on this line or on the next one indented deeper
+   = see `wid explain E0105`
+
+error[E0105]: expected an expression after `+`, found end of line
+  --> tests/ui/operator_before_statement.wid:12:14
+   |
+12 |   z = [1, 2 +
+   |              ^ expected an expression
+   |       - this `[` is never closed
+   |             - `+` needs a value after it
+   = note: the next line is a statement of its own: it starts like one, indented no deeper than this statement's first line
+help: remove the `+` and close the `[`
+   |   z = [1, 2]
+help: or write the missing value after `+`, on this line or on the next one indented deeper
+   = see `wid explain E0105`
+
+error: could not compile due to 3 errors

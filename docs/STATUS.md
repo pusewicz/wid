@@ -1367,6 +1367,21 @@ the language server.
   `field_rejected` for a member access, and by `undefined_explained` for a
   name in a method of the type) keeps its uses on the type, through an
   `include` or an `extend` of it too, from being E0204 or E0201.
+- After a binary operator at the end of a line, a line indented no deeper
+  than the statement's first line that starts like a statement (a call
+  without parentheses, an assignment or declaration, `return`, `break`,
+  `next`, `defer`, `guard`) is a statement of its own (#120): `x = (1 +`
+  followed by `p x` read `p x` as the operand, which gave E0307 (`Int` +
+  `Void`), E0109, E0201 for `x` and the unclosed `(`. It is now one E0105
+  "expected an expression after `+`, found end of line" at the line end,
+  whose fix removes the operator, and the next line is parsed on its own.
+  A value on such a line still continues the expression (`if a &&` then
+  `b < 1`, which `wid fmt` indents). The parser keeps the line where the
+  statement or declaration being parsed starts (`Parser::stmt_line`, set
+  by `parse_stmt` and `parse_item`); `Parser::operand_cut` and
+  `statement_ahead` decide, and `missing_operand_at_line_end` reports. A bracket left open on that line
+  is reported by the same error (`Parser::cut_operand`): `unclosed` adds
+  "this `(` is never closed" to it, and the fix closes it too.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
