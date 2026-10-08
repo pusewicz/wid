@@ -525,7 +525,9 @@ impl<'a> Checker<'a> {
                     }
                     None => {
                         let candidates = self.visible_var_names();
-                        if !self.declared_by_failed_macro(true, false) {
+                        // `zz += 1` after `false && decl(:zz)` names a variable
+                        // whose scope was the operand.
+                        if !self.declared_by_failed_macro(true, false) && !self.report_scoped_out(*name, target.span) {
                             self.undefined(*name, target.span, candidates, "variable");
                         }
                         ir::Expr::new(ExprKind::Zero, self.types.unknown())

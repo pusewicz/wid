@@ -1074,6 +1074,10 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `TypeInfoField` or `TypeInfoMember`, or through a pointer or slice read
   out of one. `&` of a whole record stays allowed, since writes through it
   are caught.
+- Assigning to a name that a macro declared only in an operand
+  (`zz += 1` or `zz ||= 1` after `false && decl(:zz)`) gets the same E0201
+  note and help as reading it (#105): `Checker::place` asks
+  `report_scoped_out` before the bare "undefined variable".
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),

@@ -64,4 +64,8 @@ def main
   when deferred(true) then puts "deferred"
   end
   p e, f, g, h.name, i, k
+
+  # Assigning to a name declared only in an operand is the same mistake.
+  aa += 1
+  bb ||= 1
 end
