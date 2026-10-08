@@ -23,6 +23,7 @@
 //! [`Uses`] kept next to the index: for every name, call and written type,
 //! what it refers to, and for every expression and binding, its type.
 
+pub mod complete;
 mod extent;
 pub mod item;
 pub mod json;
@@ -36,7 +37,8 @@ use wid_sema::{PackageId, ProgramInput};
 pub use extent::Extents;
 pub use item::{Item, ItemBuilder, Location, OriginInfo, PackageInfo, Style};
 pub use uses::{
-    Nearby, Position, PositionError, RefItem, TypeItem, calls, find_file, refs, type_at, type_at_offset, written,
+    Nearby, Position, PositionError, RefItem, TypeItem, calls, declaration_at, find_file, ref_at, refs, target_name,
+    type_at, type_at_offset, uses_of, written,
 };
 
 /// A loaded and checked program, ready for queries.

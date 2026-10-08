@@ -616,9 +616,16 @@ impl Index {
 
     /// The methods extensions add to a builtin type such as `String`.
     pub fn builtin_groups(&self, name: &str) -> Vec<MemberGroup> {
+        self.extension_groups(&self.extensions_of(|link| link.symbol.is_none() && link.text == name))
+    }
+
+    /// The methods the extensions `extensions` add, in order, each followed
+    /// by the modules it includes: what a type that they all extend
+    /// answers to beyond its own (see [`crate::uses::Members`]).
+    pub fn extension_groups(&self, extensions: &[SymbolId]) -> Vec<MemberGroup> {
         let mut groups = Vec::new();
         let mut seen = Vec::new();
-        for ext in self.extensions_of(|link| link.symbol.is_none() && link.text == name) {
+        for &ext in extensions {
             groups.push(MemberGroup {
                 origin: Origin::Extend { extension: ext },
                 members: self.symbol(ext).members.clone(),

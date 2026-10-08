@@ -23,13 +23,16 @@ use std::time::{Duration, Instant};
 
 use lsp_types::{
     CodeAction, CodeActionKind, CodeActionOptions, CodeActionOrCommand, CodeActionParams, CodeActionProviderCapability,
-    DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
-    DocumentFormattingParams, DocumentSymbol, DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams,
-    GotoDefinitionResponse, Hover, HoverContents, HoverParams, HoverProviderCapability, InitializeParams,
-    InitializeResult, Location, MarkupContent, MarkupKind, MessageType, OneOf, Position, PositionEncodingKind,
-    PublishDiagnosticsParams, Range, SaveOptions, ServerCapabilities, ServerInfo, ShowMessageParams, SymbolInformation,
-    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions, TextDocumentSyncSaveOptions, TextEdit,
-    Uri, WorkspaceEdit,
+    CompletionItem, CompletionItemKind, CompletionList, CompletionOptions, CompletionParams, CompletionResponse,
+    CompletionTextEdit, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
+    DidSaveTextDocumentParams, Documentation, DocumentFormattingParams, DocumentSymbol, DocumentSymbolParams,
+    DocumentSymbolResponse, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
+    HoverProviderCapability, InitializeParams, InitializeResult, Location, MarkupContent, MarkupKind, MessageType,
+    OneOf, ParameterInformation, ParameterLabel, Position, PositionEncodingKind, PrepareRenameResponse,
+    PublishDiagnosticsParams, Range, ReferenceParams, RenameOptions, RenameParams, SaveOptions, ServerCapabilities,
+    ServerInfo, ShowMessageParams, SignatureHelp, SignatureHelpOptions, SignatureHelpParams, SignatureInformation,
+    SymbolInformation, TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind,
+    TextDocumentSyncOptions, TextDocumentSyncSaveOptions, TextEdit, Uri, WorkspaceEdit,
 };
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -40,7 +43,7 @@ use wid_query::{Analysis, TypeItem};
 
 use crate::Config;
 use crate::convert::{Converter, Published};
-use crate::features;
+use crate::{complete, features, rename, syntax};
 use crate::position::{Encoding, LineIndex};
 use crate::transport::{self, Incoming, RpcError, code};
 use crate::uri;
@@ -113,7 +116,10 @@ impl RootKey {
 /// A package being checked.
 struct Root {
     /// The last check; `None` before the first, or when it crashed.
-    analysis: Option<Analysis>,
+    analysis: Option<Arc<Analysis>>,
+    /// The last check in which every file of the package parsed, which
+    /// completion falls back on mid-edit.
+    good: Option<Arc<Analysis>>,
     /// Whether a file it reads changed since.
     dirty: bool,
     /// Every file on disk the last check read.
@@ -125,7 +131,7 @@ struct Root {
 
 impl Root {
     fn new() -> Root {
-        Root { analysis: None, dirty: true, files: HashSet::new(), diags: BTreeMap::new() }
+        Root { analysis: None, good: None, dirty: true, files: HashSet::new(), diags: BTreeMap::new() }
     }
 }
 
@@ -139,6 +145,11 @@ struct Server<W: Write> {
     markdown: bool,
     /// The client takes nested document symbols.
     hierarchical: bool,
+    /// The client shows Markdown in completion items' and signatures'
+    /// documentation.
+    markdown_docs: bool,
+    /// The workspace folders, which a rename may edit.
+    workspace: Vec<PathBuf>,
     config: Config,
     /// The directory holding `core/`, `vendor/` and `runtime/`.
     wid_root: PathBuf,
@@ -208,6 +219,8 @@ impl<W: Write> Server<W> {
             encoding: Encoding::Utf16,
             markdown: false,
             hierarchical: false,
+            markdown_docs: false,
+            workspace: Vec::new(),
             config,
             wid_root,
             error_docs,
@@ -347,6 +360,11 @@ impl<W: Write> Server<W> {
             "textDocument/formatting" => json(self.formatting(params(method, value)?)?),
             "textDocument/documentSymbol" => json(self.document_symbols(params(method, value)?)),
             "textDocument/codeAction" => json(self.code_actions(params(method, value)?)),
+            "textDocument/references" => json(self.references(params(method, value)?)),
+            "textDocument/prepareRename" => json(self.prepare_rename(params(method, value)?)?),
+            "textDocument/rename" => json(self.rename(params(method, value)?)?),
+            "textDocument/completion" => json(self.completion(params(method, value)?)),
+            "textDocument/signatureHelp" => json(self.signature_help(params(method, value)?)),
             _ => Err(RpcError::new(code::METHOD_NOT_FOUND, format!("`wid lsp` has no request `{method}`"))),
         }
     }
@@ -384,7 +402,16 @@ impl<W: Write> Server<W> {
         self.markdown = formats.is_some_and(|f| f.contains(&MarkupKind::Markdown));
         let symbols = text.and_then(|t| t.document_symbol.as_ref());
         self.hierarchical = symbols.and_then(|s| s.hierarchical_document_symbol_support).unwrap_or(false);
-        let workspace = workspace_root(&params);
+        let completion = text.and_then(|t| t.completion.as_ref()).and_then(|c| c.completion_item.as_ref());
+        let formats = completion.and_then(|c| c.documentation_format.as_ref());
+        self.markdown_docs = formats.is_some_and(|f| f.contains(&MarkupKind::Markdown));
+        self.workspace = workspace_folders(&params);
+        if self.workspace.is_empty()
+            && let Ok(dir) = std::env::current_dir()
+        {
+            self.workspace.push(absolute(&dir, None));
+        }
+        let workspace = self.workspace.first().cloned();
         for problem in self.read_options(params.initialization_options.as_ref(), workspace.as_deref()) {
             self.to_show.push((MessageType::WARNING, problem));
         }
@@ -408,6 +435,20 @@ impl<W: Write> Server<W> {
                     work_done_progress_options: Default::default(),
                     resolve_provider: None,
                 })),
+                references_provider: Some(OneOf::Left(true)),
+                rename_provider: Some(OneOf::Right(RenameOptions {
+                    prepare_provider: Some(true),
+                    work_done_progress_options: Default::default(),
+                })),
+                completion_provider: Some(CompletionOptions {
+                    trigger_characters: Some(vec![".".into(), "@".into()]),
+                    ..CompletionOptions::default()
+                }),
+                signature_help_provider: Some(SignatureHelpOptions {
+                    trigger_characters: Some(vec!["(".into(), ",".into()]),
+                    retrigger_characters: None,
+                    work_done_progress_options: Default::default(),
+                }),
                 ..ServerCapabilities::default()
             },
             server_info: Some(ServerInfo { name: "wid".into(), version: Some(env!("CARGO_PKG_VERSION").into()) }),
@@ -592,7 +633,7 @@ impl<W: Write> Server<W> {
         let opts = self.options(key);
         let overlay = &self.overlay;
         let analysis = match catch_unwind(AssertUnwindSafe(|| wid_driver::analyze(&opts, overlay))) {
-            Ok(analysis) => Some(analysis),
+            Ok(analysis) => Some(Arc::new(analysis)),
             Err(_) => {
                 let shown = key.target.display();
                 self.show(
@@ -639,6 +680,11 @@ impl<W: Write> Server<W> {
         paths.extend(diags.keys().cloned());
         root.diags = diags;
         root.files = files;
+        if let Some(analysis) = &analysis
+            && parsed(analysis, key)
+        {
+            root.good = Some(analysis.clone());
+        }
         root.analysis = analysis;
         root.dirty = false;
         self.publish(paths);
@@ -692,7 +738,7 @@ impl<W: Write> Server<W> {
 
     /// The last check of a root, and the file `path` in it.
     fn analysis(&self, key: &RootKey, path: &Path) -> Option<(&Analysis, FileId)> {
-        let analysis = self.roots.get(key)?.analysis.as_ref()?;
+        let analysis = self.roots.get(key)?.analysis.as_deref()?;
         Some((analysis, analysis.sources.find_by_path(path)?))
     }
 
@@ -820,6 +866,271 @@ impl<W: Write> Server<W> {
         }
         Some(actions)
     }
+
+    /// The checks a rename or a references request reads: the one of the
+    /// package the position is in, then every other open package's whose
+    /// last check read `declared`, the file declaring what is asked about,
+    /// each checked first if it is dirty.
+    fn related(&mut self, key: &RootKey, declared: Option<&Path>) -> Vec<Arc<Analysis>> {
+        let others: Vec<RootKey> = match declared {
+            Some(path) => self
+                .roots
+                .iter()
+                .filter(|(other, root)| *other != key && (root.files.contains(path) || other.covers(path)))
+                .map(|(other, _)| other.clone())
+                .collect(),
+            None => Vec::new(),
+        };
+        for other in &others {
+            if self.roots.get(other).is_some_and(|r| r.dirty) {
+                self.check(other);
+            }
+        }
+        std::iter::once(key)
+            .chain(&others)
+            .filter_map(|k| self.roots.get(k)?.analysis.clone())
+            .collect()
+    }
+
+    /// What the position names, in the fresh check of its package.
+    fn subject(
+        &mut self,
+        at: &TextDocumentPositionParams,
+    ) -> Option<(RootKey, Arc<Analysis>, Result<Option<rename::Subject>, String>)> {
+        let (key, path) = self.fresh(&at.text_document.uri)?;
+        let analysis = self.roots.get(&key)?.analysis.clone()?;
+        let file = analysis.sources.find_by_path(&path)?;
+        let offset = LineIndex::new(&analysis.sources.file(file).text).offset(at.position, self.encoding);
+        let found = rename::subject_at(&analysis, file, offset as u32);
+        Some((key, analysis, found))
+    }
+
+    /// A place in a file as an LSP location.
+    fn location(&self, analyses: &[Arc<Analysis>], place: &rename::Place) -> Option<Location> {
+        let text = analyses.iter().find_map(|a| {
+            let id = a.sources.find_by_path(&place.path)?;
+            Some(a.sources.file(id).text.clone())
+        })?;
+        let range = LineIndex::new(&text).range(place.start as usize, place.end as usize, self.encoding);
+        Some(Location { uri: uri_of(&self.docs, &place.path)?, range })
+    }
+
+    /// Every use of what the position names, in its package and the
+    /// packages it loads, and in the other open packages that load the
+    /// file declaring it; with its declaration when the client asks.
+    fn references(&mut self, params: ReferenceParams) -> Option<Vec<Location>> {
+        let (key, _, found) = self.subject(&params.text_document_position)?;
+        let subject = found.ok().flatten()?;
+        let declared = subject.declared.as_ref().map(|(path, _, _)| path.clone());
+        let analyses = self.related(&key, declared.as_deref());
+        let refs: Vec<&Analysis> = analyses.iter().map(|a| a.as_ref()).collect();
+        let places = rename::references(&refs, &subject, params.context.include_declaration);
+        Some(places.iter().filter_map(|p| self.location(&analyses, p)).collect())
+    }
+
+    /// Whether the name at the position can be renamed: its range, or
+    /// `null` where no name is; an error that says why when it can't be.
+    fn prepare_rename(&mut self, params: TextDocumentPositionParams) -> Result<Option<PrepareRenameResponse>, RpcError> {
+        let Some((key, analysis, found)) = self.subject(&params) else { return Ok(None) };
+        let subject = match found {
+            Ok(Some(subject)) => subject,
+            Ok(None) => return Ok(None),
+            Err(why) => return Err(RpcError::new(code::REQUEST_FAILED, why)),
+        };
+        let declared = subject.declared.as_ref().map(|(path, _, _)| path.clone());
+        let analyses = self.related(&key, declared.as_deref());
+        let scope = self.rename_scope(&analyses);
+        // The new name isn't known yet: check all the rest with the old one.
+        if let Err(why) = rename::plan(&scope, &subject, &subject.name) {
+            return Err(RpcError::new(code::REQUEST_FAILED, why));
+        }
+        // The name at the position is in the document's own file.
+        let path = self.docs.get(params.text_document.uri.as_str()).and_then(|d| d.path.clone());
+        let Some(file) = path.and_then(|p| analysis.sources.find_by_path(&p)) else { return Ok(None) };
+        let source = &analysis.sources.file(file).text;
+        let range = LineIndex::new(source).range(subject.at.0 as usize, subject.at.1 as usize, self.encoding);
+        Ok(Some(PrepareRenameResponse::RangeWithPlaceholder { range, placeholder: subject.name }))
+    }
+
+    fn rename_scope<'a>(&self, analyses: &'a [Arc<Analysis>]) -> rename::Scope<'a> {
+        rename::Scope {
+            analyses: analyses.iter().map(|a| a.as_ref()).collect(),
+            workspace: self.workspace.clone(),
+            wid_root: self.wid_root.clone(),
+        }
+    }
+
+    /// Renames what the position names: its declaration and every use, as
+    /// one edit, or an error that says why it can't.
+    // `WorkspaceEdit::changes` is keyed by `Uri`; see `code_actions`.
+    #[allow(clippy::mutable_key_type)]
+    fn rename(&mut self, params: RenameParams) -> Result<Option<WorkspaceEdit>, RpcError> {
+        let failed = |why: String| RpcError::new(code::REQUEST_FAILED, why);
+        let Some((key, _, found)) = self.subject(&params.text_document_position) else {
+            return Err(failed("the document isn't open in a package `wid lsp` checks".into()));
+        };
+        let subject = match found {
+            Ok(Some(subject)) => subject,
+            Ok(None) => return Err(failed("there's no name here to rename".into())),
+            Err(why) => return Err(failed(why)),
+        };
+        let declared = subject.declared.as_ref().map(|(path, _, _)| path.clone());
+        let analyses = self.related(&key, declared.as_deref());
+        let scope = self.rename_scope(&analyses);
+        let edits = rename::plan(&scope, &subject, params.new_name.trim()).map_err(failed)?;
+        let mut changes: HashMap<Uri, Vec<TextEdit>> = HashMap::new();
+        for (place, new_text) in edits {
+            let location = self.location(&analyses, &place).ok_or_else(|| failed("a file to edit isn't loaded".into()))?;
+            changes.entry(location.uri).or_default().push(TextEdit { range: location.range, new_text });
+        }
+        Ok(Some(WorkspaceEdit { changes: Some(changes), ..WorkspaceEdit::default() }))
+    }
+
+    /// The latest checks of an open document's package as snapshots of its
+    /// buffer now (the latest check, then the last that parsed), checking
+    /// first when there is none; the buffer, and the cursor as a byte
+    /// offset.
+    fn snapshots(&mut self, at: &TextDocumentPositionParams) -> Option<(RootKey, PathBuf, Arc<str>, usize)> {
+        let doc = self.docs.get(at.text_document.uri.as_str())?;
+        let path = doc.path.clone()?;
+        let text = doc.text.clone();
+        let offset = LineIndex::new(&text).offset(at.position, self.encoding);
+        let key = RootKey::of(&path);
+        if self.roots.entry(key.clone()).or_insert_with(Root::new).analysis.is_none() {
+            self.check(&key);
+        }
+        Some((key, path, text, offset))
+    }
+
+    fn checks_of(&self, key: &RootKey) -> Vec<Arc<Analysis>> {
+        let Some(root) = self.roots.get(key) else { return Vec::new() };
+        let mut out: Vec<Arc<Analysis>> = root.analysis.iter().cloned().collect();
+        if let Some(good) = &root.good
+            && !out.iter().any(|a| Arc::ptr_eq(a, good))
+        {
+            out.push(good.clone());
+        }
+        out
+    }
+
+    /// Completion at a position, from the package's latest checks without
+    /// checking again; only when they can't say what a receiver is and the
+    /// buffer changed since, the package is checked first.
+    fn completion(&mut self, params: CompletionParams) -> Option<CompletionResponse> {
+        let (key, path, text, offset) = self.snapshots(&params.text_document_position)?;
+        let mut answer = self.complete_with(&key, &path, &text, offset);
+        let unanswered = answer.1.is_empty() && !matches!(answer.0, syntax::Context::Nothing);
+        if unanswered && self.roots.get(&key).is_some_and(|r| r.dirty) {
+            self.check(&key);
+            answer = self.complete_with(&key, &path, &text, offset);
+        }
+        let (context, candidates) = answer;
+        let start = match context {
+            syntax::Context::Member { start, .. } | syntax::Context::Ivar { start } | syntax::Context::Name { start } => {
+                start
+            }
+            syntax::Context::Nothing => offset,
+        };
+        let range = LineIndex::new(&text).range(start, offset, self.encoding);
+        let items = candidates
+            .into_iter()
+            .enumerate()
+            .map(|(i, (c, group))| self.completion_item(c, group, i, range))
+            .collect();
+        Some(CompletionResponse::List(CompletionList { is_incomplete: false, items }))
+    }
+
+    fn complete_with(
+        &self,
+        key: &RootKey,
+        path: &Path,
+        text: &str,
+        offset: usize,
+    ) -> (syntax::Context, Vec<(wid_query::complete::Candidate, u8)>) {
+        let checks = self.checks_of(key);
+        let snaps: Vec<complete::Snapshot<'_>> =
+            checks.iter().filter_map(|a| complete::Snapshot::new(a, path, text)).collect();
+        complete::candidates(&snaps, text, offset)
+    }
+
+    fn completion_item(&self, c: wid_query::complete::Candidate, group: u8, i: usize, range: Range) -> CompletionItem {
+        use wid_query::complete::CandidateKind as K;
+        let kind = match c.kind {
+            K::Field => CompletionItemKind::FIELD,
+            K::Method => CompletionItemKind::METHOD,
+            K::Function | K::Macro | K::Overload => CompletionItemKind::FUNCTION,
+            K::Constant => CompletionItemKind::CONSTANT,
+            K::Struct => CompletionItemKind::STRUCT,
+            K::Enum | K::Union => CompletionItemKind::ENUM,
+            K::Module | K::Package => CompletionItemKind::MODULE,
+            K::TypeAlias => CompletionItemKind::TYPE_PARAMETER,
+            K::EnumMember => CompletionItemKind::ENUM_MEMBER,
+            K::Variable => CompletionItemKind::VARIABLE,
+            K::Keyword => CompletionItemKind::KEYWORD,
+        };
+        let mut doc = c.doc.clone().unwrap_or_default();
+        if let Some(origin) = c.origin.as_deref().filter(|o| *o != "builtin") {
+            let from = if self.markdown_docs { format!("From `{origin}`.") } else { format!("From {origin}.") };
+            doc = if doc.is_empty() { from } else { format!("{doc}\n\n{from}") };
+        }
+        let documentation = (!doc.is_empty()).then(|| {
+            let kind = if self.markdown_docs { MarkupKind::Markdown } else { MarkupKind::PlainText };
+            Documentation::MarkupContent(MarkupContent { kind, value: doc })
+        });
+        CompletionItem {
+            label: c.label.clone(),
+            kind: Some(kind),
+            detail: Some(c.detail),
+            documentation,
+            sort_text: Some(format!("{group}{i:05}")),
+            text_edit: Some(CompletionTextEdit::Edit(TextEdit { range, new_text: c.label })),
+            ..CompletionItem::default()
+        }
+    }
+
+    /// The signature of the call around the position, and the parameter
+    /// the cursor is at, from the same checks as completion.
+    fn signature_help(&mut self, params: SignatureHelpParams) -> Option<SignatureHelp> {
+        let (key, path, text, offset) = self.snapshots(&params.text_document_position_params)?;
+        let checks = self.checks_of(&key);
+        let snaps: Vec<complete::Snapshot<'_>> =
+            checks.iter().filter_map(|a| complete::Snapshot::new(a, &path, &text)).collect();
+        let (signatures, active, parameter) = complete::signatures(&snaps, &text, offset)?;
+        let encoding = self.encoding;
+        let units = |s: &str| match encoding {
+            Encoding::Utf8 => s.len() as u32,
+            Encoding::Utf16 => s.encode_utf16().count() as u32,
+        };
+        let docs = |text: String| {
+            let kind = if self.markdown_docs { MarkupKind::Markdown } else { MarkupKind::PlainText };
+            Documentation::MarkupContent(MarkupContent { kind, value: text })
+        };
+        let signatures = signatures
+            .into_iter()
+            .map(|s| SignatureInformation {
+                parameters: Some(
+                    s.parameters
+                        .iter()
+                        .map(|(r, _)| ParameterInformation {
+                            label: ParameterLabel::LabelOffsets([
+                                units(&s.label[..r.start]),
+                                units(&s.label[..r.end]),
+                            ]),
+                            documentation: None,
+                        })
+                        .collect(),
+                ),
+                documentation: s.doc.map(docs),
+                label: s.label,
+                active_parameter: None,
+            })
+            .collect();
+        Some(SignatureHelp {
+            signatures,
+            active_signature: Some(active as u32),
+            active_parameter: Some(parameter as u32),
+        })
+    }
 }
 
 /// Document symbols as a flat list, for a client that takes no nesting.
@@ -838,15 +1149,30 @@ fn flatten(symbols: &[DocumentSymbol], uri: &Uri, container: Option<&str>, out: 
     }
 }
 
-/// The workspace's directory: its first folder, or the root the client
-/// names.
-fn workspace_root(params: &InitializeParams) -> Option<PathBuf> {
-    if let Some(folder) = params.workspace_folders.as_ref().and_then(|f| f.first()) {
-        return uri::to_path(&folder.uri);
+/// The workspace's folders, or the root the client names.
+fn workspace_folders(params: &InitializeParams) -> Vec<PathBuf> {
+    let folders: Vec<PathBuf> = params
+        .workspace_folders
+        .iter()
+        .flatten()
+        .filter_map(|f| uri::to_path(&f.uri))
+        .map(|p| absolute(&p, None))
+        .collect();
+    if !folders.is_empty() {
+        return folders;
     }
     #[allow(deprecated)] // Older clients only send `rootUri`.
     let root = params.root_uri.as_ref();
-    root.and_then(uri::to_path)
+    root.and_then(uri::to_path).map(|p| absolute(&p, None)).into_iter().collect()
+}
+
+/// Whether every file of a root's package parsed in a check: no syntax
+/// error (E01xx) has its place there.
+fn parsed(analysis: &Analysis, key: &RootKey) -> bool {
+    !analysis.diags.iter().any(|d| {
+        d.code.as_str().starts_with("E01")
+            && d.primary_span().is_some_and(|s| key.covers(&analysis.sources.file(s.file).path))
+    })
 }
 
 #[cfg(test)]

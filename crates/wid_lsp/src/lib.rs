@@ -16,10 +16,13 @@
 //!
 //! It never generates C or runs a C compiler.
 
+mod complete;
 mod convert;
 mod features;
 mod position;
+mod rename;
 mod server;
+mod syntax;
 mod transport;
 mod uri;
 

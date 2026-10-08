@@ -29,6 +29,9 @@ pub struct Uses {
     /// The type of every expression, binding, parameter, written type and
     /// declaration name, sorted by span; one entry per span.
     pub types: Vec<Typed>,
+    /// What the members of the types in [`Uses::types`] are, each once:
+    /// [`Typed::members`] indexes this list.
+    pub members: Vec<Members>,
 }
 
 /// A use of a name.
@@ -129,6 +132,66 @@ pub struct Typed {
     pub instances: Vec<String>,
     /// What the span is.
     pub kind: TypedKind,
+    /// What a member access on a value of the type reaches, as an index
+    /// into [`Uses::members`] (for the first instance's type); `None` for a
+    /// type with nothing to reach, like `Void` or a type the checker
+    /// couldn't work out.
+    pub members: Option<usize>,
+}
+
+/// What `value.name` can reach on a value of a type, for completion: the
+/// type is read through optionals and a pointer, as a member access reads
+/// it (`^Ball?` reaches what `Ball` does).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Members {
+    /// The struct, enum or union that declares the type (a generic
+    /// struct's for one of its instances), whose fields, enum members and
+    /// methods the index lists.
+    pub decl: Option<SymbolId>,
+    /// The kind of the type, which decides its builtin methods.
+    pub shape: Shape,
+    /// The `extend` blocks that add methods to the type, other than those
+    /// that name `decl` (which the index lists): the extensions of a
+    /// builtin type or of a pattern (`extend []$T`), in the order lookup
+    /// tries them. An array or dynamic array also has those of its slice.
+    pub extensions: Vec<SymbolId>,
+}
+
+/// The kinds of types that differ in their builtin methods.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Shape {
+    /// `Bool`.
+    Bool,
+    /// An integer or float type.
+    Number,
+    /// `Rune`.
+    Rune,
+    /// `String`.
+    String,
+    /// An enum.
+    Enum,
+    /// A struct.
+    Struct,
+    /// A fixed array; `numeric` when its elements are numbers, so that up
+    /// to four of them have swizzle names (`v.x`, `c.rgb`).
+    Array {
+        /// The number of elements.
+        len: u64,
+        /// Whether the elements are numbers.
+        numeric: bool,
+    },
+    /// A slice, `[]T`.
+    Slice,
+    /// A dynamic array, `[dynamic]T`.
+    Dynamic,
+    /// A map, `map[K]V`.
+    Map,
+    /// A matrix.
+    Matrix,
+    /// A proc, which `.call` calls.
+    Proc,
+    /// Any other type: a union, a pointer to pointer, a C type, ….
+    Other,
 }
 
 /// What a typed span is.
@@ -176,5 +239,10 @@ impl Uses {
     /// The typed entry at exactly `span`.
     pub fn typed(&self, span: Span) -> Option<&Typed> {
         self.types.binary_search_by(|t| t.span.cmp(&span)).ok().map(|i| &self.types[i])
+    }
+
+    /// What a member access reaches on a value of the type of `typed`.
+    pub fn members_of(&self, typed: &Typed) -> Option<&Members> {
+        self.members.get(typed.members?)
     }
 }

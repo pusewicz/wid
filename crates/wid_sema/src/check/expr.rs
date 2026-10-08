@@ -2100,6 +2100,7 @@ impl<'a> Checker<'a> {
                 }
                 Some(n) => match params.iter().position(|p| p.name == n.name) {
                     Some(i) => {
+                        self.note_named_arg(n.span, params[i].span);
                         if matches!(slots[i], ArgSource::Given(_)) {
                             self.report(
                                 Diagnostic::error(

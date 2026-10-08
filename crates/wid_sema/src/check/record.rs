@@ -25,7 +25,7 @@ use crate::index::SymbolId;
 use crate::input::PackageId;
 use crate::ir;
 use crate::types::{TyId, TyKind};
-use crate::uses::{Ref, RefKind, RefTarget, Typed, TypedKind, Uses};
+use crate::uses::{Members, Ref, RefKind, RefTarget, Shape, Typed, TypedKind, Uses};
 
 /// What a recorded name refers to, before it becomes a [`RefTarget`].
 #[derive(Clone, Debug)]
@@ -45,6 +45,14 @@ enum Raw {
 struct Slot {
     kind: TypedKind,
     by_lowering: Vec<(u32, TyId)>,
+}
+
+/// What a member access reaches on the recorded types: by type, an index
+/// into `list`, or `None` for a type that reaches nothing.
+#[derive(Default)]
+struct MembersTable {
+    index: HashMap<TyId, Option<usize>>,
+    list: Vec<Members>,
 }
 
 /// One lowering of code: the function whose body is being lowered, its
@@ -189,6 +197,13 @@ impl Checker<'_> {
         self.note_type(span, ty, TypedKind::Local);
     }
 
+    /// Records an argument passed by name (`move(by: 2)`) to the parameter
+    /// declared at `param`: a write of the parameter, as a named argument
+    /// of `T.new` writes a field.
+    pub(crate) fn note_named_arg(&mut self, span: Span, param: Span) {
+        self.note(span, Raw::Local(param), RefKind::Write);
+    }
+
     /// Records that the local declared at `span` is a parameter.
     pub(crate) fn note_param(&mut self, span: Span) {
         if let Some(r) = self.recorder.as_deref_mut() {
@@ -223,9 +238,12 @@ impl Checker<'_> {
     }
 
     /// What the recording holds, as [`Uses`], with every declaration's own
-    /// name: empty when the check didn't index.
-    pub(super) fn build_uses(&self) -> Uses {
-        let Some(r) = self.recorder.as_deref() else { return Uses::default() };
+    /// name: empty when the check didn't index. It is the last thing the
+    /// check does: the recording is used up.
+    pub(super) fn build_uses(&mut self) -> Uses {
+        let Some(r) = self.recorder.take() else { return Uses::default() };
+        let table = self.members_table(&r);
+        let r = &*r;
         // The names of declarations. A local "declared" there is one the
         // checker made up (the block parameters of a block method checked
         // on its own).
@@ -270,7 +288,8 @@ impl Checker<'_> {
             if all.len() < 2 {
                 all.clear();
             }
-            (ty, all)
+            let reaches = slot.by_lowering.first().and_then(|(_, t)| table.index.get(t).copied().flatten());
+            (ty, all, reaches)
         };
         for (i, d) in self.decls.iter().enumerate() {
             let id = SymbolId(i as u32);
@@ -281,7 +300,12 @@ impl Checker<'_> {
                 refs.push(Ref { span: d.span, target: RefTarget::Symbol(id), kind: RefKind::Declaration });
                 if let Some(ty) = self.declared_type(DeclId(i as u32)) {
                     let kind = TypedKind::Declaration;
-                    types.push(Typed { span: d.span, ty, instances: Vec::new(), kind });
+                    // A constant's value reaches members, as a receiver.
+                    let members = match d.kind {
+                        DeclKind::Const(_) => self.const_ty(DeclId(i as u32)).and_then(|t| table.index.get(&t).copied().flatten()),
+                        _ => None,
+                    };
+                    types.push(Typed { span: d.span, ty, instances: Vec::new(), kind, members });
                     typed.insert(d.span);
                 }
             }
@@ -293,8 +317,9 @@ impl Checker<'_> {
                         if let Some(slot) = r.types.get(&f.ty.span)
                             && typed.insert(f.name.span)
                         {
-                            let (ty, instances) = shown(slot);
-                            types.push(Typed { span: f.name.span, ty, instances, kind: TypedKind::Field });
+                            let (ty, instances, members) = shown(slot);
+                            let kind = TypedKind::Field;
+                            types.push(Typed { span: f.name.span, ty, instances, kind, members });
                         }
                     }
                 }
@@ -307,7 +332,8 @@ impl Checker<'_> {
                             && typed.insert(m.name.span)
                         {
                             let kind = TypedKind::Declaration;
-                            types.push(Typed { span: m.name.span, ty: ty.clone(), instances: Vec::new(), kind });
+                            let ty = ty.clone();
+                            types.push(Typed { span: m.name.span, ty, instances: Vec::new(), kind, members: None });
                         }
                     }
                 }
@@ -330,8 +356,8 @@ impl Checker<'_> {
                 TypedKind::Local if params.contains(span) => TypedKind::Parameter,
                 kind => kind,
             };
-            let (ty, instances) = shown(slot);
-            types.push(Typed { span: *span, ty, instances, kind });
+            let (ty, instances, members) = shown(slot);
+            types.push(Typed { span: *span, ty, instances, kind, members });
         }
         // Parameters of methods no lowering declared, like a block
         // method's, which is inlined where it is called.
@@ -339,12 +365,98 @@ impl Checker<'_> {
             for p in &sig.params {
                 if p.span != Span::default() && typed.insert(p.span) {
                     let ty = self.types.display(p.ty);
-                    types.push(Typed { span: p.span, ty, instances: Vec::new(), kind: TypedKind::Parameter });
+                    let (kind, members) = (TypedKind::Parameter, table.index.get(&p.ty).copied().flatten());
+                    types.push(Typed { span: p.span, ty, instances: Vec::new(), kind, members });
                 }
             }
         }
         types.sort_by_key(|t| t.span);
-        Uses { refs, types }
+        Uses { refs, types, members: table.list }
+    }
+
+    /// What a member access reaches on each type the recording holds (the
+    /// first lowering's type of each span) and on each parameter's type.
+    /// Finding the extensions that apply resolves their targets, which the
+    /// check has done already; anything that reports is dropped, so the
+    /// index never adds a diagnostic.
+    fn members_table(&mut self, r: &Recorder) -> MembersTable {
+        let mut tys: Vec<TyId> = r.types.values().filter_map(|slot| slot.by_lowering.first().map(|(_, t)| *t)).collect();
+        tys.extend(self.sigs.values().flat_map(|sig| sig.params.iter().map(|p| p.ty)));
+        let consts: Vec<DeclId> = (0..self.decls.len() as u32).map(DeclId).collect();
+        tys.extend(consts.into_iter().filter(|d| matches!(self.decls[d.0 as usize].kind, DeclKind::Const(_))).filter_map(|d| self.const_ty(d)));
+        tys.sort_unstable();
+        tys.dedup();
+        let unions: HashMap<TyId, DeclId> = self
+            .decl_types
+            .iter()
+            .filter(|(d, _)| matches!(self.decls[d.0 as usize].kind, DeclKind::Union(_)))
+            .map(|(d, t)| (*t, *d))
+            .collect();
+        let saved = std::mem::take(&mut self.diags);
+        let mut table = MembersTable::default();
+        let mut seen: HashMap<Members, usize> = HashMap::new();
+        for ty in tys {
+            let found = self.members_of(ty, &unions).map(|m| match seen.get(&m) {
+                Some(&i) => i,
+                None => {
+                    let i = table.list.len();
+                    seen.insert(m.clone(), i);
+                    table.list.push(m);
+                    i
+                }
+            });
+            table.index.insert(ty, found);
+        }
+        self.diags = saved;
+        table
+    }
+
+    /// What `value.name` reaches on a value of type `ty`: read through
+    /// optionals and one pointer, as [`Checker::value_member`] reads it.
+    fn members_of(&mut self, ty: TyId, unions: &HashMap<TyId, DeclId>) -> Option<Members> {
+        let mut ty = ty;
+        while let TyKind::Optional(inner) = self.types.kind(ty) {
+            ty = *inner;
+        }
+        if let TyKind::Pointer(inner) = self.types.kind(ty) {
+            ty = *inner;
+        }
+        while let TyKind::Optional(inner) = self.types.kind(ty) {
+            ty = *inner;
+        }
+        let base = self.types.base(ty);
+        let shape = match self.types.kind(base).clone() {
+            TyKind::Unknown | TyKind::Void | TyKind::Never | TyKind::Nil | TyKind::Param(_) => return None,
+            TyKind::Bool => Shape::Bool,
+            TyKind::Int(_) | TyKind::Float(_) => Shape::Number,
+            TyKind::Rune => Shape::Rune,
+            TyKind::String => Shape::String,
+            TyKind::Enum(_) => Shape::Enum,
+            TyKind::Struct(_) => Shape::Struct,
+            TyKind::Array(elem, len) => Shape::Array { len, numeric: self.types.is_numeric(elem) },
+            TyKind::Slice(_) => Shape::Slice,
+            TyKind::Dynamic(_) => Shape::Dynamic,
+            TyKind::Map(..) => Shape::Map,
+            TyKind::Matrix(..) => Shape::Matrix,
+            TyKind::Proc(_) => Shape::Proc,
+            _ => Shape::Other,
+        };
+        let decl = self.type_decl(ty).or_else(|| unions.get(&ty).copied());
+        let mut extensions: Vec<SymbolId> = Vec::new();
+        if decl.is_none() {
+            let mut receivers = vec![ty];
+            if let TyKind::Array(elem, _) | TyKind::Dynamic(elem) = self.types.kind(base).clone() {
+                receivers.push(self.types.slice(elem));
+            }
+            for receiver in receivers {
+                for ext in self.extends_of(receiver) {
+                    if !extensions.contains(&SymbolId(ext.0)) {
+                        extensions.push(SymbolId(ext.0));
+                    }
+                }
+            }
+        }
+        Some(Members { decl: decl.map(|d| SymbolId(d.0)), shape, extensions })
     }
 
     /// The type a declaration's name has: a method's proc type, a
@@ -361,16 +473,21 @@ impl Checker<'_> {
                 };
                 Some(format!("proc({}){ret}", params.join(", ")))
             }
-            DeclKind::Const(_) => match (self.decl_types.get(&decl), self.consts.get(&decl)) {
-                (Some(t), _) => Some(self.types.display(*t)),
-                (None, Some(ConstState::Done { typed, .. })) => Some(self.types.display(typed.ty)),
-                _ => None,
-            },
+            DeclKind::Const(_) => self.const_ty(decl).map(|t| self.types.display(t)),
             DeclKind::Struct(s) if !s.generics.is_empty() => Some(generic_shape(d.name, &s.generics)),
             DeclKind::Union(u) if !u.generics.is_empty() => Some(generic_shape(d.name, &u.generics)),
             DeclKind::Struct(_) | DeclKind::Enum(_) | DeclKind::Union(_) => {
                 self.decl_types.get(&decl).map(|t| self.types.display(*t))
             }
+            _ => None,
+        }
+    }
+
+    /// The type of the constant `decl`, once it is known.
+    fn const_ty(&self, decl: DeclId) -> Option<TyId> {
+        match (self.decl_types.get(&decl), self.consts.get(&decl)) {
+            (Some(t), _) => Some(*t),
+            (None, Some(ConstState::Done { typed, .. })) => Some(typed.ty),
             _ => None,
         }
     }

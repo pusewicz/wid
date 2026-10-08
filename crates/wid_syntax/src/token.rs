@@ -48,6 +48,51 @@ pub enum Keyword {
 }
 
 impl Keyword {
+    /// Every keyword, in declaration order, for tools that list them (the
+    /// LSP's completion). `crates/wid_syntax/tests/editor_syntax.rs` checks
+    /// that it holds every word [`Keyword::from_ident`] maps.
+    pub const ALL: [Keyword; 39] = [
+        Keyword::Def,
+        Keyword::End,
+        Keyword::If,
+        Keyword::Unless,
+        Keyword::Elsif,
+        Keyword::Else,
+        Keyword::Then,
+        Keyword::While,
+        Keyword::Until,
+        Keyword::For,
+        Keyword::In,
+        Keyword::Do,
+        Keyword::Loop,
+        Keyword::Return,
+        Keyword::Break,
+        Keyword::Next,
+        Keyword::Yield,
+        Keyword::Struct,
+        Keyword::Enum,
+        Keyword::Union,
+        Keyword::Module,
+        Keyword::Include,
+        Keyword::Extend,
+        Keyword::Using,
+        Keyword::Import,
+        Keyword::Cimport,
+        Keyword::Guard,
+        Keyword::Case,
+        Keyword::When,
+        Keyword::Defer,
+        Keyword::Nil,
+        Keyword::True,
+        Keyword::False,
+        Keyword::SelfKw,
+        Keyword::Comptime,
+        Keyword::Macro,
+        Keyword::Quote,
+        Keyword::Overload,
+        Keyword::Private,
+    ];
+
     /// Maps identifier text to a keyword, if it is one.
     pub fn from_ident(text: &str) -> Option<Keyword> {
         Some(match text {

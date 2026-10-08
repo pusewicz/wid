@@ -24,6 +24,8 @@ pub struct RefItem {
     /// Where it is: the name, or for a use in generated code, the macro
     /// call.
     pub location: Location,
+    /// The same place as a span of the file it is written in.
+    pub span: Span,
     /// How the symbol is used.
     pub kind: RefKind,
     /// The path of the declaration the use is in (`Player.heal`); `None` at
@@ -142,24 +144,82 @@ fn ref_target(target: Target) -> RefTarget {
 /// column. Uses in the code of `cimport` packages are left out.
 pub fn refs(analysis: &Analysis, pkg: PackageId, path: &str) -> Result<Vec<RefItem>, Failure> {
     let target = ref_target(crate::resolve(&analysis.index, pkg, path, true)?);
+    Ok(uses_of(analysis, &target))
+}
+
+/// Every use of `target`, as [`refs`] lists them: locals and parameters
+/// too, which no symbol path names.
+pub fn uses_of(analysis: &Analysis, target: &RefTarget) -> Vec<RefItem> {
     let items = analysis.items(true);
     let contexts = Contexts::new(analysis);
-    let mut out: Vec<(Span, RefItem)> = Vec::new();
-    for r in analysis.uses.refs_to(&target) {
+    let mut out: Vec<RefItem> = Vec::new();
+    for r in analysis.uses.refs_to(target) {
         let (span, via_macro) = written(&analysis.sources, r.span);
         if analysis.sources.file(span.file).display.starts_with("cimport:") {
             continue;
         }
         let Some(location) = items.location(span) else { continue };
         let context = contexts.around(analysis, span);
-        out.push((span, RefItem { location, kind: r.kind, context, via_macro }));
+        out.push(RefItem { location, span, kind: r.kind, context, via_macro });
     }
-    out.sort_by(|(a, x), (b, y)| {
+    out.sort_by(|x, y| {
         let key = |l: &Location| (l.file.clone(), l.line, l.column, l.end_line, l.end_column);
-        key(&x.location).cmp(&key(&y.location)).then(a.cmp(b)).then(x.kind.cmp(&y.kind))
+        key(&x.location).cmp(&key(&y.location)).then(x.span.cmp(&y.span)).then(x.kind.cmp(&y.kind))
     });
-    out.dedup_by(|(_, x), (_, y)| x == y);
-    Ok(out.into_iter().map(|(_, r)| r).collect())
+    out.dedup();
+    out
+}
+
+/// The use of a name at byte `offset` of `file`: the smallest recorded
+/// name around it. Among the uses at one span, one whose target is named
+/// as written there comes first (at a call of an overload set, the set,
+/// not the member the call chose), then as [`type_at`] prefers them.
+pub fn ref_at(analysis: &Analysis, file: FileId, offset: u32) -> Option<&Ref> {
+    let covers = |s: Span| s.file == file && s.start <= offset && offset < s.end;
+    analysis.uses.refs.iter().filter(|r| covers(r.span)).min_by_key(|r| {
+        let written = analysis.sources.slice(r.span);
+        let named = target_name(analysis, &r.target).is_some_and(|n| written.trim_start_matches(':') == n);
+        (r.span.len(), !named, preference(analysis, r))
+    })
+}
+
+/// The name a target is declared with; `None` for a package, whose
+/// import name differs from file to file.
+pub fn target_name(analysis: &Analysis, target: &RefTarget) -> Option<String> {
+    let index = &analysis.index;
+    Some(match target {
+        RefTarget::Symbol(id) => index.symbol(*id).name.clone(),
+        RefTarget::Field { owner, index: i } => index.symbol(*owner).fields.get(*i)?.name.clone(),
+        RefTarget::EnumMember { owner, index: i } => index.symbol(*owner).enum_members.get(*i)?.name.clone(),
+        RefTarget::Local { binding, .. } => first_name(analysis.sources.slice(*binding))?.to_string(),
+        RefTarget::Builtin(name) => name.clone(),
+        RefTarget::Package(_) => return None,
+    })
+}
+
+/// The first name in `text`: `amount` in `amount: Int`, `x` in `|&x|`.
+fn first_name(text: &str) -> Option<&str> {
+    let is_name = |c: char| c.is_alphanumeric() || c == '_';
+    let start = text.find(is_name)?;
+    let rest = &text[start..];
+    Some(&rest[..rest.find(|c: char| !is_name(c)).unwrap_or(rest.len())])
+}
+
+/// The declaration around byte `offset` of `file`: the smallest one
+/// whose extent holds it (a method before the type around it); `None` at
+/// the top level of a file.
+pub fn declaration_at(analysis: &Analysis, file: FileId, offset: u32) -> Option<SymbolId> {
+    let mut best: Option<(u32, SymbolId)> = None;
+    for (i, s) in analysis.index.symbols.iter().enumerate() {
+        if s.span == Span::default() || s.span.file != file || s.c.is_some() {
+            continue;
+        }
+        let extent = analysis.extents.declaration(&analysis.sources, s.span).unwrap_or(s.span);
+        if extent.start <= offset && offset <= extent.end && best.is_none_or(|(len, _)| extent.len() < len) {
+            best = Some((extent.len(), SymbolId(i as u32)));
+        }
+    }
+    best.map(|(_, id)| id)
 }
 
 /// The calls of what a symbol path names: its `call` uses.

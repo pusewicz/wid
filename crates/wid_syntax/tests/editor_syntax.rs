@@ -38,6 +38,13 @@ fn lexer_keywords_are_parsed() {
 }
 
 #[test]
+fn every_keyword_is_listed_once() {
+    let listed: BTreeSet<&str> = Keyword::ALL.iter().map(|k| k.as_str()).collect();
+    assert_eq!(listed.len(), Keyword::ALL.len(), "a keyword appears twice in `Keyword::ALL`");
+    assert_eq!(listed, lexer_keywords(), "`Keyword::ALL` is out of sync with `Keyword::from_ident`");
+}
+
+#[test]
 fn vim_syntax_lists_every_keyword_once() {
     let words = vim_reserved_words();
     let unique: BTreeSet<&str> = words.iter().copied().collect();
