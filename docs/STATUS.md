@@ -496,6 +496,15 @@ runs the stages; `wid_cli` is the `wid` binary.
   E0105. Expanded in a method, the line is a nested declaration. The
   speculative parses share a `Mark` that also takes back put-back line
   ends.
+- A splice glued to text in a name inside a `quote` (`def bump_#{name}`,
+  `@#{name}_count`, `:a_#{f}`, `struct #{name}Box`, in any name position)
+  is one E0111 "a splice can't be part of a name" instead of five
+  cascading errors (#45). Its fix, to review, builds the name before the
+  `quote` (`bump_name = "bump_#{name}".to_sym`, once for each name) and
+  splices it (`def #{bump_name}`); in a `quote` inside a splice it is a
+  help. The parser reads the glued name as a splice of the
+  `"bump_#{name}".to_sym` it meant, so the declaration parses and code
+  using the generated name adds no errors.
 - Any type written where a `Type` is expected, or in `comptime` code, is a
   `Type` value: constructors (`name_of([]Int)`, `name_of(Int?)`,
   `name_of(^Node)`, `name_of((proc(Int) -> Int)?)`), generic instances and

@@ -1,0 +1,36 @@
+# A splice inserts a whole name: text glued to it, as Ruby builds a name
+# from a string (`define_method("bump_#{name}")`), is one error at the
+# glued name, with a fix that builds the name before the `quote` (once for
+# each name). The rest of the check reads it as the name it was meant to
+# build, so the code that uses the generated names adds no errors.
+struct Hero
+  hp: Int
+  hp_count: Int
+end
+
+macro def counter(name: Symbol) -> Code
+  quote do
+    def bump_#{name}(by_#{name}: Int) -> Int = @#{name}_count + by_#{name}
+    def twice -> Int = bump_#{name}(1) + self.#{name}_count
+  end
+end
+
+macro def boxed(name: Symbol, field: Symbol) -> Code
+  quote do
+    struct #{name}Box
+      #{field}_value: Int
+    end
+  end
+end
+
+extend Hero
+  counter :hp
+end
+
+boxed :Hp, :hp
+
+def main
+  hero = Hero.new(hp: 10)
+  box = HpBox.new(hp_value: 3)
+  p hero.bump_hp(by_hp: 2), hero.twice, box.hp_value
+end

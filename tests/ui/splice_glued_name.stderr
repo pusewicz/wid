@@ -1,0 +1,92 @@
+error[E0111]: a splice can't be part of a name
+  --> tests/ui/splice_glued_name.wid:13:9
+   |
+13 |     def bump_#{name}(by_#{name}: Int) -> Int = @#{name}_count + by_#{name}
+   |         ^^^^^^^^^^^^ a splice inserts a whole name, not part of one
+   = note: the text next to the splice is read as a separate name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole
+   |   bump_name = "bump_#{name}".to_sym
+   |   quote do
+   |     def #{bump_name}(by_#{name}: Int) -> Int = @#{name}_count + by_#{name}
+   = see `wid explain E0111`
+
+error[E0111]: a splice can't be part of a name
+  --> tests/ui/splice_glued_name.wid:13:22
+   |
+13 |     def bump_#{name}(by_#{name}: Int) -> Int = @#{name}_count + by_#{name}
+   |                      ^^^^^^^^^^ a splice inserts a whole name, not part of one
+   = note: the text next to the splice is read as a separate name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole
+   |   by_name = "by_#{name}".to_sym
+   |   quote do
+   |     def bump_#{name}(#{by_name}: Int) -> Int = @#{name}_count + by_#{name}
+   = see `wid explain E0111`
+
+error[E0111]: a splice can't be part of a name
+  --> tests/ui/splice_glued_name.wid:13:48
+   |
+13 |     def bump_#{name}(by_#{name}: Int) -> Int = @#{name}_count + by_#{name}
+   |                                                ^^^^^^^^^^^^^^ a splice inserts a whole name, not part of one
+   = note: the text next to the splice is read as a separate name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole
+   |   name_count = "#{name}_count".to_sym
+   |   quote do
+   |     def bump_#{name}(by_#{name}: Int) -> Int = @#{name_count} + by_#{name}
+   = see `wid explain E0111`
+
+error[E0111]: a splice can't be part of a name
+  --> tests/ui/splice_glued_name.wid:13:65
+   |
+13 |     def bump_#{name}(by_#{name}: Int) -> Int = @#{name}_count + by_#{name}
+   |                                                                 ^^^^^^^^^^ a splice inserts a whole name, not part of one
+   = note: the text next to the splice is read as a separate name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole
+   |     def bump_#{name}(by_#{name}: Int) -> Int = @#{name}_count + #{by_name}
+   = see `wid explain E0111`
+
+error[E0111]: a splice can't be part of a name
+  --> tests/ui/splice_glued_name.wid:14:24
+   |
+14 |     def twice -> Int = bump_#{name}(1) + self.#{name}_count
+   |                        ^^^^^^^^^^^^ a splice inserts a whole name, not part of one
+   = note: the text next to the splice is read as a separate name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole
+   |     def twice -> Int = #{bump_name}(1) + self.#{name}_count
+   = see `wid explain E0111`
+
+error[E0111]: a splice can't be part of a name
+  --> tests/ui/splice_glued_name.wid:14:47
+   |
+14 |     def twice -> Int = bump_#{name}(1) + self.#{name}_count
+   |                                               ^^^^^^^^^^^^^ a splice inserts a whole name, not part of one
+   = note: the text next to the splice is read as a separate name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole
+   |     def twice -> Int = bump_#{name}(1) + self.#{name_count}
+   = see `wid explain E0111`
+
+error[E0111]: a splice can't be part of a name
+  --> tests/ui/splice_glued_name.wid:20:12
+   |
+20 |     struct #{name}Box
+   |            ^^^^^^^^^^ a splice inserts a whole name, not part of one
+   = note: the text next to the splice is read as a separate name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole
+   |   name_box = "#{name}Box".to_sym
+   |   quote do
+   |     struct #{name_box}
+   = see `wid explain E0111`
+
+error[E0111]: a splice can't be part of a name
+  --> tests/ui/splice_glued_name.wid:21:7
+   |
+21 |       #{field}_value: Int
+   |       ^^^^^^^^^^^^^^ a splice inserts a whole name, not part of one
+   = note: the text next to the splice is read as a separate name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole
+   |   field_value = "#{field}_value".to_sym
+   |   quote do
+   |     struct #{name}Box
+   |       #{field_value}: Int
+   = see `wid explain E0111`
+
+error: could not compile due to 8 errors

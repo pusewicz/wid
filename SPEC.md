@@ -527,7 +527,11 @@ end
     splice is only valid inside `quote` (E0111). Comments therefore start
     with `# `. A splice is one expression and may span lines. Inside a
     string literal in a `quote`, `#{}` is ordinary run-time interpolation
-    of the generated code.
+    of the generated code. A splice inserts a whole name, so it can't be
+    glued to text, as in Ruby's `define_method("bump_#{name}")`:
+    `def bump_#{name}` or `@#{name}_count` is E0111. The macro builds the
+    name first (`fname = "bump_#{name}".to_sym`) and splices that
+    (`def #{fname}`).
   - **Calls:** macros are package members like any def, declared at the top
     level of a file (E0105 inside a type). `pkg.name(…)`, and
     `pkg.name args` as a statement or declaration, works wherever an

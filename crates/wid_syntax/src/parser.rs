@@ -158,6 +158,11 @@ struct Parser<'a> {
     /// expression is parsed with this stack emptied, so a `quote` inside it
     /// starts its own list and a bare splice inside it is reported.
     quotes: Vec<Vec<Expr>>,
+    /// The `quote` keyword of each open `quote`, innermost last, for the
+    /// fix that builds a glued name on a line before it (see
+    /// [`Parser::glued_name`]); `None` for a `quote` inside a splice, where
+    /// no line goes before it.
+    quote_keywords: Vec<Option<Span>>,
     /// How many splice expressions enclose the position, counted from the
     /// innermost `quote` (for the message about a splice inside a splice).
     splice_depth: u32,
@@ -275,6 +280,7 @@ impl<'a> Parser<'a> {
             yield_seen: false,
             pending_optional: None,
             quotes: Vec::new(),
+            quote_keywords: Vec::new(),
             splice_depth: 0,
             in_macro: false,
             uninferred: Vec::new(),
@@ -803,18 +809,183 @@ impl<'a> Parser<'a> {
     }
 
     /// The number of tokens of the name `n` tokens ahead: an identifier,
-    /// or inside a `quote` a splice standing for one.
+    /// or inside a `quote` a splice standing for one (or a name glued from
+    /// both, which is reported, see [`Parser::glued_len`]).
     fn name_len(&self, n: usize) -> Option<usize> {
         match self.nth(n).kind {
+            T::Ident | T::SpliceBegin if let Some(len) = self.glued_len(n) => Some(len),
             T::Ident => Some(1),
             T::SpliceBegin if !self.quotes.is_empty() => self.splice_len(n),
             _ => None,
         }
     }
 
+    /// Inside a `quote`, the number of tokens of the name `n` tokens ahead
+    /// when it is glued together from text and splices, with no space
+    /// between them: `bump_#{name}`, `#{name}_count`, `@hp_#{n}` or
+    /// `:#{a}_b`. Ruby builds a name from a string that way, but a splice
+    /// inserts a whole name, so [`Parser::glued_name`] reports it.
+    fn glued_len(&self, n: usize) -> Option<usize> {
+        if self.quotes.is_empty() {
+            return None;
+        }
+        let mut i = n;
+        // The `@` or `:` of `@#{…}` or `:#{…}`.
+        if matches!(self.nth(i).kind, T::AtSplice | T::ColonSplice) {
+            i += 1;
+        }
+        let (mut splices, mut texts, mut after_splice) = (0, 0, false);
+        loop {
+            let tok = self.nth(i);
+            if i > n && tok.space_before {
+                break;
+            }
+            match tok.kind {
+                T::SpliceBegin => {
+                    i += self.splice_len(i)?;
+                    splices += 1;
+                    after_splice = true;
+                    continue;
+                }
+                T::Ident | T::Const => {}
+                T::IVar | T::Symbol if i == n => {}
+                T::Int if after_splice => {}
+                _ => break,
+            }
+            i += 1;
+            texts += 1;
+            after_splice = false;
+        }
+        (splices > 0 && texts > 0).then_some(i - n)
+    }
+
+    /// Parses a name glued from text and splices (see
+    /// [`Parser::glued_len`]) and reports it. For the rest of the check it
+    /// is the name it was meant to build, a splice of `"text#{…}".to_sym`,
+    /// so the code around it still parses and what uses the name still
+    /// finds it. Returns the name (after its `@` or `:`) and the span of
+    /// all of it, or `None`, with nothing consumed, when no glued name
+    /// starts here.
+    fn glued_name(&mut self) -> Option<(Ident, Span)> {
+        let len = self.glued_len(0)?;
+        let first = self.peek();
+        let span = first.span.to(self.nth(len - 1).span);
+        let sigil = matches!(first.kind, T::AtSplice | T::ColonSplice | T::IVar | T::Symbol);
+        let name_span = Span::new(self.file, span.start + u32::from(sigil), span.end);
+        let (help, edits) = self.glued_fix(len, name_span);
+        let mut parts = Vec::new();
+        while self.peek().span.start < span.end && !self.at(T::Eof) {
+            let tok = self.peek();
+            match tok.kind {
+                T::SpliceBegin => {
+                    self.parse_splice();
+                    // The name's own splice holds the expression.
+                    if let Some(expr) = self.quotes.last_mut().and_then(Vec::pop) {
+                        parts.push(StrPart::Interp(expr));
+                    }
+                }
+                T::AtSplice | T::ColonSplice => {
+                    self.bump();
+                }
+                T::IVar | T::Symbol => {
+                    self.bump();
+                    parts.push(StrPart::Text(self.text_of(tok.span)[1..].to_string()));
+                }
+                _ => {
+                    self.bump();
+                    parts.push(StrPart::Text(self.text_of(tok.span).to_string()));
+                }
+            }
+        }
+        let text = Expr { kind: ExprKind::Str(parts), span: name_span };
+        let to_sym =
+            Callee::Method { recv: text, name: Ident { name: Name::new("to_sym"), span: name_span }, safe: false };
+        let call = Call { callee: to_sym, args: Vec::new(), block: None, parens: false };
+        let index = self.quotes.last_mut().map(|list| {
+            list.push(Expr { kind: ExprKind::Call(Box::new(call)), span: name_span });
+            list.len() as u32 - 1
+        });
+        self.report(
+            Diagnostic::error(codes::SPLICE_OUTSIDE_QUOTE, "a splice can't be part of a name")
+                .primary(span, "a splice inserts a whole name, not part of one")
+                .note("the text next to the splice is read as a separate name")
+                .suggest(help, edits, Applicability::MaybeIncorrect),
+        );
+        let name = index.map_or_else(|| Name::new("<error>"), splice_name);
+        Some((Ident { name, span: name_span }, span))
+    }
+
+    /// The help for the glued name of `len` tokens here, written
+    /// `name_span` without its `@` or `:`: build it in the macro with
+    /// `to_sym` and splice that. Its edits put that on a line before the
+    /// `quote` (once for each name in it) and splice the variable in place
+    /// of the glued name.
+    fn glued_fix(&self, len: usize, name_span: Span) -> (String, Vec<Edit>) {
+        // A variable for the name, from its text and the splices that are
+        // plain names (`bump_#{name}` is `bump_name`).
+        let (mut var, mut spliced) = (String::new(), Vec::new());
+        let mut i = 0;
+        while i < len {
+            let tok = self.nth(i);
+            let part = match tok.kind {
+                T::SpliceBegin => {
+                    let n = self.splice_len(i).unwrap_or(1);
+                    let inner = Span::new(self.file, tok.span.end, self.nth(i + n - 1).span.start);
+                    let last = self.text_of(inner).trim().rsplit('.').next().unwrap_or_default();
+                    let plain = last.starts_with(|c: char| c.is_ascii_lowercase() || c == '_')
+                        && last.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+                    let part = if plain { last } else { "name" };
+                    spliced.push(part);
+                    i += n;
+                    part
+                }
+                T::IVar | T::Symbol => {
+                    i += 1;
+                    &self.text_of(tok.span)[1..]
+                }
+                T::AtSplice | T::ColonSplice => {
+                    i += 1;
+                    continue;
+                }
+                _ => {
+                    i += 1;
+                    self.text_of(tok.span)
+                }
+            };
+            if !var.is_empty() && !var.ends_with('_') && !part.starts_with('_') {
+                var.push('_');
+            }
+            var.push_str(part);
+        }
+        let mut var = to_snake_case(&var).split('_').filter(|s| !s.is_empty()).collect::<Vec<_>>().join("_");
+        if var.is_empty() || var.starts_with(|c: char| c.is_ascii_digit()) || spliced.contains(&var.as_str()) {
+            var = format!("{var}_sym").trim_start_matches('_').to_string();
+        }
+        let written = self.text_of(name_span);
+        let built = format!("{var} = \"{written}\".to_sym");
+        let help = "build the name as a `Symbol` in the macro, before the `quote`, and splice it whole";
+        let keyword = self.quote_keywords.last().copied().flatten();
+        let Some(keyword) = keyword.filter(|_| !written.contains(['"', '\\', '\n'])) else {
+            return (format!("{help}: `{built}`, then `#{{{var}}}`"), Vec::new());
+        };
+        let line = self.line_of(keyword.start);
+        let start = self.line_starts[line];
+        let indent = &self.text[start as usize..start as usize + self.indent_of_line(line)];
+        let insert = Edit { span: Span::new(self.file, start, start), replacement: format!("{indent}{built}\n") };
+        let mut edits = vec![Edit { span: name_span, replacement: format!("#{{{var}}}") }];
+        // Another glued name with the same text already builds it.
+        if !self.diags.iter().flat_map(|d| &d.helps).flat_map(|h| &h.edits).any(|e| *e == insert) {
+            edits.insert(0, insert);
+        }
+        (help.to_string(), edits)
+    }
+
     /// Parses a name: an identifier, or a splice, which becomes the
     /// placeholder [`splice_name`].
     fn parse_name(&mut self, what: &str) -> Ident {
+        if let Some((name, _)) = self.glued_name() {
+            return name;
+        }
         if !self.at(T::SpliceBegin) {
             return self.expect_ident(what);
         }
@@ -824,7 +995,11 @@ impl<'a> Parser<'a> {
 
     /// Parses the name of a declared type: a constant, or a splice.
     fn parse_type_name(&mut self, what: &str) -> Ident {
-        if self.at(T::SpliceBegin) { self.parse_name(what) } else { self.expect_const(what) }
+        if self.at(T::SpliceBegin) || self.glued_len(0).is_some() {
+            self.parse_name(what)
+        } else {
+            self.expect_const(what)
+        }
     }
 
     /// Parses a splice in a name position. `None` means it was outside a
@@ -1141,9 +1316,11 @@ impl<'a> Parser<'a> {
 
     /// A declaration that starts with a splice, inside a `quote`: a field
     /// (`#{name}: T` in a struct), a constant (`#{name} = value`), or a
-    /// splice standing alone ([`ItemKind::Splice`]).
+    /// splice standing alone ([`ItemKind::Splice`]). A name glued from text
+    /// and a splice (see [`Parser::glued_len`]) reads as the splice.
     fn parse_splice_item(&mut self, ctx: ItemCtx) -> ItemKind {
-        let after = self.splice_len(0).map(|n| self.nth(n));
+        let glued = self.glued_len(0);
+        let after = glued.or_else(|| self.splice_len(0)).map(|n| self.nth(n));
         match after.map(|t| (t.kind, t.space_before)) {
             Some((T::Colon, false)) => {
                 let name = self.parse_name("a name");
@@ -1170,6 +1347,15 @@ impl<'a> Parser<'a> {
                 self.bump();
                 let value = self.parse_const_value();
                 ItemKind::Const(Box::new(ConstDecl { name, ty: None, value }))
+            }
+            // Alone, or a macro call (`make_#{name}(1)`).
+            _ if glued.is_some() => {
+                let expr = self.parse_expr_cmd();
+                match expr.kind {
+                    ExprKind::Splice(index) => ItemKind::Splice(index),
+                    _ if is_macro_call(&expr) => ItemKind::MacroCall(Box::new(expr)),
+                    _ => ItemKind::Error,
+                }
             }
             _ => match self.parse_splice().0 {
                 Some(index) => ItemKind::Splice(index),
@@ -1358,6 +1544,9 @@ impl<'a> Parser<'a> {
                 return None;
             }
             T::SpliceBegin => self.parse_splice_item(ctx),
+            // A name glued from text and a splice (`bump_#{name}: Int`),
+            // reported and read as the splice.
+            T::Ident | T::Const if self.glued_len(0).is_some() => self.parse_splice_item(ctx),
             T::Ident => {
                 let save = self.pos;
                 let splices = self.splice_mark();
@@ -1667,6 +1856,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_def_name(&mut self) -> Ident {
+        if let Some((name, _)) = self.glued_name() {
+            return name;
+        }
         let tok = self.peek();
         let text: Option<String> = match tok.kind {
             T::Ident => Some(self.text_of(tok.span).to_string()),
@@ -2320,6 +2512,9 @@ impl<'a> Parser<'a> {
 
     fn parse_symbol_ident(&mut self, what: &str) -> Option<Ident> {
         let tok = self.peek();
+        if let Some((name, span)) = self.glued_name() {
+            return Some(Ident { span, ..name });
+        }
         if tok.kind == T::ColonSplice {
             self.bump();
             return self.parse_splice_name().map(|name| Ident { span: tok.span.to(name.span), ..name });
@@ -2475,6 +2670,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_type_base(&mut self) -> TypeExpr {
+        if let Some((name, span)) = self.glued_name() {
+            return TypeExpr { kind: name.splice_index().map_or(TypeKind::Error, TypeKind::Splice), span };
+        }
         let tok = self.peek();
         let start = tok.span;
         let kind = match tok.kind {
@@ -3549,6 +3747,22 @@ impl<'a> Parser<'a> {
         let tok = self.peek();
         let span = tok.span;
         let simple = |kind| Expr { kind, span };
+        if let Some((name, span)) = self.glued_name() {
+            // It reads as the splice of the name it builds: a name, field,
+            // symbol or call.
+            let kind = match tok.kind {
+                T::AtSplice | T::IVar => ExprKind::IVar(name.name),
+                T::ColonSplice | T::Symbol => ExprKind::Symbol(name.name),
+                _ if self.at(T::LParen) && !self.peek().space_before => {
+                    return self.parse_call_with_parens(Callee::Name(name), span);
+                }
+                _ if cmd && self.can_start_command_arg(self.peek()) => {
+                    return self.parse_command_call(Callee::Name(name), span);
+                }
+                _ => name.splice_index().map_or(ExprKind::Error, ExprKind::Splice),
+            };
+            return Expr { kind, span };
+        }
         match tok.kind {
             T::Int => {
                 self.bump();
@@ -3675,6 +3889,7 @@ impl<'a> Parser<'a> {
                 // The quote's code runs where the macro is called: it has
                 // its own locals, splices and `yield`s.
                 self.quotes.push(Vec::new());
+                self.quote_keywords.push((self.splice_depth == 0).then_some(span));
                 let splice_depth = std::mem::replace(&mut self.splice_depth, 0);
                 let outer_yield = std::mem::replace(&mut self.yield_seen, false);
                 self.push_def_scope();
@@ -3683,6 +3898,7 @@ impl<'a> Parser<'a> {
                 self.yield_seen = outer_yield;
                 self.splice_depth = splice_depth;
                 let splices = self.quotes.pop().unwrap_or_default();
+                self.quote_keywords.pop();
                 self.expect_end();
                 Expr { kind: ExprKind::Quote(Box::new(QuoteExpr { body, splices })), span: span.to(self.prev_span()) }
             }
@@ -4220,7 +4436,9 @@ impl<'a> Parser<'a> {
                     self.bump();
                     self.skip_newlines();
                     let name_tok = self.peek();
+                    let glued = self.glued_name().map(|(name, _)| name);
                     let name = match name_tok.kind {
+                        _ if let Some(name) = glued => name,
                         T::Ident | T::Const => {
                             self.bump();
                             Ident { name: Name::new(self.text_of(name_tok.span)), span: name_tok.span }
@@ -5062,11 +5280,17 @@ end
     /// The messages of the diagnostics for `src`, and `src` with the edits
     /// of every first fix applied.
     fn fix_all(src: &str) -> (Vec<String>, String) {
+        apply_fixes(src, Applicability::MachineApplicable)
+    }
+
+    /// The messages, and the source with the first fix of each diagnostic
+    /// that has the given applicability applied.
+    fn apply_fixes(src: &str, applicability: Applicability) -> (Vec<String>, String) {
         let (_, diags) = parse_file(FileId(0), src);
         let mut edits: Vec<_> = diags
             .iter()
             .filter_map(|d| d.helps.first())
-            .filter(|h| h.applicability == Applicability::MachineApplicable)
+            .filter(|h| h.applicability == applicability)
             .flat_map(|h| h.edits.iter())
             .map(|e| (e.span.start as usize, e.span.end as usize, e.replacement.clone()))
             .collect();
@@ -5422,6 +5646,72 @@ end
         let (_, diags) = parse_file(FileId(0), "macro def m(a: Symbol) -> Code\n  #{a}\nend\n");
         assert_eq!(diags.iter().map(|d| d.code.as_str()).collect::<Vec<_>>(), ["E0111"]);
         assert_eq!(diags.iter().next().expect("one").helps.len(), 2, "advice about `quote` in a macro");
+    }
+
+    #[test]
+    fn names_glued_to_splices() {
+        // One error at the glued name, and the rest of the file parses.
+        let src = "macro def m(name: Symbol) -> Code\n  quote do\n    def bump_#{name} -> Int = 1\n  end\nend\n\
+                   def main\nend\n";
+        let (file, diags) = parse_file(FileId(0), src);
+        let diags: Vec<_> = diags.iter().collect();
+        assert_eq!(diags.len(), 1);
+        assert_eq!((diags[0].code.as_str(), diags[0].message.as_str()), ("E0111", "a splice can't be part of a name"));
+        assert_eq!(file.items.len(), 2);
+        let q = first_quote(&file);
+        let StmtKind::Item(item) = &q.body[0].kind else { panic!() };
+        let ItemKind::Def(def) = &item.kind else { panic!() };
+        assert_eq!(splice_of(&def.name), 0);
+        // The fix builds the name before the `quote` and splices it.
+        let (_, fixed) = apply_fixes(src, Applicability::MaybeIncorrect);
+        assert_eq!(
+            fixed,
+            "macro def m(name: Symbol) -> Code\n  bump_name = \"bump_#{name}\".to_sym\n  quote do\n    \
+             def #{bump_name} -> Int = 1\n  end\nend\ndef main\nend\n"
+        );
+        parse_ok(&fixed);
+        // In every name position, with the text before or after the splice
+        // (or both), one error each.
+        let body = "def get_#{a}(x_#{a}: Int) -> Int = @#{a}_x + x.#{a}_y\n\
+                    struct Box#{a}\n  v_#{a}: Int\nend\n\
+                    enum E#{a}\n  m_#{a}\n  b\nend\n\
+                    MAX_#{a} = 3\n\
+                    def go\n  \
+                      y_#{a}: Int = 1\n  z_#{a} = :#{a}_s + :s_#{a}\n  call_#{a}(1, k_#{a}: 2)\n  \
+                      for i_#{a} in xs\n  end\n  xs.each { |e_#{a}| }\n  v: T#{a} = 1\n  \
+                      #{a}_#{a}_#{a} = 2\n  p_#{a} 1, 2\n  w = #{a}2\n\
+                    end\n\
+                    overload :o_#{a}, :#{a}\n";
+        let src = format!("macro def m(a: Symbol) -> Code\n  quote do\n{body}  end\nend\n");
+        let (file, diags) = parse_file(FileId(0), &src);
+        let lines: Vec<_> = diags
+            .iter()
+            .map(|d| {
+                assert_eq!(d.message, "a splice can't be part of a name");
+                src[..d.primary_span().expect("a span").start as usize].matches('\n').count() + 1
+            })
+            .collect();
+        assert_eq!(lines, [3, 3, 3, 3, 4, 5, 7, 8, 11, 13, 14, 14, 14, 15, 15, 16, 18, 19, 20, 21, 22, 24]);
+        assert_eq!(first_quote(&file).body.len(), 6);
+        // The same name glued twice is built once.
+        let src = "macro def m(a: Symbol) -> Code\n  quote do\n    def get_#{a} = 1\n    def two = get_#{a} + 1\n  \
+                   end\nend\n";
+        let (messages, fixed) = apply_fixes(src, Applicability::MaybeIncorrect);
+        assert_eq!(messages.len(), 2);
+        assert_eq!(fixed.matches("get_a = \"get_#{a}\".to_sym").count(), 1);
+        parse_ok(&fixed);
+        // In a `quote` inside a splice, no line can go before it: the help
+        // says what to write.
+        let (_, diags) = parse_file(
+            FileId(0),
+            "macro def m(a: Symbol) -> Code\n  quote do\n    #{quote do\n      x_#{a} = 1\n    end}\n  end\nend\n",
+        );
+        let diags: Vec<_> = diags.iter().collect();
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].helps[0].edits.is_empty());
+        assert!(diags[0].helps[0].message.ends_with("`x_a = \"x_#{a}\".to_sym`, then `#{x_a}`"));
+        // Spaced, a splice is a separate argument.
+        parse_ok("macro def m(a: Code) -> Code\n  quote do\n    p #{a}\n    x = [#{a}, a]\n  end\nend\n");
     }
 
     #[test]
