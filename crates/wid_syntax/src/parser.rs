@@ -937,12 +937,9 @@ impl<'a> Parser<'a> {
     /// `bump_#{name}`, `#{name}_count`, `@hp_#{n}` or `:#{a}_b`. Ruby
     /// builds a name from a string that way, but a splice inserts a whole
     /// name, so [`Parser::glued_name`] reports it. Outside a `quote` too,
-    /// where it is never a comment, but not inside a splice's expression,
-    /// where a splice is reported as nested.
+    /// where it is never a comment, and inside a splice's expression, which
+    /// is macro code (see [`Parser::glued_in_splice`]).
     fn glued_len(&self, n: usize) -> Option<usize> {
-        if self.quotes.is_empty() && self.splice_depth > 0 {
-            return None;
-        }
         let mut i = n;
         // The `@` or `:` of `@#{…}` or `:#{…}`.
         if matches!(self.nth(i).kind, T::AtSplice | T::ColonSplice) {
@@ -986,7 +983,13 @@ impl<'a> Parser<'a> {
         let span = first.span.to(self.nth(len - 1).span);
         let sigil = matches!(first.kind, T::AtSplice | T::ColonSplice | T::IVar | T::Symbol);
         let name_span = Span::new(self.file, span.start + u32::from(sigil), span.end);
-        let (help, edits) = self.glued_fix(len, name_span);
+        if self.quotes.is_empty() && self.splice_depth > 0 {
+            // A name can't be built here (a method's, a parameter's), only
+            // a value: the help says how, with no edits.
+            self.glued_in_splice(len, false);
+            return Some((Ident { name: Name::new(self.text_of(name_span)), span: name_span }, span));
+        }
+        let (help, edits) = self.glued_fix(len, name_span, None);
         if self.quotes.is_empty() {
             return Some(self.glued_name_outside_quote(span, name_span, help));
         }
@@ -1032,6 +1035,61 @@ impl<'a> Parser<'a> {
         Some((Ident { name, span: name_span }, span))
     }
 
+    /// A name glued from text and splices (see [`Parser::glued_len`])
+    /// inside a splice's expression (`#{foo_#{name}}`), which is macro code,
+    /// where a splice is nested: one E0111, whose fix builds the name before
+    /// the `quote` and splices that (`#{foo_name}`). Consumes the name and
+    /// returns the `"foo_#{name}".to_sym` it means, which builds it in the
+    /// macro, so the code it lands in is checked as meant. Without `fix`,
+    /// the help has no edits.
+    fn glued_in_splice(&mut self, len: usize, fix: bool) -> Expr {
+        let first = self.peek();
+        let span = first.span.to(self.nth(len - 1).span);
+        let sigil = matches!(first.kind, T::AtSplice | T::ColonSplice | T::IVar | T::Symbol);
+        let name_span = Span::new(self.file, span.start + u32::from(sigil), span.end);
+        let written = self.text_of(name_span);
+        let (help, edits) = if fix {
+            self.glued_fix(len, name_span, Some(span))
+        } else {
+            (
+                format!(
+                    "macro code can't name a method or variable with a splice; build the name as a value, `\"{written}\".to_sym`"
+                ),
+                Vec::new(),
+            )
+        };
+        let mut parts = Vec::new();
+        while self.peek().span.start < span.end && !self.at(T::Eof) {
+            let tok = self.bump();
+            match tok.kind {
+                T::SpliceBegin => {
+                    // A splice inside it is nested once more.
+                    self.splice_depth += 1;
+                    let expr = self.parse_expr();
+                    self.splice_depth -= 1;
+                    self.close_splice(tok.span);
+                    parts.push(StrPart::Interp(expr));
+                }
+                T::AtSplice | T::ColonSplice => {}
+                T::IVar | T::Symbol => parts.push(StrPart::Text(self.text_of(tok.span)[1..].to_string())),
+                _ => parts.push(StrPart::Text(self.text_of(tok.span).to_string())),
+            }
+        }
+        self.report(
+            Diagnostic::error(codes::MISPLACED_SPLICE, "a splice inside a splice")
+                .primary(span, "this is already macro code, where a splice can't build a name")
+                .note(format!(
+                    "the expression inside `#{{…}}` runs in the macro, where `\"{written}\".to_sym` builds the name"
+                ))
+                .suggest(help, edits, Applicability::MaybeIncorrect),
+        );
+        let text = Expr { kind: ExprKind::Str(parts), span: name_span };
+        let to_sym =
+            Callee::Method { recv: text, name: Ident { name: Name::new("to_sym"), span: name_span }, safe: false };
+        let call = Call { callee: to_sym, args: Vec::new(), block: None, parens: false };
+        Expr { kind: ExprKind::Call(Box::new(call)), span }
+    }
+
     /// [`Parser::glued_name`] outside a `quote`, where nothing is spliced:
     /// skips the name at `span` (`name_span` without its `@` or `:`),
     /// reports it as one E0111 and returns the name as written
@@ -1057,8 +1115,9 @@ impl<'a> Parser<'a> {
     /// `name_span` without its `@` or `:`: build it in the macro with
     /// `to_sym` and splice that. Its edits put that on a line before the
     /// `quote` (once for each name in it) and splice the variable in place
-    /// of the glued name.
-    fn glued_fix(&self, len: usize, name_span: Span) -> (String, Vec<Edit>) {
+    /// of the glued name, or, inside a splice's expression (`in_splice`,
+    /// all of the name with its `@` or `:`), write the variable there.
+    fn glued_fix(&self, len: usize, name_span: Span, in_splice: Option<Span>) -> (String, Vec<Edit>) {
         // A variable for the name, from its text and the splices that are
         // plain names (`bump_#{name}` is `bump_name`).
         let (mut var, mut spliced) = (String::new(), Vec::new());
@@ -1110,7 +1169,10 @@ impl<'a> Parser<'a> {
         let start = self.line_starts[line];
         let indent = &self.text[start as usize..start as usize + self.indent_of_line(line)];
         let insert = Edit { span: Span::new(self.file, start, start), replacement: format!("{indent}{built}\n") };
-        let mut edits = vec![Edit { span: name_span, replacement: format!("#{{{var}}}") }];
+        let mut edits = vec![match in_splice {
+            Some(span) => Edit { span, replacement: var.clone() },
+            None => Edit { span: name_span, replacement: format!("#{{{var}}}") },
+        }];
         // Another glued name with the same text already builds it.
         if !self.diags.iter().flat_map(|d| &d.helps).flat_map(|h| &h.edits).any(|e| *e == insert) {
             edits.insert(0, insert);
@@ -3932,6 +3994,13 @@ impl<'a> Parser<'a> {
         let tok = self.peek();
         let span = tok.span;
         let simple = |kind| Expr { kind, span };
+        // In a splice's expression, which is macro code, it builds the name.
+        if self.quotes.is_empty()
+            && self.splice_depth > 0
+            && let Some(len) = self.glued_len(0)
+        {
+            return self.glued_in_splice(len, true);
+        }
         if let Some((name, span)) = self.glued_name() {
             // It reads as the splice of the name it builds: a name, field,
             // symbol or call.
@@ -6162,6 +6231,23 @@ end
         let (_, diags) = parse_file(FileId(0), "macro def m(a: Symbol) -> Code\n  #{a}\nend\n");
         assert_eq!(diags.iter().map(|d| d.code.as_str()).collect::<Vec<_>>(), ["E0111"]);
         assert_eq!(diags.iter().next().expect("one").helps.len(), 2, "advice about `quote` in a macro");
+        // A name glued to a splice inside a splice's expression is one
+        // error, whose fix builds the name before the `quote`, and reads as
+        // the `"foo_#{a}".to_sym` it means.
+        let src = "macro def m(a: Symbol) -> Code\n  quote do\n    p #{foo_#{a}}\n  end\nend\ndef main\nend\n";
+        let (messages, fixed) = apply_fixes(src, Applicability::MaybeIncorrect);
+        assert_eq!(messages, ["a splice inside a splice"]);
+        assert_eq!(
+            fixed,
+            "macro def m(a: Symbol) -> Code\n  foo_a = \"foo_#{a}\".to_sym\n  quote do\n    p #{foo_a}\n  end\nend\n\
+             def main\nend\n"
+        );
+        parse_ok(&fixed);
+        let (file, _) = parse_file(FileId(0), src);
+        assert_eq!(file.items.len(), 2);
+        let q = first_quote(&file);
+        let ExprKind::Call(call) = &q.splices[0].kind else { panic!("a call") };
+        assert!(matches!(&call.callee, Callee::Method { name, .. } if name.as_str() == "to_sym"));
     }
 
     #[test]

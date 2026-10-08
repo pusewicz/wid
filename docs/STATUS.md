@@ -652,10 +652,11 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   splice outside a `quote`", noting that it can't be part of a name
   either, with the help that builds the name in a macro (#61). It was
   four errors, with a fix that read it as a comment (`def bump_# {name}`)
-  and lost `def main`. `glued_len` works outside a `quote` (not inside a
-  splice's expression), `stray_is_comment` never takes a splice glued to
-  a name for a comment, and the line is read as the declaration it was
-  written in, with the name as written, which no code can refer to. The
+  and lost `def main`. `glued_len` works outside a `quote` (and, since
+  #87, inside a splice's expression), `stray_is_comment` never takes a
+  splice glued to a name for a comment, and the line is read as the
+  declaration it was written in, with the name as written, which no code
+  can refer to. The
   E0111 title is now "misplaced splice" (`codes::MISPLACED_SPLICE`), as it
   also covers a splice inside a splice and one glued to a name.
 - Any type written where a `Type` is expected, or in `comptime` code, is a
@@ -939,6 +940,15 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   proc the field holds (`Callee::IVar`) like `@#{name}(args)`; the `(n)`
   was "expected end of line" and the field's proc type an E0301 (#95,
   second part).
+- Inside a splice's expression, a name glued to a splice
+  (`#{foo_#{name}}`) is one E0111 "a splice inside a splice", whose fix to
+  review builds the name before the `quote` (`foo_name =
+  "foo_#{name}".to_sym`) and splices it, `#{foo_name}` (#87; it was E0201
+  "undefined name `foo_`" and "expected `}` to close the splice").
+  `glued_len` now works inside a splice's expression too, and
+  `Parser::glued_in_splice` reads the name as that `to_sym` call, so the
+  code it lands in adds no errors. In a name position there (a method
+  name after `.`), the help explains it without edits.
 - A C compiler without C23 (one that rejects `-std=c23`, like gcc 13 or
   clang 17, or lacks `<stdckdint.h>` or `#embed`) is E0702 "the C compiler
   `cc` doesn't support C23", with the first line of its `--version`, the
