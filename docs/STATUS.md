@@ -1328,6 +1328,15 @@ the language server.
   at the `def` explains it, so its arguments, the run-time call of
   compile-time code (E0906) and the names its code would have declared
   aren't reported.
+- A field written with a space before its `:` (`pos :Vec2`) in a struct's
+  body, where no macro is named `pos` and the symbol names a type (maybe
+  optional, or a generic parameter), is E0105 "a field's `:` goes right
+  after its name" with the machine-applicable fix `pos: Vec2` (#119); it
+  was "undefined macro `pos`". `Checker::spaced_field` and
+  `report_spaced_field` in `check/decl_macros.rs` run before the call is
+  resolved as a macro, and record the field in `rejected_fields`, so its
+  uses (`b.pos`, `@pos`, `Ball.new(pos: …)`) aren't reported missing while
+  other members of the struct still are.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),

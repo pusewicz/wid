@@ -195,8 +195,9 @@ pub(crate) struct MacroState {
     /// [`Checker::members_incomplete`]).
     pub failed_owners: HashSet<DeclId>,
     /// Fields that a macro call in a struct's body generated and E0913
-    /// rejected, by struct: their uses aren't reported missing (see
-    /// [`Checker::field_rejected`]).
+    /// rejected, and fields written with a space before their `:` that
+    /// read as a macro call (`pos :Vec2`, E0105), by struct: their uses
+    /// aren't reported missing (see [`Checker::field_rejected`]).
     pub rejected_fields: HashSet<(DeclId, Name)>,
     /// The code every expansion spliced in from outside it, by the file of
     /// its span.

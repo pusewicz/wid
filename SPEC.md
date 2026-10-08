@@ -734,6 +734,9 @@ end
   - **Among declarations,** a call must name a macro (or an `overload`
     set that chooses one): calling a method there is a statement outside
     a method (E0108), and an unknown name is an undefined macro (E0201).
+    In a struct's body, `name :Type` where no macro is named `name` and
+    `Type` is a type is the field `name: Type` written with its space
+    before the `:` (E0105, whose fix moves the `:`).
     In an `enum` body a name alone on a line is
     a member, so a macro without arguments is called `name()` there. A
     member written as a name alone that a macro visible there also has is

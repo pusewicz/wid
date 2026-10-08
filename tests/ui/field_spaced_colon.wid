@@ -1,0 +1,24 @@
+# `pos :Vec2` in a struct's body reads as a call of a macro `pos` with the
+# symbol `:Vec2`. With no macro `pos` and `Vec2` a type, it is a field
+# with the space before its `:` instead of after it: one error with the
+# fix, and the field's uses add none. Other missing members are reported.
+struct Vec2
+  x: F32
+end
+
+struct Ball
+  pos :Vec2
+  vel :Vec2?
+  hp: Int
+
+  def move
+    @pos.x += 1.0
+  end
+end
+
+def main
+  b = Ball.new(pos: Vec2.new(x: 1.0))
+  b.move
+  p b.pos.x, b.vel.nil?, b.hp
+  p b.hpp
+end
