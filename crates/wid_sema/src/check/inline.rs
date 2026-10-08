@@ -344,6 +344,8 @@ impl<'a> Checker<'a> {
                 }
             }
             ast::FnBody::Expr(e) => {
+                // As each statement of a block body does.
+                self.emit(Stmt::Line(e.span));
                 let v = self.expr(e, result.map(|(_, t)| t));
                 self.deliver(v, dest, e.span);
             }

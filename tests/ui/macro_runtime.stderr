@@ -2,7 +2,7 @@ error[E0906]: `describe` works only at compile time
   --> tests/ui/macro_runtime.wid:15:3
    |
  4 | def describe(s: Symbol) -> String = s.to_s
-   |     -------- uses `Symbol` values, which exist only while compiling
+   |                                     ------ uses `Symbol` values, which exist only while compiling
 ...
 15 |   puts describe(:hp)
    |   ^^^^^^^^^^^^^^^^^^ `main` calls it when the program runs
@@ -14,7 +14,7 @@ error[E0906]: `keep` works only at compile time
   --> tests/ui/macro_runtime.wid:16:3
    |
  6 | def keep(c: Code) -> Code = c
-   |     ---- uses `Code` values, which exist only while macros run
+   |                             - uses `Code` values, which exist only while macros run
 ...
 16 |   keep({})
    |   ^^^^^^^^ `main` calls it when the program runs

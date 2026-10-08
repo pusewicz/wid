@@ -208,7 +208,7 @@ fn apply_flags(opts: &mut Options, path: &Path) -> bool {
             "-json-errors" => json = true,
             other => {
                 if let Some(level) = other.strip_prefix("-o:").and_then(wid_driver::OptLevel::parse) {
-                    opts.opt = level;
+                    opts.opt = Some(level);
                 } else if let Some(define) = other.strip_prefix("-define:") {
                     let (name, value) = define.split_once('=').unwrap_or((define, "true"));
                     opts.defines.insert(name.to_string(), value.to_string());

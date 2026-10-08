@@ -969,8 +969,12 @@ end
 - The compiler is written in Rust. It emits C23 and calls the host C compiler
   (clang ≥ 19 or gcc ≥ 15); `cimport` also needs libclang. The generated C
   compiles without warnings under `-std=c23 -Wall -Wextra -Wpedantic` at
-  every `-o:` level. The output has `#line` directives, so lldb, gdb and
-  sanitizers point at `.wid` sources. `-keep-c` keeps the generated C.
+  every `-o:` level. `-debug` builds have `#line` directives, so lldb, gdb
+  and sanitizers point at `.wid` sources: one before each statement and
+  before an endless `def`'s expression, and after each method one back into
+  the C file, so generated helpers and the C `main` point at the C. Release
+  builds have no `#line` directives and no debug info. `-keep-c` keeps the
+  generated C, and the directives name the kept file.
 - **Tests.** `wid test <dir>` builds the package together with its
   `_test.wid` files (which other builds skip) and runs every `@[test]` method:
   a package-level `def name(t: ^testing.T)` from `core:testing`.
@@ -1005,8 +1009,10 @@ end
   checked: `-file`, `-define:`, `-target:`, `-collection:` and
   `-json-errors`; the flags for building C (`-out:`, `-o:`, `-debug`,
   `-keep-c`, `-cc:`, `-no-bounds-check`, `-sanitize:`) belong to `build`,
-  `run` and `test`. Compile-time code runs with `-debug`'s checks whatever
-  the flags. A flag another command takes is an error that names the
+  `run` and `test`. `-o:` defaults to `minimal`. `-debug` builds with debug
+  info, overflow checks and `#line` directives, at `-o:none` unless an
+  `-o:` flag is given, so a debugger sees every variable and steps line by
+  line. Compile-time code runs with `-debug`'s checks whatever the flags. A flag another command takes is an error that names the
   commands taking it (`wid explain -debug`: "`-debug` doesn't apply to
   `wid explain`"), never silently ignored; like every usage error, it exits
   with status 2.

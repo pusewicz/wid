@@ -79,9 +79,10 @@ pub struct Options {
     pub command: String,
     /// The output executable path.
     pub out: Option<PathBuf>,
-    /// The C optimization level.
-    pub opt: OptLevel,
-    /// Debug build: debug info, overflow checks, `#line` directives.
+    /// The C optimization level `-o:` gives; see [`Options::opt_level`].
+    pub opt: Option<OptLevel>,
+    /// Debug build: debug info, overflow checks, `#line` directives, and
+    /// `-o:none` unless `opt` says otherwise.
     pub debug: bool,
     /// Keep the generated C next to the output.
     pub keep_c: bool,
@@ -119,7 +120,7 @@ impl Options {
             file_mode: false,
             command: "build".to_string(),
             out: None,
-            opt: OptLevel::Minimal,
+            opt: None,
             debug: false,
             keep_c: false,
             cc: None,
@@ -135,6 +136,13 @@ impl Options {
             library: false,
             wid_root: None,
         }
+    }
+
+    /// The level the C is compiled at: `-o:`'s, or without one `none` for a
+    /// `-debug` build (so a debugger sees every variable and steps line by
+    /// line) and `minimal` otherwise.
+    pub fn opt_level(&self) -> OptLevel {
+        self.opt.unwrap_or(if self.debug { OptLevel::None } else { OptLevel::Minimal })
     }
 
     fn check_options(&self) -> CheckOptions {
@@ -261,12 +269,18 @@ pub struct Built {
     pub c_file: Option<PathBuf>,
 }
 
-/// Generates C for a checked program.
-pub fn generate_c(program: &Program, sources: &SourceMap, opts: &Options) -> String {
+/// Generates C for a checked program, to be compiled as `c_file`: a
+/// `-debug` build's `#line` directives return to that name after each
+/// function.
+pub fn generate_c(program: &Program, sources: &SourceMap, opts: &Options, c_file: &Path) -> String {
     wid_codegen_c::generate(
         program,
         sources,
-        &wid_codegen_c::Options { line_directives: opts.debug, runtime_header: "wid_runtime.h".into() },
+        &wid_codegen_c::Options {
+            line_directives: opts.debug,
+            runtime_header: "wid_runtime.h".into(),
+            c_file: c_file.to_string_lossy().into_owned(),
+        },
     )
 }
 
@@ -308,9 +322,8 @@ pub fn build(opts: &Options) -> Built {
         );
         return Built { checked, exe: None, c_file: None };
     }
-    let c_source = generate_c(program, &checked.sources, opts);
     let out = opts.out.clone().unwrap_or_else(|| default_output(opts));
-    match compile_c(&c_source, program, &out, opts) {
+    match compile_c(program, &checked.sources, &out, opts) {
         Ok(c_file) => Built { checked, exe: Some(out), c_file },
         Err(diag) => {
             checked.diags.push(diag);
@@ -361,25 +374,30 @@ struct StepFailure {
 /// The outcome of a compiler invocation.
 type Step = Result<(), Box<StepFailure>>;
 
-/// Compiles the generated C, the package's own C and C++ files, and links
-/// them into `out`. Each source is compiled separately so an error names the
-/// file it comes from. Returns where the generated C was kept, if anywhere.
-fn compile_c(source: &str, program: &Program, out: &Path, opts: &Options) -> Result<Option<PathBuf>, Diagnostic> {
+/// Generates the C, compiles it, the package's own C and C++ files, and
+/// links them into `out`. Each source is compiled separately so an error
+/// names the file it comes from. Returns where the generated C was kept, if
+/// anywhere.
+fn compile_c(
+    program: &Program,
+    sources: &SourceMap,
+    out: &Path,
+    opts: &Options,
+) -> Result<Option<PathBuf>, Diagnostic> {
     let fail = |message: String| Diagnostic::error(codes::C_COMPILER_FAILED, message);
     let dir = scratch_dir().map_err(|e| fail(format!("cannot create a build directory: {e}")))?;
     let c_path = dir.join("program.c");
+    // `#line` names the copy a debugger can find later: the kept one.
+    let kept = opts.keep_c.then(|| out.with_extension("c"));
+    let source = generate_c(program, sources, opts, kept.as_deref().unwrap_or(&c_path));
     std::fs::write(&c_path, source).map_err(|e| fail(format!("cannot write {}: {e}", c_path.display())))?;
     std::fs::write(dir.join("wid_runtime.h"), RUNTIME_HEADER)
         .map_err(|e| fail(format!("cannot write the runtime header: {e}")))?;
     let result = compile_and_link(&dir, &c_path, program, out, opts);
-    let kept = if opts.keep_c {
-        let target = out.with_extension("c");
-        let _ = std::fs::copy(&c_path, &target);
+    if let Some(target) = &kept {
+        let _ = std::fs::copy(&c_path, target);
         let _ = std::fs::write(target.with_file_name("wid_runtime.h"), RUNTIME_HEADER);
-        Some(target)
-    } else {
-        None
-    };
+    }
     match result {
         Ok(()) => {
             let _ = std::fs::remove_dir_all(&dir);
@@ -401,7 +419,7 @@ fn compile_and_link(dir: &Path, c_path: &Path, program: &Program, out: &Path, op
     let cc = c_compiler(opts);
     let cxx = cxx_compiler(opts);
     let common = |cmd: &mut Command| {
-        cmd.arg(opts.opt.flag());
+        cmd.arg(opts.opt_level().flag());
         if opts.debug {
             cmd.arg("-g");
         }

@@ -607,6 +607,11 @@ impl<'a> Checker<'a> {
         }
         let ret = sig.ret;
         let wants_value = !matches!(self.types.kind(ret), TyKind::Void | TyKind::Never);
+        // An endless `def`'s body is one expression, which gets the `#line`
+        // (and the place in compile-time traces) a statement would.
+        if let ast::FnBody::Expr(e) = &f.body {
+            self.emit(Stmt::Line(e.span));
+        }
         match &f.body {
             ast::FnBody::Block(stmts) => {
                 let dest = if wants_value { Dest::Return } else { Dest::Discard };

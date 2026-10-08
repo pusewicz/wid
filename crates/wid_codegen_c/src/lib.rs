@@ -30,7 +30,17 @@ pub struct Options {
     pub line_directives: bool,
     /// The name of the runtime header to include.
     pub runtime_header: String,
+    /// The generated file's name as the C compiler is given it. With
+    /// `line_directives`, a `#line` naming it follows each function that
+    /// points into a `.wid` file, so what comes after (the next function,
+    /// the C `main`) is the C file's own code again.
+    pub c_file: String,
 }
+
+/// Stands for the `#line` directive back into the C file, until the whole
+/// file is written and its line numbers are known. A control character
+/// can't start a line of generated C otherwise.
+const LINE_RESET: &str = "\u{1}#line";
 
 /// Generates the C source for a checked program.
 pub fn generate(program: &Program, sources: &SourceMap, opts: &Options) -> String {
@@ -156,7 +166,7 @@ impl<'p> Gen<'p> {
             out.push_str("    return 0;\n");
             out.push_str("}\n");
         }
-        out
+        resolve_line_resets(&out, &self.opts.c_file)
     }
 
     /// Emits the `main` of a test build: `--list` prints the test names, and
@@ -271,7 +281,7 @@ impl<'p> Gen<'p> {
         let mut reads = HashSet::new();
         collect_reads(body, &self.p.types, &mut reads);
         let sig = self.signature(f, Some(&reads));
-        let mut ctx = FnCtx { contexts: 0, used_labels, reads, out: String::new(), indent: 1 };
+        let mut ctx = FnCtx { contexts: 0, used_labels, reads, out: String::new(), indent: 1, wid_lines: false };
         let _ = writeln!(out, "{sig} {{");
         if f.abi == Abi::C {
             ctx.out.push_str(
@@ -280,7 +290,14 @@ impl<'p> Gen<'p> {
         }
         self.block_stmts(body, &mut ctx, f);
         out.push_str(&ctx.out);
-        out.push_str("}\n\n");
+        out.push_str("}\n");
+        // The code after a function is the C file's own again, not the lines
+        // after the function's last `.wid` line.
+        if ctx.wid_lines {
+            out.push_str(LINE_RESET);
+            out.push('\n');
+        }
+        out.push('\n');
     }
 
     fn block_stmts(&mut self, block: &ir::Block, ctx: &mut FnCtx, f: &ir::Function) {
@@ -403,6 +420,7 @@ impl<'p> Gen<'p> {
                     let file = self.sources.file(span.file);
                     let (line, _) = file.line_col(span.start);
                     ctx.out.push_str(&format!("#line {line} {}\n", c_string_literal(file.display.as_bytes())));
+                    ctx.wid_lines = true;
                 }
             }
         }
@@ -1117,6 +1135,8 @@ struct FnCtx {
     reads: HashSet<LocalId>,
     out: String,
     indent: usize,
+    /// Whether a `#line` directive points into a `.wid` file.
+    wid_lines: bool,
 }
 
 fn label_name(l: LabelId) -> String {
@@ -1212,6 +1232,26 @@ fn call_name(f: &ir::Function) -> String {
 fn extern_alias(symbol: &str) -> String {
     let safe: String = symbol.chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' }).collect();
     format!("wid_extern_{safe}")
+}
+
+/// Replaces each [`LINE_RESET`] line of the finished C with a `#line`
+/// directive that gives the line after it its real number in `c_file`, as
+/// the C preprocessor would.
+fn resolve_line_resets(text: &str, c_file: &str) -> String {
+    if !text.contains(LINE_RESET) {
+        return text.to_string();
+    }
+    let name = c_string_literal(c_file.as_bytes());
+    let mut out = String::with_capacity(text.len());
+    for (i, line) in text.split_inclusive('\n').enumerate() {
+        if line.strip_suffix('\n') == Some(LINE_RESET) {
+            // This is line `i + 1`; the directive numbers the next one.
+            let _ = writeln!(out, "#line {} {name}", i + 2);
+        } else {
+            out.push_str(line);
+        }
+    }
+    out
 }
 
 /// Formats bytes as a C string literal.

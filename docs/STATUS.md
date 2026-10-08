@@ -1299,6 +1299,20 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   run it after changing the runtime or the emitter. Every run test is
   clean at -O0, -O1, -Os, -O2 and -O3 with clang 20 and gcc 15, in
   release and `-debug` builds.
+- Debug builds (#141, SPEC "Toolchain and CLI"): an endless `def`'s
+  expression gets a `Stmt::Line` (as a statement does; inlined block
+  methods too), so `break main.wid:6` binds in `def add(…) = a + b` and
+  compile-time errors in one point at the expression rather than the
+  method's name. After each function with a `.wid` `#line`, codegen
+  writes a placeholder that becomes `#line N "file.c"` once the file is
+  done, with N the real line, so the next function, the generated helpers
+  and the C `main` no longer inherit the last `.wid` line (`main` was at
+  `main.wid:15` in a 10-line file). The file is the one the C compiler is
+  given: the kept copy with `-keep-c`, else the scratch `program.c`
+  (`generate_c` takes it). `-debug` compiles at `-o:none` unless `-o:` is
+  given (`Options::opt` is an `Option`, `Options::opt_level` decides), so
+  gdb sees `ctx` and steps by line. `wid_driver/tests/debug_builds.rs`
+  checks the directives and, through a fake C compiler, the `-O` flag.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
@@ -1604,7 +1618,6 @@ only on `main` and can run in parallel with the macro stack.
    - methods ending in an endless loop (#132);
    - `<=>` deriving the comparisons, and the definable operator set (#134);
    - `def self.` in an `extend` (#135);
-   - debug builds: `#line` and `-debug` at `-O0` (#141);
    - three cascades, including spurious E0203 when a package fails to load
      (#138);
    - `?` methods return `Bool` (#136);

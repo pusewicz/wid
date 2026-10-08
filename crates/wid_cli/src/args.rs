@@ -29,7 +29,8 @@ pub struct Parsed {
     pub help_topic: Option<String>,
     pub file_mode: bool,
     pub out: Option<PathBuf>,
-    pub opt: OptLevel,
+    /// `-o:`; without it, `-debug` builds at `none` and others at `minimal`.
+    pub opt: Option<OptLevel>,
     pub debug: bool,
     pub keep_c: bool,
     pub cc: Option<String>,
@@ -180,7 +181,7 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
         help_topic: None,
         file_mode: false,
         out: None,
-        opt: OptLevel::Minimal,
+        opt: None,
         debug: false,
         keep_c: false,
         cc: None,
@@ -277,9 +278,9 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
             "-out" => parsed.out = Some(PathBuf::from(need("path")?)),
             "-o" => {
                 let v = need("speed")?;
-                parsed.opt = OptLevel::parse(&v).ok_or_else(|| {
+                parsed.opt = Some(OptLevel::parse(&v).ok_or_else(|| {
                     format!("unknown optimization level `{v}`; use none, minimal, size, speed or aggressive")
-                })?;
+                })?);
             }
             "-debug" => parsed.debug = true,
             "-keep-c" => parsed.keep_c = true,
@@ -487,7 +488,7 @@ const BUILD_FLAG_HELP: &str = "Flags:\n  \
     -file                  Treat the target as a single-file package\n  \
     -out:<path>            Output executable path\n  \
     -o:<level>             none, minimal (default), size, speed, aggressive\n  \
-    -debug                 Debug info, overflow checks and #line directives\n  \
+    -debug                 Debug info, overflow checks and #line directives, at -o:none unless -o: is given\n  \
     -keep-c                Keep the generated C next to the executable\n  \
     -cc:<compiler>         C compiler to use (default: $WID_CC, $CC, cc)\n  \
     -define:NAME=value     Set a value that `config(:NAME, default)` reads\n  \

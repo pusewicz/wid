@@ -20,10 +20,10 @@ error[E0901]: `comptime` code failed: panic: bad news
    = see `wid explain E0901`
 
 error[E0903]: `comptime` code stopped: calls nest more than 256 deep
-  --> tests/ui/comptime_errors.wid:14:5
+  --> tests/ui/comptime_errors.wid:14:27
    |
 14 | def deep(n: Int) -> Int = deep(n + 1)
-   |     ^^^^ failed here
+   |                           ^^^^^^^^^^^ failed here
 ...
 38 | TOO_DEEP = comptime deep(0)
    |            ---------------- while running this at compile time
@@ -31,10 +31,10 @@ help: look for recursion that never stops
    = see `wid explain E0903`
 
 error[E0904]: `comptime` code can't call C: it calls `cosine`, which is implemented in C (`c_cosine`) and only runs in the built program
-  --> tests/ui/comptime_errors.wid:30:5
+  --> tests/ui/comptime_errors.wid:30:19
    |
 30 | def wave -> F64 = cosine(0.5)
-   |     ^^^^ failed here
+   |                   ^^^^^^^^^^^ failed here
 ...
 42 | CALLS_C = comptime wave
    |           ------------- while running this at compile time
