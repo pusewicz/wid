@@ -1,0 +1,32 @@
+error[E0105]: expected an expression, found `,`
+  --> tests/ui/named_arg_missing_value_comma.wid:11:10
+   |
+11 |   p g(a: , b: 2)
+   |          ^ expected the value of `a`
+help: write the value after `a:`
+   = see `wid explain E0105`
+
+error[E0105]: expected an expression, found `)`
+  --> tests/ui/named_arg_missing_value_comma.wid:12:16
+   |
+12 |   p g(b: 2, a: )
+   |                ^ expected the value of `a`
+help: write the value after `a:`
+   = see `wid explain E0105`
+
+error[E0105]: expected an expression, found `,`
+  --> tests/ui/named_arg_missing_value_comma.wid:13:15
+   |
+13 |   show label: , n: g(a: 1, b: "two")
+   |               ^ expected the value of `label`
+help: write the value after `label:`
+   = see `wid explain E0105`
+
+error[E0301]: expected `Int`, found `String`
+  --> tests/ui/named_arg_missing_value_comma.wid:13:31
+   |
+13 |   show label: , n: g(a: 1, b: "two")
+   |                               ^^^^^ this has type `String`
+   = see `wid explain E0301`
+
+error: could not compile due to 4 errors

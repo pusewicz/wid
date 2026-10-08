@@ -1,0 +1,14 @@
+# A named argument with no value before a `,` or the `)` is one error at
+# that token, and the argument list goes on: the arguments after it are
+# checked, and nothing is reported missing.
+def g(a: Int, b: Int) -> Int = a + b
+
+def show(label: String, n: Int)
+  puts "#{label}: #{n}"
+end
+
+def main
+  p g(a: , b: 2)
+  p g(b: 2, a: )
+  show label: , n: g(a: 1, b: "two")
+end

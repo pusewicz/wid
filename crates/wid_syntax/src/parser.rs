@@ -4694,6 +4694,18 @@ impl<'a> Parser<'a> {
                 );
                 return Arg { name: Some(name), value: Expr { kind: ExprKind::Error, span: at }, splat: false };
             }
+            // `add(a: , b: 2)`: the value is missing, and the list goes on.
+            if self.at(T::Comma) || (parens && self.at(T::RParen)) {
+                let tok = self.peek();
+                let (text, found) = (self.text_of(name.span), self.found());
+                self.report(
+                    Diagnostic::error(codes::UNEXPECTED_TOKEN, format!("expected an expression, found {found}"))
+                        .primary(tok.span, format!("expected the value of `{text}`"))
+                        .help(format!("write the value after `{text}:`")),
+                );
+                let at = colon.shrink_to_end();
+                return Arg { name: Some(name), value: Expr { kind: ExprKind::Error, span: at }, splat: false };
+            }
             self.skip_newlines();
             let value = self.parse_arg_value(types, parens);
             return Arg { name: Some(name), value, splat: false };
