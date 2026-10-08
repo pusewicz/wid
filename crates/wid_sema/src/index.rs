@@ -695,3 +695,127 @@ impl Index {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    use wid_diagnostics::FileId;
+
+    use super::{Index, Origin, PathErrorKind, SymbolKind, Target};
+    use crate::input::{CheckOptions, FileInput, PackageId, PackageInput, ProgramInput};
+
+    const SRC: &str = "\
+# Says things.
+module Greeter
+  def greet -> Int = 1
+end
+
+struct Entity
+  hp: Int
+  def move
+  end
+end
+
+# The player.
+struct Player
+  using base: Entity
+  include Greeter
+  def heal
+  end
+  private def secret
+  end
+end
+
+extend Player
+  def boost
+  end
+end
+
+Hero = Player
+";
+
+    /// The index of a one-file library package.
+    fn index(src: &str) -> Index {
+        let (ast, diags) = wid_syntax::parse_file(FileId(0), src);
+        assert!(diags.is_empty(), "{diags:?}");
+        let file = FileInput {
+            ast,
+            imports: HashMap::new(),
+            text: Arc::from(src),
+            display: "main.wid".into(),
+            deferred: HashMap::new(),
+        };
+        let package = PackageInput {
+            name: "main".into(),
+            path: ".".into(),
+            dir: ".".into(),
+            files: vec![file],
+            c_sources: Vec::new(),
+            cimport: None,
+        };
+        let options = CheckOptions { library: true, ..CheckOptions::default() };
+        let input = ProgramInput { packages: vec![package], options, prelude: None };
+        let (_, diags, index) = crate::check_program_indexed(&input);
+        assert!(!diags.has_errors(), "{diags:?}");
+        index
+    }
+
+    #[test]
+    fn paths_reach_members_from_every_origin() {
+        let index = index(SRC);
+        let root = PackageId(0);
+        let resolve = |path: &[&str]| index.resolve(root, path, false);
+        for (path, want) in [
+            (&["Player", "heal"][..], "Player.heal"),
+            (&["Player", "greet"], "Greeter.greet"),
+            (&["Player", "boost"], "boost"),
+            (&["Player", "move"], "Entity.move"),
+            (&["Hero", "heal"], "Player.heal"),
+        ] {
+            match resolve(path) {
+                Ok(Target::Symbol(id)) => assert_eq!(index.path_of(id), want),
+                other => panic!("{path:?}: {other:?}"),
+            }
+        }
+        let Ok(Target::Field { owner, promoted: Some((into, through)), .. }) = resolve(&["Player", "hp"]) else {
+            panic!("`Player.hp` is a promoted field");
+        };
+        assert_eq!((index.symbol(owner).name.as_str(), index.symbol(into).name.as_str()), ("Entity", "Player"));
+        assert_eq!(through, "base");
+        let player = index.package(root).scope["Player"];
+        assert_eq!(index.symbol(player).doc.as_deref(), Some("The player."));
+        assert_eq!(index.symbol(player).kind, SymbolKind::Struct);
+        let origins: Vec<&str> = index
+            .member_groups(player)
+            .iter()
+            .map(|g| match g.origin {
+                Origin::Own => "own",
+                Origin::Include { .. } => "include",
+                Origin::Extend { .. } => "extend",
+                Origin::Using { .. } => "using",
+            })
+            .collect();
+        assert_eq!(origins, ["own", "include", "extend", "using"]);
+    }
+
+    #[test]
+    fn failures_say_what_went_wrong() {
+        let index = index(SRC);
+        let root = PackageId(0);
+        let err = index.resolve(root, &["Player", "secret"], false).expect_err("private");
+        assert!(matches!(err.kind, PathErrorKind::Private { .. }), "{err:?}");
+        assert!(index.resolve(root, &["Player", "secret"], true).is_ok());
+        let err = index.resolve(root, &["Plyer"], false).expect_err("unknown");
+        assert_eq!(err.segment, 0);
+        let PathErrorKind::UnknownName { candidates, .. } = err.kind else { panic!("{err:?}") };
+        assert!(candidates.iter().any(|c| c == "Player"));
+        let err = index.resolve(root, &["Player", "heal", "x"], false).expect_err("no members");
+        assert_eq!(err.segment, 2);
+        assert!(matches!(err.kind, PathErrorKind::NoMembers { .. }));
+        let err = index.resolve(root, &["Player", "hepl"], false).expect_err("no member");
+        let PathErrorKind::NoMember { candidates, .. } = err.kind else { panic!("{err:?}") };
+        assert!(candidates.iter().any(|c| c == "heal") && !candidates.iter().any(|c| c == "secret"));
+    }
+}

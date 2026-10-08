@@ -538,8 +538,13 @@ impl ErrorContext<'_> {
     fn report(&self, failure: Failure) -> Diagnostic {
         let error = match failure {
             Failure::Malformed => {
-                return Diagnostic::error(codes::DOC_UNKNOWN_SYMBOL, format!("`{}` is not a symbol path", self.symbol))
-                    .primary(self.cmd.arg(self.file, self.arg), "a name is missing around a `.`")
+                let (message, label) = if self.symbol.is_empty() {
+                    ("the symbol path is empty".to_string(), "a name goes here")
+                } else {
+                    (format!("`{}` is not a symbol path", self.symbol), "a name is missing around a `.`")
+                };
+                return Diagnostic::error(codes::DOC_UNKNOWN_SYMBOL, message)
+                    .primary(self.cmd.arg(self.file, self.arg), label)
                     .help("write a name, a type and its member, or an import name first: `Ball`, `Ball.update`, `rl.draw_circle_v`");
             }
             Failure::Path(error) => error,
