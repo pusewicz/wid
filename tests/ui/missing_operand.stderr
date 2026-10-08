@@ -1,0 +1,54 @@
+error[E0105]: expected an expression after `+`, found `]`
+ --> tests/ui/missing_operand.wid:6:15
+  |
+6 |   xs = [1, 2 +]
+  |               ^ expected an expression
+  |              - `+` needs a value after it
+help: remove the `+`
+  |   xs = [1, 2]
+help: or write the missing value after `+`
+  = see `wid explain E0105`
+
+error[E0105]: expected an expression after `+`, found `)`
+ --> tests/ui/missing_operand.wid:7:11
+  |
+7 |   y = (1 +)
+  |           ^ expected an expression
+  |          - `+` needs a value after it
+help: remove the `+`
+  |   y = (1)
+help: or write the missing value after `+`
+  = see `wid explain E0105`
+
+error[E0105]: expected an expression after `*`, found `)`
+ --> tests/ui/missing_operand.wid:8:17
+  |
+8 |   z = add(1, 2 *)
+  |                 ^ expected an expression
+  |                - `*` needs a value after it
+help: remove the `*`
+  |   z = add(1, 2)
+help: or write the missing value after `*`
+  = see `wid explain E0105`
+
+error[E0105]: expected an expression after `>`, found `}`
+  --> tests/ui/missing_operand.wid:9:26
+   |
+ 9 |   n = xs.count { |x| x > }
+   |                          ^ expected an expression
+   |                        - `>` needs a value after it
+help: remove the `>`
+   |   n = xs.count { |x| x }
+help: or write the missing value after `>`
+   = see `wid explain E0105`
+
+error[E0105]: expected an expression after `-`, found `]`
+  --> tests/ui/missing_operand.wid:10:12
+   |
+10 |   w = [1, -]
+   |            ^ expected an expression
+   |           - `-` needs a value after it
+help: write the value after `-`
+   = see `wid explain E0105`
+
+error: could not compile due to 5 errors

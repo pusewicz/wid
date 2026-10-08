@@ -1,7 +1,7 @@
 error[E0111]: a splice can't be part of a name
-  --> tests/ui/splice_glued_name.wid:13:9
+  --> tests/ui/splice_glued_name.wid:14:9
    |
-13 |     def bump_#{name}(by_#{name}: Int) -> Int = @#{name}_count + by_#{name}
+14 |     def bump_#{name}(by_#{name}: Int) -> Int = @#{name}_count + by_#{name}
    |         ^^^^^^^^^^^^ a splice inserts a whole name, not part of one
    = note: the text next to the splice is read as a separate name
 help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole
@@ -11,9 +11,9 @@ help: build the name as a `Symbol` in the macro, before the `quote`, and splice 
    = see `wid explain E0111`
 
 error[E0111]: a splice can't be part of a name
-  --> tests/ui/splice_glued_name.wid:13:22
+  --> tests/ui/splice_glued_name.wid:14:22
    |
-13 |     def bump_#{name}(by_#{name}: Int) -> Int = @#{name}_count + by_#{name}
+14 |     def bump_#{name}(by_#{name}: Int) -> Int = @#{name}_count + by_#{name}
    |                      ^^^^^^^^^^ a splice inserts a whole name, not part of one
    = note: the text next to the splice is read as a separate name
 help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole
@@ -23,9 +23,9 @@ help: build the name as a `Symbol` in the macro, before the `quote`, and splice 
    = see `wid explain E0111`
 
 error[E0111]: a splice can't be part of a name
-  --> tests/ui/splice_glued_name.wid:13:48
+  --> tests/ui/splice_glued_name.wid:14:48
    |
-13 |     def bump_#{name}(by_#{name}: Int) -> Int = @#{name}_count + by_#{name}
+14 |     def bump_#{name}(by_#{name}: Int) -> Int = @#{name}_count + by_#{name}
    |                                                ^^^^^^^^^^^^^^ a splice inserts a whole name, not part of one
    = note: the text next to the splice is read as a separate name
 help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole
@@ -35,9 +35,9 @@ help: build the name as a `Symbol` in the macro, before the `quote`, and splice 
    = see `wid explain E0111`
 
 error[E0111]: a splice can't be part of a name
-  --> tests/ui/splice_glued_name.wid:13:65
+  --> tests/ui/splice_glued_name.wid:14:65
    |
-13 |     def bump_#{name}(by_#{name}: Int) -> Int = @#{name}_count + by_#{name}
+14 |     def bump_#{name}(by_#{name}: Int) -> Int = @#{name}_count + by_#{name}
    |                                                                 ^^^^^^^^^^ a splice inserts a whole name, not part of one
    = note: the text next to the splice is read as a separate name
 help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole
@@ -45,9 +45,9 @@ help: build the name as a `Symbol` in the macro, before the `quote`, and splice 
    = see `wid explain E0111`
 
 error[E0111]: a splice can't be part of a name
-  --> tests/ui/splice_glued_name.wid:14:24
+  --> tests/ui/splice_glued_name.wid:15:24
    |
-14 |     def twice -> Int = bump_#{name}(1) + self.#{name}_count
+15 |     def twice -> Int = bump_#{name}(1) + self.#{name}_count
    |                        ^^^^^^^^^^^^ a splice inserts a whole name, not part of one
    = note: the text next to the splice is read as a separate name
 help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole
@@ -55,9 +55,9 @@ help: build the name as a `Symbol` in the macro, before the `quote`, and splice 
    = see `wid explain E0111`
 
 error[E0111]: a splice can't be part of a name
-  --> tests/ui/splice_glued_name.wid:14:47
+  --> tests/ui/splice_glued_name.wid:15:47
    |
-14 |     def twice -> Int = bump_#{name}(1) + self.#{name}_count
+15 |     def twice -> Int = bump_#{name}(1) + self.#{name}_count
    |                                               ^^^^^^^^^^^^^ a splice inserts a whole name, not part of one
    = note: the text next to the splice is read as a separate name
 help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole
@@ -65,9 +65,23 @@ help: build the name as a `Symbol` in the macro, before the `quote`, and splice 
    = see `wid explain E0111`
 
 error[E0111]: a splice can't be part of a name
-  --> tests/ui/splice_glued_name.wid:20:12
+  --> tests/ui/splice_glued_name.wid:17:31
    |
-20 |     struct #{name}Box
+17 |     def fire(n: Int) -> Int = @on_#{name}(n)
+   |                               ^^^^^^^^^^^ a splice inserts a whole name, not part of one
+   = note: the text next to the splice is read as a separate name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole
+   | macro def counter(name: Symbol) -> Code
+   |   on_name = "on_#{name}".to_sym
+   |   quote do
+...
+   |     def fire(n: Int) -> Int = @#{on_name}(n)
+   = see `wid explain E0111`
+
+error[E0111]: a splice can't be part of a name
+  --> tests/ui/splice_glued_name.wid:23:12
+   |
+23 |     struct #{name}Box
    |            ^^^^^^^^^^ a splice inserts a whole name, not part of one
    = note: the text next to the splice is read as a separate name
 help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole
@@ -77,9 +91,9 @@ help: build the name as a `Symbol` in the macro, before the `quote`, and splice 
    = see `wid explain E0111`
 
 error[E0111]: a splice can't be part of a name
-  --> tests/ui/splice_glued_name.wid:21:7
+  --> tests/ui/splice_glued_name.wid:24:7
    |
-21 |       #{field}_value: Int
+24 |       #{field}_value: Int
    |       ^^^^^^^^^^^^^^ a splice inserts a whole name, not part of one
    = note: the text next to the splice is read as a separate name
 help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole
@@ -89,4 +103,4 @@ help: build the name as a `Symbol` in the macro, before the `quote`, and splice 
    |       #{field_value}: Int
    = see `wid explain E0111`
 
-error: could not compile due to 8 errors
+error: could not compile due to 9 errors

@@ -652,10 +652,11 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   splice outside a `quote`", noting that it can't be part of a name
   either, with the help that builds the name in a macro (#61). It was
   four errors, with a fix that read it as a comment (`def bump_# {name}`)
-  and lost `def main`. `glued_len` works outside a `quote` (not inside a
-  splice's expression), `stray_is_comment` never takes a splice glued to
-  a name for a comment, and the line is read as the declaration it was
-  written in, with the name as written, which no code can refer to. The
+  and lost `def main`. `glued_len` works outside a `quote` (and, since
+  #87, inside a splice's expression), `stray_is_comment` never takes a
+  splice glued to a name for a comment, and the line is read as the
+  declaration it was written in, with the name as written, which no code
+  can refer to. The
   E0111 title is now "misplaced splice" (`codes::MISPLACED_SPLICE`), as it
   also covers a splice inside a splice and one glued to a name.
 - Any type written where a `Type` is expected, or in `comptime` code, is a
@@ -921,6 +922,66 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   its place too (it went last). A line that is neither a member nor a
   declaration is one E0911 that quotes it, and E0204 leaves out an empty
   "members:" note.
+- An operator with nothing after it before a closer (`[1, 2 +]`, `(1 +)`,
+  `f(1, 2 *)`, `{ |x| x > }`, `[1, -]`) is one E0105 "expected an
+  expression after `+`, found `]`" (`Parser::missing_operand`), with a fix
+  to review that removes a binary operator; the closer is no longer
+  consumed, so it still closes its bracket (#85; `[1, 2 +]` also got
+  "expected `]`" with a fix that added a second `]`).
+- `Foo { a: 1 }` and `geo.Vec2 { x: 1.0 }`, with a space before the `{` as
+  Rust and Go write it, are #60's single E0113 with the fix `Foo.new(a: 1)`
+  (#86; it was E0323 and E0105). A constant never takes a block, so
+  `struct_literal_ahead` accepts a spaced `{` on the constant's line, but
+  not after a generic instance (`Pool(Int, 4) { … }` is a call's block) or
+  before a block's `|x|`. The fix takes the spaces inside the braces with
+  them (`Foo { }` becomes `Foo.new()`).
+- A field name glued to a splice and called like `@name(args)` in a
+  `quote` (`@on_#{event}(n)`) is #45's one E0111, read as a call of the
+  proc the field holds (`Callee::IVar`) like `@#{name}(args)`; the `(n)`
+  was "expected end of line" and the field's proc type an E0301 (#95,
+  second part).
+- Inside a splice's expression, a name glued to a splice
+  (`#{foo_#{name}}`) is one E0111 "a splice inside a splice", whose fix to
+  review builds the name before the `quote` (`foo_name =
+  "foo_#{name}".to_sym`) and splices it, `#{foo_name}` (#87; it was E0201
+  "undefined name `foo_`" and "expected `}` to close the splice").
+  `glued_len` now works inside a splice's expression too, and
+  `Parser::glued_in_splice` reads the name as that `to_sym` call, so the
+  code it lands in adds no errors. In a name position there (a method
+  name after `.`), the help explains it without edits.
+- `quote` lines (#75): `#{name} = distinct F64`, `#{name} = proc(Int) ->
+  Int` and `#{name} = @[c] proc(…)` are constant declarations
+  (`Parser::quote_item_ahead`, `type_only_value_at`), as `NAME = v` is;
+  `#{name} = 5` stays an assignment, which among declarations is a
+  constant (they were E0201 "undefined method `distinct`"). `#{t}?` is
+  the optional type in any expression, as `Int?` is (`names_type` takes a
+  splice; it read as a conditional). A `using` line is a field, parsed as
+  in a struct, so a fragment spliced into a generated struct may hold
+  one (it was E0105 and up to 12 errors); generated in the struct whose
+  body holds the call, it is E0913 alone, since the struct's missing
+  members may be ones it would have promoted. A splice where the parser
+  takes none is one error: `recover_line` skips a splice whole (its `}`
+  ended the `quote` and cascaded into up to 11 errors), as do the
+  attribute list and generic parameters; `overload #{name}` gets the fix
+  `:#{name}` and reads as it, and `import #{path}` notes that generated
+  code can't import.
+- Ruby habits are one error each, with a fix, and the rest of the file is
+  checked (#80): `quote { 1 }` is E0105 with the fix `quote do 1 end` and
+  reads as that `quote` (`Parser::braced_quote`; it lost `def main`);
+  `macro twice(…)` is E0105 with the fix `macro def twice`, parsed as if
+  `def` were there; a macro's string where `Code` is expected (E0301)
+  gets a help, with the string written out as a `quote` when it is a
+  literal (`Checker::string_as_code`); a block passed to a macro that
+  takes `Code` is E0319 alone (the `Code` argument isn't reported
+  missing); `guard x = v else return 0` is E0105 with the multi-line fix,
+  its branch read as the line's statement (`Parser::one_line_guard`; it
+  swallowed the method's `end`); a keyword followed directly by `:`
+  names an argument (`Node.new(v: 1, next: &n)`, also starting a call
+  without parentheses; `Parser::keyword_label`), since a field may be
+  named `next`; and `Self` where a value goes in a method (`"#{Self}"`)
+  is E0323 "`Self` is a type, not a value" with `type_info(Self).name`
+  and, in generated code, computing the name in the macro (it was
+  "undefined constant `Self`").
 - A C compiler without C23 (one that rejects `-std=c23`, like gcc 13 or
   clang 17, or lacks `<stdckdint.h>` or `#embed`) is E0702 "the C compiler
   `cc` doesn't support C23", with the first line of its `--version`, the

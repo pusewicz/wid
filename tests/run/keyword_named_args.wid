@@ -1,0 +1,37 @@
+# A field may be named by a keyword, like a linked list's `next`. A keyword
+# followed directly by `:` in an argument list names an argument, as in
+# Ruby, so `new` takes such fields by name.
+struct Node
+  value: Int
+  next: ^Node?
+end
+
+struct Range2
+  from: Int
+  in: Int
+  do: Bool
+  then: String
+  case: Int = 7
+
+  def describe -> String = "#{@from} #{@in} #{@do} #{@then} #{@case}"
+end
+
+def sum(n: ^Node) -> Int
+  total = n.value
+  if rest = n.next
+    total += sum(rest)
+  end
+  total
+end
+
+def main
+  last = Node.new(value: 3)
+  middle = Node.new(value: 2, next: &last)
+  first = Node.new next: &middle, value: 1
+  p sum(&first)
+  r = Range2.new(from: 1, in: 2, do: true, then: "x")
+  puts r.describe
+  p r.in, r.case
+  r = Range2.new from: 4, in: 5, do: false, then: "y", case: 9
+  puts r.describe
+end

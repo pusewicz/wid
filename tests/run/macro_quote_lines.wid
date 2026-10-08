@@ -1,0 +1,62 @@
+# Lines of a `quote` that are declarations: a constant whose name is
+# spliced and whose value can only be a type, a spliced type made optional,
+# and `using` fields, here in a fragment spliced into a generated struct.
+
+# `#{name} = distinct F64` and `#{name} = proc(Int) -> Int` declare types.
+macro def alias(name: Symbol) -> Code
+  quote do
+    #{name} = distinct F64
+  end
+end
+
+macro def callback(name: Symbol) -> Code
+  quote do
+    #{name} = proc(Int) -> Int
+  end
+end
+
+alias :Meters
+callback :Op
+
+# `#{t}?` is the optional type, as `Int?` is.
+macro def optional(name: Symbol, base: Type) -> Code
+  quote do
+    #{name} = #{base}?
+  end
+end
+
+optional :MaybeInt, Int
+
+# A `using` field in a fragment that a generated struct splices in.
+struct Body
+  hp: Int
+  def hurt(n: Int) -> Int = @hp - n
+end
+
+macro def entity(name: Symbol, base: Type) -> Code
+  fields = quote do
+    using body: #{base}
+    mp: Int
+  end
+  quote do
+    struct #{name}
+      #{fields}
+    end
+  end
+end
+
+entity :Hero, Body
+
+def double(x: Int) -> Int = x * 2
+
+def main
+  m: Meters = 1.5
+  p m
+  f: Op = method(:double)
+  p f(4)
+  a: MaybeInt = nil
+  b: MaybeInt = 3
+  p a.nil?, b || 0
+  hero = Hero.new(body: Body.new(hp: 10), mp: 2)
+  p hero.hp, hero.mp, hero.hurt(3)
+end

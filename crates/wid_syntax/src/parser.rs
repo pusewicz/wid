@@ -496,18 +496,21 @@ impl<'a> Parser<'a> {
     }
 
     /// Skips to the end of the current line, or of the enclosing splice,
-    /// after an error. A bracket opened on the line goes on over the
-    /// lines up to its closer, but a declaration, or an `end` that no
-    /// `do` skipped here opened, starting a later line was never part of
+    /// after an error. A splice on the line is skipped whole, so its `}`
+    /// doesn't end a `quote`'s body. A bracket opened on the line goes on
+    /// over the lines up to its closer, but a declaration, or an `end` that
+    /// no `do` skipped here opened, starting a later line was never part of
     /// the line: it was left open (`X = Foo{` followed by `def main`), so
     /// the skipping stops there, and the declaration is parsed on its own.
     fn recover_line(&mut self) {
         let mut depth = 0i32;
-        let mut blocks = 0u32;
+        let (mut blocks, mut splices) = (0u32, 0u32);
         loop {
             let tok = self.peek();
             match tok.kind {
                 T::Eof => return,
+                T::SpliceBegin => splices += 1,
+                T::SpliceEnd if splices > 0 => splices -= 1,
                 T::Newline | T::SpliceEnd if depth <= 0 => return,
                 T::Kw(K::End) if blocks > 0 => blocks -= 1,
                 kind if starts_declaration(kind) && self.pos > 0 => {
@@ -937,12 +940,9 @@ impl<'a> Parser<'a> {
     /// `bump_#{name}`, `#{name}_count`, `@hp_#{n}` or `:#{a}_b`. Ruby
     /// builds a name from a string that way, but a splice inserts a whole
     /// name, so [`Parser::glued_name`] reports it. Outside a `quote` too,
-    /// where it is never a comment, but not inside a splice's expression,
-    /// where a splice is reported as nested.
+    /// where it is never a comment, and inside a splice's expression, which
+    /// is macro code (see [`Parser::glued_in_splice`]).
     fn glued_len(&self, n: usize) -> Option<usize> {
-        if self.quotes.is_empty() && self.splice_depth > 0 {
-            return None;
-        }
         let mut i = n;
         // The `@` or `:` of `@#{…}` or `:#{…}`.
         if matches!(self.nth(i).kind, T::AtSplice | T::ColonSplice) {
@@ -986,7 +986,13 @@ impl<'a> Parser<'a> {
         let span = first.span.to(self.nth(len - 1).span);
         let sigil = matches!(first.kind, T::AtSplice | T::ColonSplice | T::IVar | T::Symbol);
         let name_span = Span::new(self.file, span.start + u32::from(sigil), span.end);
-        let (help, edits) = self.glued_fix(len, name_span);
+        if self.quotes.is_empty() && self.splice_depth > 0 {
+            // A name can't be built here (a method's, a parameter's), only
+            // a value: the help says how, with no edits.
+            self.glued_in_splice(len, false);
+            return Some((Ident { name: Name::new(self.text_of(name_span)), span: name_span }, span));
+        }
+        let (help, edits) = self.glued_fix(len, name_span, None);
         if self.quotes.is_empty() {
             return Some(self.glued_name_outside_quote(span, name_span, help));
         }
@@ -1032,6 +1038,61 @@ impl<'a> Parser<'a> {
         Some((Ident { name, span: name_span }, span))
     }
 
+    /// A name glued from text and splices (see [`Parser::glued_len`])
+    /// inside a splice's expression (`#{foo_#{name}}`), which is macro code,
+    /// where a splice is nested: one E0111, whose fix builds the name before
+    /// the `quote` and splices that (`#{foo_name}`). Consumes the name and
+    /// returns the `"foo_#{name}".to_sym` it means, which builds it in the
+    /// macro, so the code it lands in is checked as meant. Without `fix`,
+    /// the help has no edits.
+    fn glued_in_splice(&mut self, len: usize, fix: bool) -> Expr {
+        let first = self.peek();
+        let span = first.span.to(self.nth(len - 1).span);
+        let sigil = matches!(first.kind, T::AtSplice | T::ColonSplice | T::IVar | T::Symbol);
+        let name_span = Span::new(self.file, span.start + u32::from(sigil), span.end);
+        let written = self.text_of(name_span);
+        let (help, edits) = if fix {
+            self.glued_fix(len, name_span, Some(span))
+        } else {
+            (
+                format!(
+                    "macro code can't name a method or variable with a splice; build the name as a value, `\"{written}\".to_sym`"
+                ),
+                Vec::new(),
+            )
+        };
+        let mut parts = Vec::new();
+        while self.peek().span.start < span.end && !self.at(T::Eof) {
+            let tok = self.bump();
+            match tok.kind {
+                T::SpliceBegin => {
+                    // A splice inside it is nested once more.
+                    self.splice_depth += 1;
+                    let expr = self.parse_expr();
+                    self.splice_depth -= 1;
+                    self.close_splice(tok.span);
+                    parts.push(StrPart::Interp(expr));
+                }
+                T::AtSplice | T::ColonSplice => {}
+                T::IVar | T::Symbol => parts.push(StrPart::Text(self.text_of(tok.span)[1..].to_string())),
+                _ => parts.push(StrPart::Text(self.text_of(tok.span).to_string())),
+            }
+        }
+        self.report(
+            Diagnostic::error(codes::MISPLACED_SPLICE, "a splice inside a splice")
+                .primary(span, "this is already macro code, where a splice can't build a name")
+                .note(format!(
+                    "the expression inside `#{{…}}` runs in the macro, where `\"{written}\".to_sym` builds the name"
+                ))
+                .suggest(help, edits, Applicability::MaybeIncorrect),
+        );
+        let text = Expr { kind: ExprKind::Str(parts), span: name_span };
+        let to_sym =
+            Callee::Method { recv: text, name: Ident { name: Name::new("to_sym"), span: name_span }, safe: false };
+        let call = Call { callee: to_sym, args: Vec::new(), block: None, parens: false };
+        Expr { kind: ExprKind::Call(Box::new(call)), span }
+    }
+
     /// [`Parser::glued_name`] outside a `quote`, where nothing is spliced:
     /// skips the name at `span` (`name_span` without its `@` or `:`),
     /// reports it as one E0111 and returns the name as written
@@ -1057,8 +1118,9 @@ impl<'a> Parser<'a> {
     /// `name_span` without its `@` or `:`: build it in the macro with
     /// `to_sym` and splice that. Its edits put that on a line before the
     /// `quote` (once for each name in it) and splice the variable in place
-    /// of the glued name.
-    fn glued_fix(&self, len: usize, name_span: Span) -> (String, Vec<Edit>) {
+    /// of the glued name, or, inside a splice's expression (`in_splice`,
+    /// all of the name with its `@` or `:`), write the variable there.
+    fn glued_fix(&self, len: usize, name_span: Span, in_splice: Option<Span>) -> (String, Vec<Edit>) {
         // A variable for the name, from its text and the splices that are
         // plain names (`bump_#{name}` is `bump_name`).
         let (mut var, mut spliced) = (String::new(), Vec::new());
@@ -1110,7 +1172,10 @@ impl<'a> Parser<'a> {
         let start = self.line_starts[line];
         let indent = &self.text[start as usize..start as usize + self.indent_of_line(line)];
         let insert = Edit { span: Span::new(self.file, start, start), replacement: format!("{indent}{built}\n") };
-        let mut edits = vec![Edit { span: name_span, replacement: format!("#{{{var}}}") }];
+        let mut edits = vec![match in_splice {
+            Some(span) => Edit { span, replacement: var.clone() },
+            None => Edit { span: name_span, replacement: format!("#{{{var}}}") },
+        }];
         // Another glued name with the same text already builds it.
         if !self.diags.iter().flat_map(|d| &d.helps).flat_map(|h| &h.edits).any(|e| *e == insert) {
             edits.insert(0, insert);
@@ -1360,8 +1425,8 @@ impl<'a> Parser<'a> {
     /// start one, otherwise a statement.
     fn parse_quote_line(&mut self) -> Stmt {
         let start = self.peek().span;
-        if self.quote_item_ahead() {
-            let kind = match self.parse_item(ItemCtx::Package) {
+        if let Some(ctx) = self.quote_item_ahead() {
+            let kind = match self.parse_item(ctx) {
                 Some(item) => StmtKind::Item(Box::new(item)),
                 None => StmtKind::Error,
             };
@@ -1377,8 +1442,13 @@ impl<'a> Parser<'a> {
     }
 
     /// Whether the line ahead, after any attributes and `private`, starts a
-    /// declaration that can't be a statement.
-    fn quote_item_ahead(&self) -> bool {
+    /// declaration that can't be a statement, and where it is parsed as
+    /// one: a `using` field as in a struct, the rest as at package level.
+    /// A constant whose name is spliced (`#{name} = v`) is a declaration
+    /// when its value can only be a type (`distinct F64`, `proc(Int)`,
+    /// `@[c] proc()`); otherwise it reads as an assignment, which among
+    /// declarations is that constant too.
+    fn quote_item_ahead(&self) -> Option<ItemCtx> {
         let mut i = 0;
         while self.nth(i).kind == T::AtBracket {
             let mut depth = 0u32;
@@ -1387,7 +1457,7 @@ impl<'a> Parser<'a> {
                     T::AtBracket | T::LBracket => depth += 1,
                     T::RBracket if depth <= 1 => break,
                     T::RBracket => depth -= 1,
-                    T::Eof => return false,
+                    T::Eof => return None,
                     _ => {}
                 }
                 i += 1;
@@ -1400,7 +1470,7 @@ impl<'a> Parser<'a> {
         if self.nth(i).kind == T::Kw(K::Private) {
             i += 1;
         }
-        match self.nth(i).kind {
+        let item = match self.nth(i).kind {
             T::Kw(
                 K::Def
                 | K::Macro
@@ -1414,7 +1484,30 @@ impl<'a> Parser<'a> {
                 | K::Import
                 | K::Cimport,
             ) => true,
+            T::Kw(K::Using) => return Some(ItemCtx::Struct),
             T::Const => matches!(self.nth(i + 1).kind, T::Eq | T::Colon),
+            T::SpliceBegin => self
+                .name_len(i)
+                .is_some_and(|len| self.nth(i + len).kind == T::Eq && self.type_only_value_at(i + len + 1)),
+            _ => false,
+        };
+        item.then_some(ItemCtx::Package)
+    }
+
+    /// Whether the value that starts `n` tokens ahead, after any `(`s, can
+    /// only be a type: `distinct T`, `proc(…)` (unless a local has the
+    /// name) or `@[c] proc(…)`.
+    fn type_only_value_at(&self, mut n: usize) -> bool {
+        while self.nth(n).kind == T::LParen {
+            n += 1;
+        }
+        let tok = self.nth(n);
+        match tok.kind {
+            T::AtBracket => true,
+            T::Ident => {
+                let text = self.text_of(tok.span);
+                matches!(text, "distinct" | "proc") && !self.is_local(Name::new(text))
+            }
             _ => false,
         }
     }
@@ -1597,6 +1690,10 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 let name = self.expect_ident("an attribute name");
+                if self.at(T::SpliceBegin) {
+                    // Reported as not a name.
+                    self.skip_token();
+                }
                 let mut args = Vec::new();
                 if self.at(T::LParen) && !self.peek().space_before {
                     self.bump();
@@ -1636,10 +1733,28 @@ impl<'a> Parser<'a> {
             T::Kw(K::Cimport) => self.parse_cimport(),
             T::Kw(K::Def) => ItemKind::Def(Box::new(self.parse_def(false))),
             T::Kw(K::Macro) => {
-                self.bump();
+                let kw = self.bump();
                 if !self.at_kw(K::Def) {
-                    self.error_expected("`def` after `macro`");
-                    return None;
+                    // `macro twice(e: Code)`: read as the `macro def` it
+                    // means, when a method's name follows.
+                    if !matches!(self.kind(), T::Ident | T::SpliceBegin) {
+                        self.error_expected("`def` after `macro`");
+                        return None;
+                    }
+                    let name = self.peek();
+                    self.report(
+                        Diagnostic::error(
+                            codes::UNEXPECTED_TOKEN,
+                            format!("expected `def` after `macro`, found {}", self.found()),
+                        )
+                        .primary(name.span, "expected `def`")
+                        .secondary(kw.span, "a macro is declared with `macro def`")
+                        .suggest(
+                            "add `def`",
+                            vec![Edit { span: name.span.shrink_to_start(), replacement: "def ".into() }],
+                            Applicability::MachineApplicable,
+                        ),
+                    );
                 }
                 ItemKind::Def(Box::new(self.parse_def(true)))
             }
@@ -1882,6 +1997,25 @@ impl<'a> Parser<'a> {
         self.report(diag);
     }
 
+    /// Reports a splice where an `import` or `cimport` (`keyword`) in a
+    /// `quote` expects its path, and skips the line. Generated code can't
+    /// import anything, whatever the path, which the note says.
+    fn spliced_path(&mut self, what: &str, keyword: &str) -> bool {
+        if !self.at(T::SpliceBegin) || self.quotes.is_empty() {
+            return false;
+        }
+        let tok = self.peek();
+        let end = self.splice_len(0).map_or(tok.span, |n| self.nth(n - 1).span);
+        self.report(
+            Diagnostic::error(codes::UNEXPECTED_TOKEN, format!("expected {what}, found a splice"))
+                .primary(tok.span.to(end), "the path is a string literal")
+                .note(format!("generated code can't `{keyword}` anything: packages are loaded before any macro runs"))
+                .help(format!("write the `{keyword}` in the macro's file; the `quote`'s code uses its imports")),
+        );
+        self.recover_line();
+        true
+    }
+
     fn parse_string_literal(&mut self, what: &str) -> Option<(String, Span)> {
         let tok = self.peek();
         if let T::Str(idx) = tok.kind {
@@ -1895,7 +2029,11 @@ impl<'a> Parser<'a> {
 
     fn parse_import(&mut self) -> ItemKind {
         self.bump();
-        let Some((path, path_span)) = self.parse_string_literal("an import path like \"core:fmt\"") else {
+        let what = "an import path like \"core:fmt\"";
+        if self.spliced_path(what, "import") {
+            return ItemKind::Error;
+        }
+        let Some((path, path_span)) = self.parse_string_literal(what) else {
             self.recover_line();
             return ItemKind::Error;
         };
@@ -1925,7 +2063,11 @@ impl<'a> Parser<'a> {
 
     fn parse_cimport(&mut self) -> ItemKind {
         self.bump();
-        let Some((header, header_span)) = self.parse_string_literal("a header path like \"stb_image.h\"") else {
+        let what = "a header path like \"stb_image.h\"";
+        if self.spliced_path(what, "cimport") {
+            return ItemKind::Error;
+        }
+        let Some((header, header_span)) = self.parse_string_literal(what) else {
             self.recover_line();
             return ItemKind::Error;
         };
@@ -2073,8 +2215,10 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Parses a method at its `def`, or, for a macro written without `def`
+    /// (reported), at its name, right after `macro`.
     fn parse_def(&mut self, is_macro: bool) -> FnDecl {
-        let def_tok = self.bump();
+        let def_tok = if self.at_kw(K::Def) { self.bump() } else { self.tokens[self.pos.saturating_sub(1)] };
         let mut is_static = false;
         if self.at_kw(K::SelfKw) && self.nth(1).kind == T::Dot {
             self.bump();
@@ -2522,7 +2666,7 @@ impl<'a> Parser<'a> {
                 out.push(GenericParam { name, ty, span: tok.span.to(self.prev_span()) });
             } else {
                 self.error_expected("a generic parameter like `$T`");
-                self.bump();
+                self.skip_token();
             }
             if !self.eat(T::Comma) {
                 break;
@@ -2530,6 +2674,14 @@ impl<'a> Parser<'a> {
         }
         self.expect(T::RParen, "`)`");
         out
+    }
+
+    /// Skips the token here after an error, or all of the splice it starts,
+    /// whose `}` would otherwise end a `quote`'s body.
+    fn skip_token(&mut self) {
+        for _ in 0..self.splice_len(0).unwrap_or(1) {
+            self.bump();
+        }
     }
 
     fn parse_struct(&mut self) -> ItemKind {
@@ -2682,6 +2834,21 @@ impl<'a> Parser<'a> {
         if tok.kind == T::ColonSplice {
             self.bump();
             return self.parse_splice_name().map(|name| Ident { span: tok.span.to(name.span), ..name });
+        }
+        // `overload #{name}, …` in a `quote`: the splice inserts a name, but
+        // a symbol is expected. Read as the `:#{name}` it needs.
+        if tok.kind == T::SpliceBegin && !self.quotes.is_empty() {
+            let end = self.splice_len(0).map_or(tok.span, |n| self.nth(n - 1).span);
+            self.report(
+                Diagnostic::error(codes::UNEXPECTED_TOKEN, format!("expected {what}, found a splice"))
+                    .primary(tok.span.to(end), "this splice inserts a name, not a symbol")
+                    .suggest(
+                        "splice it as a symbol literal",
+                        vec![Edit { span: tok.span.shrink_to_start(), replacement: ":".into() }],
+                        Applicability::MachineApplicable,
+                    ),
+            );
+            return self.parse_splice_name();
         }
         if tok.kind == T::Symbol {
             self.bump();
@@ -3389,14 +3556,50 @@ impl<'a> Parser<'a> {
             err = Some(e);
             self.expect(T::Pipe, "`|`");
         }
-        self.openers.push(Opener { keyword: "guard", span: kw.span });
-        let else_body = self.parse_block_body();
+        // The lexer drops the line end after the `|` of `|err|`.
+        let same_line = self.line_of(self.peek().span.start) == self.line_of(self.prev_span().start);
+        let else_body = if !same_line || matches!(self.kind(), T::Newline | T::Eof | T::Kw(K::End)) {
+            self.openers.push(Opener { keyword: "guard", span: kw.span });
+            let body = self.parse_block_body();
+            self.expect_end();
+            body
+        } else {
+            self.one_line_guard(kw.span)
+        };
         self.pop_scope();
-        self.expect_end();
         for n in &names {
             self.declare(n.name);
         }
         StmtKind::Guard { names, value, err, else_body }
+    }
+
+    /// The `else` branch of the `guard` at `kw` written on the guard's own
+    /// line (`guard x = v else return 0`), as a one-line form: one error,
+    /// whose fix moves it to a line of its own and closes it with `end`.
+    /// The branch is the statement there, with an `end` on the line if one
+    /// follows, so the lines after it are the method's again.
+    fn one_line_guard(&mut self, kw: Span) -> Vec<Stmt> {
+        let (gap, first, errors) = (self.prev_span().end, self.peek().span, self.diags.len());
+        let stmt = self.parse_stmt();
+        let last = self.prev_span();
+        let indent = " ".repeat(self.indent_of_line(self.line_of(kw.start)));
+        let mut edits =
+            vec![Edit { span: Span::new(self.file, gap, first.start), replacement: format!("\n{indent}  ") }];
+        if self.at_kw(K::End) && self.line_of(self.peek().span.start) == self.line_of(last.start) {
+            let end = self.bump().span;
+            edits.push(Edit { span: Span::new(self.file, last.end, end.start), replacement: format!("\n{indent}") });
+        } else {
+            edits.push(Edit { span: last.shrink_to_end(), replacement: format!("\n{indent}end") });
+        }
+        let applicability =
+            if self.diags.len() > errors { Applicability::MaybeIncorrect } else { Applicability::MachineApplicable };
+        self.report(
+            Diagnostic::error(codes::UNEXPECTED_TOKEN, "a `guard`'s `else` branch goes on the lines below it")
+                .primary(first.to(last), "this branch is on the `guard`'s line")
+                .note("the branch is a block: it starts on the next line, leaves the scope and ends with `end`")
+                .suggest("put the branch on its own line, and close it with `end`", edits, applicability),
+        );
+        vec![stmt]
     }
 
     fn parse_expr_or_assign(&mut self) -> StmtKind {
@@ -3847,6 +4050,8 @@ impl<'a> Parser<'a> {
             // Outside a `quote` a splice is a mistyped comment, not an argument.
             T::SpliceBegin | T::AtSplice | T::ColonSplice => self.splices_are_code(),
             T::LBracket | T::Minus | T::Star | T::Amp | T::Tilde | T::Caret => tight_next,
+            // A keyword that names an argument (`Node.new next: n`).
+            T::Kw(_) => tight_next && self.tokens.get(idx).is_some_and(|n| n.kind == T::Colon),
             _ => false,
         }
     }
@@ -3932,10 +4137,22 @@ impl<'a> Parser<'a> {
         let tok = self.peek();
         let span = tok.span;
         let simple = |kind| Expr { kind, span };
+        // In a splice's expression, which is macro code, it builds the name.
+        if self.quotes.is_empty()
+            && self.splice_depth > 0
+            && let Some(len) = self.glued_len(0)
+        {
+            return self.glued_in_splice(len, true);
+        }
         if let Some((name, span)) = self.glued_name() {
             // It reads as the splice of the name it builds: a name, field,
             // symbol or call.
             let kind = match tok.kind {
+                // `@on_#{event}(n)` calls the proc the field holds, as
+                // `@name(args)` does.
+                T::AtSplice | T::IVar if self.at(T::LParen) && !self.peek().space_before => {
+                    return self.parse_call_with_parens(Callee::IVar(Ident { span, ..name }), span);
+                }
                 T::AtSplice | T::IVar => ExprKind::IVar(name.name),
                 T::ColonSplice | T::Symbol => ExprKind::Symbol(name.name),
                 _ if self.at(T::LParen) && !self.peek().space_before => {
@@ -4067,10 +4284,15 @@ impl<'a> Parser<'a> {
             }
             T::Kw(K::Quote) => {
                 self.bump();
-                if !self.eat_kw(K::Do) {
+                // `quote { … }`, as a block is written: reported once its
+                // `}` is found, and read as `quote do … end`.
+                let brace = self.at(T::LBrace).then(|| self.bump().span);
+                if brace.is_none() && !self.eat_kw(K::Do) {
                     self.error_expected("`do` after `quote`");
                 }
-                self.openers.push(Opener { keyword: "quote", span });
+                if brace.is_none() {
+                    self.openers.push(Opener { keyword: "quote", span });
+                }
                 // The quote's code runs where the macro is called: it has
                 // its own locals, splices and `yield`s.
                 self.quotes.push(Vec::new());
@@ -4084,7 +4306,10 @@ impl<'a> Parser<'a> {
                 self.splice_depth = splice_depth;
                 let splices = self.quotes.pop().unwrap_or_default();
                 self.quote_keywords.pop();
-                self.expect_end();
+                match brace {
+                    Some(open) => self.braced_quote(open),
+                    None => self.expect_end(),
+                }
                 Expr { kind: ExprKind::Quote(Box::new(QuoteExpr { body, splices })), span: span.to(self.prev_span()) }
             }
             T::SpliceBegin => {
@@ -4226,7 +4451,7 @@ impl<'a> Parser<'a> {
                 if self.at(T::LParen) && !self.peek().space_before {
                     return self.parse_call_with_parens(Callee::Name(name), span);
                 }
-                if self.struct_literal_ahead() {
+                if self.struct_literal_ahead(true) {
                     return self.parse_struct_literal(simple(ExprKind::Const(name.name)));
                 }
                 simple(ExprKind::Const(name.name))
@@ -4287,13 +4512,83 @@ impl<'a> Parser<'a> {
                     self.restore_line_end(last.span);
                     return Expr { kind: ExprKind::Error, span: at };
                 }
-                self.error_expected("an expression");
-                if !self.at_stmt_end() {
+                if !self.missing_operand() {
+                    self.error_expected("an expression");
+                }
+                // A closer or the line's end still closes what it closes:
+                // `[1, 2 +]` is one error, and the `]` ends the array.
+                if !self.at_stmt_end() && !self.at(T::RBracket) {
                     self.bump();
                 }
                 simple(ExprKind::Error)
             }
         }
+    }
+
+    /// Reports a missing expression after an operator (`[1, 2 +]`,
+    /// `(1 +)`, `-]`), naming the operator, with a fix that removes a binary
+    /// one. Returns false, with nothing reported, when no operator comes
+    /// before the position.
+    fn missing_operand(&mut self) -> bool {
+        let Some(op) = self.pos.checked_sub(1).map(|i| self.tokens[i]) else { return false };
+        // A binary operator follows the end of its left operand, on its line.
+        let before = self
+            .pos
+            .checked_sub(2)
+            .map(|i| self.tokens[i])
+            .filter(|t| ends_operand(t.kind) && self.line_of(t.span.start) == self.line_of(op.span.start));
+        let binary = infix_bp(op.kind).is_some() && op.kind != T::Question && before.is_some();
+        let prefix = matches!(op.kind, T::Minus | T::Bang | T::Tilde | T::Amp | T::DotDot | T::DotDotDot);
+        if !binary && !prefix {
+            return false;
+        }
+        let tok = self.peek();
+        let text = self.text_of(op.span);
+        let diag = Diagnostic::error(
+            codes::UNEXPECTED_TOKEN,
+            format!("expected an expression after `{text}`, found {}", self.found()),
+        )
+        .primary(tok.span, "expected an expression")
+        .secondary(op.span, format!("`{text}` needs a value after it"));
+        let diag = match before.filter(|_| binary) {
+            // Removing the operator, and the space around it before a `)`
+            // or `]`, leaves its left operand.
+            Some(before) => {
+                let closer = matches!(tok.kind, T::RParen | T::RBracket)
+                    && self.line_of(tok.span.start) == self.line_of(op.span.start);
+                let end = if closer { tok.span.start } else { op.span.end };
+                diag.suggest(
+                    format!("remove the `{text}`"),
+                    vec![Edit { span: Span::new(self.file, before.span.end, end), replacement: String::new() }],
+                    Applicability::MaybeIncorrect,
+                )
+                .help(format!("or write the missing value after `{text}`"))
+            }
+            None => diag.help(format!("write the value after `{text}`")),
+        };
+        self.report(diag);
+        true
+    }
+
+    /// Reports a `quote` whose code is in braces (`quote { 1 }`, at `open`),
+    /// with the body parsed, and consumes its `}`. A `quote` takes its code
+    /// in `do … end`, which the fix writes.
+    fn braced_quote(&mut self, open: Span) {
+        let mut diag = Diagnostic::error(codes::UNEXPECTED_TOKEN, "expected `do` after `quote`, found `{`")
+            .primary(open, "a `quote` takes its code in `do … end`, not in braces")
+            .note("`quote` is a keyword, not a method that takes a block");
+        self.skip_newlines();
+        if self.at(T::RBrace) {
+            let close = self.bump().span;
+            diag = diag.suggest(
+                "write `do … end`",
+                vec![Edit { span: open, replacement: "do".into() }, Edit { span: close, replacement: "end".into() }],
+                Applicability::MachineApplicable,
+            );
+        } else {
+            diag = diag.help("write the code between `quote do` and `end`");
+        }
+        self.report(diag);
     }
 
     /// Parses `(args)`. `types` is true for the builtins whose arguments are
@@ -4339,10 +4634,17 @@ impl<'a> Parser<'a> {
     /// with the statement.
     fn parse_arg(&mut self, types: bool, open: Option<Span>) -> Arg {
         let parens = open.is_some();
-        if let Some(len) = self.name_len(0)
+        if let Some(len) = self.name_len(0).or_else(|| self.keyword_label().then_some(1))
             && self.nth(len).kind == T::Colon
         {
-            let name = self.parse_name("an argument name");
+            let name = match self.kind() {
+                // `next: node`: a field may be named by a keyword.
+                T::Kw(k) => {
+                    let tok = self.bump();
+                    Ident { name: Name::new(k.as_str()), span: tok.span }
+                }
+                _ => self.parse_name("an argument name"),
+            };
             let colon = self.bump().span;
             // The value may go on the next line, indented deeper than the
             // call's own line. `add(a:` followed by a declaration, an
@@ -4487,6 +4789,13 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Whether a keyword followed directly by `:` starts here (`next: n`),
+    /// which names an argument, as in Ruby: fields may be named by most
+    /// keywords.
+    fn keyword_label(&self) -> bool {
+        matches!(self.kind(), T::Kw(_)) && self.nth(1).kind == T::Colon && !self.nth(1).space_before
+    }
+
     /// Whether `callee` is `size_of`, `align_of` or `type_info`, whose
     /// arguments are types (`type_info` also takes a value).
     fn takes_type_args(&self, callee: &Callee) -> bool {
@@ -4501,7 +4810,7 @@ impl<'a> Parser<'a> {
         let name = match &callee {
             Callee::Name(name) | Callee::IVar(name) | Callee::Method { name, .. } => *name,
         };
-        if is_constant_name(name.as_str()) && self.struct_literal_ahead() {
+        if is_constant_name(name.as_str()) && self.struct_literal_ahead(false) {
             let call = Call { callee, args, block: None, parens: true };
             let ty = Expr { kind: ExprKind::Call(Box::new(call)), span: start.to(self.prev_span()) };
             return self.parse_struct_literal(ty);
@@ -4514,9 +4823,16 @@ impl<'a> Parser<'a> {
     }
 
     /// Whether a `{` written right after the token before (a constant, as
-    /// in `Foo{`) starts a struct literal: anything but a block's `|x|`.
-    fn struct_literal_ahead(&self) -> bool {
-        self.at(T::LBrace) && !self.peek().space_before && !matches!(self.nth(1).kind, T::Pipe | T::OrOr)
+    /// in `Foo{`, or a generic instance, `Pool(Int, 4){`) starts a struct
+    /// literal: anything but a block's `|x|`. After a constant (`spaced`),
+    /// one after a space on the same line does too (`Foo { a: 1 }`, as Rust
+    /// and Go write it), since a constant never takes a block.
+    fn struct_literal_ahead(&self, spaced: bool) -> bool {
+        let prev = self.prev_span();
+        self.at(T::LBrace)
+            && (!self.peek().space_before
+                || (spaced && self.line_of(self.peek().span.start) == self.line_of(prev.start)))
+            && !matches!(self.nth(1).kind, T::Pipe | T::OrOr)
     }
 
     /// Parses `{…}` after the type `ty` (`Foo`, `geo.Vec2`,
@@ -4541,7 +4857,13 @@ impl<'a> Parser<'a> {
             kind: Items::Args,
         };
         let errors = self.diags.len();
-        let mut edits = vec![Edit { span: open, replacement: ".new(".into() }];
+        // `Foo { a: 1 }` becomes `Foo.new(a: 1)`: the spaces around the
+        // braces on their lines go with them.
+        let same_line = |p: &Self, a: Span, b: Span| p.line_of(a.start) == p.line_of(b.start);
+        let first = self.peek();
+        let open_end =
+            if first.kind != T::RBrace && same_line(self, first.span, open) { first.span.start } else { open.end };
+        let mut edits = vec![Edit { span: Span::new(self.file, ty.span.end, open_end), replacement: ".new(".into() }];
         let mut args = Vec::new();
         // The list's own report that it was left open, which this error
         // replaces: the diagnostics and last error position before it.
@@ -4589,7 +4911,9 @@ impl<'a> Parser<'a> {
             }
             None if self.at(T::RBrace) => {
                 let close = self.bump().span;
-                edits.push(Edit { span: close, replacement: ")".into() });
+                let last = self.tokens[self.pos - 2].span;
+                let start = if same_line(self, last, close) { last.end } else { close.start };
+                edits.push(Edit { span: Span::new(self.file, start, close.end), replacement: ")".into() });
                 true
             }
             None => {
@@ -4784,7 +5108,7 @@ impl<'a> Parser<'a> {
                         let name_span = name.span;
                         expr =
                             self.parse_nested_command_call(Callee::Method { recv: expr, name, safe }, start, name_span);
-                    } else if is_constant_name(name.as_str()) && self.struct_literal_ahead() {
+                    } else if is_constant_name(name.as_str()) && self.struct_literal_ahead(true) {
                         // `geo.Vec2{x: 1}`: a constant never takes a block.
                         let span = start.to(name.span);
                         let ty = Expr { kind: ExprKind::Member { recv: Box::new(expr), name, safe }, span };
@@ -5135,6 +5459,29 @@ fn is_plain_name(kind: &TypeKind, name: Name) -> bool {
     matches!(kind, TypeKind::Path { segments, args } if args.is_empty() && segments.len() == 1 && segments[0].name == name)
 }
 
+/// Whether a token can end an operand, so an operator after it is binary.
+fn ends_operand(kind: TokenKind) -> bool {
+    matches!(
+        kind,
+        T::Int
+            | T::Float
+            | T::Str(_)
+            | T::StrEnd
+            | T::Symbol
+            | T::Ident
+            | T::Const
+            | T::IVar
+            | T::TypeParam
+            | T::RParen
+            | T::RBracket
+            | T::RBrace
+            | T::SpliceEnd
+            | T::Question
+            | T::Caret
+            | T::Kw(K::Nil | K::True | K::False | K::SelfKw | K::End)
+    )
+}
+
 fn is_assignable(expr: &Expr) -> bool {
     match &expr.kind {
         ExprKind::Ident(_) | ExprKind::IVar(_) | ExprKind::Index { .. } | ExprKind::Deref(_) | ExprKind::Splice(_) => {
@@ -5157,13 +5504,15 @@ fn is_constant_name(name: &str) -> bool {
 }
 
 /// Whether an expression reads as the name of a type that a `?` could make
-/// optional: `Int`, `rl.Color`, `Pool(Ball, 64)`, `geo.Pool(Ball, 64)`, one
-/// of those in parentheses, or a type parsed in place (`[]Int`).
+/// optional: `Int`, `rl.Color`, `Pool(Ball, 64)`, `geo.Pool(Ball, 64)`, a
+/// splice, one of those in parentheses, or a type parsed in place
+/// (`[]Int`).
 fn names_type(e: &Expr) -> bool {
     let upper = |name: &Ident| name.as_str().starts_with(|c: char| c.is_ascii_uppercase());
     let package = |recv: &Expr| matches!(recv.kind, ExprKind::Ident(_) | ExprKind::Const(_));
     match &e.kind {
-        ExprKind::Const(_) | ExprKind::Type(_) => true,
+        // A splice may insert a type (`#{t}?`).
+        ExprKind::Const(_) | ExprKind::Type(_) | ExprKind::Splice(_) => true,
         ExprKind::Paren(inner) => names_type(inner),
         ExprKind::Member { recv, name, safe: false } => package(recv) && upper(name),
         ExprKind::Call(call) if call.block.is_none() => match &call.callee {
@@ -5567,6 +5916,60 @@ end
     }
 
     #[test]
+    fn quote_lines_with_spliced_declarations() {
+        let file = parse_ok(
+            "macro def m(n: Symbol, t: Type) -> Code\n\
+             \x20 quote do\n\
+             \x20   #{n} = distinct F64\n\
+             \x20   #{n} = proc(Int) -> Int\n\
+             \x20   #{n} = 5\n\
+             \x20   OptT = #{t}?\n\
+             \x20   using base: #{t}\n\
+             \x20 end\n\
+             end\n",
+        );
+        let q = first_quote(&file);
+        let item = |stmt: &Stmt| match &stmt.kind {
+            StmtKind::Item(item) => (**item).clone(),
+            other => panic!("not an item: {other:?}"),
+        };
+        // A spliced name whose value can only be a type is a constant; one
+        // with a value is an assignment, a constant among declarations.
+        for stmt in &q.body[..2] {
+            let ItemKind::Const(c) = item(stmt).kind else { panic!("a constant") };
+            assert!(matches!(c.value.kind, ExprKind::Type(_)));
+        }
+        assert!(matches!(q.body[2].kind, StmtKind::Assign { .. }));
+        // `#{t}?` is the optional type.
+        let ItemKind::Const(c) = item(&q.body[3]).kind else { panic!("a constant") };
+        let ExprKind::Type(ty) = &c.value.kind else { panic!("a type") };
+        assert!(matches!(&ty.kind, TypeKind::Optional(inner) if matches!(inner.kind, TypeKind::Splice(_))));
+        let ItemKind::Field(f) = item(&q.body[4]).kind else { panic!("a field") };
+        assert!(f.using);
+        // A splice where the parser takes none is one error, and the rest
+        // of the `quote` still parses; for `overload`, the fix makes it a
+        // symbol.
+        for (line, fixed) in [
+            ("overload #{n}, :a, :b", Some("overload :#{n}, :a, :b")),
+            ("import #{n}", None),
+            ("cimport #{n}", None),
+            ("@[#{n}] def f = 1", None),
+            ("struct S(#{n})\n    end", None),
+        ] {
+            let src = format!(
+                "macro def m(n: Symbol) -> Code\n  quote do\n    {line}\n    def g = 1\n  end\nend\ndef main\nend\n"
+            );
+            let (file, diags) = parse_file(FileId(0), &src);
+            assert_eq!(diags.iter().count(), 1, "{src:?}");
+            assert_eq!(file.items.len(), 2, "{src:?}");
+            assert_eq!(first_quote(&file).body.len(), 2, "{src:?}");
+            if let Some(fixed) = fixed {
+                assert_eq!(fix_all(&src).1, src.replace(line, fixed));
+            }
+        }
+    }
+
+    #[test]
     fn variadic_macro_parameter() {
         let file = parse_ok("macro def attr_reader(*names: Symbol) -> Code\n  quote do\n  end\nend\n");
         let ItemKind::Def(def) = &file.items[0].kind else { panic!() };
@@ -5954,6 +6357,62 @@ end
     }
 
     #[test]
+    fn ruby_habits_are_one_error_each() {
+        // Each is one error whose fix writes the Wid form, and the file's
+        // `main` is still found.
+        for (src, fixed) in [
+            ("macro def m -> Code\n  quote { 1 }\nend\n", "macro def m -> Code\n  quote do 1 end\nend\n"),
+            (
+                "macro m(e: Code) -> Code\n  quote do\n    #{e}\n  end\nend\n",
+                "macro def m(e: Code) -> Code\n  quote do\n    #{e}\n  end\nend\n",
+            ),
+            (
+                "def f(v: Int?) -> Int\n  guard x = v else return 0\n  x\nend\n",
+                "def f(v: Int?) -> Int\n  guard x = v else\n    return 0\n  end\n  x\nend\n",
+            ),
+            (
+                "def f(v: Int?) -> Int\n  guard x = v else |e| return 0 end\n  x\nend\n",
+                "def f(v: Int?) -> Int\n  guard x = v else |e|\n    return 0\n  end\n  x\nend\n",
+            ),
+        ] {
+            let src = format!("{src}def main\nend\n");
+            let (messages, out) = fix_all(&src);
+            assert_eq!(messages.len(), 1, "{src:?}");
+            assert_eq!(out, format!("{fixed}def main\nend\n"), "{src:?}");
+            parse_ok(&out);
+            assert_eq!(parse_file(FileId(0), &src).0.items.len(), 2, "{src:?}");
+        }
+        // A keyword followed directly by `:` names an argument.
+        let file = parse_ok("def main\n  n = Node.new(v: 1, next: m)\n  o = Node.new next: m, if: 2\nend\n");
+        let ItemKind::Def(def) = &file.items[0].kind else { panic!("a def") };
+        let FnBody::Block(body) = &def.body else { panic!("a block body") };
+        for (stmt, names) in body.iter().zip([["v", "next"], ["next", "if"]]) {
+            let StmtKind::Assign { values, .. } = &stmt.kind else { panic!("an assignment") };
+            let ExprKind::Call(call) = &values[0].kind else { panic!("a call") };
+            let given: Vec<_> = call.args.iter().map(|a| a.name.map(|n| n.as_str())).collect();
+            assert_eq!(given, names.map(Some));
+        }
+    }
+
+    #[test]
+    fn missing_operands_leave_the_closer() {
+        // One error naming the operator, and the closer still closes its
+        // bracket; the fix to review removes a binary operator.
+        for (line, message, fixed) in [
+            ("x = [1, 2 +]", "expected an expression after `+`, found `]`", "x = [1, 2]"),
+            ("x = (1 +)", "expected an expression after `+`, found `)`", "x = (1)"),
+            ("x = f(1, 2 * )", "expected an expression after `*`, found `)`", "x = f(1, 2)"),
+            ("x = xs.count { |y| y > }", "expected an expression after `>`, found `}`", "x = xs.count { |y| y }"),
+            ("x = [1, -]", "expected an expression after `-`, found `]`", "x = [1, -]"),
+        ] {
+            let src = format!("def main\n  {line}\n  p x\nend\n");
+            let (messages, out) = apply_fixes(&src, Applicability::MaybeIncorrect);
+            assert_eq!(messages, [message], "{src:?}");
+            assert_eq!(out, format!("def main\n  {fixed}\n  p x\nend\n"), "{src:?}");
+        }
+    }
+
+    #[test]
     fn loose_type_parameters() {
         let src = "def first($T, xs: []T) -> T = xs[0]\n\ndef main\n  p first([1])\nend\n";
         let (file, diags) = parse_file(FileId(0), src);
@@ -6052,6 +6511,23 @@ end
         let (_, diags) = parse_file(FileId(0), "macro def m(a: Symbol) -> Code\n  #{a}\nend\n");
         assert_eq!(diags.iter().map(|d| d.code.as_str()).collect::<Vec<_>>(), ["E0111"]);
         assert_eq!(diags.iter().next().expect("one").helps.len(), 2, "advice about `quote` in a macro");
+        // A name glued to a splice inside a splice's expression is one
+        // error, whose fix builds the name before the `quote`, and reads as
+        // the `"foo_#{a}".to_sym` it means.
+        let src = "macro def m(a: Symbol) -> Code\n  quote do\n    p #{foo_#{a}}\n  end\nend\ndef main\nend\n";
+        let (messages, fixed) = apply_fixes(src, Applicability::MaybeIncorrect);
+        assert_eq!(messages, ["a splice inside a splice"]);
+        assert_eq!(
+            fixed,
+            "macro def m(a: Symbol) -> Code\n  foo_a = \"foo_#{a}\".to_sym\n  quote do\n    p #{foo_a}\n  end\nend\n\
+             def main\nend\n"
+        );
+        parse_ok(&fixed);
+        let (file, _) = parse_file(FileId(0), src);
+        assert_eq!(file.items.len(), 2);
+        let q = first_quote(&file);
+        let ExprKind::Call(call) = &q.splices[0].kind else { panic!("a call") };
+        assert!(matches!(&call.callee, Callee::Method { name, .. } if name.as_str() == "to_sym"));
     }
 
     #[test]
@@ -6118,6 +6594,16 @@ end
         assert!(diags[0].helps[0].message.ends_with("`x_a = \"x_#{a}\".to_sym`, then `#{x_a}`"));
         // Spaced, a splice is a separate argument.
         parse_ok("macro def m(a: Code) -> Code\n  quote do\n    p #{a}\n    x = [#{a}, a]\n  end\nend\n");
+        // A glued field called like `@name(args)` calls the proc it holds.
+        let src = "macro def m(a: Symbol) -> Code\n  quote do\n    def f(n: Int) -> Int = @on_#{a}(n)\n  end\nend\n";
+        let (file, diags) = parse_file(FileId(0), src);
+        assert_eq!(diags.iter().count(), 1);
+        let StmtKind::Item(item) = &first_quote(&file).body[0].kind else { panic!("an item") };
+        let ItemKind::Def(def) = &item.kind else { panic!("a def") };
+        let FnBody::Expr(body) = &def.body else { panic!("an endless def") };
+        let ExprKind::Call(call) = &body.kind else { panic!("a call") };
+        assert!(matches!(&call.callee, Callee::IVar(name) if name.splice_index() == Some(0)));
+        assert_eq!(call.args.len(), 1);
     }
 
     #[test]
@@ -6410,5 +6896,20 @@ end
         assert_eq!(fixed, "X = Foo.new(a: 1)\ndef main\nend\n");
         // A block after a call stays one.
         assert!(codes_of("def main\n  xs.each{ |x| p x }\n  Foo.bar{ p 1 }\nend\n").is_empty());
+        // With a space before the `{`, after a constant: a constant never
+        // takes a block, so it is the same mistake.
+        let src = "W = Foo { a: 1 }\ndef main\n  w = geo.Vec2 { x: 1, y: 2 }\n  e = Foo { }\n  \
+                   m = Foo {\n    a: 1,\n  }\n  p w, e, m\nend\n";
+        let (messages, fixed) = fix_all(src);
+        assert_eq!(messages, ["Wid has no struct literal syntax"; 4]);
+        assert_eq!(
+            fixed,
+            "W = Foo.new(a: 1)\ndef main\n  w = geo.Vec2.new(x: 1, y: 2)\n  e = Foo.new()\n  \
+             m = Foo.new(\n    a: 1,\n  )\n  p w, e, m\nend\n"
+        );
+        // After a generic instance, a spaced `{` is a block, and a `{ |x|`
+        // after a constant is one too.
+        assert!(codes_of("def main\n  Pool(Int, 4) { p 1 }\nend\n").is_empty());
+        assert!(!codes_of("def main\n  Foo { |x| p x }\nend\n").contains(&"E0113"));
     }
 }

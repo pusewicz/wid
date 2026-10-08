@@ -1,0 +1,59 @@
+# Mistakes that Ruby habits lead to are one error each, with a fix, and
+# the rest of the file is still checked. A keyword followed directly by `:`
+# names an argument, so `next:` is fine.
+struct Node
+  value: Int
+  next: ^Node?
+end
+
+# A `quote`'s code goes in `do … end`, not in braces.
+macro def braced -> Code
+  quote { 1 }
+end
+
+# A macro is declared with `macro def`.
+macro twice(e: Code) -> Code
+  quote do
+    #{e} * 2
+  end
+end
+
+# A macro builds code with `quote`, not with a string.
+macro def thrice(e: Code) -> Code
+  "#{e} * 3"
+end
+
+# Code is passed to a macro as an argument, not as a block.
+macro def timed(body: Code) -> Code
+  quote do
+    #{body}
+  end
+end
+
+# `Self` is a type, not a value.
+macro def describe -> Code
+  quote do
+    def describe -> String = "#{Self}"
+  end
+end
+
+struct Named
+  describe
+end
+
+# A `guard`'s `else` branch goes on its own lines.
+def first_or_zero(v: Int?) -> Int
+  guard x = v else return 0
+  x
+end
+
+def main
+  p braced, twice(2), thrice(1), first_or_zero(1)
+  timed do
+    p 1
+  end
+  last = Node.new(value: 1)
+  n = Node.new(value: 2, next: &last)
+  p n.value
+  puts Named.new.describe
+end

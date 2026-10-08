@@ -1,0 +1,57 @@
+error[E0105]: expected the overloaded name as a symbol, like `:*`, found a splice
+  --> tests/ui/quote_lines.wid:12:14
+   |
+12 |     overload #{name}, :by_int, :by_float
+   |              ^^^^^^^ this splice inserts a name, not a symbol
+help: splice it as a symbol literal
+   |     overload :#{name}, :by_int, :by_float
+   = see `wid explain E0105`
+
+error[E0105]: expected an import path like "core:fmt", found a splice
+  --> tests/ui/quote_lines.wid:18:12
+   |
+18 |     import #{path}
+   |            ^^^^^^^ the path is a string literal
+   = note: generated code can't `import` anything: packages are loaded before any macro runs
+help: write the `import` in the macro's file; the `quote`'s code uses its imports
+   = see `wid explain E0105`
+
+error[E0105]: expected an attribute name, found `#{`
+  --> tests/ui/quote_lines.wid:25:7
+   |
+25 |     @[#{attr}] def tagged_def -> Int = 1
+   |       ^^ expected an attribute name
+   = see `wid explain E0105`
+
+error[E0105]: expected a generic parameter like `$T`, found `#{`
+  --> tests/ui/quote_lines.wid:26:18
+   |
+26 |     struct Boxed(#{param})
+   |                  ^^ expected a generic parameter like `$T`
+   = see `wid explain E0105`
+
+error[E0913]: a macro can't add fields to `P`
+  --> tests/ui/quote_lines.wid:34:11
+   |
+34 |     using base: Base
+   |           ^^^^ `based` generates this field
+  ::: tests/ui/quote_lines.wid:50:3
+   |
+50 |   based
+   |   ----- `based` expands here
+   = note: a struct's layout is fixed before the macros in its body run, which is what lets them read `Self.fields`
+help: declare `base` in `P` itself, and let the macro generate the methods that use it
+   = see `wid explain E0913`
+
+error[E0105]: declarations cannot be nested inside methods
+  --> tests/ui/quote_lines.wid:42:5
+   |
+42 |     #{name} = distinct F64
+   |     ^^^^^^^^^^^^^^^^^^^^^^ move this to the top level of the file
+  ::: tests/ui/quote_lines.wid:55:3
+   |
+55 |   unit :Meters
+   |   ------------ `unit` expands here
+   = see `wid explain E0105`
+
+error: could not compile due to 6 errors

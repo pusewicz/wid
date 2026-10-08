@@ -1,0 +1,27 @@
+# Inside a splice's expression, which is macro code, a name glued to a
+# splice is one E0111, whose fix builds the name before the `quote`. It is
+# read as the `"foo_#{name}".to_sym` it means, so the code it lands in adds
+# no errors.
+def foo_x -> Int = 1
+
+enum Kind
+  foo_x
+end
+
+macro def call_foo(name: Symbol) -> Code
+  quote do
+    #{foo_#{name}}
+  end
+end
+
+macro def symbol_of(name: Symbol) -> Code
+  quote do
+    :#{:foo_#{name}}
+  end
+end
+
+def main
+  p call_foo(:x)
+  k: Kind = symbol_of(:x)
+  p k
+end

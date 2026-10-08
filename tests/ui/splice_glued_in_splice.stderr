@@ -1,0 +1,25 @@
+error[E0111]: a splice inside a splice
+  --> tests/ui/splice_glued_in_splice.wid:13:7
+   |
+13 |     #{foo_#{name}}
+   |       ^^^^^^^^^^^ this is already macro code, where a splice can't build a name
+   = note: the expression inside `#{…}` runs in the macro, where `"foo_#{name}".to_sym` builds the name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole
+   |   foo_name = "foo_#{name}".to_sym
+   |   quote do
+   |     #{foo_name}
+   = see `wid explain E0111`
+
+error[E0111]: a splice inside a splice
+  --> tests/ui/splice_glued_in_splice.wid:19:8
+   |
+19 |     :#{:foo_#{name}}
+   |        ^^^^^^^^^^^^ this is already macro code, where a splice can't build a name
+   = note: the expression inside `#{…}` runs in the macro, where `"foo_#{name}".to_sym` builds the name
+help: build the name as a `Symbol` in the macro, before the `quote`, and splice it whole
+   |   foo_name = "foo_#{name}".to_sym
+   |   quote do
+   |     :#{foo_name}
+   = see `wid explain E0111`
+
+error: could not compile due to 2 errors

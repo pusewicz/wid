@@ -55,8 +55,8 @@ end
   methods must return `Bool`. Source files use the `.wid` extension.
 - **Blocks** can be written `do |x| … end` or `{ |x| … }`. A `{` right after a
   call opens a block; anywhere else, `{}` is the zero-value literal. A type
-  never takes a block: `Vec2{…}` is struct literal syntax, which Wid doesn't
-  have (E0113; see structs).
+  never takes a block: `Vec2{…}` and `Vec2 {…}` are struct literal syntax,
+  which Wid doesn't have (E0113; see structs).
 - **Declarations.** The first assignment declares a variable: `x = 1`,
   `speed: F32 = 120.0`, or `grid: [4][4]U8`. Variables are zero-initialized,
   and `= ---` opts out. As in Ruby, a name that starts with an uppercase letter
@@ -69,7 +69,9 @@ end
   assignment like `cells[0] += 1`. Unused parameters are allowed.
 - **Calls.** Parentheses are optional for zero-argument calls and for the
   outermost call of a statement (`puts "hi"`). Any parameter can be passed by
-  name. Defaults are written `hp: Int = 100`.
+  name. Defaults are written `hp: Int = 100`. A field may be named by most
+  keywords (`next: ^Node?`), and, as in Ruby, a keyword followed directly
+  by `:` in an argument list names an argument: `Node.new(next: n)`.
 - **Symbols.** `:north` is a compile-time name. Where an enum is expected it
   selects a member, like Odin's `.North`; anywhere else it is a plain
   identifier (in macros and `cimport` options, for example).
@@ -129,9 +131,10 @@ end
     declaration ends with that line. A named argument's value may go on
     the next line only indented deeper than the call's own line.
   - `x ? a : b` needs spaces around `?`, because `x?` is a predicate name.
-    So a `?` written right after a type's name or its closing `)`
-    (`Int?`, `rl.Color?`, `Pool(Ball, 64)?`, `(proc(Int) -> Int)?`) ends
-    that type, written in place, unless a conditional's `:` follows it:
+    So a `?` written right after a type's name, its closing `)` or a
+    splice (`Int?`, `rl.Color?`, `Pool(Ball, 64)?`,
+    `(proc(Int) -> Int)?`, `#{t}?` in a `quote`) ends that type, written
+    in place, unless a conditional's `:` follows it:
     `t = Int?` is the type `Int?` (a value goes there, E0323). In `C.int?`
     the `?` is read as part of the name, as in a predicate's, but `core:c`
     has no member `int?`: `C.int?` is the optional C type wherever it is
@@ -291,8 +294,12 @@ end
   (`def self.create`). There is no struct literal syntax: a type followed
   directly by `{` (`Vec2{x: 1.0}`, `geo.Vec2{1.0, 2.0}`, `Pool(Int, 4){}`,
   as in Odin, Go, Rust or Zig) is E0113, with a fix that writes the `new`
-  call, and is read as that call. `==` compares structs field by field when
-  every field is comparable; define `==` to customize it.
+  call, and is read as that call. A constant never takes a block, so a `{`
+  after a space on the constant's line is the same mistake (`Foo { a: 1 }`,
+  `geo.Vec2 { … }`), unless it opens a block's `|x|`; after a generic
+  instance, a spaced `{` (`Pool(Int, 4) { … }`) is a call's block. `==`
+  compares structs field by field when every field is comparable; define
+  `==` to customize it.
 - **Fields are always public**, as in Odin: code reads and writes them
   directly (`hero.hp`, `hero.hp = 3`, `@hp` inside a method). There are no
   getter or setter methods and no accessor macros like Ruby's `attr_reader`,
@@ -409,9 +416,12 @@ end
   can be nil also works as the error value. `nil` means success.
 - `guard a, b = f() else |err| … end` binds the non-error values, or unwraps a
   `T?`, for the rest of the scope. The `else` branch must leave the scope with
-  `return`, `break`, `next` or `panic`. There are no shorthand propagation
-  operators such as `or_return` or `?`. `guard cond else … end` also works
-  with a plain `Bool` condition.
+  `return`, `break`, `next` or `panic`. Like any block, it starts on the line
+  after `else` (or `|err|`) and ends with `end`: a branch written on the
+  guard's own line (`guard x = v else return 0`) is E0105, whose fix moves it
+  to its own line. There are no shorthand propagation operators such as
+  `or_return` or `?`. `guard cond else … end` also works with a plain `Bool`
+  condition.
 - By convention a failing function returns `{}, err` if its type is
   `(T, Error)` and `nil` if its type is `T?`. Silently dropping an `Error` is a
   compile error; discard one explicitly with `_`.
@@ -525,8 +535,12 @@ end
     `str.to_sym`. In compile-time code a symbol literal where no enum is
     expected is a `Symbol`. A zero `Code` (`{}`) is no code.
   - **Quotes:** the code in a `quote` may be statements or declarations
-    (`def`, `struct`, constants, other macro calls, …); which it must be
-    depends on where the macro is called. `quote` works only in a
+    (`def`, `struct`, constants, `using` fields, other macro calls, …);
+    which it must be depends on where the macro is called. A line
+    `#{name} = v` reads as an assignment, which among declarations is a
+    constant; when `v` can only be a type (`distinct F64`,
+    `proc(Int) -> Int`, `@[c] proc(I32)`), the line is that constant's
+    declaration wherever it is, as `NAME = v` is. `quote` works only in a
     `macro def`, the procs inside it included (E0910).
   - **Splices:** a spliced value is inserted according to its type, and must
     fit where the splice is (E0911, reported at the call):
@@ -582,7 +596,9 @@ end
     name first (`fname = "bump_#{name}".to_sym`) and splices that
     (`def #{fname}`). Outside a `quote`, a splice glued to a name is never
     read as a comment: it is one E0111, and the line is read as the
-    declaration it was written in.
+    declaration it was written in. Inside a splice's expression, which is
+    macro code, a name glued to a splice (`#{foo_#{name}}`) is E0111 too,
+    and is read as the `"foo_#{name}".to_sym` it means.
   - **Calls:** macros are package members like any def, declared at the top
     level of a file (E0105 inside a type). `pkg.name(…)`, and
     `pkg.name args` as a statement or declaration, works wherever an
@@ -626,13 +642,13 @@ end
     - Each line of the generated code must be a declaration: `def`,
       `macro def`, `struct`, `enum`, `union`, `module`, `extend`,
       `overload`, `include`, a constant (`NAME = v` or `NAME: T = v`, also
-      with a spliced name, `#{name} = v`), a field (`name: T`), a
-      `comptime if` whose branches follow the same rule, or a macro call (a
-      call or a name alone on a line, maybe after `private`), which
-      expands in turn and counts against the budgets. Any other statement
-      is E0108. Code spliced among declarations inside a `quote`, like
-      `#{fields}` in a `struct` body, follows the same rule (E0911 for a
-      statement).
+      with a spliced name, `#{name} = v`), a field (`name: T` or
+      `using name: T`), a `comptime if` whose branches follow the same
+      rule, or a macro call (a call or a name alone on a line, maybe after
+      `private`), which expands in turn and counts against the budgets.
+      Any other statement is E0108. Code spliced among declarations inside
+      a `quote`, like `#{fields}` in a `struct` body, follows the same rule
+      (E0911 for a statement).
     - What a call may generate follows what may be written where it is
       (types only at package level, fields only in a struct, and so on),
       with two exceptions (E0913). A macro can't add fields to the struct

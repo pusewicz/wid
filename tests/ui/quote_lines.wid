@@ -1,0 +1,56 @@
+# Lines of a `quote` with a splice where the parser takes none are one
+# error each, and the rest of the `quote` still parses. A `using` field a
+# macro generates in the struct whose body holds the call is one E0913.
+struct Base
+  hp: Int
+end
+
+macro def grouped(name: Symbol) -> Code
+  quote do
+    def by_int(i: Int) -> Int = i
+    def by_float(f: F64) -> Int = 2
+    overload #{name}, :by_int, :by_float
+  end
+end
+
+macro def importer(path: String) -> Code
+  quote do
+    import #{path}
+    def after_import -> Int = 1
+  end
+end
+
+macro def tagged(attr: Symbol, param: Symbol) -> Code
+  quote do
+    @[#{attr}] def tagged_def -> Int = 1
+    struct Boxed(#{param})
+      v: Int
+    end
+  end
+end
+
+macro def based -> Code
+  quote do
+    using base: Base
+  end
+end
+
+# A constant whose name is spliced and whose value is a type is a
+# declaration, which a method can't hold.
+macro def unit(name: Symbol) -> Code
+  quote do
+    #{name} = distinct F64
+  end
+end
+
+grouped :pick
+importer "core:fmt"
+
+struct P
+  based
+end
+
+def main
+  p pick(1), P.new.hp
+  unit :Meters
+end
