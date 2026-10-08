@@ -237,25 +237,36 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Reports values that must not be dropped silently.
+    /// Reports values that must not be dropped silently: an `Error`, or a
+    /// union returned as the last of several values, which is the error
+    /// value too.
     fn check_discarded(&mut self, value: &ir::Expr, span: Span) {
         let ty = value.ty;
-        let drops_error = match self.types.kind(ty) {
-            TyKind::Error => true,
-            TyKind::Tuple(elems) => elems.last().is_some_and(|t| matches!(self.types.kind(*t), TyKind::Error)),
-            _ => false,
+        let error = match self.types.kind(ty) {
+            TyKind::Error => Some(ty),
+            TyKind::Tuple(elems) => elems
+                .last()
+                .copied()
+                .filter(|t| matches!(self.types.kind(self.types.base(*t)), TyKind::Error | TyKind::Union(_))),
+            _ => None,
         };
-        if drops_error {
+        if let Some(error) = error {
+            let shown = self.types.display(error);
             let is_call = matches!(value.kind, ExprKind::Call { .. } | ExprKind::CallIndirect { .. });
             let (message, label) = if is_call {
-                ("the `Error` returned here is ignored", "this call can fail")
+                (format!("the `{shown}` returned here is ignored"), "this call can fail")
             } else {
-                ("this `Error` is never checked", "evaluating it does not handle it")
+                (format!("this `{shown}` is never checked"), "evaluating it does not handle it")
             };
             self.report(
                 Diagnostic::error(codes::IGNORED_ERROR, message)
                     .primary(span, label)
-                    .help("handle it with `guard … else |err| … end`, or discard it explicitly with `_ = …`"),
+                    .help("handle it with `guard … else |err| … end`")
+                    .suggest(
+                        "or discard it explicitly with `_ = …`",
+                        vec![wid_diagnostics::Edit { span: span.shrink_to_start(), replacement: "_ = ".to_string() }],
+                        Applicability::MachineApplicable,
+                    ),
             );
         }
     }
@@ -339,6 +350,12 @@ impl<'a> Checker<'a> {
         let value = &values[0];
         if let Some(op) = op {
             self.lower_op_assign(target, op, value, span);
+            return;
+        }
+        // `_ = v` discards `v`, whatever its type, as `a, _ = …` does.
+        if matches!(target.kind, E::Ident(n) if n.as_str() == "_") {
+            let v = self.expr(value, None);
+            self.assign_to(target, v);
             return;
         }
         let root = self.unread_root(target);

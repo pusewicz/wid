@@ -1,0 +1,31 @@
+error[E0401]: the `Failure` returned here is ignored
+  --> tests/ui/ignored_union_error.wid:19:3
+   |
+19 |   parse("")
+   |   ^^^^^^^^^ this call can fail
+help: handle it with `guard … else |err| … end`
+help: or discard it explicitly with `_ = …`
+   |   _ = parse("")
+   = see `wid explain E0401`
+
+error[E0401]: the `Failure` returned here is ignored
+  --> tests/ui/ignored_union_error.wid:20:3
+   |
+20 |   parse "1"
+   |   ^^^^^^^^^ this call can fail
+help: handle it with `guard … else |err| … end`
+help: or discard it explicitly with `_ = …`
+   |   _ = parse "1"
+   = see `wid explain E0401`
+
+error[E0401]: the `Error` returned here is ignored
+  --> tests/ui/ignored_union_error.wid:21:3
+   |
+21 |   check
+   |   ^^^^^ this call can fail
+help: handle it with `guard … else |err| … end`
+help: or discard it explicitly with `_ = …`
+   |   _ = check
+   = see `wid explain E0401`
+
+error: could not compile due to 3 errors

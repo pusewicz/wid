@@ -30,7 +30,9 @@ error[E0401]: the `Error` returned here is ignored
    |
 13 |   parse("2")
    |   ^^^^^^^^^^ this call can fail
-help: handle it with `guard … else |err| … end`, or discard it explicitly with `_ = …`
+help: handle it with `guard … else |err| … end`
+help: or discard it explicitly with `_ = …`
+   |   _ = parse("2")
    = see `wid explain E0401`
 
 error: could not compile due to 4 errors

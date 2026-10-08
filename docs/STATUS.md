@@ -1656,6 +1656,13 @@ the language server.
   resolves to `Failure`, so `case` over it with `when nil` adds no error
   (it gave two errors per `when`). A `$T?` that a union fills, or `Self?`,
   isn't reported.
+- A dropped union error (#139, SPEC "Errors"): `check_discarded` reports a
+  union returned as the last of several values as E0401, like an `Error`
+  ("the `Failure` returned here is ignored"); a union returned alone isn't,
+  since a function returns variants that way too (`-> Shape`). E0401's
+  `_ = …` is a machine-applicable fix that writes `_ = ` before the
+  statement. `_ = v` is a discard, as `a, _ = …` was: it declared a
+  variable `_`, so a second `_ = …` of another type was E0301.
 
 ## Next
 

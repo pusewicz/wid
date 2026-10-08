@@ -1,0 +1,28 @@
+# `_ = v` drops `v`, whatever its type: `_` is not a variable, so each
+# discard may drop a value of another type, and `v` still runs once.
+struct ParseErr
+  at: Int
+end
+
+union Failure = ParseErr
+
+def parse(text: String) -> (Int, Failure)
+  puts "parse #{text}"
+  return 0, ParseErr.new(1) if text.empty?
+  return 1, nil
+end
+
+def check -> Error
+  puts "check"
+  :failed
+end
+
+def main
+  _ = parse("")
+  _ = check
+  _ = parse "2"
+  _ = 5
+  _ = "five"
+  n, _ = parse("1")
+  p n
+end

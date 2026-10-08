@@ -1,0 +1,24 @@
+# A union returned as the last of several values is the error value, so
+# dropping it is E0401 like dropping an `Error`; each fix writes `_ = `.
+struct ParseErr
+  at: Int
+end
+
+union Failure = ParseErr
+
+def parse(text: String) -> (Int, Failure)
+  return 0, ParseErr.new(1) if text.empty?
+  return 1, nil
+end
+
+def check -> Error
+  nil
+end
+
+def main
+  parse("")
+  parse "1"
+  check
+  _ = parse("")
+  _ = check
+end

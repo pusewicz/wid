@@ -516,8 +516,11 @@ end
   `or_return` or `?`. `guard cond else … end` also works with a plain `Bool`
   condition.
 - By convention a failing function returns `{}, err` if its type is
-  `(T, Error)` and `nil` if its type is `T?`. Silently dropping an `Error` is a
-  compile error; discard one explicitly with `_`.
+  `(T, Error)` and `nil` if its type is `T?`. Silently dropping an `Error`
+  (alone or as the last of several values), or a union returned as the last
+  of several values, is a compile error (E0401, whose fix writes `_ = `);
+  discard one explicitly with `_`: `q, _ = f()`, or `_ = f()` for every
+  value. `_` is not a variable, so each `_ = …` drops a value of any type.
 - Use `assert` and `panic` for bugs and `unreachable` for impossible paths.
 
 ## Memory
