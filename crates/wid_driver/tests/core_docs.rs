@@ -71,7 +71,7 @@ fn every_public_core_declaration_has_a_doc() {
         let name = format!("core:{}", dir.file_name().unwrap_or_default().to_string_lossy());
         let mut opts = Options::new(&dir);
         opts.wid_root = Some(root.clone());
-        let analysis = wid_driver::analyze(&opts);
+        let analysis = wid_driver::analyze(&opts, &wid_driver::Overlay::new());
         assert!(!analysis.diags.has_errors(), "{name} has errors");
         let pkg = analysis.root().expect("the package loads");
         let package = analysis.index.package(pkg);

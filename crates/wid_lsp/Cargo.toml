@@ -1,20 +1,18 @@
 [package]
-name = "wid_cli"
-description = "The `wid` command-line tool"
+name = "wid_lsp"
+description = "The Wid language server: `wid lsp`, speaking LSP over stdio on top of the query engine"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-
-[[bin]]
-name = "wid"
-path = "src/main.rs"
 
 [dependencies]
 wid_diagnostics.workspace = true
 wid_syntax.workspace = true
 wid_sema.workspace = true
 wid_driver.workspace = true
-wid_lsp.workspace = true
+wid_query.workspace = true
+lsp-types.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 
 [lints]

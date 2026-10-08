@@ -79,7 +79,7 @@ pub fn query(opts: &Options, request: &QueryRequest) -> QueryOutput {
     let mut opts = opts.clone();
     opts.target = target;
     opts.testing = false;
-    let mut analysis = crate::analyze(&opts);
+    let mut analysis = crate::analyze(&opts, &crate::Overlay::new());
     let file = cmd.add(&mut analysis.sources);
     let Some(root) = analysis.root() else {
         return failed(analysis.sources, analysis.diags);

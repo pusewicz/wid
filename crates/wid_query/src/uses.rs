@@ -252,6 +252,16 @@ pub fn type_at(analysis: &Analysis, pkg: PackageId, position: &str) -> Result<Ty
         return fail(PositionError::NoColumn { last });
     }
     let offset = source.offset_of(pos.line, pos.column).unwrap_or_default();
+    match type_at_offset(analysis, file, offset) {
+        Some(found) => Ok(found),
+        None => fail(PositionError::Nothing { nearest: nearest(analysis, file, offset) }),
+    }
+}
+
+/// What is at byte `offset` of `file`, as [`type_at`] finds it, for a
+/// caller that holds positions as offsets (the LSP); `None` where nothing
+/// is recorded.
+pub fn type_at_offset(analysis: &Analysis, file: FileId, offset: u32) -> Option<TypeItem> {
     let uses = &analysis.uses;
     let covers = |s: Span| s.file == file && s.start <= offset && offset < s.end;
     let within = |inner: Span, outer: Span| outer.start <= inner.start && inner.end <= outer.end;
@@ -273,7 +283,7 @@ pub fn type_at(analysis: &Analysis, pkg: PackageId, position: &str) -> Result<Ty
         (Some(t), Some(r)) if r.span != t.span && !heads(t, r) => (own(r), r.span),
         (Some(t), _) => (Some(t), t.span),
         (None, Some(r)) => (own(r), r.span),
-        (None, None) => return fail(PositionError::Nothing { nearest: nearest(analysis, file, offset) }),
+        (None, None) => return None,
     };
     let kind = match named {
         Some(r) => match &r.target {
@@ -293,19 +303,17 @@ pub fn type_at(analysis: &Analysis, pkg: PackageId, position: &str) -> Result<Ty
     };
     let items = analysis.items(true);
     let location_of = |span: Span| {
-        items.location(span).unwrap_or_else(|| Location {
-            file: source.display.clone(),
-            line: pos.line,
-            column: pos.column,
-            end_line: pos.line,
-            end_column: pos.column,
+        items.location(span).unwrap_or_else(|| {
+            let source = analysis.sources.file(file);
+            let (line, column) = source.line_col(offset);
+            Location { file: source.display.clone(), line, column, end_line: line, end_column: column }
         })
     };
     let (ty, instances) = match (entry, named.map(|r| &r.target)) {
         (_, Some(RefTarget::Package(_))) | (None, _) => (None, Vec::new()),
         (Some(t), _) => (Some(t.ty.clone()), t.instances.clone()),
     };
-    Ok(TypeItem {
+    Some(TypeItem {
         location: location_of(named.map_or(at, |r| r.span)),
         span: location_of(at),
         ty,

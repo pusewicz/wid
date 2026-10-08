@@ -8,8 +8,9 @@ compiler implements and what is next.
 `wid_syntax` (lex, parse) → `wid_sema` (resolve, check, lower to typed IR) →
 `wid_codegen_c` (IR → C23) → host C compiler. `wid_driver` loads packages and
 runs the stages; `wid_cli` is the `wid` binary. `wid_query` answers questions
-about a checked package (`wid query`, and the LSP later) without generating
-code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
+about a checked package (`wid query`, `wid lsp`) without generating code;
+`wid_driver::analyze` loads and checks for it and for `wid doc`. `wid_lsp` is
+the language server.
 
 ## Conventions fixed so far
 
@@ -370,8 +371,8 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
     visible in the enum's body (`member_names_macro`, E0914, fixed by
     adding `()`), keeps the member, and adds the enum to `failed_owners`
     so the methods the macro would generate aren't reported missing.
-- The symbol index (`wid_sema::index`, for `wid doc` now and `wid query`
-  and the LSP later): `check_program_indexed` runs the checker like
+- The symbol index (`wid_sema::index`, for `wid doc`, `wid query` and
+  `wid lsp`): `check_program_indexed` runs the checker like
   `check_program` and then `Checker::build_index` (`check/index.rs`), which
   only reads the checker's tables (`decls`, `pkg_scopes`, `file_imports`,
   `include_items`, `merged_cimports`) and reports nothing. Every `DeclId` is
@@ -402,8 +403,8 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   another command say so with `<!-- command: ARGS -->` and
   `<!-- fix-command: ARGS -->` (E0601–E0605), which both errdocs scripts
   follow.
-- The query engine (`crates/wid_query`, for `wid query` now and the LSP
-  later) depends on `wid_sema`, `wid_syntax` and `wid_diagnostics` only;
+- The query engine (`crates/wid_query`, for `wid query` and `wid lsp`)
+  depends on `wid_sema`, `wid_syntax` and `wid_diagnostics` only;
   `wid_driver` depends on it, so the suite in `wid_driver` runs it and the
   graph stays acyclic. `Analysis::check` (pure: a `ProgramInput` in, the
   sources, sorted diagnostics, `Index` and `Extents` out) is what
@@ -424,7 +425,8 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   worded per `Tool`. `Query::parse` gives usage errors, which the CLI
   prints with status 2.
 - What names and expressions resolve to (`wid_sema::uses`, for `wid query
-  refs`, `calls` and `type`): `Checker::recorder` is `Some` only in
+  refs`, `calls` and `type`, and the LSP's hover and definition):
+  `Checker::recorder` is `Some` only in
   `check_program_indexed`, and the `note_*` methods (`check/record.rs`)
   return at once when it is `None`, so `check_program` allocates nothing
   and pays one branch per call. They are called where a name resolves:
@@ -472,6 +474,39 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `tests/query/cmerged` is a package with a `cimport` without `as:`, and
   `tests/query/game` (with `geo`) the program `refs`, `calls` and `type`
   cases read.
+- The language server (`crates/wid_lsp`, SPEC "Toolchain and CLI" →
+  "LSP") uses `lsp-types` for the protocol's types and its own framing
+  (`transport.rs`): `lsp-server`, which builds on 1.88 too, ends its stdio
+  reader at the first malformed message and accepts only `i32` and string
+  ids, so it couldn't keep running after a bad message. A reader thread
+  sends `Incoming` messages over a channel; `server.rs` drains the channel
+  before handling each message (so `$/cancelRequest` finds requests still
+  waiting) and waits with a deadline for the debounced check. Unsaved
+  buffers reach the checker as a `wid_driver::Overlay` (normalized
+  absolute path to text) that `analyze` and `load_program` take; the
+  loader reads a file from it before the disk and lists its `.wid` files
+  with a directory's (`wid_files`), and a `-file` target it holds needs no
+  file on disk. The CLI tools pass an empty overlay. A `RootKey` (package
+  directory or `-file` target, and whether `_test.wid` files load) names
+  each package being checked; a `Root` keeps its last `Analysis`, the
+  files it read (a change to one marks it dirty) and its `Published`
+  diagnostics by file, and the server publishes, per file, the union over
+  roots of what changed. `convert.rs` maps diagnostics (a span is placed
+  in the real file `SourceMap::file` resolves it to; only absolute paths
+  are files on disk), `features.rs` hovers, definitions and symbols from
+  `wid_query::type_at_offset` (offset-based `type_at`) and `outline`, and
+  `position.rs` converts between byte offsets and UTF-8 or UTF-16
+  positions with its own line index (LSP's `\r` line breaks included).
+  Formatting goes through `wid_driver::fmt::format_text`, the check `wid
+  fmt` runs (parse, format, same tree). Checks and request handlers run
+  under `catch_unwind`, so a compiler crash is reported, not fatal. The
+  server writes its answers itself (a failed write stops it with status
+  1, as a closed stdout means the client is gone) and logs with
+  `wid_lsp::log`, which ignores a closed stderr; `wid help lsp` and its
+  usage errors go through `wid_cli::output`. `crates/wid_cli/tests/lsp.rs`
+  drives the built binary over pipes, `closed_pipe.rs` covers both closed
+  streams, and the framing, positions, URIs, conversions and the server's
+  lifecycle and cancellation have unit tests.
 - Every `core` package opens the file named after it (`core/mem/mem.wid`,
   `core/builtin/builtin.wid`) with its package doc, and every public
   declaration in `core` has a `# ` doc comment directly above it: types,
@@ -1370,6 +1405,26 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `vendor/`, `examples/` and `tests/` that parses keeps its tree and its
   comments and formats idempotently, and each, with its whitespace
   perturbed in ways that keep its tree, formats to the same text.
+- `wid lsp`, part 1 (SPEC "Toolchain and CLI" → "LSP", `wid help lsp`,
+  `docs/editors.md` for Neovim and VS Code): a synchronous server over
+  stdio with `initialize`, `shutdown`, `exit`, full text sync,
+  cancellation of waiting requests, `MethodNotFound` for unknown requests
+  and a JSON-RPC error (not an exit) for a malformed message. Open buffers
+  are checked, not the files on disk, through an overlay that
+  `wid_driver::analyze` takes. Diagnostics for every file of the package
+  an open document belongs to (a `_test.wid` file's with the tests, any
+  other file as `-file`) on open, save and 0.1 s after the last change,
+  cleared when they go away: code (linking `docs/errors`), severity,
+  message with the primary label, notes and helps, secondary labels and
+  macro calls as related information, code in macro expansions shown at
+  the outermost call. Fixes are quick fixes (`isPreferred` when
+  machine-applicable). Hover and go-to-definition from `wid query type`
+  (`refers_to`), document symbols from `outline`, formatting with
+  `wid fmt`'s checks. Positions in UTF-8 when the client offers it, UTF-16
+  otherwise. `-collection:`, `-define:` and `-target:` from the command
+  line and `initializationOptions`; `-stdio` and `--stdio` are accepted,
+  and other commands' flags are usage errors. A closed stdout stops the
+  server quietly with status 1, and a closed stderr is ignored.
 - Linux and CI (`.github/workflows/ci.yml`, cached with sccache and
   rust-cache): `cargo fmt --check`; clippy and the full `cargo test` on
   Ubuntu 26.04 (clang-22, gcc-15, libclang 22, SDL3) and macOS 26 (Apple
@@ -1578,10 +1633,10 @@ only on `main` and can run in parallel with the macro stack.
      notes are under "Expansion" above.
 2. **`wid query`** (`wid/query`, two stacked PRs): **landed** (see "Done"
    and "Conventions fixed so far"; its limits are under "Known gaps").
-3. **`wid lsp`** (`crates/wid_lsp`, `wid/lsp`; `wid query` and `wid fmt`
-   have landed, see "Done"). Diagnostics, hover, go-to-definition,
-   completion, formatting (`wid_syntax::fmt::format`) and rename, all on
-   top of the query engine.
+3. **`wid lsp`** (`crates/wid_lsp`, `wid/lsp`): part 1 **landed**
+   (diagnostics, quick fixes, hover, go-to-definition, document symbols and
+   formatting; see "Done"). Part 2: completion, references (from `refs`)
+   and rename, on top of the query engine.
 4. **Reformat the repository with `wid fmt`** (one PR). It changes
    `core/fmt/fmt.wid` (three parameter lists get a trailing `,`), and in
    `tests/` blank lines around multi-line declarations in seven
@@ -1716,8 +1771,8 @@ before anyone starts them.
   (`a + b`) or, for `+=`, at its target, since the parser keeps no span
   for the operator. `refs` has no way to name a local (`type` covers
   them), and `wid query calls` has no reverse view (what a method calls).
-  The LSP will want positions in UTF-16 (`SourceFile::offset_of_utf16`);
-  `type` takes characters. A declaration a macro generates under a name from its
+  `type` takes columns in characters (the LSP converts its own positions).
+  A declaration a macro generates under a name from its
   arguments (`counter :kills`) has the macro call as its `span`. A `using`
   origin has no location. The fixes in its diagnostics edit the command
   line as `wid query` rebuilds it (query, argument, `-in:`, `-file`), not
@@ -1734,6 +1789,25 @@ before anyone starts them.
   (`extras/vim/indent/wid.vim`) indents a continued block header (`if a &&`
   then `b`, or `def f(a: Int,` then `b: Int)`) one step, where `wid fmt`
   uses two.
+- `wid lsp` (part 1): no completion, references, rename, workspace or
+  semantic symbols, signature help or inlay hints (completion, references
+  and rename are part 2). Checks run on the server's one thread, so a
+  request waits for a check in progress, and a cancellation only reaches
+  requests still waiting. A package is checked only while one of its files
+  is open, and its `_test.wid` files only while one of them is open. Files
+  changed on disk outside the editor are seen at the next check (there is
+  no `workspace/didChangeWatchedFiles`). Only `file:` documents are
+  checked (an `untitled:` buffer can only be formatted), and buffers match
+  files by their cleaned absolute path, so a file opened through a
+  symbolic link isn't the file the loader reads. Hover and definition
+  share `wid query type`'s limits: a generic method that no call
+  instantiates (an `extend` or `module` method of a library package) and a
+  field default that no `T.new` uses have nothing recorded. Builtin types
+  and C declarations have no definition (`CDoc::declared_at` is
+  `header.h:12`, without the header's directory). A diagnostic with no
+  place in a file on disk is shown at the start of the package's open
+  documents. Formatting ignores the client's options (the style has
+  none) and has no range formatting.
 - `vendor:miniaudio` built with GCC on macOS has no CoreAudio backend: GCC
   can't parse the block syntax in Apple's headers (`miniaudio.c` sets
   `MA_NO_COREAUDIO` there).

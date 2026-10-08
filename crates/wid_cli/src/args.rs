@@ -15,6 +15,7 @@ pub enum Command {
     Doc,
     Fmt,
     Query,
+    Lsp,
     Explain,
     Cimport,
     Version,
@@ -65,7 +66,7 @@ pub struct Parsed {
 }
 
 const COMMANDS: &[&str] =
-    &["build", "run", "check", "test", "doc", "fmt", "query", "explain", "cimport", "version", "help"];
+    &["build", "run", "check", "test", "doc", "fmt", "query", "lsp", "explain", "cimport", "version", "help"];
 
 /// The flags `build` and `run` take, without their `:`; `test` takes
 /// `-filter` too.
@@ -98,6 +99,10 @@ const FMT_FLAGS: &[&str] = &["-check", "-file", "-json-errors"];
 /// The flags `wid query` takes.
 const QUERY_FLAGS: &[&str] = &["-in", "-file", "-define", "-target", "-collection"];
 
+/// The flags `wid lsp` takes. Clients that start servers over stdio may
+/// pass `-stdio` (or `--stdio`); stdio is the only transport.
+const LSP_FLAGS: &[&str] = &["-collection", "-define", "-target", "-stdio"];
+
 /// The flags `wid cimport` takes.
 const CIMPORT_FLAGS: &[&str] = &["-dump", "-strip-prefix", "-include-dir", "-pkg-config", "-define", "-json-errors"];
 
@@ -110,13 +115,14 @@ fn command_flags(command: Command) -> Vec<&'static str> {
         Command::Doc => DOC_FLAGS.to_vec(),
         Command::Fmt => FMT_FLAGS.to_vec(),
         Command::Query => QUERY_FLAGS.to_vec(),
+        Command::Lsp => LSP_FLAGS.to_vec(),
         Command::Cimport => CIMPORT_FLAGS.to_vec(),
         Command::Explain | Command::Version | Command::Help => Vec::new(),
     }
 }
 
 /// Every command, in the order the help lists them.
-const ALL_COMMANDS: [Command; 11] = [
+const ALL_COMMANDS: [Command; 12] = [
     Command::Build,
     Command::Run,
     Command::Check,
@@ -124,6 +130,7 @@ const ALL_COMMANDS: [Command; 11] = [
     Command::Doc,
     Command::Fmt,
     Command::Query,
+    Command::Lsp,
     Command::Explain,
     Command::Cimport,
     Command::Version,
@@ -155,6 +162,7 @@ pub fn command_name(command: Command) -> &'static str {
         Command::Doc => "doc",
         Command::Fmt => "fmt",
         Command::Query => "query",
+        Command::Lsp => "lsp",
         Command::Explain => "explain",
         Command::Cimport => "cimport",
         Command::Version => "version",
@@ -170,6 +178,7 @@ const COMMAND_FLAGS: &[(&str, &str)] = &[
     ("-dump", "cimport"),
     ("-filter", "test"),
     ("-check", "fmt"),
+    ("-stdio", "lsp"),
 ];
 
 /// Parses the arguments after the program name.
@@ -212,6 +221,7 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
         "doc" => Command::Doc,
         "fmt" => Command::Fmt,
         "query" => Command::Query,
+        "lsp" => Command::Lsp,
         "explain" => Command::Explain,
         "cimport" => Command::Cimport,
         "version" | "-version" | "--version" => Command::Version,
@@ -306,6 +316,7 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
             "-private" if parsed.command == Command::Doc => parsed.private = true,
             "-check" if parsed.command == Command::Fmt => parsed.check = true,
             "-in" if parsed.command == Command::Query => parsed.query_in = Some(need("path/to/package")?),
+            "-stdio" | "--stdio" if parsed.command == Command::Lsp => {}
             "-strip-prefix" => parsed.strip_prefixes.push(need("SDL_")?),
             "-include-dir" => parsed.include_dirs.push(PathBuf::from(need("path")?)),
             "-pkg-config" => parsed.pkg_config.push(need("raylib")?),
@@ -361,6 +372,7 @@ pub fn usage(topic: Option<&str>) -> String {
         Some("doc") => DOC_HELP.to_string(),
         Some("fmt") => FMT_HELP.to_string(),
         Some("query") => QUERY_HELP.to_string(),
+        Some("lsp") => LSP_HELP.to_string(),
         Some("explain") => "wid explain [CODE]\n\nPrints the long explanation of an error code, or lists all codes.\n".to_string(),
         Some("cimport") => "wid cimport --dump <header> [flags]\n\nPrints the Wid declarations `cimport` makes of a C header. A header that\nisn't a file is looked up on the include path, like `#include <name>`.\n\nFlags:\n  -strip-prefix:<prefix>  Remove a prefix from every name\n  -include-dir:<dir>      Search a directory for headers\n  -pkg-config:<name>      Use pkg-config's flags for a library\n  -define:NAME=value      Define a C macro first\n".to_string(),
         _ => format!(
@@ -374,6 +386,7 @@ pub fn usage(topic: Option<&str>) -> String {
                doc      Show the documentation of a package or symbol\n  \
                fmt      Format a package's files in the canonical style\n  \
                query    Answer questions about a package, as JSON\n  \
+               lsp      Run the language server, for editors\n  \
                explain  Explain an error code\n  \
                cimport  Print the Wid view of a C header\n  \
                version  Print the version\n  \
@@ -480,6 +493,33 @@ Flags:
   -define:NAME=value     Set a value that `config(:NAME, default)` reads
   -target:<os_arch>      Query another target's code (sets OS and ARCH)
   -collection:name=path  Add an import collection
+";
+
+const LSP_HELP: &str = "wid lsp [flags]
+
+Runs the Wid language server, which speaks the Language Server Protocol on
+stdin and stdout; an editor starts it. It checks the package each open file
+belongs to as you type, unsaved text included, and offers diagnostics with
+quick fixes, hover, go to definition, document symbols and formatting. It
+never generates code or runs a C compiler.
+
+A `.wid` file is checked with the package of its directory, as `wid check`
+loads it (a `_test.wid` file with the package's tests, as `wid test` loads
+them); any other file is checked alone, as with `-file`. The client's
+`initializationOptions` add to the flags:
+
+  {\"collections\": {\"shared\": \"../shared\"}, \"defines\": {\"LOG_LEVEL\": \"2\"},
+   \"target\": \"linux_amd64\"}
+
+A relative collection path there is read against the workspace folder. SPEC.md
+(\"Toolchain and CLI\") describes the server, and docs/editors.md how to set up
+Neovim and VS Code.
+
+Flags:
+  -collection:name=path  Add an import collection
+  -define:NAME=value     Set a value that `config(:NAME, default)` reads
+  -target:<os_arch>      Check another target's code (sets OS and ARCH)
+  -stdio                 Accepted and ignored: stdio is the only transport
 ";
 
 /// The flags `build`, `run` and `test` take (`test` takes `-filter:` too).
@@ -599,7 +639,7 @@ mod tests {
     #[test]
     fn every_flag_the_help_promises_is_taken() {
         let mut checked = 0;
-        for command in ["build", "run", "check", "test", "doc", "fmt", "query", "cimport"] {
+        for command in ["build", "run", "check", "test", "doc", "fmt", "query", "lsp", "cimport"] {
             let flags = promised(command);
             assert!(!flags.is_empty(), "`wid help {command}` lists no flags");
             for flag in flags {
@@ -616,9 +656,16 @@ mod tests {
         }
         assert!(checked > 30, "only {checked} flags checked");
         // The help lists every flag a command takes, and no other.
-        for command in
-            [Command::Build, Command::Run, Command::Check, Command::Test, Command::Doc, Command::Fmt, Command::Query]
-        {
+        for command in [
+            Command::Build,
+            Command::Run,
+            Command::Check,
+            Command::Test,
+            Command::Doc,
+            Command::Fmt,
+            Command::Query,
+            Command::Lsp,
+        ] {
             let name = command_name(command);
             let mut listed = promised(name);
             let mut taken: Vec<String> = command_flags(command).into_iter().map(str::to_string).collect();
@@ -630,6 +677,18 @@ mod tests {
         for command in [Command::Explain, Command::Version, Command::Help] {
             assert!(command_flags(command).is_empty(), "`wid {}` takes flags", command_name(command));
         }
+    }
+
+    #[test]
+    fn lsp_takes_stdio_with_one_dash_or_two() {
+        for args in ["lsp", "lsp -stdio", "lsp --stdio", "lsp -collection:a=b -define:A=1 -target:linux_amd64"] {
+            let argv: Vec<String> = args.split_whitespace().map(str::to_string).collect();
+            assert!(parse(&argv).is_ok(), "`wid {args}`");
+        }
+        let build = "`wid build`, `wid run` and `wid test` take it";
+        assert_eq!(error("lsp -debug"), format!("`-debug` doesn't apply to `wid lsp`; {build}"));
+        assert_eq!(error("check -stdio"), "`-stdio` doesn't apply to `wid check`; only `wid lsp` takes it");
+        assert_eq!(error("check --stdio"), "unknown flag `--stdio`; `-stdio` only applies to `wid lsp`");
     }
 
     #[test]

@@ -1,12 +1,13 @@
-//! The introspection engine behind `wid query` and, later, `wid lsp`: it
-//! answers questions about a checked package as plain data.
+//! The introspection engine behind `wid query` and `wid lsp`: it answers
+//! questions about a checked package as plain data.
 //!
 //! An [`Analysis`] is a loaded and checked program: its sources, its
 //! diagnostics, the symbol index the checker builds ([`wid_sema::index`])
 //! and the [`Extents`] of its declarations. [`Analysis::check`] makes one
-//! from a loaded program; `wid_driver::analyze` loads a package from disk
-//! and calls it. Both are pure functions of their inputs, so a long-lived
-//! caller such as the LSP reruns them whenever a file changes.
+//! from a loaded program; `wid_driver::analyze` loads a package (from disk,
+//! or from the LSP's unsaved buffers) and calls it. Both are pure functions
+//! of their inputs, so a long-lived caller such as the LSP reruns them
+//! whenever a file changes.
 //!
 //! A [`Query`] is answered by [`answer`], or directly by [`outline`],
 //! [`def`], [`methods`], [`refs`], [`calls`] and [`type_at`]. Answers are
@@ -34,7 +35,9 @@ use wid_sema::{PackageId, ProgramInput};
 
 pub use extent::Extents;
 pub use item::{Item, ItemBuilder, Location, OriginInfo, PackageInfo, Style};
-pub use uses::{Nearby, Position, PositionError, RefItem, TypeItem, calls, find_file, refs, type_at, written};
+pub use uses::{
+    Nearby, Position, PositionError, RefItem, TypeItem, calls, find_file, refs, type_at, type_at_offset, written,
+};
 
 /// A loaded and checked program, ready for queries.
 #[derive(Debug)]

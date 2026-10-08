@@ -2,7 +2,7 @@
 //! an error: `wid` drops that output without panicking and exits with the
 //! status the command has anyway (SPEC "Toolchain and CLI").
 
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
 
@@ -77,6 +77,7 @@ fn every_command_with_stdout_closed() {
         "help",
         "help query",
         "help fmt",
+        "help lsp",
         "version",
         "explain",
         "explain E0101",
@@ -106,6 +107,7 @@ fn every_command_with_stderr_closed() {
     // Usage errors, for `wid` and for `wid query`.
     stderr_closed("build -bogus", 2);
     stderr_closed("query nothing", 2);
+    stderr_closed("lsp extra", 2);
     stderr_closed("explain E9999", 1);
     stderr_closed("doc core:nope", 1);
     stderr_closed("query outline -in:core:nope", 1);
@@ -134,4 +136,62 @@ fn run_reports_the_program_status() {
     let output = wid(&args).stdout(closed_pipe()).stderr(Stdio::piped()).output().expect("run wid");
     assert_quiet(&args, &output, 141);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A message to `wid lsp`, framed.
+fn frame(body: &str) -> String {
+    format!("Content-Length: {}\r\n\r\n{body}", body.len())
+}
+
+/// Waits for `child` to exit, killing it after 20 seconds.
+fn wait(child: &mut std::process::Child, what: &str) -> std::process::ExitStatus {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    while std::time::Instant::now() < deadline {
+        if let Ok(Some(status)) = child.try_wait() {
+            return status;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let _ = child.kill();
+    panic!("{what} didn't exit");
+}
+
+/// `wid lsp` can't answer once the client's end of stdout is closed, so it
+/// stops quietly with status 1, though stdin is still open.
+#[test]
+fn lsp_with_stdout_closed() {
+    let mut child =
+        wid("lsp").stdin(Stdio::piped()).stdout(closed_pipe()).stderr(Stdio::piped()).spawn().expect("run wid lsp");
+    let mut stdin = child.stdin.take().expect("stdin is piped");
+    let initialize = frame(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    stdin.write_all(initialize.as_bytes()).expect("send initialize");
+    stdin.flush().expect("flush");
+    let status = wait(&mut child, "wid lsp with stdout closed");
+    drop(stdin);
+    let mut stderr = String::new();
+    child.stderr.take().expect("stderr is piped").read_to_string(&mut stderr).expect("read stderr");
+    assert!(!stderr.contains("panicked"), "wid lsp panicked:\n{stderr}");
+    assert_eq!(status.code(), Some(1), "stderr:\n{stderr}");
+}
+
+/// With stderr closed, the log of a malformed message is dropped and the
+/// server carries on.
+#[test]
+fn lsp_with_stderr_closed() {
+    let mut child =
+        wid("lsp").stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(closed_pipe()).spawn().expect("run wid lsp");
+    let mut stdin = child.stdin.take().expect("stdin is piped");
+    let messages = [
+        frame(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#),
+        frame("not json"),
+        frame(r#"{"jsonrpc":"2.0","id":2,"method":"shutdown"}"#),
+        frame(r#"{"jsonrpc":"2.0","method":"exit"}"#),
+    ];
+    stdin.write_all(messages.concat().as_bytes()).expect("send the messages");
+    drop(stdin);
+    let output = child.wait_with_output().expect("wait for wid lsp");
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains(r#""code":-32700"#), "the parse error is answered:\n{stdout}");
+    assert!(stdout.contains(r#""id":2,"jsonrpc":"2.0","result":null"#), "shutdown is answered:\n{stdout}");
 }
