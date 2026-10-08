@@ -244,6 +244,14 @@ impl<'a> Checker<'a> {
         false
     }
 
+    /// Whether `name` is a field that a macro called in the body of `ty`'s
+    /// struct generated and E0913 rejected. That error explains its uses
+    /// (`x.name`, `@name`, `T.new(name: …)`), which aren't reported missing.
+    pub(super) fn field_rejected(&self, ty: TyId, name: Name) -> bool {
+        !self.macros.rejected_fields.is_empty()
+            && self.type_decl(ty).is_some_and(|d| self.macros.rejected_fields.contains(&(d, name)))
+    }
+
     /// Whether a macro call failed in the body of `owner` or of a module it
     /// includes, directly or through other modules.
     pub(super) fn owner_failed(&mut self, owner: DeclId) -> bool {
@@ -520,6 +528,7 @@ impl<'a> Checker<'a> {
                             f.name.as_str()
                         )),
                 );
+                self.macros.rejected_fields.insert((o, f.name.name));
                 continue;
             }
             if p.item.private {

@@ -1,0 +1,18 @@
+error[E0913]: a macro can't add fields to `Player`
+  --> tests/ui/macro_failed_field.wid:14:12
+   |
+14 |   counter :kills
+   |            ^^^^^ `counter` generates this field
+   = note: a struct's layout is fixed before the macros in its body run, which is what lets them read `Self.fields`
+help: declare `kills` in `Player` itself, and let the macro generate the methods that use it
+   = see `wid explain E0913`
+
+error[E0204]: `Player` has no field or method `klls`
+  --> tests/ui/macro_failed_field.wid:25:15
+   |
+25 |   puts player.klls
+   |               ^^^^ not found on `Player`
+   = note: available: hp, reset, score
+   = see `wid explain E0204`
+
+error: could not compile due to 2 errors

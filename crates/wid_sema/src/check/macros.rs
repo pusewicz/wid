@@ -68,7 +68,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use wid_diagnostics::{Applicability, Diagnostic, FileId, Span, codes};
+use wid_diagnostics::{Applicability, Diagnostic, FileId, Span, codes, did_you_mean};
 use wid_syntax::ast::{self, ExprKind as E, ItemKind, StmtKind, TypeKind, splice_index};
 use wid_syntax::visit::{VisitMut, walk_expr, walk_item, walk_type};
 use wid_syntax::{Name, ast::Ident};
@@ -164,6 +164,10 @@ pub(crate) struct MacroState {
     /// may be one it would have generated (see
     /// [`Checker::members_incomplete`]).
     pub failed_owners: HashSet<DeclId>,
+    /// Fields that a macro call in a struct's body generated and E0913
+    /// rejected, by struct: their uses aren't reported missing (see
+    /// [`Checker::field_rejected`]).
+    pub rejected_fields: HashSet<(DeclId, Name)>,
 }
 
 /// A call of a macro.
@@ -486,6 +490,60 @@ impl<'a> Checker<'a> {
         let self_ty = frame.self_ty;
         let owner = frame.decl.and_then(|d| self.decls[d.0 as usize].owner);
         owner.is_some_and(|o| self.owner_failed(o)) || self_ty.is_some_and(|t| self.members_incomplete(t))
+    }
+
+    /// Reports a call of a method that doesn't exist (E0201) and checks its
+    /// arguments. A call that may have been meant for a macro counts as a
+    /// failed expansion, so the variables its code would have declared
+    /// aren't reported missing after it: one whose name is close to a
+    /// macro's (`countr :hits`, which the error suggests replacing), or one
+    /// standing alone as a statement with a symbol argument whose name is
+    /// close to no other.
+    pub fn undefined_call(
+        &mut self,
+        name: Ident,
+        args: &[ast::Arg],
+        span: Span,
+        candidates: Vec<&'static str>,
+    ) -> ir::Expr {
+        let loc = self.loc_at(name.span);
+        let similar = did_you_mean(name.as_str(), candidates.iter().copied()).map(Name::new);
+        let near_macro = similar
+            .and_then(|n| self.lookup_pkg(loc.pkg, n).or_else(|| self.lookup_prelude(n)))
+            .filter(|&d| self.is_macro(d));
+        // A name close to a method's is more likely a misspelled call of it.
+        let symbols = args.iter().any(|a| matches!(a.value.kind, E::Symbol(_)));
+        let macro_like = near_macro.is_some() || (similar.is_none() && symbols && self.macros.line == span);
+        if !self.declared_by_failed_macro(false, true) {
+            match near_macro {
+                Some(m) => {
+                    if !self.undefined_explained(name.name, name.span) {
+                        let d = &self.decls[m.0 as usize];
+                        let (best, at) = (d.name.as_str(), d.span);
+                        self.report(
+                            Diagnostic::error(codes::UNDEFINED_NAME, format!("undefined method `{}`", name.name))
+                                .primary(name.span, "not found in this scope")
+                                .secondary(at, format!("the macro `{best}` is defined here"))
+                                .suggest_replace(
+                                    format!("a macro with a similar name exists: `{best}`"),
+                                    name.span,
+                                    best,
+                                    Applicability::MaybeIncorrect,
+                                ),
+                        );
+                    }
+                }
+                None => self.undefined(name.name, name.span, candidates, "method"),
+            }
+        }
+        for arg in args {
+            self.expr(&arg.value, None);
+        }
+        if macro_like {
+            // What the macro's code would have read and declared is unknown.
+            self.failed_expansion(span);
+        }
+        ir::Expr::new(ExprKind::Zero, self.types.unknown())
     }
 
     /// Runs a macro for a call and builds the code it generates, allocated

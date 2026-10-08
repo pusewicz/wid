@@ -885,9 +885,9 @@ impl<'a> Checker<'a> {
             return;
         }
         // A macro that failed among the type's declarations may have been
-        // meant to generate it; that failure is already reported. Fields
-        // are never generated.
-        if !is_ivar && self.members_incomplete(ty) {
+        // meant to generate it, or generated it as a field E0913 rejected;
+        // that failure is already reported. Fields are never generated.
+        if self.field_rejected(ty, name) || (!is_ivar && self.members_incomplete(ty)) {
             return;
         }
         let shown = self.types.display(ty);

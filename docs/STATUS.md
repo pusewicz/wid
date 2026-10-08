@@ -275,7 +275,14 @@ runs the stages; `wid_cli` is the `wid` binary.
     on its type (also through an included module or an `extend`) and
     `declared_by_failed_macro` skips E0201 for implicit-self calls and
     constants in its methods. An undefined macro among declarations is
-    still reported after an earlier failure.
+    still reported after an earlier failure. A field that E0913 rejects
+    joins `MacroState::rejected_fields` instead: the call's other
+    declarations are known, so only that name is skipped (`field_rejected`,
+    in `no_member` for `x.f` and `@f`, and in `struct_new`). An unknown
+    call in a method (`undefined_call`) runs `failed_expansion` when
+    `did_you_mean` picks a macro (the E0201 then offers the macro and labels
+    its declaration) or when, with no close name, it is the whole statement
+    (`MacroState::line`) and has a symbol argument.
   - `enum_type` reports a member without a value whose name is a macro
     visible in the enum's body (`member_names_macro`, E0914, fixed by
     adding `()`), keeps the member, and adds the enum to `failed_owners`
@@ -520,7 +527,11 @@ runs the stages; `wid_cli` is the `wid` binary.
   unused (#6); a macro call that fails to expand or names no macro hides
   the undefined names, missing members and unread variables that its code
   might have declared or read (#8); an enum member written as a name alone
-  that a macro also has is E0914, with a fix that calls the macro (#16).
+  that a macro also has is E0914, with a fix that calls the macro (#16);
+  uses of a field that E0913 rejected aren't reported missing, and a call
+  in a method whose name is close to a macro's (E0201, whose help names the
+  macro) or that stands alone with a symbol argument counts as a failed
+  expansion (#25).
 - Test suite: `tests/run` (clang and gcc-16, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
   `tests/test` (`wid test` reports) and every `core/` package's `_test.wid`

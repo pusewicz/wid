@@ -1,0 +1,36 @@
+error[E0201]: undefined method `countr`
+  --> tests/ui/macro_misspelled.wid:13:3
+   |
+ 4 | macro def counter(name: Symbol) -> Code
+   |           ------- the macro `counter` is defined here
+...
+13 |   countr :hits
+   |   ^^^^^^ not found in this scope
+help: a macro with a similar name exists: `counter`
+   |   counter :hits
+   = see `wid explain E0201`
+
+error[E0201]: undefined method `make_counter`
+  --> tests/ui/macro_misspelled.wid:21:3
+   |
+21 |   make_counter :misses
+   |   ^^^^^^^^^^^^ not found in this scope
+   = see `wid explain E0201`
+
+error[E0201]: undefined method `taly`
+  --> tests/ui/macro_misspelled.wid:27:3
+   |
+27 |   taly :hits
+   |   ^^^^ not found in this scope
+help: a similar name exists: `tally`
+   |   tally :hits
+   = see `wid explain E0201`
+
+error[E0201]: undefined variable `total`
+  --> tests/ui/macro_misspelled.wid:28:3
+   |
+28 |   total += 1
+   |   ^^^^^ not found in this scope
+   = see `wid explain E0201`
+
+error: could not compile due to 4 errors

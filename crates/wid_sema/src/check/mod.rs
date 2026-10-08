@@ -600,16 +600,8 @@ impl<'a> Checker<'a> {
 
     /// Reports an undefined name with suggestions.
     pub fn undefined(&mut self, name: Name, span: Span, candidates: Vec<&'static str>, what: &str) {
-        if !self.body.frames.is_empty() {
-            // Where the name resolves: for code a macro generated, the
-            // macro's file.
-            let loc = self.loc_at(span);
-            if self.import_failed(loc, name) || self.pkg_incomplete(loc.pkg) {
-                return;
-            }
-            if self.merged_cimports.contains_key(&loc.pkg) && self.report_not_imported(loc.pkg, name, span) {
-                return;
-            }
+        if self.undefined_explained(name, span) {
+            return;
         }
         let text = name.as_str();
         let mut diag = Diagnostic::error(codes::UNDEFINED_NAME, format!("undefined {what} `{text}`"))
@@ -623,6 +615,22 @@ impl<'a> Checker<'a> {
             );
         }
         self.report(diag);
+    }
+
+    /// Whether a name written at `span` that code in a method doesn't find
+    /// is explained by another error: a failed import, a package that may be
+    /// missing names, or a name of a merged `cimport` that wasn't imported
+    /// (reported here).
+    pub fn undefined_explained(&mut self, name: Name, span: Span) -> bool {
+        if self.body.frames.is_empty() {
+            return false;
+        }
+        // Where the name resolves: for code a macro generated, the macro's
+        // file.
+        let loc = self.loc_at(span);
+        self.import_failed(loc, name)
+            || self.pkg_incomplete(loc.pkg)
+            || (self.merged_cimports.contains_key(&loc.pkg) && self.report_not_imported(loc.pkg, name, span))
     }
 
     /// Whether `name` is an import of this file that failed to load; its
