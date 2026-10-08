@@ -1,0 +1,40 @@
+error[E0302]: Wid has no argument spreading
+  --> tests/ui/argument_spreading.wid:15:14
+   |
+15 |   v = V.new(*xs)
+   |              ^^ `*` cannot spread a collection into arguments
+   = note: `V.new` takes a value for each field, by position or by name
+help: pass the elements one by one
+   |   v = V.new(xs[0], xs[1])
+   = see `wid explain E0302`
+
+error[E0302]: Wid has no argument spreading
+  --> tests/ui/argument_spreading.wid:16:17
+   |
+16 |   w = V.new(1, *xs)
+   |                 ^^ `*` cannot spread a collection into arguments
+   = note: `V.new` takes a value for each field, by position or by name
+help: pass the elements one by one
+   |   w = V.new(1, xs[0], xs[1])
+   = see `wid explain E0302`
+
+error[E0302]: Wid has no argument spreading
+  --> tests/ui/argument_spreading.wid:18:14
+   |
+18 |   u = V.new(*ys)
+   |              ^^ `*` cannot spread a collection into arguments
+   = note: `V.new` takes a value for each field, by position or by name
+help: pass the elements one by one
+   |   u = V.new(ys[0], ys[1], ys[2])
+   = see `wid explain E0302`
+
+error[E0302]: Wid has no argument spreading
+  --> tests/ui/argument_spreading.wid:19:25
+   |
+19 |   p v.x, w.y, u.z, add(*xs)
+   |                         ^^ `*` cannot spread a collection into arguments
+   = note: every method takes a fixed number of arguments
+help: pass `xs` as one argument to a parameter of type `[]T`, or pass the elements one by one
+   = see `wid explain E0302`
+
+error: could not compile due to 4 errors

@@ -251,12 +251,53 @@ impl<'a> Checker<'a> {
         false
     }
 
-    /// Whether `name` is a field that a macro called in the body of `ty`'s
-    /// struct generated and E0913 rejected. That error explains its uses
-    /// (`x.name`, `@name`, `T.new(name: …)`), which aren't reported missing.
-    pub(super) fn field_rejected(&self, ty: TyId, name: Name) -> bool {
-        !self.macros.rejected_fields.is_empty()
-            && self.type_decl(ty).is_some_and(|d| self.macros.rejected_fields.contains(&(d, name)))
+    /// Whether `name` is a member of `ty` that an error rejected: a field
+    /// that a macro called in the body of `ty`'s struct generated and E0913
+    /// rejected, one written there with a space before its `:` (`pos
+    /// :Vec2`, E0105), or a `macro def` in a type's body (see
+    /// [`Checker::macro_rejected`]). That error explains its uses
+    /// (`x.name`, `@name`, `T.new(name: …)`), which aren't reported
+    /// missing.
+    pub(super) fn field_rejected(&mut self, ty: TyId, name: Name) -> bool {
+        (!self.macros.rejected_fields.is_empty()
+            && self.type_decl(ty).is_some_and(|d| self.macros.rejected_fields.contains(&(d, name))))
+            || self.macro_rejected(ty, name)
+    }
+
+    /// Whether `name` is a `macro def` written in the body of `ty`'s struct
+    /// or enum, of a module it includes, or of an `extend` of it, which
+    /// E0105 rejected, since macros are package members. That error
+    /// explains its uses (`x.name`, `name` in a method), which aren't
+    /// reported missing.
+    pub(super) fn macro_rejected(&mut self, ty: TyId, name: Name) -> bool {
+        let owners: Vec<DeclId> =
+            self.macros.rejected_macros.iter().filter(|(_, n)| *n == name).map(|(o, _)| *o).collect();
+        if owners.is_empty() {
+            return false;
+        }
+        // The type and the modules it includes, directly or through others.
+        let mut pending: Vec<DeclId> = self.type_decl(ty).into_iter().collect();
+        let mut seen = Vec::new();
+        while let Some(d) = pending.pop() {
+            if owners.contains(&d) {
+                return true;
+            }
+            seen.push(d);
+            let modules = self.includes_of(d);
+            pending.extend(modules.into_iter().filter(|m| !seen.contains(m)));
+        }
+        for owner in owners {
+            if !matches!(self.decls[owner.0 as usize].kind, DeclKind::Extend(_)) {
+                continue;
+            }
+            for pattern in self.extend_targets(owner) {
+                let mut bindings = vec![(Name::new("Self"), ty)];
+                if self.unify(pattern, ty, &mut bindings) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     /// Whether a macro call failed in the body of `owner` or of a module it
@@ -313,6 +354,14 @@ impl<'a> Checker<'a> {
                 (self.lookup_pkg(target, parts.name.name), shown, Some(target))
             }
         };
+        // `pos :Vec2` in a struct's body, with no macro `pos`: a field.
+        if scope.is_none()
+            && !found.is_some_and(|d| self.is_macro(d) || self.set_has_macros(d) || self.returns_code(d))
+            && let Some(ty) = self.spaced_field(expr, p)
+        {
+            self.report_spaced_field(parts.name, ty, p);
+            return None;
+        }
         match found {
             // An overload set's member is chosen in the frame the macro runs
             // in (`expand_among_declarations`).
@@ -352,6 +401,52 @@ impl<'a> Checker<'a> {
                 self.failed_among_declarations(p);
                 None
             }
+        }
+    }
+
+    /// For a call among declarations in a struct's body that reads as a
+    /// field written with a space before its `:` instead of after it
+    /// (`pos :Vec2`, a call of `pos` with the symbol `:Vec2`): the symbol
+    /// (the type's name, without `:`) and its span, when it names a type,
+    /// maybe made optional (`:Vec2?`).
+    fn spaced_field(&self, expr: &ast::Expr, p: PendingMacro<'a>) -> Option<(Name, Span)> {
+        let owner = p.owner?;
+        let DeclKind::Struct(s) = self.decls[owner.0 as usize].kind else { return None };
+        let E::Call(call) = &expr.kind else { return None };
+        let [arg] = call.args.as_slice() else { return None };
+        let E::Symbol(ty) = arg.value.kind else { return None };
+        if call.parens || call.block.is_some() || arg.name.is_some() || arg.splat {
+            return None;
+        }
+        let base = Name::new(ty.as_str().strip_suffix('?').unwrap_or(ty.as_str()));
+        let generic = s.generics.iter().any(|g| g.name.name == base);
+        let named = ast::Expr { kind: E::Const(base), span: arg.value.span };
+        let loc = self.names_at(arg.value.span, p.loc);
+        let names_type =
+            base.as_str().starts_with(char::is_uppercase) && (generic || self.is_type_alias_value(&named, loc, 0));
+        names_type.then_some((ty, arg.value.span))
+    }
+
+    /// Reports a field written with a space before its `:` (see
+    /// [`Checker::spaced_field`]), with the fix that moves the `:`. The
+    /// field's uses aren't reported missing.
+    fn report_spaced_field(&mut self, name: Ident, (ty, ty_span): (Name, Span), p: PendingMacro<'a>) {
+        let gap = Span { end: ty_span.start + 1, ..name.span.shrink_to_end() };
+        self.report(
+            Diagnostic::error(codes::UNEXPECTED_TOKEN, "a field's `:` goes right after its name")
+                .primary(gap, format!("this reads as a call of a macro `{name}` with the symbol `:{ty}`", name = name.name))
+                .note(format!(
+                    "no macro `{name}` is in scope, and `{ty}` is a type, so this is the field `{name}: {ty}` with its space before the `:`",
+                    name = name.name
+                ))
+                .suggest(
+                    "write the `:` right after the field's name",
+                    vec![wid_diagnostics::Edit { span: gap, replacement: ": ".into() }],
+                    Applicability::MachineApplicable,
+                ),
+        );
+        if let Some(owner) = p.owner {
+            self.macros.rejected_fields.insert((owner, name.name));
         }
     }
 

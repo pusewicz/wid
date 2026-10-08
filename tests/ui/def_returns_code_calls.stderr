@@ -1,0 +1,25 @@
+error[E0910]: `twice` returns `Code`, but it is a `def`, not a `macro def`
+  --> tests/ui/def_returns_code_calls.wid:11:1
+   |
+11 | def twice(e: Code) -> Code
+   | ^^^ `twice` is declared as a method the program runs
+12 |   quote do
+   |   -------- a `quote` builds code only inside a `macro def`
+   = note: a `macro def` runs while compiling, and the code its `quote` builds replaces each call; `Code` exists only then
+help: make `twice` a macro
+   | macro def twice(e: Code) -> Code
+   = see `wid explain E0910`
+
+error[E0910]: `declare` returns `Code`, but it is a `def`, not a `macro def`
+  --> tests/ui/def_returns_code_calls.wid:17:1
+   |
+17 | def declare(name: Symbol) -> Code
+   | ^^^ `declare` is declared as a method the program runs
+18 |   quote do
+   |   -------- a `quote` builds code only inside a `macro def`
+   = note: a `macro def` runs while compiling, and the code its `quote` builds replaces each call; `Code` exists only then
+help: make `declare` a macro
+   | macro def declare(name: Symbol) -> Code
+   = see `wid explain E0910`
+
+error: could not compile due to 2 errors

@@ -1,6 +1,6 @@
 //! A recursive-descent parser with Pratt expression parsing and error recovery.
 
-use wid_diagnostics::{Applicability, Diagnostic, Diagnostics, Edit, FileId, Span, codes};
+use wid_diagnostics::{Applicability, Diagnostic, Diagnostics, Edit, FileId, Help, Label, Span, codes};
 
 use crate::ast::*;
 use crate::intern::Name;
@@ -210,6 +210,15 @@ struct Parser<'a> {
     /// line (see [`Parser::insert_line_end`]), in order, so a speculative
     /// parse that is rewound takes them back.
     inserted: Vec<usize>,
+    /// The line where the statement or declaration being parsed starts. A
+    /// later line indented no deeper starts a new one, so it can't be the
+    /// operand after an operator that ends a line (see
+    /// [`Parser::operand_cut`]).
+    stmt_line: usize,
+    /// Where [`Parser::missing_operand_at_line_end`] last reported a
+    /// missing operand: a line end, after which a bracket left open on the
+    /// line is reported by that error, not by one of its own.
+    cut_operand: Option<Span>,
 }
 
 /// Binding powers for infix operators.
@@ -316,6 +325,8 @@ impl<'a> Parser<'a> {
             uninferred: Vec::new(),
             array_params: None,
             inserted: Vec::new(),
+            stmt_line: 0,
+            cut_operand: None,
         }
     }
 
@@ -583,6 +594,30 @@ impl<'a> Parser<'a> {
     fn unclosed(&mut self, open: Span, last: Span, closer: &str, what: &str) {
         let at = last.shrink_to_end();
         let bracket = self.text_of(open);
+        // The line's end was just reported by an operator with nothing after
+        // it: that error says the bracket is never closed too, and its fix
+        // that removes the operator closes it.
+        if self.cut_operand == Some(at)
+            && self.last_error_at == Some(at.start)
+            && let Some(diag) = self.diags.last_mut()
+            && diag.primary_span() == Some(at)
+        {
+            let message = format!("this `{bracket}` is never closed");
+            diag.labels.push(Label { span: open, message, primary: false, splice: false });
+            let close = Edit { span: at, replacement: closer.into() };
+            match diag.helps.iter_mut().find(|h| !h.edits.is_empty()) {
+                Some(help) if help.edits.last().is_some_and(|e| e.span.end == at.end) => {
+                    help.message = format!("{} and close the `{bracket}`", help.message);
+                    help.edits.push(close);
+                }
+                _ => diag.helps.push(Help {
+                    message: format!("close the `{bracket}`"),
+                    edits: vec![close],
+                    applicability: Applicability::MachineApplicable,
+                }),
+            }
+            return;
+        }
         self.report(
             Diagnostic::error(codes::UNEXPECTED_TOKEN, format!("expected {what}, found end of line"))
                 .primary(at, format!("expected `{closer}`"))
@@ -1586,19 +1621,27 @@ impl<'a> Parser<'a> {
                 let value = self.parse_const_value();
                 ItemKind::Const(Box::new(ConstDecl { name, ty: None, value }))
             }
-            // Alone, or a macro call (`make_#{name}(1)`).
-            _ if glued.is_some() => {
-                let expr = self.parse_expr_cmd();
-                match expr.kind {
-                    ExprKind::Splice(index) => ItemKind::Splice(index),
-                    _ if is_macro_call(&expr) => ItemKind::MacroCall(Box::new(expr)),
-                    _ => ItemKind::Error,
-                }
-            }
+            // Alone, or a macro call (`make_#{name}(1)`, `#{name}(1)`,
+            // `#{name} :hp`).
+            Some((T::LParen, false)) => self.splice_item_call(),
+            Some((_, true)) if after.is_some_and(|t| self.can_start_command_arg(t)) => self.splice_item_call(),
+            _ if glued.is_some() => self.splice_item_call(),
             _ => match self.parse_splice().0 {
                 Some(index) => ItemKind::Splice(index),
                 None => ItemKind::Error,
             },
+        }
+    }
+
+    /// A line among declarations, inside a `quote`, that starts with a
+    /// splice and isn't a field or a constant: the splice alone, or a
+    /// macro call whose name it gives.
+    fn splice_item_call(&mut self) -> ItemKind {
+        let expr = self.parse_expr_cmd();
+        match expr.kind {
+            ExprKind::Splice(index) => ItemKind::Splice(index),
+            _ if is_macro_call(&expr) => ItemKind::MacroCall(Box::new(expr)),
+            _ => ItemKind::Error,
         }
     }
 
@@ -1722,6 +1765,14 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_item(&mut self, ctx: ItemCtx) -> Option<Item> {
+        let here = self.line_of(self.peek().span.start);
+        let line = std::mem::replace(&mut self.stmt_line, here);
+        let item = self.parse_item_here(ctx);
+        self.stmt_line = line;
+        item
+    }
+
+    fn parse_item_here(&mut self, ctx: ItemCtx) -> Option<Item> {
         let start = self.peek().span;
         let doc = self.doc_before(start.start);
         let attrs = self.parse_attrs();
@@ -3396,6 +3447,14 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_stmt(&mut self) -> Stmt {
+        let here = self.line_of(self.peek().span.start);
+        let line = std::mem::replace(&mut self.stmt_line, here);
+        let stmt = self.parse_stmt_here();
+        self.stmt_line = line;
+        stmt
+    }
+
+    fn parse_stmt_here(&mut self) -> Stmt {
         let attrs = self.parse_attrs();
         let decl_kw = |kind| {
             matches!(
@@ -3817,7 +3876,11 @@ impl<'a> Parser<'a> {
                 _ => {
                     let op = binop_of(tok.kind).expect("infix token has a binop");
                     self.skip_newlines();
-                    let rhs = self.parse_expr_bp(rbp, false);
+                    let rhs = if self.operand_cut(tok) {
+                        self.missing_operand_at_line_end(lhs.span, tok)
+                    } else {
+                        self.parse_expr_bp(rbp, false)
+                    };
                     let span = lhs.span.to(rhs.span);
                     lhs = Expr { kind: ExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) }, span };
                 }
@@ -4326,6 +4389,19 @@ impl<'a> Parser<'a> {
                     let name = Ident { name: splice_name(index), span };
                     return self.parse_call_with_parens(Callee::Name(name), span);
                 }
+                // `#{name} args` and `#{name} do … end` too, as for a name
+                // that isn't a local.
+                let name = Ident { name: splice_name(index), span };
+                if self.can_start_command_arg(self.peek()) {
+                    if cmd {
+                        return self.parse_command_call(Callee::Name(name), span);
+                    }
+                    return self.parse_nested_command_call(Callee::Name(name), span, span);
+                }
+                if let Some(block) = self.parse_block_arg() {
+                    let call = Call { callee: Callee::Name(name), args: Vec::new(), block: Some(block), parens: false };
+                    return Expr { span: span.to(self.prev_span()), kind: ExprKind::Call(Box::new(call)) };
+                }
                 Expr { kind: ExprKind::Splice(index), span }
             }
             T::AtSplice | T::ColonSplice => {
@@ -4576,6 +4652,71 @@ impl<'a> Parser<'a> {
         true
     }
 
+    /// Whether the line ended after the operator `op` (just consumed), and
+    /// the next line, indented no deeper than the line where the statement
+    /// starts, starts a statement of its own (see
+    /// [`Parser::statement_ahead`]), as in `x = (1 +` followed by `p x`:
+    /// it can't be the operand. A declaration or an `end` starting the
+    /// next line is reported where it is parsed.
+    fn operand_cut(&self, op: Token) -> bool {
+        let next = self.peek();
+        let line = self.line_of(next.span.start);
+        !starts_declaration(next.kind)
+            && line > self.line_of(op.span.start)
+            && self.indent_of_line(line) <= self.indent_of_line(self.stmt_line)
+            && self.statement_ahead()
+    }
+
+    /// Whether what starts here reads as a statement and not as a value: a
+    /// call without parentheses (`p x`, of a name that isn't a local), an
+    /// assignment (`y = 2`, `@hp -= 1`), a variable's declaration
+    /// (`n: Int`), or `return`, `break`, `next`, `defer` or `guard`.
+    fn statement_ahead(&self) -> bool {
+        let tok = self.peek();
+        match tok.kind {
+            T::Kw(K::Return | K::Break | K::Next | K::Defer | K::Guard) => true,
+            T::Ident | T::IVar => {
+                let next = self.nth(1);
+                let local = tok.kind == T::Ident && self.is_local(Name::new(self.text_of(tok.span)));
+                next.kind == T::Eq
+                    || is_assign_op(next.kind)
+                    || (tok.kind == T::Ident && self.is_decl_start())
+                    || (tok.kind == T::Ident && !local && self.can_start_command_arg(next))
+            }
+            _ => false,
+        }
+    }
+
+    /// Reports the operand missing after `op`, which ends its line (see
+    /// [`Parser::operand_cut`]), with a fix that removes the operator after
+    /// the left operand at `lhs`, and puts back the line end so the next
+    /// line is parsed on its own. Returns the error placeholder for the
+    /// operand.
+    fn missing_operand_at_line_end(&mut self, lhs: Span, op: Token) -> Expr {
+        let at = op.span.shrink_to_end();
+        let text = self.text_of(op.span);
+        self.report(
+            Diagnostic::error(
+                codes::UNEXPECTED_TOKEN,
+                format!("expected an expression after `{text}`, found end of line"),
+            )
+            .primary(at, "expected an expression")
+            .secondary(op.span, format!("`{text}` needs a value after it"))
+            .note("the next line is a statement of its own: it starts like one, indented no deeper than this statement's first line")
+            .suggest(
+                format!("remove the `{text}`"),
+                vec![Edit { span: Span::new(self.file, lhs.end, op.span.end), replacement: String::new() }],
+                Applicability::MaybeIncorrect,
+            )
+            .help(format!(
+                "or write the missing value after `{text}`, on this line or on the next one indented deeper"
+            )),
+        );
+        self.restore_line_end(op.span);
+        self.cut_operand = Some(at);
+        Expr { kind: ExprKind::Error, span: at }
+    }
+
     /// Reports a `quote` whose code is in braces (`quote { 1 }`, at `open`),
     /// with the body parsed, and consumes its `}`. A `quote` takes its code
     /// in `do … end`, which the fix writes.
@@ -4671,6 +4812,18 @@ impl<'a> Parser<'a> {
                         .primary(at, format!("expected the value of `{text}`"))
                         .help(format!("write the value after `{text}:` on this line")),
                 );
+                return Arg { name: Some(name), value: Expr { kind: ExprKind::Error, span: at }, splat: false };
+            }
+            // `add(a: , b: 2)`: the value is missing, and the list goes on.
+            if self.at(T::Comma) || (parens && self.at(T::RParen)) {
+                let tok = self.peek();
+                let (text, found) = (self.text_of(name.span), self.found());
+                self.report(
+                    Diagnostic::error(codes::UNEXPECTED_TOKEN, format!("expected an expression, found {found}"))
+                        .primary(tok.span, format!("expected the value of `{text}`"))
+                        .help(format!("write the value after `{text}:`")),
+                );
+                let at = colon.shrink_to_end();
                 return Arg { name: Some(name), value: Expr { kind: ExprKind::Error, span: at }, splat: false };
             }
             self.skip_newlines();
@@ -5078,15 +5231,20 @@ impl<'a> Parser<'a> {
     fn parse_postfix(&mut self, mut expr: Expr, cmd: bool) -> Expr {
         loop {
             let tok = self.peek();
+            // `Pool::CAP`: Ruby's scope operator, read as the `.` Wid writes.
+            let scope = tok.kind == T::Colon && self.scope_operator_ahead();
             match tok.kind {
-                T::Dot | T::SafeNav => {
+                T::Dot | T::SafeNav | T::Colon if tok.kind != T::Colon || scope => {
                     let safe = tok.kind == T::SafeNav;
                     self.bump();
-                    self.skip_newlines();
+                    if !scope {
+                        self.skip_newlines();
+                    }
                     let name_tok = self.peek();
-                    let glued = self.glued_name().map(|(name, _)| name);
+                    let glued = if scope { None } else { self.glued_name().map(|(name, _)| name) };
                     let name = match (glued, name_tok.kind) {
                         (Some(name), _) => name,
+                        (None, T::Symbol) => self.scope_operator(expr.span, tok, name_tok),
                         (None, T::Ident | T::Const) => {
                             self.bump();
                             Ident { name: Name::new(self.text_of(name_tok.span)), span: name_tok.span }
@@ -5180,6 +5338,40 @@ impl<'a> Parser<'a> {
             }
         }
         expr
+    }
+
+    /// Whether a `::` written right after an expression, and followed
+    /// directly by a name, starts here (`Pool::CAP`, `Foo::bar(1)`): Ruby's
+    /// scope operator. The lexer reads it as a `:` and the symbol `:CAP`.
+    fn scope_operator_ahead(&self) -> bool {
+        let (colon, sym) = (self.peek(), self.nth(1));
+        if colon.space_before || sym.kind != T::Symbol || sym.span.start != colon.span.end {
+            return false;
+        }
+        let name = &self.text_of(sym.span)[1..];
+        let base = name.strip_suffix(['?', '!']).unwrap_or(name);
+        base.starts_with(|c: char| c.is_alphabetic() || c == '_')
+            && base.chars().all(|c| c.is_alphanumeric() || c == '_')
+    }
+
+    /// Reports Ruby's `::` after the expression at `recv` (the `:` at
+    /// `colon`, just consumed, and the symbol `sym` after it) with the fix
+    /// that writes Wid's `.`, and consumes the symbol: the name after `::`,
+    /// read as a member.
+    fn scope_operator(&mut self, recv: Span, colon: Token, sym: Token) -> Ident {
+        self.bump();
+        let ops = Span { end: sym.span.start + 1, ..colon.span };
+        let name = Ident { name: Name::new(&self.text_of(sym.span)[1..]), span: Span { start: ops.end, ..sym.span } };
+        let written = format!("{}.{}", self.text_of(recv), name.name);
+        self.report(
+            Diagnostic::error(codes::UNEXPECTED_TOKEN, "Wid writes `.` where Ruby writes `::`")
+                .primary(ops, "Ruby's scope operator")
+                .note(format!(
+                    "a type's constants and methods, and a package's members, are reached with `.`, as in `{written}`"
+                ))
+                .suggest_replace("write `.`", ops, ".", Applicability::MachineApplicable),
+        );
+        name
     }
 
     fn parse_cond(&mut self) -> Cond {
@@ -6380,6 +6572,7 @@ end
                 "def f(v: Int?) -> Int\n  guard x = v else |e| return 0 end\n  x\nend\n",
                 "def f(v: Int?) -> Int\n  guard x = v else |e|\n    return 0\n  end\n  x\nend\n",
             ),
+            ("X = Pool::CAP + 1\n", "X = Pool.CAP + 1\n"),
         ] {
             let src = format!("{src}def main\nend\n");
             let (messages, out) = fix_all(&src);
@@ -6398,6 +6591,54 @@ end
             let given: Vec<_> = call.args.iter().map(|a| a.name.map(|n| n.as_str())).collect();
             assert_eq!(given, names.map(Some));
         }
+    }
+
+    #[test]
+    fn ruby_scope_operator_reads_as_a_dot() {
+        // Each `::` is one error whose fix writes `.`, and the rest of the
+        // line parses as it would with the `.`.
+        let src = "def main\n  x = geo::Grid::make 2\n  p x\nend\n";
+        let (messages, out) = fix_all(src);
+        assert_eq!(messages, ["Wid writes `.` where Ruby writes `::`"; 2]);
+        assert_eq!(out, "def main\n  x = geo.Grid.make 2\n  p x\nend\n");
+        let (file, _) = parse_file(FileId(0), src);
+        let ItemKind::Def(def) = &file.items[0].kind else { panic!("a def") };
+        let FnBody::Block(body) = &def.body else { panic!("a block body") };
+        let StmtKind::Assign { values, .. } = &body[0].kind else { panic!("an assignment") };
+        let ExprKind::Call(call) = &values[0].kind else { panic!("a call") };
+        let Callee::Method { recv, name, .. } = &call.callee else { panic!("a method call") };
+        assert_eq!((name.as_str(), call.args.len()), ("make", 1));
+        assert!(matches!(&recv.kind, ExprKind::Member { name, .. } if name.as_str() == "Grid"));
+        // A conditional's `:` before a symbol, and a symbol argument, are
+        // not `::`.
+        parse_ok("def main\n  x = n ? A : :b\n  f :a, x\nend\n");
+    }
+
+    #[test]
+    fn operators_continue_unless_a_statement_follows() {
+        // After an operator at the end of a line, a line indented no
+        // deeper than the statement's first line that starts a statement
+        // (`p x`, `y = 1`, `return`) is one: one error, whose fix removes
+        // the operator and closes a bracket left open on the line, and the
+        // next line is its own statement.
+        for (line, fixed, next) in
+            [("x = (1 +", "x = (1)", "p x"), ("x = 2 *", "x = 2", "y = x"), ("x = [1, 2 +", "x = [1, 2]", "return x")]
+        {
+            let src = format!("def main\n  {line}\n  {next}\nend\n");
+            let (messages, out) = apply_fixes(&src, Applicability::MaybeIncorrect);
+            assert_eq!(messages.len(), 1, "{src:?}");
+            assert!(messages[0].ends_with("found end of line"), "{src:?}");
+            assert_eq!(out, format!("def main\n  {fixed}\n  {next}\nend\n"), "{src:?}");
+            let file = parse_file(FileId(0), &src).0;
+            let ItemKind::Def(def) = &file.items[0].kind else { panic!("a def") };
+            let FnBody::Block(body) = &def.body else { panic!("a block body") };
+            assert_eq!(body.len(), 2, "{src:?}");
+        }
+        // Lines indented deeper go on, also from an operator in a list
+        // whose own lines are indented less, and at package level, and so
+        // does a value on a line indented no deeper (`wid fmt` indents it).
+        parse_ok("def main\n  x = a +\n      b +\n      c\n  y = f(\n    a +\n    b\n  )\nend\nX = 1 +\n  2\n");
+        parse_ok("def main\n  t = 1\n  if t > 1 &&\n  t < 100\n    p t\n  end\n  u = t +\n  f(t)\n  p u\nend\n");
     }
 
     #[test]

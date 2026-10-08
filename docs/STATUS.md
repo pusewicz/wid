@@ -1318,6 +1318,70 @@ the language server.
   error ends `wid` with status 1 and a message. `wid_cli/tests/closed_pipe.rs`
   closes stdout, or stderr, before each command writes, and stops reading
   `wid query outline` after 10 bytes.
+- A splice that names a method calls it without parentheses, as a name
+  that isn't a local does (#118): `#{f} 4` and `#{f} do … end` as a
+  statement, and `#{f} args` or `#{f}(args)` as a macro call among
+  declarations, in a type's body too (`Parser::splice_item_call`); inside
+  another expression it is E0109 with the `#{f}(4)` fix. A call of a
+  `def` that returns `Code` and builds it with a `quote` counts as a
+  failed expansion (`Checker::meant_as_macro`, from `call_fn`): the E0910
+  at the `def` explains it, so its arguments, the run-time call of
+  compile-time code (E0906) and the names its code would have declared
+  aren't reported.
+- A field written with a space before its `:` (`pos :Vec2`) in a struct's
+  body, where no macro is named `pos` and the symbol names a type (maybe
+  optional, or a generic parameter), is E0105 "a field's `:` goes right
+  after its name" with the machine-applicable fix `pos: Vec2` (#119); it
+  was "undefined macro `pos`". `Checker::spaced_field` and
+  `report_spaced_field` in `check/decl_macros.rs` run before the call is
+  resolved as a macro, and record the field in `rejected_fields`, so its
+  uses (`b.pos`, `@pos`, `Ball.new(pos: …)`) aren't reported missing while
+  other members of the struct still are.
+- `T.new(*xs)` is E0302 "Wid has no argument spreading", as a method
+  call's `*xs` is (#122); `struct_new` ignored the `*` and gave E0301 for
+  the collection as the first field's value. `Checker::spread_into_new`
+  notes that `T.new` takes a value for each field, and for an array,
+  slice or dynamic array offers the fix (to review) that passes its
+  elements to the fields left (`V.new(xs[0], xs[1])`). In both kinds of
+  call the collection is checked on its own and fills nothing, so no
+  E0301 for it and no "missing argument" follow (`match_args` counts it
+  like an unknown named argument).
+- A variable declared at package level (`buf: [4]U8 = ---`) is one E0108
+  (#123): `collect_item` records its name in `Checker::package_vars`, and
+  `undefined_explained` keeps its uses from being E0201 at each one.
+- Ruby's `::` (`Pool::CAP`, `Pool::make(2)`) is one E0105 "Wid writes `.`
+  where Ruby writes `::`" with the machine-applicable fix `.` (#123); it
+  was a parse error at the `:` and E0323 for the bare `Pool`. The lexer
+  reads `::CAP` as a `:` and the symbol `:CAP`; `parse_postfix` takes a
+  `:` written right after an expression and followed directly by such a
+  symbol (`Parser::scope_operator_ahead`) as the `.` it means, so the rest
+  of the line parses and checks as `Pool.CAP` would.
+- A named argument with no value before a `,` or the `)` (`g(a: , b: 2)`)
+  is one E0105 at that token, "expected the value of `a`" (#123), the
+  counterpart of #52's missing value at a line end: `parse_arg` leaves the
+  `,` for the list, so `b: 2` is parsed and checked. It was also "expected
+  `)` to close the argument list" at `b` and "missing argument `b`".
+- A `macro def` inside a struct, enum, module or `extend` body is one
+  E0105 (#123): `collect_item` records its name on the declaration
+  (`MacroState::rejected_macros`), and `Checker::macro_rejected` (asked by
+  `field_rejected` for a member access, and by `undefined_explained` for a
+  name in a method of the type) keeps its uses on the type, through an
+  `include` or an `extend` of it too, from being E0204 or E0201.
+- After a binary operator at the end of a line, a line indented no deeper
+  than the statement's first line that starts like a statement (a call
+  without parentheses, an assignment or declaration, `return`, `break`,
+  `next`, `defer`, `guard`) is a statement of its own (#120): `x = (1 +`
+  followed by `p x` read `p x` as the operand, which gave E0307 (`Int` +
+  `Void`), E0109, E0201 for `x` and the unclosed `(`. It is now one E0105
+  "expected an expression after `+`, found end of line" at the line end,
+  whose fix removes the operator, and the next line is parsed on its own.
+  A value on such a line still continues the expression (`if a &&` then
+  `b < 1`, which `wid fmt` indents). The parser keeps the line where the
+  statement or declaration being parsed starts (`Parser::stmt_line`, set
+  by `parse_stmt` and `parse_item`); `Parser::operand_cut` and
+  `statement_ahead` decide, and `missing_operand_at_line_end` reports. A bracket left open on that line
+  is reported by the same error (`Parser::cut_operand`): `unclosed` adds
+  "this `(` is never closed" to it, and the fix closes it too.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
@@ -1609,7 +1673,7 @@ only on `main` and can run in parallel with the macro stack.
        members). In every name position (method, field, parameter, local,
        block-parameter, loop-variable, type and enum-member names, `x.#{m}`,
        `@#{f}`, `:#{s}`, named arguments, `#{name}(args)`,
-       `@#{f}(args)`) it is an
+       `#{name} args`, `@#{f}(args)`) it is an
        `Ident`, `IVar` or `Symbol` named `#{i}` (`ast::splice_name`,
        `Ident::splice_index`), spanning the whole `#{…}`. A splice in a
        generic argument list is a `GenericArg::Expr`.

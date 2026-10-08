@@ -1783,6 +1783,12 @@ impl<'a> Checker<'a> {
             let call = MacroCall { decl, shown: fname.to_string(), args, block, name_span, span };
             return self.call_macro(call, None);
         }
+        // E0910 at the `def` explains the call: the code a macro would have
+        // generated here, and what it reads and declares, are unknown.
+        if self.meant_as_macro(decl) {
+            self.failed_expansion(span);
+            return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+        }
         let sig = self.fn_sig(decl);
         if let Some(init) = self.const_init {
             self.report(
@@ -2087,6 +2093,15 @@ impl<'a> Checker<'a> {
                         .note("every method takes a fixed number of arguments")
                         .help(format!("pass `{text}` as one argument to a parameter of type `[]T`, or pass the elements one by one")),
                 );
+                // Which parameters its elements were meant for is unknown,
+                // like an unknown name's, so none is reported missing, and
+                // the collection is checked on its own (a macro's arguments
+                // are code, not values).
+                unknown_named = true;
+                if !f.is_macro {
+                    self.expr(&arg.value, None);
+                }
+                continue;
             }
             match arg.name {
                 None if splat_at.is_some_and(|at| positional >= at) => {}

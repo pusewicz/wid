@@ -86,7 +86,9 @@ end
   assignment like `cells[0] += 1`. Unused parameters are allowed.
 - **Calls.** Parentheses are optional for zero-argument calls and for the
   outermost call of a statement (`puts "hi"`). Any parameter can be passed by
-  name. Defaults are written `hp: Int = 100`. A field may be named by most
+  name. Defaults are written `hp: Int = 100`. There is no argument
+  spreading: `f(*xs)` and `T.new(*xs)` are E0302, and a method that takes
+  any number of values takes a slice. A field may be named by most
   keywords (`next: ^Node?`), and, as in Ruby, a keyword followed directly
   by `:` in an argument list names an argument: `Node.new(next: n)`.
 - **Symbols.** `:north` is a compile-time name. Where an enum is expected it
@@ -117,6 +119,10 @@ end
   - `for x in xs`, `for &x in xs` and `for x, i in xs` iterate.
   - `^` only builds pointer types (`^T`) and dereferences (`p^`). Bitwise xor
     is `~`, as in Odin.
+  - `.` reaches a type's constants and methods and a package's members:
+    `Pool.CAP`, `Vec2.zero`, `geo.Vec2`. Ruby's `::` is not Wid syntax;
+    `Pool::CAP` is E0105, read as `Pool.CAP`, with the fix that writes
+    `.`.
   - `&x` takes an address.
   - `{…}` literals must be empty.
   - Enum members are lowercase. Inside an `enum`, `struct`, `enum` or
@@ -134,7 +140,12 @@ end
   - A line that ends with an operator or `,`, or a next line that starts with
     `.method`, continues the statement. A declaration or an `end` starting
     the next line never does: `X = 1 +` followed by `def main` is missing
-    its operand. Inside `( )` and `[ ]`, a line end after a complete
+    its operand. After an operator, nor does a line indented no deeper
+    than the statement's first line that starts like a statement: a call
+    without parentheses (`p x`), an assignment or a variable's declaration
+    (`y = 2`, `n: Int`), or `return`, `break`, `next`, `defer` or `guard`.
+    So `x = (1 +` followed by `p x` at `x`'s indentation is missing its
+    operand (and its `)`). Inside `( )` and `[ ]`, a line end after a complete
     expression may only lead to a `,` or the closer: anything else on the
     next line means the bracket was left open at the end of the line (a
     value indented under the list's first line is read as its next item,
@@ -626,10 +637,13 @@ end
     `proc(Int) -> Int`, `@[c] proc(I32)`), the line is that constant's
     declaration wherever it is, as `NAME = v` is. `quote` works only in a
     `macro def`, the procs inside it included (E0910). A `def` that
-    returns `Code` was meant to be a macro: it is E0910 at the `def`, with
-    the fix `macro def`, and a call of it among declarations counts as a
-    failed expansion, so the names it would have declared aren't reported
-    missing.
+    returns `Code` and builds it with a `quote`, or is called among
+    declarations, was meant to be a macro: it is E0910 at the `def`, with
+    the fix `macro def`, and each call of it, among declarations or in a
+    method, counts as a failed expansion, so its arguments aren't checked
+    and the names it would have declared aren't reported missing. (A
+    `def` that returns `Code` without a `quote` is a helper that macros
+    call while compiling.)
   - **Nested quotes:** a splice belongs to the innermost `quote` around
     it. In a `macro def` that a `quote` generates, the inner macro's
     `quote` is left as written when the outer macro expands; its splices
@@ -652,7 +666,12 @@ end
       (`def #{name}`, `x.#{name}`), a field (`@#{name}`, or
       `@#{name}(args)` to call the proc it holds) or a parameter name. In
       an expression it is that identifier (a constant's, if capitalized),
-      and where a type goes, the type of that name.
+      and where a type goes, the type of that name. A splice followed by
+      arguments calls what it names, as a name that isn't a local does:
+      `#{name}(args)` anywhere, and `#{name} args` or `#{name} do … end`
+      as the outermost call of a statement (inside another expression it
+      is E0109, whose fix adds the parentheses). Among declarations,
+      `#{name}(args)` and `#{name} args` are macro calls.
       `:#{name}` inserts a symbol literal; its value must be a `Symbol`.
       In a list, a `[]Symbol` inserts one identifier (or, written
       `:#{names}`, one symbol literal) per name. A `Symbol` may hold any
@@ -726,6 +745,9 @@ end
   - **Among declarations,** a call must name a macro (or an `overload`
     set that chooses one): calling a method there is a statement outside
     a method (E0108), and an unknown name is an undefined macro (E0201).
+    In a struct's body, `name :Type` where no macro is named `name` and
+    `Type` is a type is the field `name: Type` written with its space
+    before the `:` (E0105, whose fix moves the `:`).
     In an `enum` body a name alone on a line is
     a member, so a macro without arguments is called `name()` there. A
     member written as a name alone that a macro visible there also has is

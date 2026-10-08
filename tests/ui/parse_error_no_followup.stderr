@@ -41,14 +41,8 @@ error[E0105]: expected an expression, found `,`
   --> tests/ui/parse_error_no_followup.wid:22:10
    |
 22 |   p g(a: , b: 2)
-   |          ^ expected an expression
+   |          ^ expected the value of `a`
+help: write the value after `a:`
    = see `wid explain E0105`
 
-error[E0105]: expected `)` to close the argument list, found `b`
-  --> tests/ui/parse_error_no_followup.wid:22:12
-   |
-22 |   p g(a: , b: 2)
-   |            ^ expected `)` to close the argument list
-   = see `wid explain E0105`
-
-error: could not compile due to 7 errors
+error: could not compile due to 6 errors

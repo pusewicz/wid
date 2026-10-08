@@ -286,6 +286,10 @@ impl<'a> Checker<'a> {
                         .note("macros are package members, called like `name(…)` or `pkg.name(…)`")
                         .help("move the `macro def` out of this declaration"),
                 );
+                // Its uses as a member are explained by this error.
+                if let Some(o) = owner {
+                    self.macros.rejected_macros.insert((o, f.name.name));
+                }
                 return;
             }
             ItemKind::Def(f) if f.is_macro && super::overloads::is_operator(f.name.as_str()) => {
@@ -312,15 +316,19 @@ impl<'a> Checker<'a> {
             }
             ItemKind::Field(f) => {
                 match owner.map(|o| &self.decls[o.0 as usize].kind) {
-                    None => self.report(
-                        Diagnostic::error(codes::TOP_LEVEL_STATEMENT, "fields belong inside a `struct`")
-                            .primary(f.name.span, "this field is outside any struct")
-                            .note("Wid has no package-level variables")
-                            .help(format!(
-                                "for a fixed value use a constant, like `{} = …`; for state, keep it in a struct that methods receive",
-                                f.name.as_str().to_uppercase()
-                            )),
-                    ),
+                    None => {
+                        self.report(
+                            Diagnostic::error(codes::TOP_LEVEL_STATEMENT, "fields belong inside a `struct`")
+                                .primary(f.name.span, "this field is outside any struct")
+                                .note("Wid has no package-level variables")
+                                .help(format!(
+                                    "for a fixed value use a constant, like `{} = …`; for state, keep it in a struct that methods receive",
+                                    f.name.as_str().to_uppercase()
+                                )),
+                        );
+                        // Its uses are explained by this error.
+                        self.package_vars.insert((loc.pkg, f.name.name));
+                    }
                     Some(DeclKind::Struct(_)) => {}
                     Some(DeclKind::Module) => self.report(
                         Diagnostic::error(codes::UNEXPECTED_TOKEN, "modules cannot declare fields")

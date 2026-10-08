@@ -1,0 +1,36 @@
+error[E0105]: a `macro def` belongs at the top level of a file
+ --> tests/ui/macro_in_type_body.wid:8:13
+  |
+8 |   macro def in_struct -> Code
+  |             ^^^^^^^^^ a macro inside a type
+  = note: macros are package members, called like `name(…)` or `pkg.name(…)`
+help: move the `macro def` out of this declaration
+  = see `wid explain E0105`
+
+error[E0105]: a `macro def` belongs at the top level of a file
+  --> tests/ui/macro_in_type_body.wid:16:13
+   |
+16 |   macro def bad -> Code
+   |             ^^^ a macro inside a type
+   = note: macros are package members, called like `name(…)` or `pkg.name(…)`
+help: move the `macro def` out of this declaration
+   = see `wid explain E0105`
+
+error[E0105]: a `macro def` belongs at the top level of a file
+  --> tests/ui/macro_in_type_body.wid:22:13
+   |
+22 |   macro def from_module(n: Int) -> Code
+   |             ^^^^^^^^^^^ a macro inside a type
+   = note: macros are package members, called like `name(…)` or `pkg.name(…)`
+help: move the `macro def` out of this declaration
+   = see `wid explain E0105`
+
+error[E0204]: `P` has no field or method `y`
+  --> tests/ui/macro_in_type_body.wid:37:7
+   |
+37 |   p x.y
+   |       ^ not found on `P`
+   = note: available: total, x
+   = see `wid explain E0204`
+
+error: could not compile due to 4 errors

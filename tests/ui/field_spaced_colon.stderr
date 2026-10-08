@@ -1,0 +1,30 @@
+error[E0105]: a field's `:` goes right after its name
+  --> tests/ui/field_spaced_colon.wid:10:6
+   |
+10 |   pos :Vec2
+   |      ^^ this reads as a call of a macro `pos` with the symbol `:Vec2`
+   = note: no macro `pos` is in scope, and `Vec2` is a type, so this is the field `pos: Vec2` with its space before the `:`
+help: write the `:` right after the field's name
+   |   pos: Vec2
+   = see `wid explain E0105`
+
+error[E0105]: a field's `:` goes right after its name
+  --> tests/ui/field_spaced_colon.wid:11:6
+   |
+11 |   vel :Vec2?
+   |      ^^ this reads as a call of a macro `vel` with the symbol `:Vec2?`
+   = note: no macro `vel` is in scope, and `Vec2?` is a type, so this is the field `vel: Vec2?` with its space before the `:`
+help: write the `:` right after the field's name
+   |   vel: Vec2?
+   = see `wid explain E0105`
+
+error[E0204]: `Ball` has no field or method `hpp`
+  --> tests/ui/field_spaced_colon.wid:23:7
+   |
+23 |   p b.hpp
+   |       ^^^ not found on `Ball`
+help: did you mean `hp`?
+   |   p b.hp
+   = see `wid explain E0204`
+
+error: could not compile due to 3 errors

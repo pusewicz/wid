@@ -1,0 +1,14 @@
+# A splice that names a method calls it without parentheses only as the
+# outermost call of a statement, as a name does (`#{f} 4`); inside another
+# expression the call needs them.
+def show(n: Int) -> Int = n
+
+macro def call_it(f: Symbol) -> Code
+  quote do
+    p #{f} 4
+  end
+end
+
+def main
+  call_it :show
+end

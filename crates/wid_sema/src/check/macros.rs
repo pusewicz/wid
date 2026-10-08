@@ -195,9 +195,14 @@ pub(crate) struct MacroState {
     /// [`Checker::members_incomplete`]).
     pub failed_owners: HashSet<DeclId>,
     /// Fields that a macro call in a struct's body generated and E0913
-    /// rejected, by struct: their uses aren't reported missing (see
-    /// [`Checker::field_rejected`]).
+    /// rejected, and fields written with a space before their `:` that
+    /// read as a macro call (`pos :Vec2`, E0105), by struct: their uses
+    /// aren't reported missing (see [`Checker::field_rejected`]).
     pub rejected_fields: HashSet<(DeclId, Name)>,
+    /// `macro def`s written in the body of a struct, enum, module or
+    /// `extend`, which E0105 rejected, by that declaration: their uses
+    /// aren't reported missing (see [`Checker::macro_rejected`]).
+    pub rejected_macros: HashSet<(DeclId, Name)>,
     /// The code every expansion spliced in from outside it, by the file of
     /// its span.
     pub splices: HashMap<FileId, Vec<Splice>>,
@@ -605,14 +610,7 @@ impl<'a> Checker<'a> {
         let DeclKind::Fn(f) = d.kind else { return };
         let (name, top_level) = (d.name, d.owner.is_none() && !f.is_static);
         let def_kw = Span { end: f.sig_span.start + 3, ..f.sig_span };
-        let quote = quote.or_else(|| {
-            let mut find = FindQuote::default();
-            match &f.body {
-                ast::FnBody::Block(stmts) => find.visit_stmts(stmts),
-                ast::FnBody::Expr(e) => find.visit_expr(e),
-            }
-            find.0
-        });
+        let quote = quote.or_else(|| first_quote(f));
         let mut diag = Diagnostic::error(
             codes::QUOTE_OUTSIDE_MACRO,
             format!("`{name}` returns `Code`, but it is a `def`, not a `macro def`"),
@@ -639,6 +637,25 @@ impl<'a> Checker<'a> {
             ))
         };
         self.report(diag);
+    }
+
+    /// Whether `decl` is a `def` that was meant to be a macro: one reported
+    /// as that (E0910), or one that returns `Code` and builds it with a
+    /// `quote`, reported here. Its calls stand for code that the macro
+    /// would have generated, so they count as failed expansions. A `def`
+    /// that returns `Code` without a `quote` is a helper that macros may
+    /// call.
+    pub(super) fn meant_as_macro(&mut self, decl: DeclId) -> bool {
+        if self.macros.not_macros.contains(&decl) {
+            return true;
+        }
+        if !self.returns_code(decl) {
+            return false;
+        }
+        let DeclKind::Fn(f) = self.decls[decl.0 as usize].kind else { return false };
+        let Some(quote) = first_quote(f) else { return false };
+        self.not_a_macro_def(decl, None, Some(quote));
+        true
     }
 
     /// Where a macro's own code first uses `Self`, if it does. Its `quote`
@@ -2603,6 +2620,16 @@ fn enum_member_line(stmt: &ast::Stmt) -> Option<ast::EnumMember> {
         },
         _ => None,
     }
+}
+
+/// The first `quote` in a method's body, if any.
+fn first_quote(f: &ast::FnDecl) -> Option<Span> {
+    let mut find = FindQuote::default();
+    match &f.body {
+        ast::FnBody::Block(stmts) => find.visit_stmts(stmts),
+        ast::FnBody::Expr(e) => find.visit_expr(e),
+    }
+    find.0
 }
 
 /// Finds the first `quote` in a method's body.

@@ -1,0 +1,11 @@
+error[E0109]: `#{f}` is called without parentheses inside another expression
+ --> tests/ui/splice_nested_command_call.wid:8:7
+  |
+8 |     p #{f} 4
+  |       ^^^^^^ this nested call needs parentheses
+  = note: only the outermost call of a statement may omit parentheses
+help: add parentheses
+  |     p #{f}(4)
+  = see `wid explain E0109`
+
+error: could not compile due to 1 error

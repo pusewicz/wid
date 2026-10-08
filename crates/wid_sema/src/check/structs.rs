@@ -422,6 +422,37 @@ impl<'a> Checker<'a> {
             .map(|i| (i as u32, self.types.struct_info(*id).fields[i].ty))
     }
 
+    /// Reports `T.new(*xs)` (E0302): Wid has no argument spreading, as in
+    /// a method call. The collection is checked on its own and fills no
+    /// field. For an array, slice or dynamic array, the fix (to review)
+    /// passes its elements one by one to the fields left after the values
+    /// before it (`positional`), when there are a few.
+    fn spread_into_new(&mut self, info: &StructInfo, value: &ast::Expr, positional: usize) {
+        let v = self.expr(value, None);
+        let text = self.source_text(value.span);
+        let star = Span { start: value.span.start.saturating_sub(1), ..value.span };
+        let diag = Diagnostic::error(codes::ARG_COUNT, "Wid has no argument spreading")
+            .primary(value.span, "`*` cannot spread a collection into arguments")
+            .note(format!("`{}.new` takes a value for each field, by position or by name", info.name));
+        let len = match self.types.kind(self.types.base(v.ty)) {
+            TyKind::Array(_, n) => Some(*n as usize),
+            TyKind::Slice(_) | TyKind::Dynamic(_) => Some(usize::MAX),
+            _ => None,
+        };
+        let left = info.fields.len().saturating_sub(positional);
+        let count = len.map_or(0, |n| n.min(left));
+        let diag = if (1..=4).contains(&count)
+            && super::items::is_simple_operand(&text)
+            && self.source_text(star).starts_with('*')
+        {
+            let elems: Vec<String> = (0..count).map(|i| format!("{text}[{i}]")).collect();
+            diag.suggest_replace("pass the elements one by one", star, elems.join(", "), Applicability::MaybeIncorrect)
+        } else {
+            diag.help(format!("pass the elements of `{text}` one by one, or name the fields they are for"))
+        };
+        self.report(diag);
+    }
+
     /// Lowers `T.new(…)` for a struct: every field from an argument, its
     /// declared default, or zero.
     pub fn struct_new(&mut self, ty: TyId, args: &[ast::Arg], span: Span) -> ir::Expr {
@@ -430,6 +461,10 @@ impl<'a> Checker<'a> {
         let mut slots: Vec<Option<&ast::Expr>> = vec![None; info.fields.len()];
         let mut positional = 0usize;
         for arg in args {
+            if arg.splat {
+                self.spread_into_new(&info, &arg.value, positional);
+                continue;
+            }
             let idx = match arg.name {
                 None => {
                     if positional >= info.fields.len() {

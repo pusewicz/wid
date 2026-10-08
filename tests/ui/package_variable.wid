@@ -1,0 +1,12 @@
+# Wid has no package-level variables: `buf: …` outside a struct is one
+# E0108, and its uses aren't reported again as undefined names. A name
+# that is really undefined still is.
+buf: [4]U8 = ---
+count: Int
+
+def main
+  buf[0] = 1
+  p buf, buf.size
+  count += 1
+  p count, cuont
+end

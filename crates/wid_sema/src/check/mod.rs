@@ -185,6 +185,10 @@ pub(crate) struct Checker<'a> {
     /// Names of imports that failed to load, per file, so their uses are
     /// not reported again as undefined.
     pub failed_imports: std::collections::HashSet<(PackageId, usize, Name)>,
+    /// Names of variables declared at package level (`buf: [4]U8 = ---`),
+    /// which Wid doesn't have (E0108), per package, so their uses are not
+    /// reported again as undefined.
+    pub package_vars: std::collections::HashSet<(PackageId, Name)>,
     /// The cimport packages whose declarations joined each package's own
     /// namespace (a `cimport` without `as:`).
     pub merged_cimports: HashMap<PackageId, Vec<PackageId>>,
@@ -364,6 +368,7 @@ fn run(
         pkg_scopes: vec![HashMap::new(); input.packages.len()],
         file_imports: HashMap::new(),
         failed_imports: Default::default(),
+        package_vars: Default::default(),
         merged_cimports: HashMap::new(),
         failed_merges: Default::default(),
         functions: Vec::new(),
@@ -774,9 +779,10 @@ impl<'a> Checker<'a> {
     }
 
     /// Whether a name written at `span` that code in a method doesn't find
-    /// is explained by another error: a failed import, a package that may be
-    /// missing names, or a name of a merged `cimport` that wasn't imported
-    /// (reported here).
+    /// is explained by another error: a failed import, a variable declared
+    /// at package level, a `macro def` rejected in the body of `self`'s
+    /// type, a package that may be missing names, or a name of a merged
+    /// `cimport` that wasn't imported (reported here).
     pub fn undefined_explained(&mut self, name: Name, span: Span) -> bool {
         // A name glued from splices outside a `quote` was reported (E0111).
         if wid_syntax::ast::is_glued_name(name) {
@@ -788,7 +794,10 @@ impl<'a> Checker<'a> {
         // Where the name resolves: for code a macro generated, the macro's
         // file.
         let loc = self.loc_at(span);
+        let self_ty = self.body.frames.last().and_then(|f| f.self_ty);
         self.import_failed(loc, name)
+            || self.package_vars.contains(&(loc.pkg, name))
+            || self_ty.is_some_and(|t| self.macro_rejected(t, name))
             || self.pkg_incomplete(loc.pkg)
             || (self.merged_cimports.contains_key(&loc.pkg) && self.report_not_imported(loc.pkg, name, span))
     }
