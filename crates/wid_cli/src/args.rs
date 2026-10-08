@@ -13,6 +13,7 @@ pub enum Command {
     Check,
     Test,
     Doc,
+    Fmt,
     Query,
     Explain,
     Cimport,
@@ -55,13 +56,16 @@ pub struct Parsed {
     pub json: bool,
     /// `wid doc -private`.
     pub private: bool,
+    /// `wid fmt -check`.
+    pub check: bool,
     /// `wid query`'s positional arguments: the query and its argument.
     pub query_args: Vec<String>,
     /// `wid query -in:`: the package to query.
     pub query_in: Option<String>,
 }
 
-const COMMANDS: &[&str] = &["build", "run", "check", "test", "doc", "query", "explain", "cimport", "version", "help"];
+const COMMANDS: &[&str] =
+    &["build", "run", "check", "test", "doc", "fmt", "query", "explain", "cimport", "version", "help"];
 
 /// The flags `build`, `run` and `check` take, without their `:`; `test`
 /// takes `-filter` too.
@@ -83,6 +87,9 @@ const BUILD_FLAGS: &[&str] = &[
 /// The flags `wid doc` takes.
 const DOC_FLAGS: &[&str] = &["-json", "-private", "-file", "-json-errors", "-define", "-target", "-collection"];
 
+/// The flags `wid fmt` takes.
+const FMT_FLAGS: &[&str] = &["-check", "-file", "-json-errors"];
+
 /// The flags `wid query` takes.
 const QUERY_FLAGS: &[&str] = &["-in", "-file", "-define", "-target", "-collection"];
 
@@ -95,6 +102,7 @@ fn command_flags(command: Command) -> Vec<&'static str> {
         Command::Build | Command::Run | Command::Check => BUILD_FLAGS.to_vec(),
         Command::Test => BUILD_FLAGS.iter().copied().chain(["-filter"]).collect(),
         Command::Doc => DOC_FLAGS.to_vec(),
+        Command::Fmt => FMT_FLAGS.to_vec(),
         Command::Query => QUERY_FLAGS.to_vec(),
         Command::Cimport => CIMPORT_FLAGS.to_vec(),
         Command::Explain | Command::Version | Command::Help => Vec::new(),
@@ -109,6 +117,7 @@ pub fn command_name(command: Command) -> &'static str {
         Command::Check => "check",
         Command::Test => "test",
         Command::Doc => "doc",
+        Command::Fmt => "fmt",
         Command::Query => "query",
         Command::Explain => "explain",
         Command::Cimport => "cimport",
@@ -118,8 +127,14 @@ pub fn command_name(command: Command) -> &'static str {
 }
 
 /// Flags that only one command takes.
-const COMMAND_FLAGS: &[(&str, &str)] =
-    &[("-json", "doc"), ("-private", "doc"), ("-in", "query"), ("-dump", "cimport"), ("-filter", "test")];
+const COMMAND_FLAGS: &[(&str, &str)] = &[
+    ("-json", "doc"),
+    ("-private", "doc"),
+    ("-in", "query"),
+    ("-dump", "cimport"),
+    ("-filter", "test"),
+    ("-check", "fmt"),
+];
 
 /// Parses the arguments after the program name.
 pub fn parse(argv: &[String]) -> Result<Parsed, String> {
@@ -148,6 +163,7 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
         doc_args: Vec::new(),
         json: false,
         private: false,
+        check: false,
         query_args: Vec::new(),
         query_in: None,
     };
@@ -158,6 +174,7 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
         "check" => Command::Check,
         "test" => Command::Test,
         "doc" => Command::Doc,
+        "fmt" => Command::Fmt,
         "query" => Command::Query,
         "explain" => Command::Explain,
         "cimport" => Command::Cimport,
@@ -194,6 +211,11 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
             continue;
         }
         if !arg.starts_with('-') || arg == "-" {
+            if parsed.target.is_some() && parsed.command == Command::Fmt {
+                return Err(format!(
+                    "unexpected argument `{arg}`; `wid fmt` formats one package directory or one file at a time"
+                ));
+            }
             if parsed.target.is_some() {
                 return Err(format!("unexpected argument `{arg}`; pass program arguments after `--`"));
             }
@@ -239,6 +261,7 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
             "-dump" | "--dump" if parsed.command == Command::Cimport => {}
             "-json" if parsed.command == Command::Doc => parsed.json = true,
             "-private" if parsed.command == Command::Doc => parsed.private = true,
+            "-check" if parsed.command == Command::Fmt => parsed.check = true,
             "-in" if parsed.command == Command::Query => parsed.query_in = Some(need("path/to/package")?),
             "-strip-prefix" => parsed.strip_prefixes.push(need("SDL_")?),
             "-include-dir" => parsed.include_dirs.push(PathBuf::from(need("path")?)),
@@ -293,6 +316,7 @@ pub fn usage(topic: Option<&str>) -> String {
         Some("check") => "wid check [dir] [flags]\n\nType-checks the package without generating code.\n".to_string() + FLAG_HELP,
         Some("test") => "wid test [dir] [flags]\n\nBuilds the package with its `_test.wid` files and runs every `@[test]` method,\neach in its own process. `-filter:<text>` runs only tests whose name contains\nthe text. Exits with 1 when a test fails.\n".to_string() + FLAG_HELP,
         Some("doc") => DOC_HELP.to_string(),
+        Some("fmt") => FMT_HELP.to_string(),
         Some("query") => QUERY_HELP.to_string(),
         Some("explain") => "wid explain [CODE]\n\nPrints the long explanation of an error code, or lists all codes.\n".to_string(),
         Some("cimport") => "wid cimport --dump <header> [flags]\n\nPrints the Wid declarations `cimport` makes of a C header. A header that\nisn't a file is looked up on the include path, like `#include <name>`.\n\nFlags:\n  -strip-prefix:<prefix>  Remove a prefix from every name\n  -include-dir:<dir>      Search a directory for headers\n  -pkg-config:<name>      Use pkg-config's flags for a library\n  -define:NAME=value      Define a C macro first\n".to_string(),
@@ -305,6 +329,7 @@ pub fn usage(topic: Option<&str>) -> String {
                check    Type-check a package\n  \
                test     Run a package's tests\n  \
                doc      Show the documentation of a package or symbol\n  \
+               fmt      Format a package's files in the canonical style\n  \
                query    Answer questions about a package, as JSON\n  \
                explain  Explain an error code\n  \
                cimport  Print the Wid view of a C header\n  \
@@ -343,6 +368,30 @@ Flags:
   -define:NAME=value     Set a value that `config(:NAME, default)` reads
   -target:<os_arch>      Document another target's code (sets OS and ARCH)
   -collection:name=path  Add an import collection
+";
+
+const FMT_HELP: &str = "wid fmt [dir|file] [flags]
+
+Rewrites the `.wid` files of the package in `dir` (default `.`), its
+`_test.wid` files included, or one `.wid` file, in Wid's canonical style, and
+lists the files it changed. The style has no options; SPEC.md (\"Toolchain and
+CLI\") describes it. A file that doesn't parse is reported and left as it is,
+and the exit status is 1 then.
+
+Formatting reads only syntax: it never loads imports, type-checks or generates
+code.
+
+Examples:
+  wid fmt
+  wid fmt game/player.wid
+  wid fmt . -check
+
+Flags:
+  -check                 Change nothing: list the files that would change, and
+                         exit with 1 when there are any
+  -file                  Treat the target as a single file, whatever its name
+  -json-errors           Print the changed files and the diagnostics as one
+                         JSON document
 ";
 
 const QUERY_HELP: &str = "wid query <query> [argument] [flags]

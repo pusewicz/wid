@@ -1,0 +1,21 @@
+# A line that continues a statement (after an operator or `,`, or before
+# `.method`) is indented one step past the statement's first line, two in
+# a block's header. A line ending in `\` keeps it.
+def main
+  xs = [3, 1, 2]
+  total = xs[0] +
+    xs[1] +
+    xs[2]
+  sorted = xs.sort
+    .reverse
+  if total > 1 &&
+      total < 100
+    p sorted
+  end
+  label = "total: " \
+    + total.to_s
+  size = total > 5 ?
+    "big" :
+    "small"
+  p label, size
+end

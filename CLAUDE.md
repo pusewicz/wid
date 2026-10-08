@@ -18,7 +18,10 @@ what is implemented, which conventions are fixed and what comes next.
 
 - `crates/wid_diagnostics`: spans, source map, error-code registry, human and
   JSON renderers
-- `crates/wid_syntax`: lexer, error-recovering parser, AST
+- `crates/wid_syntax`: lexer, error-recovering parser, AST, and the
+  formatter behind `wid fmt` (`src/fmt.rs`, a pure
+  `format(source, &File) -> String` the LSP can call;
+  `wid_driver::fmt` runs the command)
 - `crates/wid_sema`: name resolution, type checking, flow typing and lowering to
   the typed IR; `src/interp/` runs that IR at compile time (`comptime`,
   constants), mirroring `runtime/wid_runtime.h`
@@ -66,6 +69,13 @@ what is implemented, which conventions are fixed and what comes next.
   `NAME.stderr`; their directories are the packages they read
 - `tests/doc/`: `wid doc` runs, with the arguments in `NAME.args` and the
   expected `NAME.stdout` and `NAME.stderr`
+- `tests/fmt/`: `.wid` files formatted as `wid fmt -check` would, with the
+  canonical text in `NAME.out` (none when the file doesn't parse), the
+  diagnostics in `NAME.stderr`, and, with `-check` or `-json-errors` in
+  `NAME.flags`, what the command prints in `NAME.stdout`.
+  `crates/wid_syntax/tests/fmt_repo.rs` formats every `.wid` file of the
+  repository and checks that the tree and the comments are kept and that
+  formatting is idempotent.
 - `tests/vendor/`: programs using pkg-config libraries (raylib, SDL3), run
   by `tests/vendor.rs` and skipped when the library is missing
 

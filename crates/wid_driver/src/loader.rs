@@ -529,7 +529,7 @@ impl Loader<'_> {
 
 /// Removes `.` components and folds `dir/..` pairs without touching the file
 /// system, so paths print as `physics/body.wid` rather than `././physics/body.wid`.
-fn clean_path(path: &Path) -> PathBuf {
+pub(crate) fn clean_path(path: &Path) -> PathBuf {
     use std::path::Component;
     let mut out = PathBuf::new();
     for c in path.components() {

@@ -38,6 +38,7 @@ fn main() -> ExitCode {
         Command::Run => run(&parsed),
         Command::Test => test(&parsed),
         Command::Doc => doc(&parsed),
+        Command::Fmt => fmt(&parsed),
         Command::Query => query(&parsed),
     }
 }
@@ -122,6 +123,20 @@ fn doc(parsed: &Parsed) -> ExitCode {
         wid_driver::doc::DocRequest { args: parsed.doc_args.clone(), private: parsed.private, dir: PathBuf::new() };
     let out = wid_driver::doc::doc(&opts, &request);
     let printed = wid_driver::doc::print(&out, parsed.json, parsed.json_errors, color_stderr());
+    eprint!("{}", printed.stderr);
+    print!("{}", printed.stdout);
+    if printed.success { ExitCode::SUCCESS } else { ExitCode::from(1) }
+}
+
+/// `wid fmt`: rewrites the files that aren't in the canonical style (with
+/// `-check`, changes nothing) and lists them on stdout; parse errors go to
+/// stderr. With `-json-errors`, stdout holds one JSON document instead. The
+/// exit status is 1 when a file has errors, and with `-check` when a file
+/// would change.
+fn fmt(parsed: &Parsed) -> ExitCode {
+    let opts = options(parsed);
+    let out = wid_driver::fmt::fmt(&opts, parsed.check);
+    let printed = wid_driver::fmt::print(&out, parsed.json_errors, color_stderr());
     eprint!("{}", printed.stderr);
     print!("{}", printed.stdout);
     if printed.success { ExitCode::SUCCESS } else { ExitCode::from(1) }

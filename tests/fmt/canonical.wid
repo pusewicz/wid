@@ -1,0 +1,4 @@
+# A file already in the canonical style: `-check` lists nothing.
+def main
+  p 1
+end

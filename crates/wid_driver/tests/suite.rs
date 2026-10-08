@@ -24,6 +24,12 @@
 //!   stderr `NAME.stderr`, as for `tests/doc`; a malformed command line
 //!   expects the usage error the CLI prints. The directories there are
 //!   packages too.
+//! - `tests/fmt/NAME.wid` is formatted as `wid fmt NAME.wid -check` would
+//!   (the file is never rewritten): the canonical text must match
+//!   `NAME.out` and format to itself. A file that doesn't parse has no
+//!   `NAME.out`, and `NAME.stderr` holds its diagnostics. `NAME.flags` may
+//!   list `-check` and `-json-errors`; then `NAME.stdout` holds what
+//!   `wid fmt` prints (a missing file expects nothing).
 //!
 //! Set `WID_BLESS=1` to rewrite expectations, `WID_TEST_FILTER=text` to run a
 //! subset, and `WID_TEST_CC=clang,gcc-16` to choose compilers.
@@ -68,6 +74,11 @@ enum Case {
     Query {
         name: String,
         args: PathBuf,
+    },
+    /// `wid fmt` on one file.
+    Fmt {
+        name: String,
+        file: PathBuf,
     },
 }
 
@@ -132,6 +143,15 @@ fn collect(root: &Path, filter: &str) -> Vec<Case> {
             }
         }
     }
+    if let Ok(rd) = std::fs::read_dir(root.join("tests/fmt")) {
+        for entry in rd.flatten() {
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e == "wid") {
+                let name = path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+                cases.push(Case::Fmt { name: format!("fmt/{name}"), file: path });
+            }
+        }
+    }
     if let Ok(rd) = std::fs::read_dir(root.join("core")) {
         for entry in rd.flatten() {
             let path = entry.path();
@@ -154,7 +174,8 @@ fn name_of(c: &Case) -> &str {
         | Case::Ui { name, .. }
         | Case::Test { name, .. }
         | Case::Doc { name, .. }
-        | Case::Query { name, .. } => name,
+        | Case::Query { name, .. }
+        | Case::Fmt { name, .. } => name,
     }
 }
 
@@ -319,11 +340,55 @@ fn run_query(args: &Path, root: &Path, bless: bool) -> Vec<String> {
     failures
 }
 
+/// Formats a `tests/fmt` file (see the module docs).
+fn run_fmt(file: &Path, root: &Path, bless: bool) -> Vec<String> {
+    let mut failures = Vec::new();
+    let flags = std::fs::read_to_string(file.with_extension("flags")).ok();
+    let mut json = false;
+    for flag in flags.as_deref().unwrap_or_default().split_whitespace() {
+        match flag {
+            "-check" => {}
+            "-json-errors" => json = true,
+            _ => panic!("unknown flag `{flag}` in {}", file.with_extension("flags").display()),
+        }
+    }
+    let mut opts = Options::new(file);
+    opts.file_mode = true;
+    let out = wid_driver::fmt::fmt(&opts, true);
+    let printed = wid_driver::fmt::print(&out, json, false);
+    if !out.internal_errors.is_empty() {
+        failures.push(format!("formatting changed the syntax tree:\n{}", printed.stderr));
+    }
+    let formatted = out.files.first().and_then(|f| f.formatted.clone());
+    let out_path = file.with_extension("out");
+    match &formatted {
+        Some(text) => {
+            compare("formatted text", &out_path, text, bless, &mut failures);
+            let (ast, diags) = wid_syntax::parse_file(wid_diagnostics::FileId(0), text);
+            if !diags.is_empty() || wid_syntax::fmt::format(text, &ast) != *text {
+                failures.push("formatting the formatted text changes it again".into());
+            }
+        }
+        None if out_path.exists() && bless => {
+            let _ = std::fs::remove_file(&out_path);
+        }
+        None if out_path.exists() => failures.push("the file was not formatted, but it has a `.out`".into()),
+        None => {}
+    }
+    compare_optional("stderr", &file.with_extension("stderr"), &normalize(&printed.stderr, root), bless, &mut failures);
+    if flags.is_some() {
+        let stdout = normalize(&printed.stdout, root);
+        compare_optional("stdout", &file.with_extension("stdout"), &stdout, bless, &mut failures);
+    }
+    failures
+}
+
 fn run_case(case: &Case, root: &Path, ccs: &[String], bless: bool) -> Vec<String> {
     let mut failures = Vec::new();
     match case {
         Case::Doc { args, .. } => return run_doc(args, root, bless),
         Case::Query { args, .. } => return run_query(args, root, bless),
+        Case::Fmt { file, .. } => return run_fmt(file, root, bless),
         Case::Ui { file, .. } => {
             let mut opts = Options::new(file);
             opts.file_mode = !file.is_dir();
@@ -424,7 +489,7 @@ fn run_case(case: &Case, root: &Path, ccs: &[String], bless: bool) -> Vec<String
 fn check_code_docs(root: &Path) -> (Vec<String>, Vec<String>) {
     let mut errors = Vec::new();
     let mut covered = std::collections::HashSet::new();
-    for dir in ["tests/ui", "tests/doc", "tests/query"] {
+    for dir in ["tests/ui", "tests/doc", "tests/query", "tests/fmt"] {
         let Ok(rd) = std::fs::read_dir(root.join(dir)) else { continue };
         for entry in rd.flatten() {
             let path = entry.path();

@@ -1253,6 +1253,38 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   unknown file (did-you-mean), a line or column past the end, and a
   position with nothing recorded, pointing at the nearest code with a fix
   that asks about it; a symbol path given to `type` gets a fix to `def`.
+- `wid fmt [dir|file] [-file] [-check] [-json-errors]` (SPEC "Toolchain
+  and CLI", which records every style decision; `wid help fmt`).
+  `wid_syntax::fmt::format(source, &File)` is pure and reprints the token
+  stream, not the tree: the tree drops what a formatter must keep (a proc
+  type's parameter names, a block's `do` or braces, a literal's spelling),
+  so `wid_syntax::print` stays the renderer of declaration lines for
+  `wid doc`. Tokens keep their text; only the whitespace between them
+  changes, plus trailing commas. A visitor (`Collector`) records what the
+  tree says about tokens: binary and unary operators, ternary, label and
+  enum colons, block braces and bars, where each block opens and closes
+  and where its header ends, which lists take a trailing comma, which
+  declarations span several lines. `Layout` indents each line from a stack
+  of frames (block, branch, `case`, bracket), decides each space (a space
+  that decides the parse and that the tree doesn't explain stays as
+  written, and one is removed only when the two tokens still lex the
+  same), the blank lines and the trailing commas, and lines up trailing
+  comments. String literals with interpolation and splices are kept whole.
+  `same_tree` compares two parses with their spans erased, and their
+  comments. `wid_driver::fmt` formats a directory's `.wid` files
+  (`_test.wid` ones too) or one file (its `-file` errors point into the
+  command line through `cmdline::file_target`, as the other commands'
+  do), reports parse errors and leaves those
+  files alone, rewrites a file only when the result has the same tree, and
+  prints the changed files (or one JSON document: `changed`, `errors`,
+  `warnings`, `diagnostics`); a formatter bug is reported as one and the
+  file left alone; the summary line is "could not format due to 1 error"
+  (`render_all_with`). Tests: the `tests/fmt` suite category (canonical forms,
+  comments, a parse error, `-check`, `-json-errors`), and
+  `crates/wid_syntax/tests/fmt_repo.rs`: every `.wid` file in `core/`,
+  `vendor/`, `examples/` and `tests/` that parses keeps its tree and its
+  comments and formats idempotently, and each, with its whitespace
+  perturbed in ways that keep its tree, formats to the same text.
 - Linux and CI (`.github/workflows/ci.yml`, cached with sccache and
   rust-cache): `cargo fmt --check`; clippy and the full `cargo test` on
   Ubuntu 26.04 (clang-22, gcc-15, libclang 22, SDL3) and macOS 26 (Apple
@@ -1290,8 +1322,8 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
 
 Everything before macros is done (see "Done"). This is the work queue for
 the orchestrator (`docs/ORCHESTRATOR.md`), together with the open GitHub
-issues. Each item is one PR unless it says otherwise. Items 2–4 depend only on `main` and can run in parallel with the
-macro stack.
+issues. Each item is one PR unless it says otherwise. Items 2–4 depend
+only on `main` and can run in parallel with the macro stack.
 
 1. **Macros and `type_info`** (`wid/macros-*`, about three stacked PRs):
    - lexer, parser and AST for `quote` and splices (**landed**);
@@ -1401,14 +1433,19 @@ macro stack.
      notes are under "Expansion" above.
 2. **`wid query`** (`wid/query`, two stacked PRs): **landed** (see "Done"
    and "Conventions fixed so far"; its limits are under "Known gaps").
-3. **`wid fmt`** (`wid/fmt`). A canonical formatter. It must be
-   idempotent, and parse → format → parse must give the same AST for every
-   file in `tests/`, `core/`, `vendor/` and `examples/`. It keeps comments
-   and supports `-check`. Start from `wid_syntax::print`, which renders
-   types, expressions and declaration lines.
-4. **`wid lsp`** (`crates/wid_lsp`, `wid/lsp`, stacked on 2 and 3).
-   Diagnostics, hover, go-to-definition, completion, formatting and rename,
-   all on top of the query engine.
+3. **`wid lsp`** (`crates/wid_lsp`, `wid/lsp`; `wid query` and `wid fmt`
+   have landed, see "Done"). Diagnostics, hover, go-to-definition,
+   completion, formatting (`wid_syntax::fmt::format`) and rename, all on
+   top of the query engine.
+4. **Reformat the repository with `wid fmt`** (one PR). It changes
+   `core/fmt/fmt.wid` (three parameter lists get a trailing `,`), and in
+   `tests/` blank lines around multi-line declarations in seven
+   `tests/run` files and two `tests/ui` ones, plus `{ }` → `{}` in
+   `tests/ui/block_errors.wid`. The `tests/ui`
+   expectations hold line numbers, so rebless them and check the diff.
+   Leave `tests/fmt/*.wid` alone: they are unformatted on purpose
+   (`WID_FMT_DIFF=1 cargo test -p wid_syntax --test fmt_repo -- --nocapture`
+   lists the files that would change).
 5. `vendor:cimgui`: vendor cimgui with the Dear ImGui sources, compiled as
    C++ package files (the driver already builds `.cpp` files and links with
    the C++ compiler), plus a raylib or SDL3 backend. Needs a decision on
@@ -1491,8 +1528,8 @@ before anyone starts them.
   Generated declarations whose names come from computed symbols point at
   the whole call in messages (E0202, E0317).
 - `wid doc`: the AST drops the parameter names of `proc` types, so a C
-  callback shows as `@[c] proc(RawPtr?, C.int)` (`wid fmt` needs them
-  too). Expressions that hold statements (`if`, `case`, blocks,
+  callback shows as `@[c] proc(RawPtr?, C.int)` (`wid fmt` reprints
+  tokens, so it keeps them). Expressions that hold statements (`if`, `case`, blocks,
   `comptime do`) print as `if … end` in declaration lines. Only named
   builtin types can be asked for (`String`, `Int`); extensions of patterns
   (`[]$T`, `[2]F32`) show in the overview only, and a type alias of a
@@ -1520,6 +1557,18 @@ before anyone starts them.
   origin has no location. The fixes in its diagnostics edit the command
   line as `wid query` rebuilds it (query, argument, `-in:`, `-file`), not
   the order the flags were typed in.
+- `wid fmt`: code inside a splice `#{…}` or a string interpolation isn't
+  formatted (it is kept as written), and the lines of a splice that spans
+  several keep their indentation. Blank lines around multi-line
+  declarations aren't added inside a `quote`. Nothing is wrapped or joined
+  to fit a width. A file with any syntax error isn't formatted at all. An
+  own-line comment before `end`, `else`, `elsif`, `when` or a closing
+  bracket keeps the author's choice between the body's indentation and
+  the closer's. `wid fmt <dir>` formats that one package, not the
+  packages in its subdirectories. The Vim indent plugin
+  (`extras/vim/indent/wid.vim`) indents a continued block header (`if a &&`
+  then `b`, or `def f(a: Int,` then `b: Int)`) one step, where `wid fmt`
+  uses two.
 - `vendor:miniaudio` built with GCC on macOS has no CoreAudio backend: GCC
   can't parse the block syntax in Apple's headers (`miniaudio.c` sets
   `MA_NO_COREAUDIO` there).

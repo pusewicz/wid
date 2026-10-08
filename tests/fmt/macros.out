@@ -1,0 +1,23 @@
+# A `quote`'s body is formatted like the code it holds. A splice `#{…}`
+# is kept exactly as written, since the code inside runs in the macro.
+macro def adder(name: Symbol, amount: Int) -> Code
+  quote do
+    def #{name}(x: Int) -> Int
+      total = x + #{ amount  *  2 }
+      total - #{amount}
+    end
+  end
+end
+
+macro def field(name: Symbol, ty: Type) -> Code
+  quote do
+    @#{name} = #{ty}.new
+    :#{name}
+  end
+end
+
+adder :add_ten, 10
+
+def main
+  p add_ten(5)
+end

@@ -1,0 +1,25 @@
+# Fields and named arguments named by keywords (`in:`, `do:`, `case:`)
+# are spaced like any other name, and so are the declaration lines of a
+# `quote`: a spliced constant's `distinct` type and a `using` field.
+struct Span2
+  from: Int
+  in: Int
+  do: Bool
+  case: Int = 7
+  def size -> Int = @in - @from
+end
+
+macro def alias(name: Symbol) -> Code
+  quote do
+    #{name} = distinct F64
+    using body: Span2
+  end
+end
+
+def main
+  s = Span2.new(from: 1, in: 4, do: true)
+  t = Span2.new from: 2, in: 5, case: 3
+  if s.do then
+    p s.size, t.in, s.case
+  end
+end

@@ -1,0 +1,12 @@
+# Strings, interpolations, symbols and numbers are never changed, a
+# string that spans lines included.
+def main
+  hex=0xFF_FF
+  big = 1_000_000+1e3.to(Int)
+  bits=0b1010 | 0o17
+  name = "wid"
+  p "#{ name }:  #{hex+big}", 'raw #{name}', :north, :+, :x=
+  text = "first line
+    second line, as written"
+  p bits, text
+end
