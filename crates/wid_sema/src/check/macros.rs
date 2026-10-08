@@ -631,6 +631,7 @@ impl<'a> Checker<'a> {
     /// call is a statement of its own: a whole statement, or the whole last
     /// line of the code of a call that is one.
     pub fn call_macro(&mut self, call: MacroCall<'_>, expected: Option<TyId>) -> ir::Expr {
+        self.note_ref(call.name_span, call.decl, crate::uses::RefKind::Call);
         let statement = self.macros.line == call.span || self.macros.discarded == Some(call.span);
         match self.expand(&call) {
             Some(code) => self.lower_generated(code, expected, &call.shown, statement),

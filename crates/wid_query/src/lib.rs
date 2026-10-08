@@ -9,29 +9,32 @@
 //! caller such as the LSP reruns them whenever a file changes.
 //!
 //! A [`Query`] is answered by [`answer`], or directly by [`outline`],
-//! [`def`] and [`methods`]. Answers are [`Item`]s, the model `wid doc`
-//! renders too, and [`json::document`] turns one into the stable JSON
-//! document `wid query` prints (SPEC "Toolchain and CLI"). Nothing here
-//! prints, exits or reads files; a request that fails returns a
-//! [`Failure`], which the caller turns into a diagnostic.
+//! [`def`], [`methods`], [`refs`], [`calls`] and [`type_at`]. Answers are
+//! [`Item`]s, the model `wid doc` renders too, or the uses and types the
+//! checker recorded ([`RefItem`], [`TypeItem`]), and [`json::document`]
+//! turns one into the stable JSON document `wid query` prints (SPEC
+//! "Toolchain and CLI"). Nothing here prints, exits or reads files; a
+//! request that fails returns a [`Failure`], which the caller turns into a
+//! diagnostic.
 //!
-//! `refs` and `type` come next. They need what the checker resolves inside
-//! bodies, which the index doesn't hold: a table, recorded by the checker
-//! and kept in the [`Analysis`] next to the index, from the span of every
-//! name, call and expression to the declaration it resolves to and its
-//! type. They will be two more [`Query`] and [`Answer`] variants that read
-//! it.
+//! `outline`, `def` and `methods` read the symbol index. `refs`, `calls`
+//! and `type` read what the checker resolved inside bodies and types, the
+//! [`Uses`] kept next to the index: for every name, call and written type,
+//! what it refers to, and for every expression and binding, its type.
 
 mod extent;
 pub mod item;
 pub mod json;
+mod uses;
 
 use wid_diagnostics::{Diagnostics, SourceMap, did_you_mean};
 use wid_sema::index::{Index, PathError, SymbolKind, Target};
+use wid_sema::uses::Uses;
 use wid_sema::{PackageId, ProgramInput};
 
 pub use extent::Extents;
 pub use item::{Item, ItemBuilder, Location, OriginInfo, PackageInfo, Style};
+pub use uses::{Nearby, Position, PositionError, RefItem, TypeItem, calls, find_file, refs, type_at, written};
 
 /// A loaded and checked program, ready for queries.
 #[derive(Debug)]
@@ -44,25 +47,28 @@ pub struct Analysis {
     pub index: Index,
     /// Where those declarations are, whole.
     pub extents: Extents,
+    /// What the names and expressions in the code the checker lowered
+    /// refer to, and their types.
+    pub uses: Uses,
 }
 
 impl Analysis {
     /// Checks a loaded program and indexes its declarations, never
     /// generating code. `sources` and `diags` are what loading made.
     pub fn check(input: &ProgramInput, mut sources: SourceMap, mut diags: Diagnostics) -> Analysis {
-        let (mut program, sema_diags, index) = wid_sema::check_program_indexed(input);
+        let (mut program, sema_diags, index, uses) = wid_sema::check_program_indexed(input);
         // Spans in code macros generated name these expansions.
         sources.set_expansions(std::mem::take(&mut program.expansions));
         diags.extend(sema_diags);
         diags.sort();
-        Analysis { sources, diags, index, extents: Extents::of_program(input) }
+        Analysis { sources, diags, index, extents: Extents::of_program(input), uses }
     }
 
     /// A program that couldn't be loaded: its diagnostics, and nothing to
     /// query.
     pub fn unloaded(sources: SourceMap, mut diags: Diagnostics) -> Analysis {
         diags.sort();
-        Analysis { sources, diags, index: Index::default(), extents: Extents::default() }
+        Analysis { sources, diags, index: Index::default(), extents: Extents::default(), uses: Uses::default() }
     }
 
     /// The package that was asked for, unless loading failed.
@@ -87,20 +93,27 @@ pub enum Query {
     Def(String),
     /// `methods <Type>`: every method callable on a type, by origin.
     Methods(String),
+    /// `refs <sym>`: every use of what a symbol path names.
+    Refs(String),
+    /// `calls <sym>`: the uses of a symbol path that call it.
+    Calls(String),
+    /// `type <file:line:col>`: what is at a position, and its type.
+    Type(String),
 }
 
 /// The queries, as `wid query` names them.
-pub const QUERIES: &[&str] = &["outline", "def", "methods"];
+pub const QUERIES: &[&str] = &["outline", "def", "methods", "refs", "calls", "type"];
 
-/// Queries SPEC.md lists that aren't implemented yet.
-const PLANNED: &[&str] = &["refs", "type"];
+/// The queries with their arguments, for messages.
+const SHAPES: &str =
+    "`outline`, `def <symbol>`, `methods <Type>`, `refs <symbol>`, `calls <symbol>` or `type <file:line:column>`";
 
 impl Query {
     /// Reads `wid query`'s positional arguments: the query and its
     /// argument. The error is a usage message.
     pub fn parse(args: &[String]) -> Result<Query, String> {
         let Some((name, rest)) = args.split_first() else {
-            return Err("`wid query` needs a query: `outline`, `def <symbol>` or `methods <Type>`".to_string());
+            return Err(format!("`wid query` needs a query: {SHAPES}"));
         };
         let arg = |what: &str, example: &str| match rest {
             [] => Err(format!("`wid query {name}` needs {what}, like `wid query {name} {example}`")),
@@ -118,33 +131,35 @@ impl Query {
             },
             "def" => arg("a symbol path", "Ball.update").map(Query::Def),
             "methods" => arg("a type", "Ball").map(Query::Methods),
-            planned if PLANNED.contains(&planned) => Err(format!(
-                "`wid query {planned}` isn't implemented yet; the queries so far are `outline`, `def` and `methods`"
-            )),
-            other => {
-                let all: Vec<&str> = QUERIES.iter().chain(PLANNED).copied().collect();
-                Err(match did_you_mean(other, all) {
-                    Some(best) => format!("unknown query `{other}`; did you mean `{best}`?"),
-                    None => format!("unknown query `{other}`; the queries are `outline`, `def` and `methods`"),
-                })
-            }
+            "refs" => arg("a symbol path", "Ball.update").map(Query::Refs),
+            "calls" => arg("a symbol path", "Ball.update").map(Query::Calls),
+            "type" => arg("a position", "main.wid:12:5").map(Query::Type),
+            other => Err(match did_you_mean(other, QUERIES.iter().copied()) {
+                Some(best) => format!("unknown query `{other}`; did you mean `{best}`?"),
+                None => format!("unknown query `{other}`; the queries are {SHAPES}"),
+            }),
         }
     }
 
-    /// The query's name: `outline`, `def`, `methods`.
+    /// The query's name: `outline`, `def`, `methods`, `refs`, `calls`,
+    /// `type`.
     pub fn name(&self) -> &'static str {
         match self {
             Query::Outline => "outline",
             Query::Def(_) => "def",
             Query::Methods(_) => "methods",
+            Query::Refs(_) => "refs",
+            Query::Calls(_) => "calls",
+            Query::Type(_) => "type",
         }
     }
 
-    /// The symbol path it asks about, if it takes one.
+    /// Its argument: the symbol path it asks about, or for `type`, the
+    /// position.
     pub fn symbol(&self) -> Option<&str> {
         match self {
             Query::Outline => None,
-            Query::Def(s) | Query::Methods(s) => Some(s),
+            Query::Def(s) | Query::Methods(s) | Query::Refs(s) | Query::Calls(s) | Query::Type(s) => Some(s),
         }
     }
 }
@@ -160,6 +175,11 @@ pub enum Answer {
     Def(Vec<Item>),
     /// The methods and overload sets callable on a type, by origin.
     Methods(Vec<MethodGroup>),
+    /// The uses of a symbol (`refs`), or its calls (`calls`), sorted by
+    /// file, line and column.
+    Refs(Vec<RefItem>),
+    /// What is at a position.
+    Type(Box<TypeItem>),
 }
 
 /// Methods a type answers to that come from the same place.
@@ -182,6 +202,8 @@ pub enum Failure {
     /// `methods` was asked of something that isn't a type: what the path
     /// named.
     NotAType(Target),
+    /// `type` was given a position where nothing is, or no position.
+    Position(PositionError),
 }
 
 /// Resolves a symbol path written with dots (`Ball.update`,
@@ -200,6 +222,9 @@ pub fn answer(analysis: &Analysis, pkg: PackageId, query: &Query) -> Result<Answ
         Query::Outline => Answer::Outline(outline(analysis, pkg)),
         Query::Def(path) => Answer::Def(def(analysis, pkg, path)?),
         Query::Methods(ty) => Answer::Methods(methods(analysis, pkg, ty)?),
+        Query::Refs(path) => Answer::Refs(refs(analysis, pkg, path)?),
+        Query::Calls(path) => Answer::Refs(calls(analysis, pkg, path)?),
+        Query::Type(position) => Answer::Type(Box::new(type_at(analysis, pkg, position)?)),
     })
 }
 
@@ -439,10 +464,14 @@ private LIMIT = 3
         assert_eq!(Query::parse(&args("outline")), Ok(Query::Outline));
         assert_eq!(Query::parse(&args("def Ball.update")), Ok(Query::Def("Ball.update".into())));
         assert_eq!(Query::parse(&args("methods Ball")), Ok(Query::Methods("Ball".into())));
+        assert_eq!(Query::parse(&args("refs Ball.pos")), Ok(Query::Refs("Ball.pos".into())));
+        assert_eq!(Query::parse(&args("calls clamp")), Ok(Query::Calls("clamp".into())));
+        assert_eq!(Query::parse(&args("type main.wid:3:5")), Ok(Query::Type("main.wid:3:5".into())));
         for (line, message) in [
             ("", "needs a query"),
             ("defs Ball", "did you mean `def`?"),
-            ("refs Ball", "isn't implemented yet"),
+            ("reff Ball", "did you mean `refs`?"),
+            ("type", "needs a position, like `wid query type main.wid:12:5`"),
             ("def", "needs a symbol path"),
             ("methods Ball extra", "unexpected argument `extra`"),
             ("outline shapes", "-in:shapes"),
@@ -477,5 +506,96 @@ private LIMIT = 3
         assert_eq!(doc["results"][2]["span"]["line"], 40);
         let none = super::json::document(&def, None, None);
         assert_eq!((none["package"].is_null(), none["results"].as_array().map(Vec::len)), (true, Some(0)));
+    }
+
+    const PROGRAM: &str = "\
+MAX = 3
+
+struct Ball
+  pos: Int
+
+  def move(by: Int) -> Int
+    @pos += by
+    @pos
+  end
+end
+
+def larger(a: $T, b: $T) -> T = a > b ? a : b
+
+def main
+  ball = Ball.new(pos: MAX)
+  ball.move(1)
+  ball.pos = larger(1, 2)
+  p larger(1.5, 2.5)
+end
+";
+
+    /// The uses of a symbol path as `kind line:column`, in order.
+    fn uses_of(a: &Analysis, path: &str) -> Vec<String> {
+        let found = super::refs(a, ROOT, path).expect("resolves");
+        found.iter().map(|r| format!("{} {}:{}", r.kind.as_str(), r.location.line, r.location.column)).collect()
+    }
+
+    #[test]
+    fn refs_list_every_use_once() {
+        let a = analysis(PROGRAM);
+        assert_eq!(uses_of(&a, "Ball.pos"), ["declaration 4:3", "write 7:5", "read 8:5", "write 15:19", "write 17:8"]);
+        assert_eq!(uses_of(&a, "Ball"), ["declaration 3:8", "type 15:10"]);
+        assert_eq!(uses_of(&a, "MAX"), ["declaration 1:1", "read 15:24"]);
+        // A generic method is checked once per instance; its calls count once.
+        assert_eq!(uses_of(&a, "larger"), ["declaration 12:5", "call 17:14", "call 18:5"]);
+        assert_eq!(uses_of(&a, "Ball.move"), ["declaration 6:7", "call 16:8"]);
+        let calls = super::calls(&a, ROOT, "larger").expect("resolves");
+        assert_eq!(calls.len(), 2);
+        assert!(calls.iter().all(|c| c.context.as_deref() == Some("main")));
+        let found = super::refs(&a, ROOT, "Ball.pos").expect("resolves");
+        let contexts: Vec<Option<&str>> = found.iter().map(|r| r.context.as_deref()).collect();
+        assert_eq!(contexts, [Some("Ball"), Some("Ball.move"), Some("Ball.move"), Some("main"), Some("main")]);
+        assert!(matches!(super::refs(&a, ROOT, "Bal"), Err(Failure::Path(_))));
+    }
+
+    #[test]
+    fn type_finds_the_innermost_thing_at_a_position() {
+        let a = analysis(PROGRAM);
+        let at = |pos: &str| super::type_at(&a, ROOT, pos).expect(pos);
+        let local = at("main.wid:15:3");
+        assert_eq!((local.kind, local.ty.as_deref()), ("local", Some("Ball")));
+        assert_eq!(local.refers_to.as_ref().map(|i| i.kind), Some("local"));
+        let call = at("main.wid:16:8");
+        assert_eq!((call.kind, call.ty.as_deref()), ("call", Some("Int")));
+        assert_eq!((call.location.column, call.span.column, call.span.end_column), (8, 3, 15));
+        assert_eq!(call.refers_to.as_ref().map(|i| i.path.as_str()), Some("Ball.move"));
+        let field = at("main.wid:17:9");
+        assert_eq!((field.kind, field.ty.as_deref()), ("field", Some("Int")));
+        let param = at("main.wid:12:33");
+        assert_eq!((param.kind, param.ty.as_deref()), ("parameter", Some("Int")));
+        assert_eq!(param.instances, ["Int", "F64"]);
+        assert_eq!(param.refers_to.as_ref().map(|i| i.signature.as_str()), Some("a: $T"));
+        let written = at("main.wid:6:16");
+        assert_eq!((written.kind, written.ty.as_deref()), ("type", Some("Int")));
+        let declared = at("main.wid:6:8");
+        assert_eq!((declared.kind, declared.ty.as_deref()), ("declaration", Some("proc(Int) -> Int")));
+        let constant = at("main.wid:15:25");
+        assert_eq!((constant.kind, constant.ty.as_deref()), ("expression", Some("Int")));
+        assert_eq!(constant.refers_to.as_ref().map(|i| i.kind), Some("constant"));
+    }
+
+    #[test]
+    fn type_explains_positions_it_cannot_answer() {
+        use super::PositionError as E;
+        let a = analysis(PROGRAM);
+        let fail = |pos: &str| match super::type_at(&a, ROOT, pos) {
+            Err(Failure::Position(e)) => e,
+            other => panic!("{pos}: {other:?}"),
+        };
+        assert_eq!(fail("main.wid"), E::Malformed);
+        assert_eq!(fail("main.wid:0:1"), E::Malformed);
+        assert!(matches!(fail("mian.wid:1:1"), E::UnknownFile { candidates } if candidates == ["main.wid"]));
+        assert_eq!(fail("main.wid:99:1"), E::NoLine { lines: 19 });
+        assert_eq!(fail("main.wid:1:20"), E::NoColumn { last: 8 });
+        let E::Nothing { nearest } = fail("main.wid:2:1") else { panic!("nothing on a blank line") };
+        assert_eq!(nearest.iter().map(|n| (n.line, n.column)).collect::<Vec<_>>(), [(1, 1), (3, 8), (4, 3)]);
+        assert_eq!(nearest[0].text, "MAX");
+        assert_eq!(super::Position::parse("a:b.wid:3:4").map(|p| p.file), Some("a:b.wid".to_string()));
     }
 }

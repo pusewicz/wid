@@ -1,0 +1,66 @@
+{
+  "package": {
+    "doc": "A small game that `wid query refs`, `calls` and `type` read.",
+    "name": "game",
+    "path": "."
+  },
+  "query": "refs",
+  "results": [
+    {
+      "context": "Entity",
+      "kind": "type",
+      "location": {
+        "column": 12,
+        "end_column": 15,
+        "end_line": 22,
+        "file": "tests/query/game/game.wid",
+        "line": 22
+      }
+    },
+    {
+      "context": null,
+      "kind": "declaration",
+      "location": {
+        "column": 8,
+        "end_column": 11,
+        "end_line": 4,
+        "file": "tests/query/game/geo/geo.wid",
+        "line": 4
+      }
+    },
+    {
+      "context": "make",
+      "kind": "type",
+      "location": {
+        "column": 29,
+        "end_column": 32,
+        "end_line": 10,
+        "file": "tests/query/game/geo/geo.wid",
+        "line": 10
+      }
+    },
+    {
+      "context": "make",
+      "kind": "type",
+      "location": {
+        "column": 35,
+        "end_column": 38,
+        "end_line": 10,
+        "file": "tests/query/game/geo/geo.wid",
+        "line": 10
+      }
+    },
+    {
+      "context": "length2",
+      "kind": "type",
+      "location": {
+        "column": 16,
+        "end_column": 19,
+        "end_line": 13,
+        "file": "tests/query/game/geo/geo.wid",
+        "line": 13
+      }
+    }
+  ],
+  "symbol": "geo.Vec"
+}

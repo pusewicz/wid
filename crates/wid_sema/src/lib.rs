@@ -8,6 +8,7 @@ mod interp;
 pub mod ir;
 pub mod type_info;
 pub mod types;
+pub mod uses;
 
 pub use check::{check_program, check_program_indexed, is_reserved_type_name};
 pub use input::{

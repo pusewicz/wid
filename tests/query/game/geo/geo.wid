@@ -1,0 +1,13 @@
+# Plane geometry.
+
+# A point, or a direction.
+struct Vec
+  x: F32
+  y: F32
+end
+
+# A vector from its coordinates.
+def make(x: F32, y: F32) -> Vec = Vec.new(x: x, y: y)
+
+# The squared length.
+def length2(v: Vec) -> F32 = v.x * v.x + v.y * v.y

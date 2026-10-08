@@ -1,0 +1,37 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0605",
+      "column": 42,
+      "expansions": [],
+      "explain": "wid explain E0605",
+      "file": "command line",
+      "helps": [
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [],
+          "message": "lines are counted from 1, as in diagnostics"
+        }
+      ],
+      "labels": [
+        {
+          "column": 42,
+          "end": 44,
+          "end_column": 45,
+          "end_line": 1,
+          "file": "command line",
+          "line": 1,
+          "message": "past the end of the file",
+          "primary": true,
+          "start": 41
+        }
+      ],
+      "line": 1,
+      "message": "`tests/query/game/game.wid` has 111 lines",
+      "notes": [],
+      "severity": "error"
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}

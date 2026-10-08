@@ -1,0 +1,44 @@
+{
+  "package": {
+    "doc": "A small game that `wid query refs`, `calls` and `type` read.",
+    "name": "game",
+    "path": "."
+  },
+  "query": "refs",
+  "results": [
+    {
+      "context": null,
+      "kind": "declaration",
+      "location": {
+        "column": 5,
+        "end_column": 10,
+        "end_line": 88,
+        "file": "tests/query/game/game.wid",
+        "line": 88
+      }
+    },
+    {
+      "context": "main",
+      "kind": "read",
+      "location": {
+        "column": 14,
+        "end_column": 20,
+        "end_line": 108,
+        "file": "tests/query/game/game.wid",
+        "line": 108
+      }
+    },
+    {
+      "context": "main",
+      "kind": "call",
+      "location": {
+        "column": 40,
+        "end_column": 45,
+        "end_line": 109,
+        "file": "tests/query/game/game.wid",
+        "line": 109
+      }
+    }
+  ],
+  "symbol": "twice"
+}

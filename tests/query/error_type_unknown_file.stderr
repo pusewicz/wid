@@ -1,0 +1,53 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0605",
+      "column": 16,
+      "expansions": [],
+      "explain": "wid explain E0605",
+      "file": "command line",
+      "helps": [
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [
+            {
+              "column": 16,
+              "end": 40,
+              "end_column": 41,
+              "end_line": 1,
+              "file": "command line",
+              "line": 1,
+              "replacement": "tests/query/game/game.wid",
+              "start": 15
+            }
+          ],
+          "message": "a similar file exists: `tests/query/game/game.wid`"
+        },
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [],
+          "message": "name the file as diagnostics show it (relative to the current directory), and the package it belongs to with `-in:`"
+        }
+      ],
+      "labels": [
+        {
+          "column": 16,
+          "end": 40,
+          "end_column": 41,
+          "end_line": 1,
+          "file": "command line",
+          "line": 1,
+          "message": "not a file this query read",
+          "primary": true,
+          "start": 15
+        }
+      ],
+      "line": 1,
+      "message": "no file `tests/query/game/gmae.wid` in the program",
+      "notes": [],
+      "severity": "error"
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}

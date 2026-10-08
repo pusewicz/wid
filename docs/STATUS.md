@@ -398,7 +398,7 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `NAME.stderr`; the directories there are their packages. Codes in their
   `.stderr` count as covered for the docs check. `docs/errors` pages about
   another command say so with `<!-- command: ARGS -->` and
-  `<!-- fix-command: ARGS -->` (E0601–E0604), which both errdocs scripts
+  `<!-- fix-command: ARGS -->` (E0601–E0605), which both errdocs scripts
   follow.
 - The query engine (`crates/wid_query`, for `wid query` now and the LSP
   later) depends on `wid_sema`, `wid_syntax` and `wid_diagnostics` only;
@@ -420,13 +420,56 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `wid_driver::cmdline` (shared by `doc` and `query`: the command line as
   a source, `package_target`, `ErrorContext`) turns it into E0601–E0603,
   worded per `Tool`. `Query::parse` gives usage errors, which the CLI
-  prints with status 2. Part 2 (`refs`, `type`) adds a per-span table of
-  resolutions and types that the checker records, kept in `Analysis` next
-  to the index.
+  prints with status 2.
+- What names and expressions resolve to (`wid_sema::uses`, for `wid query
+  refs`, `calls` and `type`): `Checker::recorder` is `Some` only in
+  `check_program_indexed`, and the `note_*` methods (`check/record.rs`)
+  return at once when it is `None`, so `check_program` allocates nothing
+  and pays one branch per call. They are called where a name resolves:
+  `Checker::expr` for every expression's type; `ident` (locals),
+  `const_ref_decl` and `fold_const` (constants, at a qualified one's last
+  name), `call_fn`, `call_with_values` and `call_package_set` (the set)
+  and `call_member` (the member chosen; `chosen_macro` for a set called
+  among declarations), `call_macro` and a declaration-level macro call,
+  package operator calls (at the operation), `value_member` and
+  `ivar_owner` (fields, at the declaring struct, so promotion needs
+  nothing more), `struct_new` (named
+  arguments, writes), `enum_member`, `package_member` and type paths (the
+  import name), `resolve_type_inner` (every written type, wrapped around
+  `resolve_type_here`), `resolve_path_type`, `decl_as_type` and
+  `generic_instance` (types; `decl_as_type` at a declaration's own name is
+  dropped), `resolve_include`, `overload_members` and `method_ref` (reads),
+  `declare_var`/`declare_param` and a proc's parameters (bindings), and
+  `lower_assign` (`note_write`: a read at an assignment target's name is a
+  write). Refs are deduplicated by span, target and kind. A span's type is
+  kept per lowering (the first frame's declaration and bindings plus the
+  innermost generic instance): the last type within one lowering wins (an
+  untyped literal lowered again with a parameter's type), the first
+  lowering's is the type, and the others' go to `instances`.
+  `Checker::build_uses` adds every declaration's own name (symbols,
+  fields, enum members, import names) with its type: a method's proc type
+  from `sigs`, a constant's, the declared type, a field's from its written
+  type; and every signature's parameters. Fields and enum members are
+  numbered as the index numbers them (the fields written in the body).
+- `wid_query` reads `Uses` from `Analysis::uses`. `refs` maps a span in a
+  virtual file to its outermost macro call (`SourceMap::expansion_chain`)
+  with `via_macro` the expansion's name, leaves out uses in `cimport:`
+  files, and finds `context` as the smallest symbol extent around a use
+  that isn't the symbol's own name. `type_at` takes the smallest typed span
+  around the position and the smallest use inside it (a declaration,
+  then a read or write, a type, an import, a call; a set's chosen member
+  before the set), and a name inside a larger expression gets its own
+  declared type unless it names the call or the generic type that starts
+  a written type. `find_file` matches the position's file by display, by
+  path, or by the end of a path; the driver picks the package that holds
+  the file when there's no `-in:`. Position failures are
+  `Failure::Position`, E0605 in `cmdline.rs`.
 - `tests/query/NAME.args` cases run `wid query` from the repository root
   (packages are `-in:tests/doc/shapes` and the like) against `NAME.stdout`
   and `NAME.stderr`; a usage error expects the CLI's two lines on stderr.
-  `tests/query/cmerged` is a package with a `cimport` without `as:`.
+  `tests/query/cmerged` is a package with a `cimport` without `as:`, and
+  `tests/query/game` (with `geo`) the program `refs`, `calls` and `type`
+  cases read.
 - Every `core` package opens the file named after it (`core/mem/mem.wid`,
   `core/builtin/builtin.wid`) with its package doc, and every public
   declaration in `core` has a `# ` doc comment directly above it: types,
@@ -1069,6 +1112,23 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `wid help query`. `wid doc`'s errors now prefer an exact member match
   (`Player.heal` for `heal`) over a similar package-level name, and a
   flag of another command says which command takes it.
+- `wid query`, part 2 (SPEC "Toolchain and CLI"): `refs <symbol>`,
+  `calls <symbol>` and `type <file:line:column>`, read from what the
+  checker records while it checks for a query (`wid_sema::uses`, see
+  "Conventions fixed so far"). `refs` lists every use with `location`,
+  `kind` (`declaration`, `read`, `write`, `call`, `type`, `import`),
+  `context` and, for code a macro generated, `via_macro` at the macro
+  call, sorted by file, line and column; generic instances and inlined
+  calls count once, `method(:f)` and `overload` lists read, promoted
+  fields are their declaring struct's. `calls` keeps the `call` uses.
+  `type` gives the innermost expression, name, binding, parameter,
+  written type or declaration name at a position, with `location`, `span`,
+  `type` (and `instances` for generic code), `kind` and `refers_to` (a
+  `def` item, or a `local`/`parameter` item); without `-in:` it reads the
+  package holding the file. E0605 reports a malformed position, an
+  unknown file (did-you-mean), a line or column past the end, and a
+  position with nothing recorded, pointing at the nearest code with a fix
+  that asks about it; a symbol path given to `type` gets a fix to `def`.
 - Linux and CI (`.github/workflows/ci.yml`, cached with sccache and
   rust-cache): `cargo fmt --check`; clippy and the full `cargo test` on
   Ubuntu 26.04 (clang-22, gcc-15, libclang 22, SDL3) and macOS 26 (Apple
@@ -1085,7 +1145,9 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   (`render_all_with`): `could not compile` stays with `build`, `run`,
   `check` and `test`; `cimport` could not import the header, and `wid doc`
   could not write the documentation, or warns that the page it printed may
-  be incomplete. The errdocs scripts accept every wording.
+  be incomplete. The errdocs scripts accept every wording. `wid query`
+  prints its diagnostics as JSON only (`refs`, `calls` and `type`
+  included), so it has no summary line.
 - `-file` errors point into the command line (`wid check main.wid -file`)
   for every command: no file named (E0206, or E0601 for `wid doc -file`,
   as for `wid query`) offers the only `.wid` file of the directory and
@@ -1213,25 +1275,8 @@ macro stack.
      and `private macro def`; definition-site resolution of the quote's own
      names; budgets (64 deep, 65,536 per build, E0903). The implementation
      notes are under "Expansion" above.
-2. **`wid query`** (`wid/query`, two stacked PRs). The introspection
-   engine in SPEC "Built for humans and LLMs": symbols, types,
-   definitions, references and call sites, as stable JSON.
-   - Part 1 (**landed**; see "Done" and "Conventions fixed so far"): the
-     `wid_query` engine, `wid_driver::analyze`, and `outline`, `def` and
-     `methods`.
-   - Part 2 (next): `refs <symbol>` (every use, call sites included) and
-     `type <file:line:col>` (the type and the declaration at a position).
-     The checker records, as it resolves them, a per-span table: for every
-     name, path, member access, method call (`recv.m`, `@f`, `self.m`),
-     `T.new` and struct literal field, operator method, `include`, `extend`
-     target, `using` field type and type written anywhere (parameters,
-     returns, locals, casts, generic arguments), the `DeclId` (or field,
-     enum member, local) it resolves to; and for every expression and
-     binding its `TyId`. Overload resolution and macro expansions record
-     the chosen member and the call site. `check_program_indexed` returns
-     the table next to the `Index`, `Analysis` keeps it, and the two
-     queries are new `Query`/`Answer` variants; `Query::parse` lists
-     `refs` and `type` as planned (a usage error) until then.
+2. **`wid query`** (`wid/query`, two stacked PRs): **landed** (see "Done"
+   and "Conventions fixed so far"; its limits are under "Known gaps").
 3. **`wid fmt`** (`wid/fmt`). A canonical formatter. It must be
    idempotent, and parse → format → parse must give the same AST for every
    file in `tests/`, `core/`, `vendor/` and `examples/`. It keeps comments
@@ -1331,10 +1376,22 @@ before anyone starts them.
   the documented package doesn't load are not listed. `cimport`
   declarations have no Wid location (their source is generated), and the C
   enum a constant came from isn't named.
-- `wid query`: `refs` and `type` are part 2 (see "Next"). It shares
-  `wid doc`'s limits on builtin types and patterns: `methods` lists only
-  what extensions add, and none for an alias of a builtin type
-  (`Vec2 = [2]F32`). A declaration a macro generates under a name from its
+- `wid query`: it shares `wid doc`'s limits on builtin types and
+  patterns: `methods` lists only what extensions add, and none for an
+  alias of a builtin type (`Vec2 = [2]F32`). `refs`, `calls` and `type`
+  see only code the checker lowers: a generic method that nothing
+  instantiates (an `extend` or `module` method is generic over `Self`, so
+  `wid query type` in `core:strings` finds little), a field default that
+  no `T.new` uses, and methods of other packages that the package doesn't
+  reach have no uses or types.
+  A constant's folded initializer (`MAX = 3`) records the constants it
+  reads but not its own types. A builtin type's uses are only where it is
+  written as a type. An operator method's use is at the whole operation
+  (`a + b`) or, for `+=`, at its target, since the parser keeps no span
+  for the operator. `refs` has no way to name a local (`type` covers
+  them), and `wid query calls` has no reverse view (what a method calls).
+  The LSP will want positions in UTF-16 (`SourceFile::offset_of_utf16`);
+  `type` takes characters. A declaration a macro generates under a name from its
   arguments (`counter :kills`) has the macro call as its `span`. A `using`
   origin has no location. The fixes in its diagnostics edit the command
   line as `wid query` rebuilds it (query, argument, `-in:`, `-file`), not

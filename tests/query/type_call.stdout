@@ -1,0 +1,58 @@
+{
+  "package": {
+    "doc": "A small game that `wid query refs`, `calls` and `type` read.",
+    "name": "game",
+    "path": "."
+  },
+  "query": "type",
+  "results": [
+    {
+      "kind": "call",
+      "location": {
+        "column": 8,
+        "end_column": 12,
+        "end_line": 93,
+        "file": "tests/query/game/game.wid",
+        "line": 93
+      },
+      "refers_to": {
+        "attributes": [],
+        "doc": null,
+        "kind": "method",
+        "location": {
+          "column": 7,
+          "end_column": 11,
+          "end_line": 38,
+          "file": "tests/query/game/game.wid",
+          "line": 38
+        },
+        "name": "heal",
+        "owner": {
+          "kind": "struct",
+          "name": "Player"
+        },
+        "package": ".",
+        "path": "Player.heal",
+        "private": false,
+        "signature": "def heal(amount: Int) -> Int",
+        "span": {
+          "column": 3,
+          "end_column": 6,
+          "end_line": 42,
+          "file": "tests/query/game/game.wid",
+          "line": 38
+        },
+        "static": false
+      },
+      "span": {
+        "column": 3,
+        "end_column": 15,
+        "end_line": 93,
+        "file": "tests/query/game/game.wid",
+        "line": 93
+      },
+      "type": "Int"
+    }
+  ],
+  "symbol": "tests/query/game/game.wid:93:8"
+}

@@ -11,6 +11,13 @@
 //! - `def`: items in `wid doc -json`'s shape (see [`item_json`]) with
 //!   `span`.
 //! - `methods`: groups, each with an `origin` and its `methods`.
+//! - `refs` and `calls`: uses, each with `location`, `kind` (`read`,
+//!   `write`, `call`, `type`, `import` or `declaration`), `context` (the
+//!   path of the declaration it is in, or `null`) and, for a use in code a
+//!   macro generated, `via_macro`.
+//! - `type`: one result with `location` (the name or code at the
+//!   position), `span` (what the type is of), `type` (or `null`), `kind`
+//!   and, where they apply, `instances` and `refers_to` (a `def` item).
 //!
 //! Every location has `file`, `line`, `column`, `end_line` and
 //! `end_column`. Object keys are sorted and lists keep the engine's
@@ -20,7 +27,7 @@ use serde_json::{Value, json};
 use wid_syntax::docs::first_paragraph;
 
 use crate::item::{Item, PackageInfo, Style, c_json, item_json, location_json, origin_json, package_json};
-use crate::{Answer, MethodGroup, Query};
+use crate::{Answer, MethodGroup, Query, RefItem, TypeItem};
 
 /// The document for a query: its answer, or empty `results` when it
 /// failed (the diagnostics say why).
@@ -30,6 +37,8 @@ pub fn document(query: &Query, package: Option<&PackageInfo>, answer: Option<&An
         Some(Answer::Outline(items)) => items.iter().map(outline_json).collect(),
         Some(Answer::Def(items)) => items.iter().map(|i| item_json(i, Style::Query)).collect(),
         Some(Answer::Methods(groups)) => groups.iter().map(group_json).collect(),
+        Some(Answer::Refs(refs)) => refs.iter().map(ref_json).collect(),
+        Some(Answer::Type(found)) => vec![type_json(found)],
     };
     json!({
         "query": query.name(),
@@ -76,4 +85,33 @@ pub fn group_json(group: &MethodGroup) -> Value {
         "origin": origin_json(&group.origin, Style::Query),
         "methods": group.methods.iter().map(|m| item_json(m, Style::Query)).collect::<Vec<_>>(),
     })
+}
+
+/// A use: `location`, `kind`, `context` and, from a macro, `via_macro`.
+pub fn ref_json(r: &RefItem) -> Value {
+    let mut map = serde_json::Map::new();
+    map.insert("location".into(), location_json(&Some(r.location.clone()), Style::Query));
+    map.insert("kind".into(), json!(r.kind.as_str()));
+    map.insert("context".into(), json!(r.context));
+    if let Some(m) = &r.via_macro {
+        map.insert("via_macro".into(), json!(m));
+    }
+    Value::Object(map)
+}
+
+/// What is at a position: `location`, `span`, `type`, `kind`, and where
+/// they apply `instances` and `refers_to`.
+pub fn type_json(t: &TypeItem) -> Value {
+    let mut map = serde_json::Map::new();
+    map.insert("location".into(), location_json(&Some(t.location.clone()), Style::Query));
+    map.insert("span".into(), location_json(&Some(t.span.clone()), Style::Query));
+    map.insert("type".into(), json!(t.ty));
+    map.insert("kind".into(), json!(t.kind));
+    if !t.instances.is_empty() {
+        map.insert("instances".into(), json!(t.instances));
+    }
+    if let Some(item) = &t.refers_to {
+        map.insert("refers_to".into(), item_json(item, Style::Query));
+    }
+    Value::Object(map)
 }

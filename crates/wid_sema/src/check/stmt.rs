@@ -264,6 +264,7 @@ impl<'a> Checker<'a> {
     }
 
     fn lower_assign(&mut self, targets: &[ast::Expr], op: Option<ast::BinOp>, values: &[ast::Expr], span: Span) {
+        targets.iter().for_each(|t| self.note_write(t));
         if targets.len() != 1 || values.len() != 1 {
             if let Some(op) = op {
                 let op_text = format!("{}=", op.as_str());

@@ -1,0 +1,33 @@
+{
+  "package": {
+    "doc": "A small game that `wid query refs`, `calls` and `type` read.",
+    "name": "game",
+    "path": "."
+  },
+  "query": "calls",
+  "results": [
+    {
+      "context": "main",
+      "kind": "call",
+      "location": {
+        "column": 5,
+        "end_column": 9,
+        "end_line": 110,
+        "file": "tests/query/game/game.wid",
+        "line": 110
+      }
+    },
+    {
+      "context": "main",
+      "kind": "call",
+      "location": {
+        "column": 25,
+        "end_column": 33,
+        "end_line": 110,
+        "file": "tests/query/game/game.wid",
+        "line": 110
+      }
+    }
+  ],
+  "symbol": "area_int"
+}

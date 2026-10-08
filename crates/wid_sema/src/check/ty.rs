@@ -175,6 +175,12 @@ impl<'a> Checker<'a> {
     }
 
     fn resolve_type_inner(&mut self, texpr: &ast::TypeExpr, ctx: &TyCtx) -> TyId {
+        let ty = self.resolve_type_here(texpr, ctx);
+        self.note_type(texpr.span, ty, crate::uses::TypedKind::Type);
+        ty
+    }
+
+    fn resolve_type_here(&mut self, texpr: &ast::TypeExpr, ctx: &TyCtx) -> TyId {
         let pointee = std::mem::take(&mut self.pointee);
         match &texpr.kind {
             // A splice outside generated code is a parse error, reported.
@@ -401,6 +407,9 @@ impl<'a> Checker<'a> {
                 return self.types.unknown();
             }
         };
+        if let [qualifier, _] = segments {
+            self.note_package(qualifier.span, pkg);
+        }
         let text = name.name.as_str();
         if segments.len() == 2 && self.input.packages[pkg.0 as usize].path == "core:c" {
             if let Some(t) = self.c_type_alias(text) {
@@ -452,6 +461,7 @@ impl<'a> Checker<'a> {
             if let Some(t) = self.primitive(text)
                 && !(SHADOWABLE_NAMES.contains(&text) && self.lookup_pkg(pkg, name.name).is_some())
             {
+                self.note_builtin(name.span, text);
                 return t;
             }
         }
@@ -465,6 +475,7 @@ impl<'a> Checker<'a> {
             .or_else(|| if segments.len() == 1 { self.lookup_prelude(name.name) } else { None });
         if let Some(decl) = found {
             self.check_visible_from(decl, ctx.loc.pkg, name.span);
+            self.note_ref(name.span, decl, crate::uses::RefKind::Type);
             if !args.is_empty() {
                 let deferrals = self.value_deferrals;
                 let arg_tys: Vec<TyId> = args
@@ -636,6 +647,7 @@ impl<'a> Checker<'a> {
 
     /// Returns the type a declaration names, reporting when it isn't a type.
     pub fn decl_as_type(&mut self, decl: super::DeclId, span: Span) -> TyId {
+        self.note_ref(span, decl, crate::uses::RefKind::Type);
         let is_record = matches!(self.decls[decl.0 as usize].kind, DeclKind::Struct(_) | DeclKind::Union(_));
         if !is_record && let Some(&t) = self.decl_types.get(&decl) {
             return t;

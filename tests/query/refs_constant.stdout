@@ -1,0 +1,57 @@
+{
+  "package": {
+    "doc": "A small game that `wid query refs`, `calls` and `type` read.",
+    "name": "game",
+    "path": "."
+  },
+  "query": "refs",
+  "results": [
+    {
+      "context": null,
+      "kind": "declaration",
+      "location": {
+        "column": 1,
+        "end_column": 7,
+        "end_line": 6,
+        "file": "tests/query/game/game.wid",
+        "line": 6
+      }
+    },
+    {
+      "context": "Player",
+      "kind": "read",
+      "location": {
+        "column": 3,
+        "end_column": 21,
+        "end_line": 44,
+        "file": "tests/query/game/game.wid",
+        "line": 44
+      },
+      "via_macro": "full_heal_method"
+    },
+    {
+      "context": "main",
+      "kind": "read",
+      "location": {
+        "column": 13,
+        "end_column": 22,
+        "end_line": 92,
+        "file": "tests/query/game/game.wid",
+        "line": 92
+      },
+      "via_macro": "double_hp"
+    },
+    {
+      "context": "main",
+      "kind": "read",
+      "location": {
+        "column": 46,
+        "end_column": 52,
+        "end_line": 109,
+        "file": "tests/query/game/game.wid",
+        "line": 109
+      }
+    }
+  ],
+  "symbol": "MAX_HP"
+}

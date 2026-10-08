@@ -1,0 +1,57 @@
+{
+  "package": {
+    "doc": "A small game that `wid query refs`, `calls` and `type` read.",
+    "name": "game",
+    "path": "."
+  },
+  "query": "type",
+  "results": [
+    {
+      "kind": "field",
+      "location": {
+        "column": 32,
+        "end_column": 33,
+        "end_line": 13,
+        "file": "tests/query/game/geo/geo.wid",
+        "line": 13
+      },
+      "refers_to": {
+        "attributes": [],
+        "doc": null,
+        "kind": "field",
+        "location": {
+          "column": 3,
+          "end_column": 4,
+          "end_line": 5,
+          "file": "tests/query/game/geo/geo.wid",
+          "line": 5
+        },
+        "name": "x",
+        "owner": {
+          "kind": "struct",
+          "name": "Vec"
+        },
+        "package": "./geo",
+        "path": "Vec.x",
+        "private": false,
+        "signature": "x: F32",
+        "span": {
+          "column": 3,
+          "end_column": 9,
+          "end_line": 5,
+          "file": "tests/query/game/geo/geo.wid",
+          "line": 5
+        }
+      },
+      "span": {
+        "column": 32,
+        "end_column": 33,
+        "end_line": 13,
+        "file": "tests/query/game/geo/geo.wid",
+        "line": 13
+      },
+      "type": "F32"
+    }
+  ],
+  "symbol": "tests/query/game/geo/geo.wid:13:32"
+}

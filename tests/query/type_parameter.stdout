@@ -1,0 +1,53 @@
+{
+  "package": {
+    "doc": "A small game that `wid query refs`, `calls` and `type` read.",
+    "name": "game",
+    "path": "."
+  },
+  "query": "type",
+  "results": [
+    {
+      "kind": "parameter",
+      "location": {
+        "column": 19,
+        "end_column": 25,
+        "end_line": 39,
+        "file": "tests/query/game/game.wid",
+        "line": 39
+      },
+      "refers_to": {
+        "attributes": [],
+        "doc": null,
+        "kind": "parameter",
+        "location": {
+          "column": 12,
+          "end_column": 23,
+          "end_line": 38,
+          "file": "tests/query/game/game.wid",
+          "line": 38
+        },
+        "name": "amount",
+        "package": "",
+        "path": "amount",
+        "private": false,
+        "signature": "amount: Int",
+        "span": {
+          "column": 12,
+          "end_column": 23,
+          "end_line": 38,
+          "file": "tests/query/game/game.wid",
+          "line": 38
+        }
+      },
+      "span": {
+        "column": 19,
+        "end_column": 25,
+        "end_line": 39,
+        "file": "tests/query/game/game.wid",
+        "line": 39
+      },
+      "type": "Int"
+    }
+  ],
+  "symbol": "tests/query/game/game.wid:39:19"
+}

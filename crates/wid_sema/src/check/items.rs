@@ -824,6 +824,7 @@ impl<'a> Checker<'a> {
                 let decl = self.lookup_pkg(loc.pkg, *name)?;
                 match self.decls[decl.0 as usize].kind {
                     DeclKind::Const(_) => {
+                        self.note_ref(expr.span, decl, crate::uses::RefKind::Read);
                         if let Some(v) = self.const_untyped(decl) {
                             v
                         } else {

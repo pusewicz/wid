@@ -1,0 +1,33 @@
+{
+  "package": {
+    "doc": "A small game that `wid query refs`, `calls` and `type` read.",
+    "name": "game",
+    "path": "."
+  },
+  "query": "refs",
+  "results": [
+    {
+      "context": "Entity",
+      "kind": "declaration",
+      "location": {
+        "column": 7,
+        "end_column": 11,
+        "end_line": 24,
+        "file": "tests/query/game/game.wid",
+        "line": 24
+      }
+    },
+    {
+      "context": "main",
+      "kind": "call",
+      "location": {
+        "column": 8,
+        "end_column": 12,
+        "end_line": 94,
+        "file": "tests/query/game/game.wid",
+        "line": 94
+      }
+    }
+  ],
+  "symbol": "Player.hurt"
+}

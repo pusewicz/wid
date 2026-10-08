@@ -360,15 +360,24 @@ Queries:
                    an overload set gives the set and each of its members
   methods <Type>   Every method callable on a type, grouped by where it comes
                    from: the type itself, `include`, `extend` and `using`
+  refs <symbol>    Every use of a symbol: where, how (`read`, `write`, `call`,
+                   `type`, `import`, `declaration`) and in which declaration
+  calls <symbol>   The uses of a symbol that call it
+  type <file:line:column>
+                   What is at a position, and its type: the innermost
+                   expression, name, binding or written type there
 
 The package is the one in `.`, or the one `-in:` names: a directory, a `.wid`
-file with `-file`, or a collection path like `core:fmt`. The JSON shapes are
-described in SPEC.md (\"Toolchain and CLI\").
+file with `-file`, or a collection path like `core:fmt`; for `type`, the
+package that holds the position's file. The JSON shapes are described in
+SPEC.md (\"Toolchain and CLI\").
 
 Examples:
   wid query outline
   wid query def Ball.update -in:game
   wid query methods String -in:core:strings
+  wid query refs Ball.pos -in:game
+  wid query type game/main.wid:12:5
 
 Flags:
   -in:<package>          The package to query (default `.`)

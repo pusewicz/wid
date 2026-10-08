@@ -1,0 +1,55 @@
+{
+  "package": {
+    "doc": "A small game that `wid query refs`, `calls` and `type` read.",
+    "name": "game",
+    "path": "."
+  },
+  "query": "refs",
+  "results": [
+    {
+      "context": null,
+      "kind": "declaration",
+      "location": {
+        "column": 1,
+        "end_column": 15,
+        "end_line": 3,
+        "file": "tests/query/game/game.wid",
+        "line": 3
+      }
+    },
+    {
+      "context": "Entity",
+      "kind": "import",
+      "location": {
+        "column": 8,
+        "end_column": 11,
+        "end_line": 22,
+        "file": "tests/query/game/game.wid",
+        "line": 22
+      }
+    },
+    {
+      "context": "main",
+      "kind": "import",
+      "location": {
+        "column": 14,
+        "end_column": 17,
+        "end_line": 98,
+        "file": "tests/query/game/game.wid",
+        "line": 98
+      }
+    },
+    {
+      "context": "main",
+      "kind": "import",
+      "location": {
+        "column": 8,
+        "end_column": 11,
+        "end_line": 99,
+        "file": "tests/query/game/game.wid",
+        "line": 99
+      }
+    }
+  ],
+  "symbol": "geo"
+}
