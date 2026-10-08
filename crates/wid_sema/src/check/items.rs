@@ -677,6 +677,27 @@ impl<'a> Checker<'a> {
             self.consts.insert(decl, ConstState::Failed);
             return None;
         }
+        // `BUF: [4]U8 = ---`: there are no package-level variables, and a
+        // constant needs a value computed while compiling.
+        if let ast::ExprKind::Uninit = c.value.kind {
+            let name = d.name;
+            let span = c.value.span;
+            let why = "a constant's value is computed while compiling, and `---` only opts a variable out of zeroing";
+            let note = match d.owner {
+                Some(_) => why.to_string(),
+                None => format!("Wid has no package-level variables, so `{name}` is a constant: {why}"),
+            };
+            let mut diag = Diagnostic::error(codes::NOT_A_VALUE, format!("the constant `{name}` needs a value"))
+                .primary(span, "`---` leaves it without one")
+                .note(note)
+                .suggest_replace("give it the value it should hold", span, "…", Applicability::HasPlaceholders);
+            if c.ty.is_some() {
+                diag = diag.suggest_replace("or make it the zero value", span, "{}", Applicability::MaybeIncorrect);
+            }
+            self.report(diag.help("for state that changes, keep it in a struct that methods receive"));
+            self.consts.insert(decl, ConstState::Failed);
+            return None;
+        }
         self.consts.insert(decl, ConstState::Resolving);
         self.const_stack.push(decl);
         let errors_before = self.diags.error_count();

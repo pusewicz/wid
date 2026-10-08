@@ -60,7 +60,10 @@ end
 - **Declarations.** The first assignment declares a variable: `x = 1`,
   `speed: F32 = 120.0`, or `grid: [4][4]U8`. Variables are zero-initialized,
   and `= ---` opts out. As in Ruby, a name that starts with an uppercase letter
-  is a compile-time constant: `MAX = 256`, `Vec2 = [2]F32`. Reading an
+  is a compile-time constant: `MAX = 256`, `Vec2 = [2]F32`. There are no
+  package-level variables, and a constant always has a value: `= ---` on one
+  is an error (E0323) whose fixes write a value or `{}`, except on an
+  `@[extern]` constant, whose value C defines. Reading an
   undeclared name is an error with a "did you mean", and so is a local
   variable that is assigned but never read (prefix it with `_` to keep it).
   Writing a field or an element of a variable (`ship.hp = 9`,

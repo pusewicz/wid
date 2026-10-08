@@ -1352,6 +1352,11 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   doesn't report spreading for `f(*)` nor arguments missing after one
   that failed to parse (`g(a: , b: 2)`), and a range with a bound that
   failed to parse (`[..]`, `for i in ..`) isn't E0323.
+- `---` as a constant's value (#112, SPEC "Syntax"): `resolve_const`
+  reports E0323 "the constant `BUF` needs a value" before evaluating it,
+  saying Wid has no package-level variables (for a constant at package
+  level), with fixes that write a value (`…`) or, for a typed constant,
+  `{}`. `@[extern]` constants keep `= ---`.
 
 ## Next
 

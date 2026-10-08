@@ -1,0 +1,13 @@
+# `---` opts a variable out of zeroing. A constant has no variable to leave
+# uninitialized: its value is computed while compiling, so it needs one. The
+# fixes give it a value, or the zero value when it has a type.
+BUF: [4]U8 = ---
+LIMIT = ---
+
+struct Pool
+  CAP: Int = ---
+end
+
+def main
+  p BUF, LIMIT, Pool.CAP
+end
