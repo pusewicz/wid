@@ -525,6 +525,16 @@ impl<'a> Checker<'a> {
     }
 
     fn const_ref(&mut self, name: Name, span: Span, expected: Option<TyId>) -> ir::Expr {
+        // A value parameter of the generic struct whose method this is, like
+        // `N` in `Pool(Ball, 64)`: an untyped integer constant.
+        if let Some(t) = self.body.frames.last().and_then(|f| super::generics::lookup(&f.subst, name)) {
+            match *self.types.kind(t) {
+                TyKind::ConstValue(v) => return self.const_with_expected(ConstValue::Int(v), expected, span),
+                // An argument that was reported.
+                TyKind::Unknown => return ir::Expr::new(ExprKind::Zero, t),
+                _ => {}
+            }
+        }
         let loc = self.loc();
         let wants_type = expected.is_some_and(|t| matches!(self.types.kind(t), TyKind::Type));
         if (wants_type || self.comptime_depth > 0)

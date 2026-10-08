@@ -182,6 +182,13 @@ end
   Only generic structs take value parameters: a method's `xs: [$N]Int` is
   E0105, and the method takes a slice, `xs: []Int`, with `xs.size` as its
   length, instead.
+  - In the struct's methods and in an `extend` of it, a value parameter is
+    a constant of the instance: in `Pool(Ball, 64)`, `N` is `64` wherever
+    a constant integer fits (`def cap -> Int = N`, `buf: [N + 1]U8`,
+    `comptime N * 2`, `Pool(T, N * 2).new`, `N.times`). Like a constant
+    declared without a type (`MAX = 64`), it takes its type from where it
+    is used and is an `Int` otherwise. It can't be assigned. Methods of an
+    included module don't see the struct's generic parameters.
   - Type arguments are inferred from the arguments. A `[N]T` or `[dynamic]T`
     argument matches a `[]$T` parameter.
   - Generic code is checked once per set of type arguments, like a template:

@@ -368,7 +368,7 @@ impl<'a> Checker<'a> {
             ValueArg::Value => {}
         }
         let errors = self.diags.error_count();
-        let value = self.eval_const(e, loc);
+        let value = self.eval_const_in(e, loc, subst);
         let want = self.source_text(want.span);
         match value {
             Some(super::items::ConstValue::Int(v)) => Some(self.types.intern(TyKind::ConstValue(v))),

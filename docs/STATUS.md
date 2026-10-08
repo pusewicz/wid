@@ -458,6 +458,15 @@ runs the stages; `wid_cli` is the `wid` binary.
   without arguments is E0315 at the use (`geo.Box.new` compiled, and
   `Outcome.size` was reported at the declaration). `x = geo.Box(Int)`
   suggests `geo.Box(Int).new` (#27).
+- A generic struct's value parameter is a constant in its methods and in
+  an `extend` of it: `def cap -> Int = N` in `Pool(Int, 4)` is `4` (it was
+  E0201, undefined constant `N`). A constant name looks in the frame's
+  generic bindings first and reads a `$N` there as an untyped integer
+  constant, so it fits `U8` or `F64` where those are expected; constant
+  folding (`fold_const_in`, `eval_const_in`) takes the bindings of a type
+  context, so `buf: [N + 1]U8`, `Pool(T, N * 2).new`, `matrix[N, N]F32`
+  and `comptime N * 2` work in a body, and `N.times` and `type_info(N)`
+  read `N` as a value instead of a type (#35).
 - Macro syntax: `quote` bodies holding statements and declarations, with
   splices in every expression, type, declaration and name position (`#{x}`,
   `@#{f}`, `:#{s}`), splices outside a `quote` (E0111), variadic

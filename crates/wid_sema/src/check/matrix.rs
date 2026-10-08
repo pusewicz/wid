@@ -25,7 +25,7 @@ impl Checker<'_> {
     ) -> TyId {
         let elem_ty = self.resolve_type(elem, ctx);
         let dim = |this: &mut Self, e: &ast::Expr, what: &str| -> Option<u32> {
-            match this.eval_const(e, ctx.loc) {
+            match this.eval_const_in(e, ctx.loc, &ctx.subst) {
                 Some(ConstValue::Int(n)) if (1..=MAX_DIM).contains(&n) => Some(n as u32),
                 Some(ConstValue::Int(n)) => {
                     this.report(

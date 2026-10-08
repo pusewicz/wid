@@ -100,7 +100,8 @@ impl<'a> Checker<'a> {
             E::Const(n) => {
                 let frame = self.frame();
                 if (n.as_str() == "Self" && frame.self_ty.is_some())
-                    || super::generics::lookup(&frame.subst, *n).is_some()
+                    || super::generics::lookup(&frame.subst, *n)
+                        .is_some_and(|t| !matches!(self.types.kind(t), TyKind::ConstValue(_)))
                 {
                     true
                 } else {

@@ -1,0 +1,69 @@
+# A generic struct's value parameter is a constant in its methods and in an
+# `extend` of it: `N` in `Pool(Int, 4)` is `4`.
+LIMIT = 3
+
+struct Pool($T, $N: Int)
+  items: [N]T
+  used: Int
+
+  def cap -> Int = N
+  def free -> Int = N - @used
+  def full? -> Bool = @used == N
+  def doubled -> Int = comptime N * 2
+  def triangle -> Int = comptime do
+    total = 0
+    for i in 1..N
+      total += i
+    end
+    total
+  end
+  def small -> U8 = N
+  def share -> F64 = 1.0 / N
+  def scratch -> Int
+    buf: [N + 1]U8 = {}
+    buf.size
+  end
+  def grid_cells -> Int
+    m: matrix[N, N]F32 = {}
+    m.row(0).size * N
+  end
+  def sum_indices -> Int
+    total = 0
+    N.times { |i| total += i }
+    total
+  end
+  def describe -> String = "#{N} x #{size_of(T)} bytes"
+  def kind -> String = type_info(N).name
+
+  # A nested generic: a bigger pool, whose own methods read its own `N`.
+  def grown -> Int = Pool(T, N * 2).new.cap
+  def twin_cap -> Int = Pool(T, N).new(used: 1).free
+end
+
+struct Grid($N: Int)
+  cells: [N]Int
+
+  def side -> Int = N
+  def pool_cap -> Int = Pool(F32, N + LIMIT).new.cap
+end
+
+extend Pool($T, $N)
+  def last_index -> Int = N - 1
+end
+
+def main
+  x: Pool(Int, 4) = {}
+  x.used = 1
+  p x.cap, x.free, x.full?, x.doubled, x.triangle, x.small, x.share
+  p x.scratch, x.grid_cells, x.sum_indices
+  puts x.describe
+  puts x.kind
+  p x.grown, x.twin_cap, x.last_index
+
+  y = Pool(U8, LIMIT * 2).new
+  p y.cap, y.items.size, y.last_index
+  puts y.describe
+
+  g: Grid(LIMIT) = {}
+  p g.side, g.cells.size, g.pool_cap
+end

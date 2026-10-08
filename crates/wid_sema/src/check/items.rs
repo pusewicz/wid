@@ -688,7 +688,13 @@ impl<'a> Checker<'a> {
     /// stays untyped; anything else (`comptime`, struct literals, `T.size`,
     /// method calls in `comptime`) runs in the interpreter.
     pub fn eval_const(&mut self, expr: &ast::Expr, loc: DeclLoc) -> Option<ConstValue> {
-        if let Some(v) = self.fold_const(expr, loc) {
+        self.eval_const_in(expr, loc, &[])
+    }
+
+    /// Like [`Checker::eval_const`], where the generic value parameters
+    /// bound in `subst` (`N` in `Pool(Ball, 64)`) are constants too.
+    pub fn eval_const_in(&mut self, expr: &ast::Expr, loc: DeclLoc, subst: &[(Name, TyId)]) -> Option<ConstValue> {
+        if let Some(v) = self.fold_const_in(expr, loc, subst) {
             return Some(v);
         }
         self.interpret_const(expr, None, loc).map(ConstValue::from_typed)
@@ -712,6 +718,12 @@ impl<'a> Checker<'a> {
     /// Folds literal arithmetic on constants, returning `None` when the
     /// expression is anything else.
     pub fn fold_const(&mut self, expr: &ast::Expr, loc: DeclLoc) -> Option<ConstValue> {
+        self.fold_const_in(expr, loc, &[])
+    }
+
+    /// Like [`Checker::fold_const`], where the generic value parameters
+    /// bound in `subst` are constants too.
+    pub fn fold_const_in(&mut self, expr: &ast::Expr, loc: DeclLoc, subst: &[(Name, TyId)]) -> Option<ConstValue> {
         use ast::ExprKind as E;
         Some(match &expr.kind {
             E::Int(v) => ConstValue::Int(i128::try_from(*v).ok()?),
@@ -728,8 +740,14 @@ impl<'a> Checker<'a> {
                 }
                 ConstValue::Str(s)
             }
-            E::Paren(inner) => self.fold_const(inner, loc)?,
+            E::Paren(inner) => self.fold_const_in(inner, loc, subst)?,
             E::Const(name) => {
+                // A value parameter, like `N` in a method of `Pool(Ball, 64)`.
+                if let Some(t) = super::generics::lookup(subst, *name)
+                    && let TyKind::ConstValue(v) = self.types.kind(t)
+                {
+                    return Some(ConstValue::Int(*v));
+                }
                 // A macro's own code names constants where the macro is.
                 let loc = self.virtual_file(expr.span.file).map_or(loc, |v| v.loc);
                 let decl = self.lookup_pkg(loc.pkg, *name)?;
@@ -748,7 +766,7 @@ impl<'a> Checker<'a> {
                 }
             }
             E::Unary { op, expr: inner } => {
-                let v = self.fold_const(inner, loc)?;
+                let v = self.fold_const_in(inner, loc, subst)?;
                 match (op, v) {
                     (ast::UnOp::Neg, ConstValue::Int(i)) => ConstValue::Int(-i),
                     (ast::UnOp::Neg, ConstValue::Float(f)) => ConstValue::Float(-f),
@@ -758,8 +776,8 @@ impl<'a> Checker<'a> {
                 }
             }
             E::Binary { op, lhs, rhs } => {
-                let l = self.fold_const(lhs, loc)?;
-                let r = self.fold_const(rhs, loc)?;
+                let l = self.fold_const_in(lhs, loc, subst)?;
+                let r = self.fold_const_in(rhs, loc, subst)?;
                 fold_binary(*op, l, r)?
             }
             _ => return None,

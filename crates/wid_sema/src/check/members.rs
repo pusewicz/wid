@@ -142,7 +142,10 @@ impl<'a> Checker<'a> {
                 {
                     return Receiver::Type(t);
                 }
-                if let Some(t) = self.body.frames.last().and_then(|f| super::generics::lookup(&f.subst, *n)) {
+                // A value parameter, like `N` in `N.times`, is a value.
+                if let Some(t) = self.body.frames.last().and_then(|f| super::generics::lookup(&f.subst, *n))
+                    && !matches!(self.types.kind(t), TyKind::ConstValue(_))
+                {
                     return Receiver::Type(t);
                 }
                 let loc = self.loc_at(recv.span);
@@ -953,7 +956,7 @@ impl Checker<'_> {
             return t;
         }
         if let ast::ExprKind::Int(_) | ast::ExprKind::Unary { .. } | ast::ExprKind::Binary { .. } = e.kind
-            && let Some(super::items::ConstValue::Int(v)) = self.fold_const(e, self.loc())
+            && let Some(super::items::ConstValue::Int(v)) = self.fold_const_in(e, self.loc(), &ctx.subst)
         {
             return self.types.intern(TyKind::ConstValue(v));
         }
