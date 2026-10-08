@@ -564,6 +564,19 @@ runs the stages; `wid_cli` is the `wid` binary.
   a name from a `Symbol`) point at the splice in the `quote` and list the
   calls, in both renderers; a name the macro computed is named in the
   label at the call instead of the call getting a type (#30).
+- A bare read of a field of `self` in an instance method (`hp` for `@hp`),
+  its own or promoted by `using`, is E0201 with a note naming the struct
+  that declares the field and a machine-applicable fix that writes `@hp`
+  (#44); a promoted field read that way was E0305 with a help about
+  arguments. `Checker::self_member` searches like `self.name`, so methods,
+  implicit-self calls and promoted proc fields work as before.
+- A C compiler without C23 (one that rejects `-std=c23`, like gcc 13 or
+  clang 17, or lacks `<stdckdint.h>` or `#embed`) is E0702 "the C compiler
+  `cc` doesn't support C23", with the first line of its `--version`, the
+  versions Wid needs and a help to choose another with `-cc:` or `WID_CC`,
+  instead of a Wid bug (#46). `run_step` reads the compiler's output on any
+  `-std=c23` step; working compilers are never run an extra time.
+  `crates/wid_driver/tests/toolchain.rs` builds with fake compilers.
 - Test suite: `tests/run` (clang and gcc-16, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
   `tests/test` (`wid test` reports) and every `core/` package's `_test.wid`

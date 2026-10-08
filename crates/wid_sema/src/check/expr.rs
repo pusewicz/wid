@@ -46,6 +46,13 @@ pub(super) const BUILTINS: &[&str] = &[
     "type_info",
 ];
 
+/// What a name reaches through `self`: a field of the struct `owner` (its
+/// own, or one `using` promotes), or a method.
+enum SelfMember {
+    Field { owner: TyId, is_proc: bool },
+    Method,
+}
+
 impl<'a> Checker<'a> {
     /// Checks `e` against `expected` and coerces the result to it.
     pub fn expr_coerced(&mut self, e: &ast::Expr, ty: TyId) -> ir::Expr {
@@ -444,9 +451,71 @@ impl<'a> Checker<'a> {
             var.read = true;
         }
         if !self.declared_by_failed_macro(true, true) {
-            self.undefined(name, span, candidates, "name");
+            match self.self_field_owner(name) {
+                Some(owner) => self.undefined_field_name(name, span, owner),
+                None => self.undefined(name, span, candidates, "name"),
+            }
         }
         ir::Expr::new(ExprKind::Zero, self.types.unknown())
+    }
+
+    /// The struct declaring `name` when it is a field of `self` in an
+    /// instance method, its own or promoted by `using`, which a bare name
+    /// doesn't read.
+    fn self_field_owner(&mut self, name: Name) -> Option<TyId> {
+        let self_ty = self.frame().self_ty?;
+        self.frame().self_local?;
+        match self.self_member(self_ty, name, &mut Vec::new())? {
+            SelfMember::Field { owner, .. } => Some(owner),
+            SelfMember::Method => None,
+        }
+    }
+
+    /// Finds what `name` reaches in `ty`, as `self.name` does: the struct's
+    /// own members first, then each `using` field in order.
+    fn self_member(&mut self, ty: TyId, name: Name, visited: &mut Vec<TyId>) -> Option<SelfMember> {
+        let ty = match *self.types.kind(ty) {
+            TyKind::Pointer(t) => t,
+            _ => ty,
+        };
+        if visited.contains(&ty) {
+            return None;
+        }
+        visited.push(ty);
+        if let Some((_, fty)) = self.field_index(ty, name) {
+            let is_proc = matches!(self.types.kind(fty), TyKind::Proc(_));
+            return Some(SelfMember::Field { owner: ty, is_proc });
+        }
+        if self.find_method(ty, name).is_some() || self.find_included(ty, name).is_some() {
+            return Some(SelfMember::Method);
+        }
+        let TyKind::Struct(id) = *self.types.kind(ty) else { return None };
+        let used: Vec<TyId> = self.types.struct_info(id).fields.iter().filter(|f| f.using).map(|f| f.ty).collect();
+        used.into_iter().find_map(|t| self.self_member(t, name, visited))
+    }
+
+    /// Reports a bare read of a field of `self`, which needs `@`.
+    fn undefined_field_name(&mut self, name: Name, span: Span, owner: TyId) {
+        let shown = self.types.display(owner);
+        let self_ty = self.frame().self_ty;
+        let note = match self_ty {
+            Some(t) if t != owner => {
+                let promoted = self.types.display(t);
+                format!("`{name}` is a field of `{shown}`, promoted into `{promoted}` by `using`")
+            }
+            _ => format!("`{name}` is a field of `{shown}`"),
+        };
+        self.report(
+            Diagnostic::error(codes::UNDEFINED_NAME, format!("undefined name `{name}`"))
+                .primary(span, "not found in this scope")
+                .note(format!("{note}; a bare name in a method is a variable or a method call, never a field"))
+                .suggest_replace(
+                    format!("read the field with `@{name}`, which means `self.{name}`"),
+                    span,
+                    format!("@{name}"),
+                    Applicability::MachineApplicable,
+                ),
+        );
     }
 
     /// Calls a method of the current type without an explicit receiver,
@@ -471,6 +540,15 @@ impl<'a> Checker<'a> {
                     self.frame().self_local?;
                     let recv = self.self_place(name_span, "this");
                     let ident = ast::Ident { name, span: name_span };
+                    // A bare read of a promoted field isn't a call: `ident`
+                    // reports it with the fix to write `@name`.
+                    let bare = span == name_span && args.is_empty() && block.is_none();
+                    if bare
+                        && let Some(SelfMember::Field { is_proc: false, .. }) =
+                            self.self_member(self_ty, name, &mut Vec::new())
+                    {
+                        return None;
+                    }
                     if self.using_lookup(self_ty, name, name_span).is_some() {
                         return Some(self.value_member(recv, name_span, ident, Some(args), block, span, None));
                     }

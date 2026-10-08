@@ -1,0 +1,37 @@
+module Greeting
+  def greet = puts name
+end
+
+struct Stats
+  hp: Int = 100
+  def heal -> Int = @hp + 1
+end
+
+struct Player
+  using stats: Stats
+  name: String = "ada"
+  mp: Int = 5
+  include Greeting
+
+  def bonus -> Int = 7
+  def mana -> Int = mp
+  def health -> Int = hp
+  def total -> Int = bonus + heal + @hp + @mp
+
+  def regen -> Int
+    t = 0
+    [1, 2].each do |x|
+      t += x + mp
+    end
+    mp = 3
+    t + mp
+  end
+
+  def self.make -> Int = mp
+end
+
+def main
+  pl = Player.new
+  p pl.mana + pl.health + pl.total + pl.regen + Player.make
+  pl.greet
+end

@@ -1,0 +1,52 @@
+error[E0201]: undefined name `name`
+  --> tests/ui/bare_field.wid:2:20
+   |
+ 2 |   def greet = puts name
+   |                    ^^^^ not found in this scope
+...
+36 |   pl.greet
+   |   -------- `Player#greet` is checked for these types because of this call
+   = note: `name` is a field of `Player`; a bare name in a method is a variable or a method call, never a field
+   = note: the error is inside the generic method `Player#greet`
+help: read the field with `@name`, which means `self.name`
+   |   def greet = puts @name
+   = see `wid explain E0201`
+
+error[E0201]: undefined name `mp`
+  --> tests/ui/bare_field.wid:17:21
+   |
+17 |   def mana -> Int = mp
+   |                     ^^ not found in this scope
+   = note: `mp` is a field of `Player`; a bare name in a method is a variable or a method call, never a field
+help: read the field with `@mp`, which means `self.mp`
+   |   def mana -> Int = @mp
+   = see `wid explain E0201`
+
+error[E0201]: undefined name `hp`
+  --> tests/ui/bare_field.wid:18:23
+   |
+18 |   def health -> Int = hp
+   |                       ^^ not found in this scope
+   = note: `hp` is a field of `Stats`, promoted into `Player` by `using`; a bare name in a method is a variable or a method call, never a field
+help: read the field with `@hp`, which means `self.hp`
+   |   def health -> Int = @hp
+   = see `wid explain E0201`
+
+error[E0201]: undefined name `mp`
+  --> tests/ui/bare_field.wid:24:16
+   |
+24 |       t += x + mp
+   |                ^^ not found in this scope
+   = note: `mp` is a field of `Player`; a bare name in a method is a variable or a method call, never a field
+help: read the field with `@mp`, which means `self.mp`
+   |       t += x + @mp
+   = see `wid explain E0201`
+
+error[E0201]: undefined name `mp`
+  --> tests/ui/bare_field.wid:30:26
+   |
+30 |   def self.make -> Int = mp
+   |                          ^^ not found in this scope
+   = see `wid explain E0201`
+
+error: could not compile due to 5 errors
