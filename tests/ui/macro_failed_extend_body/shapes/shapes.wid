@@ -1,0 +1,16 @@
+# The macro's own code has an error, so the call never runs; the `extend`
+# it would have generated applies to the whole program.
+struct Ball
+  r: F32
+end
+
+macro def add_ping(t: Type) -> Code
+  n = t.methods.size
+  quote do
+    extend #{t}
+      def ping -> Int = #{n}
+    end
+  end
+end
+
+add_ping Ball

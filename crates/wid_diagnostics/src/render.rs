@@ -74,7 +74,7 @@ pub fn render(diag: &Diagnostic, sources: &SourceMap, opts: RenderOptions) -> St
     );
 
     let primary = diag.primary_span();
-    let frames = primary.map(|s| expansion_frames(sources, s)).unwrap_or_default();
+    let frames = diag.chain_span().map(|s| expansion_frames(sources, s)).unwrap_or_default();
 
     let mut max_line = 1u32;
     for label in &diag.labels {
@@ -121,7 +121,7 @@ pub fn render(diag: &Diagnostic, sources: &SourceMap, opts: RenderOptions) -> St
             1 => format!("`{}` expands here", frame.name),
             n => format!("`{}` expands here ({n} nested calls)", frame.name),
         };
-        let label = Label { span: frame.span, message, primary: false };
+        let label = Label { span: frame.span, message, primary: false, splice: false };
         render_labels(&mut out, &p, file, &[&label], &pad, width);
     }
 
@@ -322,7 +322,8 @@ fn span_json(sources: &SourceMap, span: Span) -> serde_json::Map<String, Value> 
 /// Every position is an object with `file`, `line`, `column`, `end_line`,
 /// `end_column` and the byte offsets `start` and `end`. A position in code a
 /// macro generated is the position in the macro's `quote`. `expansions`
-/// lists the macro calls that generated the code the diagnostic points at,
+/// lists the macro calls that generated the code the diagnostic points at
+/// (for code spliced in from a call site, the code where it landed),
 /// innermost first, each a position with the macro's name in `macro`; it is
 /// empty for code written in a file.
 pub fn to_json(diag: &Diagnostic, sources: &SourceMap) -> Value {
@@ -368,7 +369,7 @@ pub fn to_json(diag: &Diagnostic, sources: &SourceMap) -> Value {
     }
     obj.insert("labels".into(), Value::Array(labels));
     let expansions: Vec<Value> = diag
-        .primary_span()
+        .chain_span()
         .map(|span| sources.expansion_chain(span))
         .unwrap_or_default()
         .into_iter()
@@ -478,5 +479,22 @@ error[E0301]: expected `Int`, found `String`
         assert_eq!((&chain[2]["file"], &chain[2]["line"]), (&"main.wid".into(), &2.into()));
         let plain = to_json(&error_at(FileId(0)), &sources);
         assert_eq!(plain["expansions"].as_array().map(Vec::len), Some(0));
+    }
+
+    #[test]
+    fn spliced_code_lists_the_calls_where_it_landed() {
+        // `outer` called at `main.wid` 2:3, whose code holds the spliced
+        // code at `lib.wid` 9:5.
+        let sources = sources();
+        let diag = Diagnostic::error(codes::TYPE_MISMATCH, "expected `Int`, found `String`")
+            .primary(Span::new(FileId(1), 11, 16), "this has type `String`")
+            .splice(Span::new(FileId::expansion(0), 102, 107), "spliced here by `outer`");
+        let value = to_json(&diag, &sources);
+        assert_eq!(value["file"], "main.wid");
+        let chain = value["expansions"].as_array().expect("an array");
+        let names: Vec<&str> = chain.iter().map(|e| e["macro"].as_str().unwrap_or_default()).collect();
+        assert_eq!(names, ["outer"]);
+        let text = render(&diag, &sources, RenderOptions::default());
+        assert!(text.contains("`outer` expands here"), "{text}");
     }
 }

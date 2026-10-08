@@ -1,0 +1,53 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0301",
+      "column": 6,
+      "expansions": [
+        {
+          "column": 1,
+          "end": 226,
+          "end_column": 10,
+          "end_line": 9,
+          "file": "tests/ui/macro_splice_json.wid",
+          "line": 9,
+          "macro": "wrap",
+          "start": 217
+        }
+      ],
+      "explain": "wid explain E0301",
+      "file": "tests/ui/macro_splice_json.wid",
+      "helps": [],
+      "labels": [
+        {
+          "column": 6,
+          "end": 226,
+          "end_column": 10,
+          "end_line": 9,
+          "file": "tests/ui/macro_splice_json.wid",
+          "line": 9,
+          "message": "this has type `String`",
+          "primary": true,
+          "start": 222
+        },
+        {
+          "column": 26,
+          "end": 205,
+          "end_column": 30,
+          "end_line": 5,
+          "file": "tests/ui/macro_splice_json.wid",
+          "line": 5,
+          "message": "spliced here by `wrap`",
+          "primary": false,
+          "start": 201
+        }
+      ],
+      "line": 9,
+      "message": "expected `Int`, found `String`",
+      "notes": [],
+      "severity": "error"
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}

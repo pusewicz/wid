@@ -29,15 +29,15 @@ help: a similar name exists: `tools`
   | tools.helpers
   = see `wid explain E0201`
 
-error[E0201]: undefined method `missing_helper`
+error[E0301]: expected `Int`, found `String`
   --> tests/ui/macro_item_packages/tools/tools.wid:17:25
    |
-17 |     def broken -> Int = missing_helper()
-   |                         ^^^^^^^^^^^^^^ not found in this scope
+17 |     def broken -> Int = "two"
+   |                         ^^^^^ this has type `String`
   ::: tests/ui/macro_item_packages/main.wid:10:3
    |
 10 |   tools.broken
    |   ------------ `tools.broken` expands here
-   = see `wid explain E0201`
+   = see `wid explain E0301`
 
 error: could not compile due to 4 errors

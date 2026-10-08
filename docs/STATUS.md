@@ -203,7 +203,25 @@ runs the stages; `wid_cli` is the `wid` binary.
     `SourceMap::file` resolves an expansion id to the template's real file,
     so `#line`, panic locations and every renderer work unchanged, and
     `expansion_chain` gives the calls behind a span, which both renderers
-    print (`expansions` in JSON).
+    print (`expansions` in JSON) for `Diagnostic::chain_span`: the first
+    label marked `Label::splice` (`Diagnostic::splice`), else the primary
+    span.
+  - Spliced code keeps its spans, so its errors would show no expansion.
+    `Expander` records a `Splice` (code span, the splice's virtual span,
+    the name for a name, and whether the name was computed and so has the
+    call's span) for each `Code` argument it inserts (`code(value, at)`)
+    and each name (`name_span`, `literal_span`), committed to
+    `MacroState::splices` (by file) when the build succeeds.
+    `Checker::report` runs `splice_context`: for a primary span inside
+    spliced code (equal to it, for a computed name), the innermost splice
+    gets a splice label (`` `label` is spliced here by `wrap` ``), so the
+    chain is listed. Of code spliced more than once and of names computed
+    for one call (which share the call's span), it picks the name the
+    message mentions, else the splice in the statement (`MacroState::line`)
+    or method being checked, else the latest when they agree; otherwise
+    nothing is added. For a computed name the primary label at the call
+    names it (`` `label`, spliced by `wrap`, has type … ``) and edits at
+    the call are dropped (#30).
   - Sites and hygiene: `Frame::site` is the virtual file of the code being
     lowered, set by `expr` and `lower_stmt` from each node's span
     (`enter_site`/`leave_site`). `loc()` is the site's `DeclLoc`, else the
@@ -270,12 +288,22 @@ runs the stages; `wid_cli` is the `wid` binary.
     declarations that fails or names no macro runs
     `failed_among_declarations`: at package level the package joins
     `MacroState::failed_packages`, which `pkg_incomplete` treats like a
-    failed `cimport` merge (undefined names and types), and in a body
-    the owner joins `failed_owners`, so `members_incomplete` skips E0204
+    failed `cimport` merge (undefined names and types). While it isn't
+    empty, `members_incomplete` is true for every type, whichever package
+    looks the member up: the call may have generated an `extend` of any
+    type, and extensions apply program-wide (#29). In a body the owner
+    joins `failed_owners`, so `members_incomplete` skips E0204
     on its type (also through an included module or an `extend`) and
     `declared_by_failed_macro` skips E0201 for implicit-self calls and
     constants in its methods. An undefined macro among declarations is
-    still reported after an earlier failure.
+    still reported after an earlier failure. A field that E0913 rejects
+    joins `MacroState::rejected_fields` instead: the call's other
+    declarations are known, so only that name is skipped (`field_rejected`,
+    in `no_member` for `x.f` and `@f`, and in `struct_new`). An unknown
+    call in a method (`undefined_call`) runs `failed_expansion` when
+    `did_you_mean` picks a macro (the E0201 then offers the macro and labels
+    its declaration) or when, with no close name, it is the whole statement
+    (`MacroState::line`) and has a symbol argument.
   - `enum_type` reports a member without a value whose name is a macro
     visible in the enum's body (`member_names_macro`, E0914, fixed by
     adding `()`), keeps the member, and adds the enum to `failed_owners`
@@ -447,6 +475,11 @@ runs the stages; `wid_cli` is the `wid` binary.
   E0323's help fits the type: `.new` only for `[dynamic]T` and `map[K]V`,
   `nil` for an optional, a proc literal for a proc type, `&x` for a pointer
   and `{}` otherwise.
+- A member a `Type` value doesn't have (E0204, `no_type_value_member`) lists
+  what it answers (`.name`, `.size`, `.align`, `.fields`) and suggests the
+  closest; for `.methods` it offers a `[]MethodInfo` parameter given
+  `T.methods` with the type written by name, or `Self.methods` in a macro
+  called in the type's body (#31).
 - Named constants as generic value arguments: `Pool(Ball, MAX)`,
   `Pool(Ball, MAX * 2)`, `Pool(Ball, (N))` and `comptime` results work like
   the literal, in types and in calls (`Checker::value_generic_arg`). A
@@ -520,7 +553,17 @@ runs the stages; `wid_cli` is the `wid` binary.
   unused (#6); a macro call that fails to expand or names no macro hides
   the undefined names, missing members and unread variables that its code
   might have declared or read (#8); an enum member written as a name alone
-  that a macro also has is E0914, with a fix that calls the macro (#16).
+  that a macro also has is E0914, with a fix that calls the macro (#16);
+  uses of a field that E0913 rejected aren't reported missing, and a call
+  in a method whose name is close to a macro's (E0201, whose help names the
+  macro) or that stands alone with a symbol argument counts as a failed
+  expansion (#25); after a macro call at package level fails (a splice that
+  doesn't fit, or an error in the macro's own code), no missing member of
+  any type is reported, since it may have generated an `extend` (#29).
+- Errors in code a macro spliced in from its call site (a `Code` argument,
+  a name from a `Symbol`) point at the splice in the `quote` and list the
+  calls, in both renderers; a name the macro computed is named in the
+  label at the call instead of the call getting a type (#30).
 - Test suite: `tests/run` (clang and gcc-16, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
   `tests/test` (`wid test` reports) and every `core/` package's `_test.wid`

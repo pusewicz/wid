@@ -1,0 +1,29 @@
+# A misspelled macro call in a method is an undefined method whose help
+# names the macro. Like a call that fails to expand, it might have declared
+# the names the code after it uses, so they aren't reported as undefined too.
+macro def counter(name: Symbol) -> Code
+  quote do
+    #{name} = 0
+  end
+end
+
+def tally(n: Int) -> Int = n
+
+def main
+  countr :hits
+  hits += 1
+  puts hits
+end
+
+# A statement call with a symbol argument whose name is close to nothing
+# else may be a macro call too.
+def unknown
+  make_counter :misses
+  misses += 1
+end
+
+# A misspelled method is a misspelled method: what follows is still checked.
+def method_typo
+  taly :hits
+  total += 1
+end

@@ -1268,13 +1268,7 @@ impl<'a> Checker<'a> {
                 }
                 let mut candidates = self.package_names(loc.pkg);
                 candidates.extend(BUILTINS.iter().copied());
-                if !self.declared_by_failed_macro(false, true) {
-                    self.undefined(name.name, name.span, candidates, "method");
-                }
-                for arg in &call.args {
-                    self.expr(&arg.value, None);
-                }
-                ir::Expr::new(ExprKind::Zero, self.types.unknown())
+                self.undefined_call(*name, &call.args, span, candidates)
             }
             ast::Callee::Method { recv, name, safe } => {
                 self.member_call(recv, *name, Some(&call.args), block, *safe, span, expected)

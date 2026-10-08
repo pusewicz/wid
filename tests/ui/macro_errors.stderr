@@ -13,6 +13,14 @@ error[E0201]: undefined name `hp`
    |
 78 |   p half(hp)
    |          ^^ not found in this scope
+  ::: tests/ui/macro_errors.wid:52:5
+   |
+52 |     #{e} / 2
+   |     ---- spliced here by `half`
+  ::: tests/ui/macro_errors.wid:78:5
+   |
+78 |   p half(hp)
+   |     -------- `half` expands here
    = see `wid explain E0201`
 
 error[E0911]: the macro `define` splices a `Type` where a name goes
@@ -56,6 +64,14 @@ error[E0314]: unknown type `Point`
    |
 82 |   p field(:x, :Point)
    |                ^^^^^ no type with this name is in scope
+  ::: tests/ui/macro_errors.wid:45:12
+   |
+45 |     value: #{t} = {}
+   |            ---- `Point` is spliced here by `field`
+  ::: tests/ui/macro_errors.wid:82:5
+   |
+82 |   p field(:x, :Point)
+   |     ----------------- `field` expands here
    = see `wid explain E0314`
 
 warning[E0909]: the macro `repeat` printed output

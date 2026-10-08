@@ -885,9 +885,9 @@ impl<'a> Checker<'a> {
             return;
         }
         // A macro that failed among the type's declarations may have been
-        // meant to generate it; that failure is already reported. Fields
-        // are never generated.
-        if !is_ivar && self.members_incomplete(ty) {
+        // meant to generate it, or generated it as a field E0913 rejected;
+        // that failure is already reported. Fields are never generated.
+        if self.field_rejected(ty, name) || (!is_ivar && self.members_incomplete(ty)) {
             return;
         }
         let shown = self.types.display(ty);
@@ -925,6 +925,11 @@ impl<'a> Checker<'a> {
         let shown_name = if is_ivar { format!("@{name}") } else { name.as_str().to_string() };
         let mut diag = Diagnostic::error(codes::NO_SUCH_MEMBER, format!("`{shown}` has no {what} `{shown_name}`"))
             .primary(span, format!("not found on `{shown}`"));
+        if matches!(self.types.kind(ty), TyKind::Type) {
+            let diag = self.no_type_value_member(name, span, diag);
+            self.report(diag);
+            return;
+        }
         let user_type = matches!(self.types.kind(ty), TyKind::Struct(_) | TyKind::Enum(_));
         if let Some((_, wid)) = SYNONYMS
             .iter()

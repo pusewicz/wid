@@ -693,6 +693,26 @@ impl<'a> Checker<'a> {
         self.type_query(op, recv, name.span)
     }
 
+    /// Explains a member that a `Type` value doesn't have (E0204): it
+    /// answers only the queries in [`is_type_query`]. `.methods` works only
+    /// on a type written by name or `Self`, where the methods are known, so
+    /// its help offers those.
+    pub(super) fn no_type_value_member(&self, name: Name, span: Span, diag: Diagnostic) -> Diagnostic {
+        let diag = diag.note("a `Type` value answers only `.name`, `.size`, `.align` and `.fields`");
+        if name.as_str() == "methods" {
+            return diag
+                .note("`.methods` works on a type written by name, like `Vec2.methods`, and on `Self`")
+                .help("take the methods instead of the type: a `[]MethodInfo` parameter, given `Vec2.methods`")
+                .help("in a macro, call the macro in the type's body and read `Self.methods`");
+        }
+        match wid_diagnostics::did_you_mean(name.as_str(), TYPE_QUERIES.iter().copied()) {
+            Some(best) => {
+                diag.suggest_replace(format!("did you mean `{best}`?"), span, best, Applicability::MaybeIncorrect)
+            }
+            None => diag,
+        }
+    }
+
     fn type_query(&mut self, op: Builtin, t: ir::Expr, span: Span) -> ir::Expr {
         let ty = match op {
             Builtin::TypeName => self.types.string(),
@@ -1255,8 +1275,11 @@ fn callee(e: &ir::Expr, out: &mut Vec<FnId>) {
 
 /// Whether `name` is a query `Type` values answer.
 pub(crate) fn is_type_query(name: &str) -> bool {
-    matches!(name, "name" | "size" | "align" | "fields")
+    TYPE_QUERIES.contains(&name)
 }
+
+/// What a `Type` value answers.
+const TYPE_QUERIES: [&str; 4] = ["name", "size", "align", "fields"];
 
 /// Whether a statement can give a block its value.
 pub(super) fn produces_value(stmt: &ast::Stmt) -> bool {

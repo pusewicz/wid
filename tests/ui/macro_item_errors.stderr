@@ -3,6 +3,14 @@ error[E0913]: a macro can't add fields to `Hero`
    |
 72 |   add_field :mana
    |              ^^^^ `add_field` generates this field
+  ::: tests/ui/macro_item_errors.wid:22:5
+   |
+22 |     #{name}: Int = 3
+   |     ------- `mana` is spliced here by `add_field`
+  ::: tests/ui/macro_item_errors.wid:72:3
+   |
+72 |   add_field :mana
+   |   --------------- `add_field` expands here
    = note: a struct's layout is fixed before the macros in its body run, which is what lets them read `Self.fields`
 help: declare `mana` in `Hero` itself, and let the macro generate the methods that use it
    = see `wid explain E0913`

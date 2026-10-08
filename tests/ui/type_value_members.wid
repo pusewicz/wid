@@ -1,0 +1,18 @@
+# A `Type` value answers only `.name`, `.size`, `.align` and `.fields`; the
+# error for anything else says so, and for `.methods` offers what works.
+struct Ball
+  r: F32
+  def area -> F32 = @r * @r
+end
+
+def count_methods(t: Type) -> Int = t.methods.size
+
+def type_label(t: Type) -> String = t.nmae
+
+N = comptime count_methods(Ball)
+L = comptime type_label(Ball)
+
+def main
+  p N
+  p L
+end

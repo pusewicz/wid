@@ -1,0 +1,26 @@
+# A field that a macro in a struct's body generates is rejected (E0913),
+# and its uses aren't reported as missing too.
+macro def counter(name: Symbol) -> Code
+  quote do
+    #{name}: Int = 0
+    def reset
+      @#{name} = 0
+    end
+  end
+end
+
+struct Player
+  hp: Int = 100
+  counter :kills
+
+  def score -> Int = @kills * 10
+end
+
+def main
+  player = Player.new(kills: 2)
+  player.kills += 1
+  puts player.kills
+  player.reset
+  # Other names are still checked.
+  puts player.klls
+end

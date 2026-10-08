@@ -435,6 +435,11 @@ impl<'a> Checker<'a> {
                 }
                 Some(n) => match info.fields.iter().position(|f| f.name == n.name) {
                     Some(i) => i,
+                    // A field a macro generated, rejected with E0913.
+                    None if self.field_rejected(ty, n.name) => {
+                        self.expr(&arg.value, None);
+                        continue;
+                    }
                     None => {
                         let names: Vec<&'static str> = info.fields.iter().map(|f| f.name.as_str()).collect();
                         let mut diag = Diagnostic::error(
