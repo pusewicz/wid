@@ -3,7 +3,7 @@ error[E0601]: unknown collection `cor`
   |
 1 | wid doc cor:fmt
   |         ^^^ no collection with this name
-  = note: known collections: core, vendor
+  = note: the collections are `core` and `vendor`
 help: a similar collection exists: `core`
   | wid doc core:fmt
   = see `wid explain E0601`

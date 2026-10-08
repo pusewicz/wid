@@ -347,6 +347,8 @@ impl<'c> Printer<'c> {
                     Callee::Method { recv, name, safe } => {
                         format!("{}{}{}", self.expr(recv), if *safe { "&." } else { "." }, name.as_str())
                     }
+                    // The name is the field's, without the `@`.
+                    Callee::IVar(name) => format!("@{}", name.as_str()),
                 };
                 let args: Vec<String> = call.args.iter().map(|a| self.arg(a)).collect();
                 if call.parens {
@@ -641,5 +643,18 @@ G = a ? b&.c : d^
         let plain: Vec<String> =
             file.items.iter().filter_map(|i| super::Printer::new(&super::Plain).item_header(i)).collect();
         assert_eq!(plain, ["X = \"a\\\"b\\n\"", "Y = 2500.0"]);
+    }
+
+    #[test]
+    fn calls_keep_their_callee() {
+        for src in ["@on_hit(1, damage: 2)", "@on_click()", "self.heal(5)", "p&.move(1)", "update"] {
+            let (e, diags) = crate::parse_expr_str(FileId(0), src);
+            assert!(diags.is_empty(), "{src}: {diags:?}");
+            assert_eq!(Printer::new(&Text(src)).expr(&e), src);
+        }
+        // The `@` is not part of the field's name in the tree.
+        let (e, _) = crate::parse_expr_str(FileId(0), "@on_hit(1)");
+        let crate::ast::ExprKind::Call(call) = &e.kind else { panic!("{e:?}") };
+        assert!(matches!(&call.callee, crate::ast::Callee::IVar(name) if name.as_str() == "on_hit"));
     }
 }

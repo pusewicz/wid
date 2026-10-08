@@ -3,7 +3,7 @@ error[E0601]: package `core:strngs` not found
   |
 1 | wid doc core:strngs
   |         ^^^^^^^^^^^ no package with this path
-  = note: the packages there are core:builtin, core:c, core:fmt, core:math, core:mem, core:os, core:strings, core:testing
+  = note: the packages there are `core:builtin`, `core:c`, `core:fmt`, `core:math`, `core:mem`, `core:os`, `core:strings` and `core:testing`
 help: a similar package exists: `core:strings`
   | wid doc core:strings
   = see `wid explain E0601`

@@ -12,7 +12,9 @@
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
-use wid_diagnostics::{Applicability, Diagnostic, Diagnostics, Edit, FileId, SourceMap, Span, codes, did_you_mean};
+use wid_diagnostics::{
+    Applicability, Diagnostic, Diagnostics, Edit, FileId, SourceMap, Span, and_list, codes, did_you_mean,
+};
 use wid_sema::PackageId;
 use wid_sema::index::{CDoc, Index, MemberGroup, Origin, PathError, PathErrorKind, SymbolId, SymbolKind, Target};
 use wid_syntax::docs::first_paragraph;
@@ -325,7 +327,7 @@ fn package_target(
                         let mut diag =
                             Diagnostic::error(codes::DOC_UNKNOWN_PACKAGE, format!("unknown collection `{collection}`"))
                                 .primary(span, "no collection with this name")
-                                .note(format!("known collections: {}", known.join(", ")));
+                                .note(format!("the collections are {}", and_list(&quote_all(&known))));
                         diag = match best {
                             Some(best) => diag.suggest_replace(
                                 format!("a similar collection exists: `{best}`"),
@@ -360,7 +362,7 @@ fn package_target(
                 );
             }
             if !packages.is_empty() {
-                diag = diag.note(format!("the packages there are {}", packages.join(", ")));
+                diag = diag.note(format!("the packages there are {}", and_list(&quote_all(&packages))));
             }
             diag
         }));
@@ -650,7 +652,7 @@ impl ErrorContext<'_> {
                     );
                 }
                 [] => {}
-                many => diag = diag.note(format!("members with that name: {}", many.join(", "))),
+                many => diag = diag.note(format!("{} have that name", and_list(&quote_all(many)))),
             }
         }
         if !suggested {
@@ -708,14 +710,18 @@ impl ErrorContext<'_> {
     }
 }
 
-/// Names for a message, at most 30 of them.
+/// Names for a message, at most 30 of them: "`a`, `b` and `c`".
 fn list_names(names: &[String]) -> String {
-    let shown: Vec<String> = names.iter().take(30).map(|n| format!("`{n}`")).collect();
-    let mut text = shown.join(", ");
+    let mut shown = quote_all(&names[..names.len().min(30)]);
     if names.len() > 30 {
-        text.push_str(&format!(" and {} more", names.len() - 30));
+        shown.push(format!("{} more", names.len() - 30));
     }
-    text
+    and_list(&shown)
+}
+
+/// Each name in backticks.
+fn quote_all(names: &[String]) -> Vec<String> {
+    names.iter().map(|n| format!("`{n}`")).collect()
 }
 
 /// A symbol kind as a page names it: `struct`, `type alias`.
