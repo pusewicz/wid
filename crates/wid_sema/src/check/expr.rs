@@ -157,6 +157,10 @@ impl<'a> Checker<'a> {
                 ir::Expr::new(ExprKind::Zero, self.types.unknown())
             }
             E::Error => ir::Expr::new(ExprKind::Zero, self.types.unknown()),
+            // A bound that failed to parse (`[..]`) was reported already.
+            E::Range { lo, hi, .. } if [lo, hi].into_iter().flatten().any(|b| matches!(b.kind, E::Error)) => {
+                ir::Expr::new(ExprKind::Zero, self.types.unknown())
+            }
             E::Range { .. } => {
                 self.report(
                     Diagnostic::error(codes::NOT_A_VALUE, "a range is not a value by itself")
@@ -1958,8 +1962,12 @@ impl<'a> Checker<'a> {
         // it takes the remaining positional arguments, which are not checked,
         // so its calls add no errors of their own.
         let splat_at = f.params.iter().position(|p| p.splat);
+        // An argument that failed to parse was reported, and the parser may
+        // have dropped the arguments after it, so none is reported missing.
+        let truncated = args.iter().any(|a| matches!(a.value.kind, E::Error));
         for arg in args {
-            if arg.splat {
+            // `f(*)`: the value after `*` failed to parse.
+            if arg.splat && !matches!(arg.value.kind, E::Error) {
                 let text = self.source_text(arg.value.span);
                 self.report(
                     Diagnostic::error(codes::ARG_COUNT, "Wid has no argument spreading")
@@ -2031,7 +2039,7 @@ impl<'a> Checker<'a> {
         if f.c_variadic.is_some() {
             extra.clear();
         }
-        if !extra.is_empty() || (!missing.is_empty() && !unknown_named) {
+        if !extra.is_empty() || (!missing.is_empty() && !unknown_named && !truncated) {
             let sig_text = self.signature_text(fname, params);
             let want = params.len();
             let diag = if !extra.is_empty() {

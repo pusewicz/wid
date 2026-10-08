@@ -1,0 +1,24 @@
+# A value that failed to parse is reported once, by the parser: the checks
+# around it don't add a second error about the missing value.
+struct V
+  def m(xs: []Int) -> Int = 1
+end
+
+def f(xs: []Int) -> Int = 1
+def g(a: Int, b: Int) -> Int = a + b
+
+def main
+  v = V.new
+  # `*` with nothing after it is no spreading.
+  p f(*)
+  p v.m(*)
+  p g(1, *)
+  # `..` with nothing after it is no range.
+  z = [..]
+  for i in ..
+    p i
+  end
+  # The arguments after one that failed to parse aren't missing.
+  p g(a: , b: 2)
+  p z
+end

@@ -1348,6 +1348,10 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   says a method can't be assigned to and `@name` only names fields, with
   no fix that drops the `@` (which would declare a variable); a field of
   a similar name, its own or promoted, is suggested instead.
+- A value that failed to parse is reported once (#109): `match_args`
+  doesn't report spreading for `f(*)` nor arguments missing after one
+  that failed to parse (`g(a: , b: 2)`), and a range with a bound that
+  failed to parse (`[..]`, `for i in ..`) isn't E0323.
 
 ## Next
 
