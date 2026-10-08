@@ -1,0 +1,50 @@
+error[E0311]: `1 << 200` is 2^200, which doesn't fit in `Int`
+ --> tests/ui/constant_shift_overflow.wid:4:5
+  |
+4 | Y = 1 << 200
+  |     ^^^^^^^^ `Int` holds values from -9223372036854775808 to 9223372036854775807
+help: the largest shift of `1` that fits in `Int` is `1 << 62`
+  = see `wid explain E0311`
+
+error[E0311]: `1 << 8` is 2^8, which doesn't fit in `U8`
+ --> tests/ui/constant_shift_overflow.wid:5:13
+  |
+5 | SMALL: U8 = 1 << 8
+  |             ^^^^^^ `U8` holds values from 0 to 255
+help: the largest shift of `1` that fits in `U8` is `1 << 7`
+help: or give the value a type that holds it, like `U16`
+  = see `wid explain E0311`
+
+error[E0311]: `1 << 70` is 2^70, which doesn't fit in `Int`
+ --> tests/ui/constant_shift_overflow.wid:9:5
+  |
+9 |   p 1 << 70
+  |     ^^^^^^^ `Int` holds values from -9223372036854775808 to 9223372036854775807
+help: the largest shift of `1` that fits in `Int` is `1 << 62`
+  = see `wid explain E0311`
+
+error[E0311]: `1 << 128` is 2^128, which doesn't fit in `Int`
+  --> tests/ui/constant_shift_overflow.wid:10:5
+   |
+10 |   p 1 << 128
+   |     ^^^^^^^^ `Int` holds values from -9223372036854775808 to 9223372036854775807
+help: the largest shift of `1` that fits in `Int` is `1 << 62`
+   = see `wid explain E0311`
+
+error[E0311]: `1 << 200` is 2^200, which doesn't fit in `Int`
+  --> tests/ui/constant_shift_overflow.wid:11:5
+   |
+11 |   p 1 << 200
+   |     ^^^^^^^^ `Int` holds values from -9223372036854775808 to 9223372036854775807
+help: the largest shift of `1` that fits in `Int` is `1 << 62`
+   = see `wid explain E0311`
+
+error[E0311]: `3 << 127` is 3 * 2^127, which doesn't fit in `Int`
+  --> tests/ui/constant_shift_overflow.wid:12:5
+   |
+12 |   p 3 << 127
+   |     ^^^^^^^^ `Int` holds values from -9223372036854775808 to 9223372036854775807
+help: the largest shift of `3` that fits in `Int` is `3 << 61`
+   = see `wid explain E0311`
+
+error: could not compile due to 6 errors

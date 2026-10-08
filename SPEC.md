@@ -473,7 +473,10 @@ end
   what the built program would. It always runs with the checks of a `-debug`
   build: bounds, nil and integer overflow.
 - **Constants** are evaluated while compiling. Literal arithmetic stays
-  untyped (`SIZE = 4 * 64`). Struct literals, `T.size`, other constants of
+  untyped (`SIZE = 4 * 64`) and exact, past every integer type in between
+  (`(1 << 100) >> 90` is `1024`); a value that doesn't fit its type is
+  E0311, which names a shift's value as a power of two (`1 << 200` is
+  2^200), whatever the shift amount. Struct literals, `T.size`, other constants of
   any type, enum members, indexing other constants and the like evaluate too
   (`ORIGIN = Vec2.new(x: 0.0, y: 0.0)`, `START = ORIGIN`,
   `FACING: Dir = :north`). Calling a method needs `comptime`, so every place

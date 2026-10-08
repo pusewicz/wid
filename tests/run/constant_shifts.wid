@@ -1,0 +1,12 @@
+# Constant shifts fold exactly. Untyped arithmetic may go past every
+# integer type in between, and a right shift by 128 or more bits leaves
+# the sign.
+FINE = (1 << 100) >> 90
+TOP = 1 << 62
+
+def main
+  p FINE, TOP, 3 << 61
+  p 1 >> 200, -1 >> 200, 0 << 300
+  x: U64 = 1 << 63
+  p x
+end

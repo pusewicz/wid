@@ -1092,6 +1092,16 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   (`a = five`) as in a constant's (#78); those were E0327. The constant
   evaluator's `needs_interpreter` counts a bare name that names a macro as
   a call. A bare method name stays E0327 with the `comptime` fix.
+- A constant shift whose value doesn't fit is E0311 whatever the amount
+  (#84): `1 << 200` folded to 0, and `1 << 127` wrapped to a negative
+  number. The message names the value as a power of two ("`1 << 200` is
+  2^200, which doesn't fit in `Int`"), with the largest shift that fits
+  and, when one exists, a type that holds it. A shift past the 128 bits
+  constants fold in is reported where it is folded
+  (`Checker::fold_const_for`, which knows the type the value is for) and
+  folds to 0 so nothing reports it again; one that fits in them is
+  checked where the value gets its type (`Checker::shift_overflows`).
+  `a >> b` by 128 or more folds to 0 or -1.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),

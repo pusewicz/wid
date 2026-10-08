@@ -1,0 +1,14 @@
+# A constant shift whose value doesn't fit is E0311, whatever the shift
+# amount, and the value is named as a power of two. In between, untyped
+# arithmetic may go past every integer type: `(1 << 100) >> 90` is fine.
+Y = 1 << 200
+SMALL: U8 = 1 << 8
+FINE = (1 << 100) >> 90
+
+def main
+  p 1 << 70
+  p 1 << 128
+  p 1 << 200
+  p 3 << 127
+  p Y, SMALL, FINE, 1 >> 200
+end
