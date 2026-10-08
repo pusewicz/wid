@@ -1022,6 +1022,17 @@ end
   and `query`) that points into the command line, with the only `.wid`
   file of the directory or a similar one as a fix, and dropping `-file` as
   the fix for a package directory.
+- **Closed output.** A closed stdout or stderr is not an error. When the
+  reader of a pipe stops early (`wid query outline | head -c 10`), `wid`
+  drops what it would have written there, finishes the command and exits
+  with the status the command has anyway (0, 1 when it fails, 2 for a usage
+  error), on every platform. So `wid test | head` still fails when a test
+  fails, and a script with `set -o pipefail` doesn't fail because its
+  reader stopped. Any other failed write, like one to a full disk, ends
+  `wid` with status 1 and says so on stderr. `wid run` exits with its
+  program's status, or 128 plus the signal number when a signal ends the
+  program: on Unix, a program that writes to a closed pipe gets `SIGPIPE`
+  (141).
 - **Docs.** `wid doc [package] [symbol]` shows documentation made from doc
   comments: the `# ` comment lines directly above a declaration (above its
   attributes too), with no blank line between; an enum member's sit above

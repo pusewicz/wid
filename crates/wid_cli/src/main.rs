@@ -2,7 +2,9 @@
 //! `wid run .`, `wid build . -o:speed -out:game`.
 
 mod args;
+mod output;
 
+use std::fmt::Write as _;
 use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -11,24 +13,24 @@ use wid_diagnostics::{Diagnostics, RenderOptions, SourceMap, render_all_with, re
 use wid_driver::Options;
 
 use args::{Command, Parsed};
+use output::{err, out};
 
 fn main() -> ExitCode {
     let argv: Vec<String> = std::env::args().skip(1).collect();
     let parsed = match args::parse(&argv) {
         Ok(p) => p,
         Err(message) => {
-            eprintln!("{}", error_line(&message));
-            eprintln!("run `wid help` for usage");
+            err(&format!("{}\nrun `wid help` for usage\n", error_line(&message)));
             return ExitCode::from(2);
         }
     };
     match parsed.command {
         Command::Help => {
-            print!("{}", args::usage(parsed.help_topic.as_deref()));
+            out(&args::usage(parsed.help_topic.as_deref()));
             ExitCode::SUCCESS
         }
         Command::Version => {
-            println!("wid {}", env!("CARGO_PKG_VERSION"));
+            out(&format!("wid {}\n", env!("CARGO_PKG_VERSION")));
             ExitCode::SUCCESS
         }
         Command::Explain => explain(&parsed),
@@ -58,9 +60,9 @@ const COMPILE: &str = "could not compile due to";
 /// With errors, the summary line after them is `failure` and the counts.
 fn report(diags: &Diagnostics, sources: &SourceMap, parsed: &Parsed, failure: &str) -> bool {
     if parsed.json_errors {
-        println!("{}", render_json(diags, sources));
+        out(&format!("{}\n", render_json(diags, sources)));
     } else if !diags.is_empty() {
-        eprint!("{}", render_all_with(diags, sources, RenderOptions { color: color_stderr() }, failure));
+        err(&render_all_with(diags, sources, RenderOptions { color: color_stderr() }, failure));
     }
     diags.has_errors()
 }
@@ -90,7 +92,7 @@ fn options(parsed: &Parsed) -> Options {
 /// `wid cimport --dump <header>`: prints the Wid view of a C header.
 fn cimport(parsed: &Parsed) -> ExitCode {
     let Some(header) = parsed.target.as_ref().map(|t| t.to_string_lossy().into_owned()) else {
-        eprintln!("{}", error_line("`wid cimport` needs a header, like `wid cimport --dump raylib.h`"));
+        err(&format!("{}\n", error_line("`wid cimport` needs a header, like `wid cimport --dump raylib.h`")));
         return ExitCode::from(2);
     };
     let request = wid_driver::DumpRequest {
@@ -103,7 +105,7 @@ fn cimport(parsed: &Parsed) -> ExitCode {
     let (sources, result) = wid_driver::cimport_dump(&request);
     match result {
         Ok(source) => {
-            print!("{source}");
+            out(&source);
             ExitCode::SUCCESS
         }
         Err(diags) => {
@@ -121,10 +123,10 @@ fn doc(parsed: &Parsed) -> ExitCode {
     let opts = options(parsed);
     let request =
         wid_driver::doc::DocRequest { args: parsed.doc_args.clone(), private: parsed.private, dir: PathBuf::new() };
-    let out = wid_driver::doc::doc(&opts, &request);
-    let printed = wid_driver::doc::print(&out, parsed.json, parsed.json_errors, color_stderr());
-    eprint!("{}", printed.stderr);
-    print!("{}", printed.stdout);
+    let page = wid_driver::doc::doc(&opts, &request);
+    let printed = wid_driver::doc::print(&page, parsed.json, parsed.json_errors, color_stderr());
+    err(&printed.stderr);
+    out(&printed.stdout);
     if printed.success { ExitCode::SUCCESS } else { ExitCode::from(1) }
 }
 
@@ -150,43 +152,39 @@ fn query(parsed: &Parsed) -> ExitCode {
     let query = match wid_driver::query::Query::parse(&parsed.query_args) {
         Ok(query) => query,
         Err(message) => {
-            eprintln!("{}", error_line(&message));
-            eprintln!("run `wid help query` for usage");
+            err(&format!("{}\nrun `wid help query` for usage\n", error_line(&message)));
             return ExitCode::from(2);
         }
     };
     let opts = options(parsed);
     let request = wid_driver::query::QueryRequest { query, package: parsed.query_in.clone(), dir: PathBuf::new() };
-    let out = wid_driver::query::query(&opts, &request);
-    let printed = wid_driver::query::print(&out);
-    eprint!("{}", printed.stderr);
-    print!("{}", printed.stdout);
+    let answer = wid_driver::query::query(&opts, &request);
+    let printed = wid_driver::query::print(&answer);
+    err(&printed.stderr);
+    out(&printed.stdout);
     if printed.success { ExitCode::SUCCESS } else { ExitCode::from(1) }
 }
 
 fn explain(parsed: &Parsed) -> ExitCode {
     let Some(code) = parsed.target.as_ref().map(|t| t.to_string_lossy().into_owned()) else {
-        println!("Error codes (run `wid explain <CODE>` for details):\n");
+        let mut list = String::from("Error codes (run `wid explain <CODE>` for details):\n\n");
         for info in wid_diagnostics::codes::ALL {
-            println!("  {}  {}", info.code, info.title);
+            let _ = writeln!(list, "  {}  {}", info.code, info.title);
         }
+        out(&list);
         return ExitCode::SUCCESS;
     };
     match wid_diagnostics::explain(&code) {
         Some(text) => {
-            print!("{text}");
+            out(text);
             ExitCode::SUCCESS
         }
         None => {
-            match wid_diagnostics::codes::lookup(&code) {
-                Some(info) => {
-                    eprintln!("{}", error_line(&format!("{} ({}) has no long explanation yet", info.code, info.title)))
-                }
-                None => eprintln!(
-                    "{}",
-                    error_line(&format!("`{code}` is not a Wid error code; run `wid explain` to list them"))
-                ),
-            }
+            let message = match wid_diagnostics::codes::lookup(&code) {
+                Some(info) => format!("{} ({}) has no long explanation yet", info.code, info.title),
+                None => format!("`{code}` is not a Wid error code; run `wid explain` to list them"),
+            };
+            err(&format!("{}\n", error_line(&message)));
             ExitCode::from(1)
         }
     }
@@ -212,14 +210,14 @@ fn test(parsed: &Parsed) -> ExitCode {
     let opts = options(parsed);
     let run = wid_driver::test(&opts, parsed.filter.as_deref());
     if parsed.json_errors {
-        println!("{}", test_json(&run));
+        out(&format!("{}\n", test_json(&run)));
         return if run.passed() { ExitCode::SUCCESS } else { ExitCode::from(1) };
     }
     if report(&run.checked.diags, &run.checked.sources, parsed, COMPILE) {
         return ExitCode::from(1);
     }
     let color = std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none();
-    print!("{}", wid_driver::render_test_report(&run, color));
+    out(&wid_driver::render_test_report(&run, color));
     if run.passed() { ExitCode::SUCCESS } else { ExitCode::from(1) }
 }
 
@@ -258,7 +256,7 @@ fn run(parsed: &Parsed) -> ExitCode {
         let name = wid_driver::default_output(&opts);
         let dir = std::env::temp_dir().join(format!("wid-run-{}", std::process::id()));
         if std::fs::create_dir_all(&dir).is_err() {
-            eprintln!("{}", error_line("cannot create a temporary directory"));
+            err(&format!("{}\n", error_line("cannot create a temporary directory")));
             return ExitCode::from(1);
         }
         opts.out = Some(dir.join(name));
@@ -292,7 +290,7 @@ fn run(parsed: &Parsed) -> ExitCode {
             }
         },
         Err(e) => {
-            eprintln!("{}", error_line(&format!("cannot run {}: {e}", exe.display())));
+            err(&format!("{}\n", error_line(&format!("cannot run {}: {e}", exe.display()))));
             ExitCode::from(1)
         }
     }

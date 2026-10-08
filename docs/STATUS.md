@@ -478,6 +478,9 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   fields, enum members, methods, constants, overload sets and extensions.
   Other file headers describe their file. `wid_driver/tests/core_docs.rs`
   checks both.
+- `wid_cli` writes through `output::out` and `output::err`, never `print!`
+  or `eprint!`, which panic when the reader of a pipe has gone. The
+  compiler crates return text and never print.
 
 ## Done
 
@@ -1270,6 +1273,16 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `-x` of an `I8` or `I16` now casts back to its type, so `-MIN` is `MIN`
   (it printed 128 for `I8`). `tests/test` packages take build flags from
   `NAME.flags`; `tests/test/overflow_traps` panics at every width.
+- A closed stdout or stderr no longer panics `wid` (#125): `wid query
+  outline | head -c 10`, `wid explain E0101` with its reader gone, or a
+  usage error with `2>&1 | head -1` exited with status 101 and Rust's
+  "failed printing to stdout". Every command writes through
+  `output::out`/`err`, which drop output to a closed pipe (`BrokenPipe`,
+  on every platform and without `unsafe`), so the command finishes and
+  exits with its own status (SPEC "Toolchain and CLI"); another write
+  error ends `wid` with status 1 and a message. `wid_cli/tests/closed_pipe.rs`
+  closes stdout, or stderr, before each command writes, and stops reading
+  `wid query outline` after 10 bytes.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
