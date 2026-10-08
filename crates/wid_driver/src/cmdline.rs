@@ -407,6 +407,131 @@ pub(crate) fn file_target(dir: &Path, request: FileRequest) -> Result<PathBuf, P
     }))
 }
 
+/// The package directory `wid build`, `run`, `check` or `test` names
+/// without `-file`: argument `arg` of `cmd`, written `text`, which is the
+/// path `path`. The errors (E0206) point at it: a `.wid` file gets a fix
+/// that adds `-file`, another file says it is neither, a missing directory
+/// is matched against the package directories next to it, and one without
+/// `.wid` files says what it holds.
+pub(crate) fn dir_target(cmd: &CommandLine, arg: usize, text: &str, path: &Path) -> Result<PathBuf, Pending> {
+    if has_wid_files(path) {
+        return Ok(path.to_path_buf());
+    }
+    let (cmd, text) = (cmd.clone(), text.to_string());
+    // `check` in `wid check nothere`.
+    let verb = cmd.text.split_whitespace().nth(1).unwrap_or("build").to_string();
+    let command = format!("wid {verb}");
+    let code = codes::UNKNOWN_IMPORT;
+    let parent = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new(".")).to_path_buf();
+    if path.is_file() {
+        let wid = path.extension().is_some_and(|e| e == "wid");
+        let files = wid_file_names(&parent);
+        return Err(Box::new(move |file| {
+            let span = cmd.span(file, arg);
+            if wid {
+                let end = cmd.end(file);
+                return Diagnostic::error(code, format!("`{text}` is a file; Wid builds packages (directories)"))
+                    .primary(span, "a package is a directory of `.wid` files")
+                    .suggest(
+                        format!("{verb} the file on its own with `-file`"),
+                        vec![Edit { span: end, replacement: " -file".to_string() }],
+                        Applicability::MachineApplicable,
+                    );
+            }
+            let mut diag =
+                Diagnostic::error(code, format!("`{text}` is neither a `.wid` file nor a package directory"))
+                    .primary(span, "a package is a directory of `.wid` files");
+            let example = files.first().map_or("main.wid", String::as_str);
+            let written_dir = text.rsplit_once('/').map_or(String::new(), |(d, _)| format!("{d}/"));
+            diag = diag.help(format!(
+                "to {verb} a single `.wid` file, name it with `-file`, like `{command} {written_dir}{example} -file`"
+            ));
+            if !files.is_empty() {
+                let place = if written_dir.is_empty() { "here".to_string() } else { format!("in `{written_dir}`") };
+                diag = diag.note(format!("the `.wid` files {place} are {}", list_names(&files)));
+            }
+            diag
+        }));
+    }
+    if path.is_dir() {
+        // What it holds: packages in its subdirectories, or other files.
+        let mut packages = Vec::new();
+        let mut entries = Vec::new();
+        if let Ok(rd) = std::fs::read_dir(path) {
+            for e in rd.flatten() {
+                let name = e.file_name().to_string_lossy().into_owned();
+                if e.path().is_dir() {
+                    if has_wid_files(&e.path()) {
+                        packages.push(name.clone());
+                    }
+                    entries.push(format!("{name}/"));
+                } else {
+                    entries.push(name);
+                }
+            }
+        }
+        packages.sort();
+        entries.sort();
+        let base = if text.ends_with('/') { text.clone() } else { format!("{text}/") };
+        let packages: Vec<String> = packages.into_iter().map(|p| format!("{base}{p}")).collect();
+        return Err(Box::new(move |file| {
+            let span = cmd.span(file, arg);
+            let diag = Diagnostic::error(code, format!("`{text}` contains no `.wid` files"))
+                .primary(span, "this directory holds no package");
+            match (packages.as_slice(), entries.is_empty()) {
+                ([only], _) => diag.suggest_replace(
+                    format!("the package in it is `{only}`"),
+                    span,
+                    only.clone(),
+                    Applicability::MaybeIncorrect,
+                ),
+                ([], true) => diag.note("it is empty").help("name a package directory, or a `.wid` file with `-file`"),
+                ([], false) => diag
+                    .note(format!("it holds {}", list_names(&entries)))
+                    .help("name a package directory, or a `.wid` file with `-file`"),
+                (_, _) => diag.note(format!("the packages in it are {}", list_names(&packages))),
+            }
+        }));
+    }
+    // A missing directory: a package directory next to it with a similar
+    // name.
+    let last = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let mut siblings: Vec<String> = std::fs::read_dir(&parent)
+        .map(|rd| {
+            rd.flatten()
+                .filter(|e| e.path().is_dir() && has_wid_files(&e.path()))
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+    siblings.sort();
+    let written_dir = text.strip_suffix(last.as_str()).unwrap_or_default().to_string();
+    let best = did_you_mean(&last, siblings.iter().map(String::as_str)).map(|b| format!("{written_dir}{b}"));
+    let wid_file = parent.join(format!("{last}.wid")).is_file().then(|| format!("{text}.wid"));
+    Err(Box::new(move |file| {
+        let span = cmd.span(file, arg);
+        let diag = Diagnostic::error(code, format!("directory `{text}` does not exist"))
+            .primary(span, "no directory with this path");
+        if let Some(best) = best {
+            return diag.suggest_replace(
+                format!("a similar package directory exists: `{best}`"),
+                span,
+                best,
+                Applicability::MaybeIncorrect,
+            );
+        }
+        if let Some(wid) = wid_file {
+            let end = cmd.end(file);
+            return diag.suggest(
+                format!("{verb} the file `{wid}` on its own with `-file`"),
+                vec![Edit { span, replacement: wid }, Edit { span: end, replacement: " -file".to_string() }],
+                Applicability::MaybeIncorrect,
+            );
+        }
+        diag.help("name a package directory, or a `.wid` file with `-file`")
+    }))
+}
+
 /// The names of the `.wid` files directly in `dir`, sorted.
 fn wid_file_names(dir: &Path) -> Vec<String> {
     let mut names: Vec<String> = std::fs::read_dir(dir)

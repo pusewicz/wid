@@ -1239,6 +1239,20 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   unknown named argument or an unused local would be reported, still
   reading the values around them. `did_you_mean` never suggests a name with
   `#{`.
+- CLI flags and package targets (#106). A flag another command takes was
+  silently ignored (`wid explain -debug E0206`, `wid check -filter:x .`,
+  `wid doc -out:x core:fmt`); `args::parse` now checks each flag against
+  the command's own list (`command_flags`) and stops with a usage error
+  (status 2) naming the commands that take it. A unit test parses every
+  flag each command's help lists. Without `-file`, a target that isn't a
+  package directory (`cmdline::dir_target`, from `load_program`) points
+  into the command line like the `-file` errors: a missing directory
+  suggests a similar package directory next to it, or `name.wid -file`; a
+  directory without `.wid` files says what it holds or suggests the package
+  in its subdirectory; a `.wid` file gets a fix adding `-file`; another file
+  (`wid check README.md`) says it is neither; and a directory with only
+  `_test.wid` files suggests `wid test`. `crates/wid_cli/tests/package_target.rs`
+  runs them.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),

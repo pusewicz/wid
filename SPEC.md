@@ -996,7 +996,16 @@ end
   `-out:`, `-o:none|minimal|size|speed|aggressive`, `-debug`, `-vet`,
   `-define:NAME=val`, `-collection:name=path`, `-target:os_arch`, `-file`,
   `-sanitize:address`, `-filter:` (for `test`), `-json` and `-private` (for
-  `doc`), `-in:` (for `query`), `-check` (for `fmt`) and `-json-errors`.
+  `doc`), `-in:` (for `query`), `-check` (for `fmt`) and `-json-errors`. A
+  flag another command takes is an error that names the commands taking it
+  (`wid explain -debug`: "`-debug` doesn't apply to `wid explain`"), never
+  silently ignored; like every usage error, it exits with status 2.
+- Without `-file`, the target of `build`, `run`, `check` and `test` is a
+  package directory. One that isn't is an error (E0206) that points into the
+  command line: a missing directory, with a similar package directory next
+  to it (or its `.wid` file) as the fix; a directory without `.wid` files,
+  with what it holds (the package in a subdirectory as the fix); a `.wid`
+  file, with adding `-file` as the fix; or another file, which is neither.
 - `-file` makes the target a single `.wid` file instead of a package
   directory, so it needs one: `wid check main.wid -file` (for `doc` and
   `query`, a collection path can name it: `core:fmt/fmt.wid`). Naming no

@@ -10,7 +10,7 @@ use wid_syntax::ast::ItemKind;
 
 use crate::Options;
 use crate::cimport;
-use crate::cmdline::{CommandLine, FileRequest, file_target};
+use crate::cmdline::{CommandLine, FileRequest, dir_target, file_target};
 
 /// Finds the directory holding `core/`, `vendor/` and `runtime/`.
 pub fn find_wid_root(opts: &Options) -> PathBuf {
@@ -75,23 +75,25 @@ pub fn load_program(opts: &Options) -> (SourceMap, Option<ProgramInput>, Diagnos
         let dir = target.parent().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."));
         (dir, vec![target.clone()])
     } else {
-        if target.is_file() && target.extension().is_some_and(|e| e == "wid") {
-            loader.diags.push(
-                Diagnostic::error(
-                    codes::UNKNOWN_IMPORT,
-                    format!("`{}` is a file; Wid builds packages (directories)", target.display()),
-                )
-                .help(format!("build a single file with `-file`, like `wid run {} -file`", target.display())),
-            );
-            return (loader.sources, None, loader.diags);
-        }
-        if !target.is_dir() {
-            loader.fatal(format!("directory `{}` does not exist", target.display()));
+        // The errors point into the command line `wid check nothere`.
+        let mut cmd = CommandLine::new(&format!("wid {}", opts.command));
+        let text = target.to_string_lossy();
+        let arg = cmd.arg("", &text);
+        if let Err(pending) = dir_target(&cmd, arg, &text, target) {
+            let file = cmd.add(&mut loader.sources);
+            loader.diags.push(pending(file));
             return (loader.sources, None, loader.diags);
         }
         let files = loader.wid_files(target);
         if files.is_empty() {
-            loader.fatal(format!("`{}` contains no `.wid` files", target.display()));
+            // Only `_test.wid` files, outside `wid test`.
+            let file = cmd.add(&mut loader.sources);
+            loader.diags.push(
+                Diagnostic::error(codes::UNKNOWN_IMPORT, format!("`{text}` holds only tests"))
+                    .primary(cmd.span(file, arg), "every `.wid` file here ends in `_test.wid`")
+                    .note("`_test.wid` files belong to the package's tests, which only `wid test` reads")
+                    .help(format!("run its tests with `wid test {text}`")),
+            );
             return (loader.sources, None, loader.diags);
         }
         (target.clone(), files)
