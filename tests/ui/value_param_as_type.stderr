@@ -1,0 +1,82 @@
+error[E0322]: `N` is a value, not a type
+ --> tests/ui/value_param_as_type.wid:5:9
+  |
+3 | struct Pool($T, $N: Int)
+  |                 ------- `N` is a value parameter, a constant `Int`
+...
+5 |   slot: N
+  |         ^ expected a type here
+  = note: a value parameter is a constant: it can be an array length, like `[N]T`, or a value, like `N.times`
+help: for the type of `N`, write `Int`
+  |   slot: Int
+  = see `wid explain E0322`
+
+error[E0322]: `N` is a value, not a type
+  --> tests/ui/value_param_as_type.wid:7:30
+   |
+ 3 | struct Pool($T, $N: Int)
+   |                 ------- `N` is a value parameter, a constant `Int`
+...
+ 7 |   def bytes -> Int = size_of(N)
+   |                              ^ expected a type here
+...
+25 |   p x.bytes
+   |     ------- `Pool(Int, 2)#bytes[Int, 2]` is checked for these types because of this call
+   = note: a value parameter is a constant: it can be an array length, like `[N]T`, or a value, like `N.times`
+   = note: the error is inside the generic method `Pool(Int, 2)#bytes[Int, 2]`
+help: for the type of `N`, write `Int`
+   |   def bytes -> Int = size_of(Int)
+   = see `wid explain E0322`
+
+error[E0322]: `N` is a value, not a type
+  --> tests/ui/value_param_as_type.wid:10:8
+   |
+ 3 | struct Pool($T, $N: Int)
+   |                 ------- `N` is a value parameter, a constant `Int`
+...
+10 |     y: N = 3
+   |        ^ expected a type here
+...
+26 |   x.keep
+   |   ------ `Pool(Int, 2)#keep[Int, 2]` is checked for these types because of this call
+   = note: a value parameter is a constant: it can be an array length, like `[N]T`, or a value, like `N.times`
+   = note: the error is inside the generic method `Pool(Int, 2)#keep[Int, 2]`
+help: for the type of `N`, write `Int`
+   |     y: Int = 3
+   = see `wid explain E0322`
+
+error[E0322]: `N` is a value, not a type
+  --> tests/ui/value_param_as_type.wid:14:15
+   |
+ 3 | struct Pool($T, $N: Int)
+   |                 ------- `N` is a value parameter, a constant `Int`
+...
+14 |   def zero -> N = 0
+   |               ^ expected a type here
+   = note: a value parameter is a constant: it can be an array length, like `[N]T`, or a value, like `N.times`
+help: for the type of `N`, write `Int`
+   |   def zero -> Int = 0
+   = see `wid explain E0322`
+
+error[E0322]: `N` is a value, not a type
+  --> tests/ui/value_param_as_type.wid:15:15
+   |
+ 3 | struct Pool($T, $N: Int)
+   |                 ------- `N` is a value parameter, a constant `Int`
+...
+15 |   def take(v: N) -> Int = 1
+   |               ^ expected a type here
+   = note: a value parameter is a constant: it can be an array length, like `[N]T`, or a value, like `N.times`
+help: for the type of `N`, write `Int`
+   |   def take(v: Int) -> Int = 1
+   = see `wid explain E0322`
+
+error[E0322]: `M` is a value, not a type
+  --> tests/ui/value_param_as_type.wid:20:15
+   |
+20 |   def last -> M = 0
+   |               ^ expected a type here
+   = note: a value parameter is a constant: it can be an array length, like `[M]T`, or a value, like `M.times`
+   = see `wid explain E0322`
+
+error: could not compile due to 6 errors

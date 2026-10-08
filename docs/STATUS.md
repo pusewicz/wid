@@ -525,6 +525,20 @@ runs the stages; `wid_cli` is the `wid` binary.
   context, so `buf: [N + 1]U8`, `Pool(T, N * 2).new`, `matrix[N, N]F32`
   and `comptime N * 2` work in a body, and `N.times` and `type_info(N)`
   read `N` as a value instead of a type (#35).
+- Method signatures read a value parameter per instance: in `Pool(Int, 2)`,
+  `def bigger -> Pool(T, N + 1)` is `Pool(Int, 3)` (it read a package
+  constant `N` when there was one, else was E0315) and `def all -> [N]T` is
+  `[2]Int` (it was `[0]Int`). A type that reads a placeholder value
+  parameter (`[N]T`, `[N + 1]T`, `matrix[N, N]F32`, `Pool(T, N + 1)`)
+  marks the signature `per_instance`, and `fn_sig_inst` resolves such a
+  signature again with the instance's bindings, as does `call_fn` for its
+  first coercion; the template keeps no error for it, so `buf: [N + 1]T`
+  fields work too. `comptime` code in a type (`[comptime N * 2]T`) reads
+  the bindings of the type's context instead of the code being lowered.
+  A value parameter where a type is expected (`y: N`, `size_of(N)`,
+  `-> N`, a field `slot: N`) is E0322 with a fix that writes its declared
+  type, and a value parameter must be declared `$N: Int`: another type is
+  E0315 at the declaration with a fix (#37).
 - Macro syntax: `quote` bodies holding statements and declarations, with
   splices in every expression, type, declaration and name position (`#{x}`,
   `@#{f}`, `:#{s}`), splices outside a `quote` (E0111), variadic

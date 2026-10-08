@@ -1446,8 +1446,14 @@ impl<'a> Checker<'a> {
         for (i, param) in sig.params.iter().enumerate() {
             let value = match &ordered[i] {
                 ArgSource::Given(e) => {
+                    // `xs: [N]T` needs the value bound to `N` so far.
+                    let pattern = if sig.per_instance {
+                        self.fn_sig_inst(decl, &bindings).params.get(i).map_or(param.ty, |p| p.ty)
+                    } else {
+                        param.ty
+                    };
                     let expected = if generic {
-                        let t = self.subst_type(param.ty, &bindings);
+                        let t = self.subst_type(pattern, &bindings);
                         if self.has_params(t) { None } else { Some(t) }
                     } else {
                         Some(param.ty)
@@ -1459,8 +1465,8 @@ impl<'a> Checker<'a> {
                             let v = self.expr(e, None);
                             let vt = self.value_type(v.ty, e.span);
                             let v = ir::Expr::new(v.kind, vt);
-                            if !self.unify(param.ty, v.ty, &mut bindings) {
-                                let want = self.types.display(param.ty);
+                            if !self.unify(pattern, v.ty, &mut bindings) {
+                                let want = self.types.display(pattern);
                                 let found = self.types.display(v.ty);
                                 self.report(
                                     Diagnostic::error(

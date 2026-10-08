@@ -158,7 +158,9 @@ impl<'a> Checker<'a> {
     /// Resolves a type expression, reporting errors and returning the
     /// unknown type on failure.
     pub fn resolve_type(&mut self, texpr: &ast::TypeExpr, ctx: &TyCtx) -> TyId {
+        let scope = self.type_scope.replace((ctx.subst.clone(), ctx.self_ty));
         let ty = self.resolve_type_inner(texpr, ctx);
+        self.type_scope = scope;
         self.fill_pending_types();
         ty
     }
@@ -234,16 +236,18 @@ impl<'a> Checker<'a> {
                     }
                     _ => None,
                 };
-                match match &len.kind {
-                    ast::ExprKind::Const(n) => {
-                        super::generics::lookup(&ctx.subst, *n).map(|t| self.types.kind(t).clone())
-                    }
-                    _ => None,
-                } {
-                    Some(TyKind::Param(_)) => return self.types.intern(TyKind::Array(elem, 0)),
+                if let ast::ExprKind::Const(n) = &len.kind
+                    && let Some(t) = super::generics::lookup(&ctx.subst, *n)
+                    && matches!(self.types.kind(t), TyKind::Unknown)
+                {
                     // A value argument that was reported.
-                    Some(TyKind::Unknown) => return self.types.unknown(),
-                    _ => {}
+                    return self.types.unknown();
+                }
+                // `[N]T` or `[N + 1]T` with `N` a placeholder: each instance
+                // resolves the type with its own `N`.
+                if self.reads_placeholder(len, &ctx.subst) {
+                    self.value_deferrals += 1;
+                    return self.types.intern(TyKind::Array(elem, 0));
                 }
                 // A length that failed to parse (like `[$N]`) was reported.
                 if super::runtime::holds_parse_error(len) {
@@ -252,10 +256,10 @@ impl<'a> Checker<'a> {
                 let loc = self.virtual_file(len.span.file).map_or(ctx.loc, |v| v.loc);
                 match bound.or_else(|| self.eval_const_in(len, loc, &ctx.subst)) {
                     Some(ConstValue::Int(n)) if n >= 0 => self.types.intern(TyKind::Array(elem, n as u64)),
-                    Some(ConstValue::Int(_)) => {
+                    Some(ConstValue::Int(n)) => {
                         self.report(
                             Diagnostic::error(codes::TYPE_MISMATCH, "array length cannot be negative")
-                                .primary(len.span, "negative length"),
+                                .primary(len.span, format!("this length is {n}")),
                         );
                         self.types.unknown()
                     }
@@ -411,6 +415,17 @@ impl<'a> Checker<'a> {
             && args.is_empty()
             && let Some(t) = super::generics::lookup(&ctx.subst, name.name)
         {
+            // A value parameter: bound to its value in an instance, or a
+            // placeholder of the struct's own value parameter.
+            let value = match self.types.kind(t) {
+                TyKind::ConstValue(_) => true,
+                TyKind::Param(_) => self.value_param_of(ctx, name.name).is_some(),
+                _ => false,
+            };
+            if value {
+                self.value_param_as_type(&name, ctx);
+                return self.types.unknown();
+            }
             return t;
         }
         if segments.len() == 1 {
@@ -441,6 +456,7 @@ impl<'a> Checker<'a> {
         if let Some(decl) = found {
             self.check_visible_from(decl, ctx.loc.pkg, name.span);
             if !args.is_empty() {
+                let deferrals = self.value_deferrals;
                 let arg_tys: Vec<TyId> = args
                     .iter()
                     .enumerate()
@@ -458,6 +474,11 @@ impl<'a> Checker<'a> {
                         },
                     })
                     .collect();
+                // `Pool(T, N + 1)` with `N` a placeholder: each instance
+                // resolves the type with its own `N`.
+                if self.value_deferrals > deferrals {
+                    return self.types.unknown();
+                }
                 let arg_spans: Vec<Span> = args
                     .iter()
                     .map(|a| match a {
@@ -547,6 +568,44 @@ impl<'a> Checker<'a> {
         }
         self.report(diag);
         self.types.unknown()
+    }
+
+    /// The value parameter `name` of the generic struct whose fields or
+    /// methods are being resolved, like `$N: Int` in `struct Pool($T, $N: Int)`.
+    pub(super) fn value_param_of(&self, ctx: &TyCtx, name: Name) -> Option<&'a ast::GenericParam> {
+        let decl = match self.types.kind(ctx.self_ty?) {
+            TyKind::Struct(id) => *self.struct_decls.get(id)?,
+            _ => return None,
+        };
+        match self.decls[decl.0 as usize].kind {
+            DeclKind::Struct(s) => s.generics.iter().find(|g| g.name.name == name && g.ty.is_some()),
+            _ => None,
+        }
+    }
+
+    /// Reports a generic value parameter, like `N` in a method of
+    /// `Pool(Int, 4)`, written where a type is expected (`y: N`,
+    /// `size_of(N)`, `-> N`), with a fix that writes its declared type.
+    fn value_param_as_type(&mut self, ident: &ast::Ident, ctx: &TyCtx) {
+        let name = ident.name;
+        let mut diag = Diagnostic::error(codes::NOT_A_TYPE, format!("`{name}` is a value, not a type"))
+            .primary(ident.span, "expected a type here");
+        if let Some(g) = self.value_param_of(ctx, name)
+            && let Some(t) = &g.ty
+        {
+            let ty_text = self.source_text(t.span);
+            diag = diag
+                .secondary(g.span, format!("`{name}` is a value parameter, a constant `{ty_text}`"))
+                .suggest_replace(
+                    format!("for the type of `{name}`, write `{ty_text}`"),
+                    ident.span,
+                    ty_text,
+                    wid_diagnostics::Applicability::MaybeIncorrect,
+                );
+        }
+        self.report(diag.note(format!(
+            "a value parameter is a constant: it can be an array length, like `[{name}]T`, or a value, like `{name}.times`"
+        )));
     }
 
     /// A generic argument written as an expression for a parameter that

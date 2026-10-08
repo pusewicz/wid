@@ -1,0 +1,28 @@
+# A generic struct's value parameter is a constant, not a type: in a
+# method's body, its signature, a field, or an `extend` of the struct.
+struct Pool($T, $N: Int)
+  items: [N]T
+  slot: N
+
+  def bytes -> Int = size_of(N)
+
+  def keep
+    y: N = 3
+    p y
+  end
+
+  def zero -> N = 0
+  def take(v: N) -> Int = 1
+  def same?(other: Pool(T, N)) -> Bool = other.items.size == N
+end
+
+extend Pool($T, $M)
+  def last -> M = 0
+end
+
+def main
+  x: Pool(Int, 2) = {}
+  p x.bytes
+  x.keep
+  p x.zero, x.take(3), x.same?(x), x.last
+end

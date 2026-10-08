@@ -558,9 +558,28 @@ impl<'a> Checker<'a> {
         }
         let d = self.decls[decl.0 as usize].clone();
         let DeclKind::Fn(f) = d.kind else { unreachable!("fn_sig on a non-function") };
-        let owner_ty = self.owner_type(decl);
         let subst = self.template_subst(decl);
+        let sig = self.resolve_sig(decl, subst);
+        if f.is_static && self.owner_type(decl).is_none() {
+            self.report(
+                Diagnostic::error(codes::SELF_OUTSIDE_METHOD, "`def self.` only makes sense inside a type")
+                    .primary(f.sig_span, "there is no type here for `self` to name")
+                    .help("remove `self.` to declare a package-level method"),
+            );
+        }
+        self.sigs.insert(decl, sig.clone());
+        sig
+    }
+
+    /// Resolves the types of a function's signature with `subst` binding
+    /// its generic parameters: placeholders for the template, or an
+    /// instance's types and values.
+    pub(super) fn resolve_sig(&mut self, decl: DeclId, subst: super::generics::Subst) -> FnSig {
+        let d = self.decls[decl.0 as usize].clone();
+        let DeclKind::Fn(f) = d.kind else { unreachable!("resolve_sig on a non-function") };
+        let owner_ty = self.owner_type(decl).map(|t| self.subst_type(t, &subst));
         let ctx = super::ty::TyCtx { loc: d.loc, self_ty: owner_ty, subst };
+        let deferrals = self.value_deferrals;
         let mut params = Vec::new();
         for p in &f.params {
             let mut ty = self.resolve_type(&p.ty, &ctx);
@@ -576,16 +595,8 @@ impl<'a> Checker<'a> {
             None => self.types.void(),
         };
         let receiver = if f.is_static { None } else { owner_ty };
-        if f.is_static && owner_ty.is_none() {
-            self.report(
-                Diagnostic::error(codes::SELF_OUTSIDE_METHOD, "`def self.` only makes sense inside a type")
-                    .primary(f.sig_span, "there is no type here for `self` to name")
-                    .help("remove `self.` to declare a package-level method"),
-            );
-        }
-        let sig = FnSig { params, ret, receiver, block, c_variadic: f.c_variadic.is_some() };
-        self.sigs.insert(decl, sig.clone());
-        sig
+        let per_instance = self.value_deferrals > deferrals || self.extends_value_params(decl);
+        FnSig { params, ret, receiver, block, c_variadic: f.c_variadic.is_some(), per_instance }
     }
 
     /// Evaluates a constant declaration.

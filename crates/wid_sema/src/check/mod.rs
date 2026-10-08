@@ -106,6 +106,10 @@ pub(crate) struct FnSig {
     pub c_variadic: bool,
     /// The `&blk` parameter of methods that take a block.
     pub block: Option<inline::BlockSig>,
+    /// A type in it reads a generic value parameter (`[N]T`,
+    /// `Pool(T, N + 1)`), so each instance resolves it again with the value
+    /// bound to `N` instead of substituting placeholders.
+    pub per_instance: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -176,6 +180,15 @@ pub(crate) struct Checker<'a> {
     /// Instance counters for C names.
     pub instance_counts: HashMap<DeclId, usize>,
     pub sigs: HashMap<DeclId, FnSig>,
+    /// How many array lengths and generic arguments so far read a generic
+    /// value parameter that is still a placeholder, like `N` in `[N]T` in a
+    /// signature resolved once for all instances. Such a type is left for
+    /// each instance to resolve.
+    pub value_deferrals: u32,
+    /// While a type is resolved, the generic bindings and `Self` of its
+    /// context, which `comptime` code in it (`[comptime N * 2]T`) reads
+    /// instead of those of the code being lowered.
+    pub type_scope: Option<(generics::Subst, Option<TyId>)>,
     pub queue: VecDeque<PendingFn>,
     pub consts: HashMap<DeclId, ConstState>,
     /// Constants being evaluated, innermost last, for cycle reports.
@@ -281,6 +294,8 @@ pub fn check_program(input: &ProgramInput) -> (ir::Program, Diagnostics) {
         extend_patterns: HashMap::new(),
         instance_counts: HashMap::new(),
         sigs: HashMap::new(),
+        value_deferrals: 0,
+        type_scope: None,
         queue: VecDeque::new(),
         consts: HashMap::new(),
         const_stack: Vec::new(),
@@ -481,6 +496,16 @@ impl<'a> Checker<'a> {
             if check && is_type {
                 let span = d.span;
                 self.decl_as_type(DeclId(i as u32), span);
+            }
+            let generics = match self.decls[i].kind {
+                DeclKind::Struct(s) => s.generics.as_slice(),
+                DeclKind::Union(u) => u.generics.as_slice(),
+                _ => &[],
+            };
+            if check {
+                for g in generics {
+                    self.value_param_is_int(DeclId(i as u32), g);
+                }
             }
             let d = &self.decls[i];
             if check && matches!(d.kind, DeclKind::Overload(_)) {

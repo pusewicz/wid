@@ -13,6 +13,8 @@ struct Pool($T, $N: Int)
   used: Int
 
   def capacity -> Int = @items.size
+  # Here `N` is the instance's value parameter, not the package's `N`:
+  # `Pool(Int, 6).bigger` is a `Pool(Int, 7)`.
   def bigger -> Pool(T, N + 1) = {}
 end
 
@@ -27,7 +29,7 @@ def main
   same: Pool(Int, 4) = a
   p a.capacity, b.capacity, c.capacity, d.capacity, e.capacity
   p f.capacity, g.capacity, g.used, same.capacity
-  p a.bigger.capacity
+  p a.bigger.capacity, b.bigger.capacity
   p size_of(Pool(U8, N)), size_of(Pool(U8, N * 4))
   puts type_info(Pool(Int, COMPUTED)).name
 end
