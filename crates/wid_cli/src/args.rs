@@ -116,12 +116,13 @@ fn command_flags(command: Command) -> Vec<&'static str> {
 }
 
 /// Every command, in the order the help lists them.
-const ALL_COMMANDS: [Command; 10] = [
+const ALL_COMMANDS: [Command; 11] = [
     Command::Build,
     Command::Run,
     Command::Check,
     Command::Test,
     Command::Doc,
+    Command::Fmt,
     Command::Query,
     Command::Explain,
     Command::Cimport,
@@ -554,13 +555,15 @@ mod tests {
         assert_eq!(
             error("version -json-errors"),
             "`-json-errors` doesn't apply to `wid version`; `wid build`, `wid run`, `wid check`, `wid test`, \
-             `wid doc` and `wid cimport` take it"
+             `wid doc`, `wid fmt` and `wid cimport` take it"
         );
         assert_eq!(
             error("cimport -file x.h"),
-            "`-file` doesn't apply to `wid cimport`; `wid build`, `wid run`, `wid check`, `wid test`, `wid doc` \
-             and `wid query` take it"
+            "`-file` doesn't apply to `wid cimport`; `wid build`, `wid run`, `wid check`, `wid test`, `wid doc`, \
+             `wid fmt` and `wid query` take it"
         );
+        assert_eq!(error("build -check ."), "`-check` doesn't apply to `wid build`; only `wid fmt` takes it");
+        assert_eq!(error("fmt -debug"), format!("`-debug` doesn't apply to `wid fmt`; {build}"));
     }
 
     /// The flags a command's help lists, from the `Flags:` section of
@@ -596,7 +599,7 @@ mod tests {
     #[test]
     fn every_flag_the_help_promises_is_taken() {
         let mut checked = 0;
-        for command in ["build", "run", "check", "test", "doc", "query", "cimport"] {
+        for command in ["build", "run", "check", "test", "doc", "fmt", "query", "cimport"] {
             let flags = promised(command);
             assert!(!flags.is_empty(), "`wid help {command}` lists no flags");
             for flag in flags {
@@ -613,7 +616,9 @@ mod tests {
         }
         assert!(checked > 30, "only {checked} flags checked");
         // The help lists every flag a command takes, and no other.
-        for command in [Command::Build, Command::Run, Command::Check, Command::Test, Command::Doc, Command::Query] {
+        for command in
+            [Command::Build, Command::Run, Command::Check, Command::Test, Command::Doc, Command::Fmt, Command::Query]
+        {
             let name = command_name(command);
             let mut listed = promised(name);
             let mut taken: Vec<String> = command_flags(command).into_iter().map(str::to_string).collect();
