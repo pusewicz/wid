@@ -54,8 +54,11 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   (`call_with_values`), so compound assignments and `[]=` reuse it without
   re-evaluating operands. Module and generic-struct members of a set are
   instantiated with the receiver's bindings plus `Self`.
-- Codegen marks parameters the body never reads `[[maybe_unused]]` in
-  definitions (Wid allows unused parameters).
+- Codegen marks parameters and locals the body never reads
+  `[[maybe_unused]]` (Wid allows unused parameters and `_` names). An
+  assignment to a field or an element of a local stored in place
+  (`ir::Expr::written_local`) reads only its indexes, as in sema, since gcc
+  reports such a local as "set but not used".
 - `@[extern("sym")]` emits `extern R wid_extern_sym(params)
   __asm__(WID_SYMBOL("sym"));`: its own name bound to the C symbol, so it never
   conflicts with a header's declaration of `sym`. `wid_` symbols get no
@@ -107,6 +110,9 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `?` binds after `^T` and `[^]T`. Types display a pointer to an optional as
   `^(T?)`.
 - Layout (size, align, field offsets) is computed in sema for 64-bit targets.
+  Sizes saturate instead of overflowing, and no type is over
+  `types::MAX_TYPE_SIZE` (`2^61 - 1` bytes, E0329) once checking succeeds,
+  so codegen never sees a saturated size.
 - Compile-time code (`check/comptime.rs`) is lowered into a function of its
   own (a fresh `Body`, the outer frame's generic bindings, outer locals made
   uncapturable) and run by `crate::interp` over the IR. The interpreter keeps
@@ -863,7 +869,50 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   instead of a Wid bug (#46). `run_step` reads the compiler's output on any
   `-std=c23` step; working compilers are never run an extra time.
   `crates/wid_driver/tests/toolchain.rs` builds with fake compilers.
-- Test suite: `tests/run` (clang and gcc-16, strict flags), `tests/ui`
+- A type over `2^61 - 1` bytes, or an array with more elements, is E0329
+  where it is written, with the size it would take and the limit (#68): the
+  layout panicked on overflow (`[1 << 61]I64`), and types that fit in a
+  `u64` but not in C failed in the C compiler as E0702. Layout arithmetic
+  saturates (`TypeTable::wide_layout` works in `u128`), and
+  `TypeTable::oversize` measures a type as the generated C lays it out
+  (`c_layout`: an empty struct takes a byte there). The checker reports
+  array, optional and tuple types as they are resolved (an array of a
+  struct still being resolved, behind a pointer, once it is), the field or
+  union variant that takes its type over (it becomes unknown), array
+  literals, and generic calls whose instance would return one.
+- A splice used as an assignment target (`=`, `+=`, `||=`, `a, #{n} = …`)
+  that gives something that can't be assigned to (a number, string, `Bool`
+  or `Type`, a capitalized `Symbol`, or `Code` that is a call or a literal)
+  is E0911 at the call, marking the splice and naming what it holds (#69);
+  it checked and then failed in the C compiler (`((void)0) = …`), or built
+  for `||=`. `Splicer::splice_target` substitutes targets before the rest of
+  the statement and applies the parser's E0107 shape rule to the result; a
+  constant's name passes there (among declarations it declares the
+  constant), and `Checker::place` reports one spliced into a method
+  (`Checker::spliced_by`).
+- A local that is only written through a field or an element (`a[0] = 1`,
+  `m.hp = 9`, `a[0], a[1] = …`, a loop variable's field) is E0203, with a
+  label on the first such write (#71); it counted as read, and gcc-15
+  rejected the C ("set but not used"). `Checker::write_place` lowers `=`
+  targets and leaves the variable unread when the place is in it
+  (`ir::Expr::written_local`) and nothing else in the target names it;
+  codegen counts reads the same way, so parameters and `_` locals written
+  that way get `[[maybe_unused]]`. `tests/run/write_only_locals` covers the
+  shapes that stay valid under gcc's strict flags. A by-value `for` binding
+  over a place that is only written that way (`for s in ships` with
+  `s.hp = 1`) is told the write changes a copy, with a `MaybeIncorrect` fix
+  that binds by reference (`for &s in ships`, `Checker::loop_copies`)
+  instead of the `_s` one.
+- Writing into a `type_info` table is E0309 "`type_info` tables are
+  read-only" (#81); it built and silently wrote to the `static const`
+  tables (STATUS said it faulted). `Checker::place`, the assignments to
+  `for &x` variables, `&` and `for &v` check `Checker::in_type_table`: the
+  place is reached through a pointer to, or a slice of, a `TypeInfo`,
+  `TypeInfoField` or `TypeInfoMember`, or through a pointer or slice read
+  out of one. `&` of a whole record stays allowed, since writes through it
+  are caught.
+- Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
+  missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
   `tests/test` (`wid test` reports), `tests/doc` (`wid doc` pages and
   errors), `tests/query` (`wid query` documents and errors) and every
@@ -1100,9 +1149,12 @@ before anyone starts them.
 - `type_info`: at compile time the tables use Wid's layouts, which differ
   from C's for a cimported C union (whose fields all start at 0 in C), and
   `Error`'s members are the error symbols seen so far. Proc tables don't say
-  whether a proc is `@[c]`. Nothing stops a program from writing through a
-  `^TypeInfo` (the run-time tables are `const`, so it faults; at compile
-  time it succeeds).
+  whether a proc is `@[c]`. Writes into the tables are E0309, except through
+  a `[]^TypeInfo` copied out of a table (`vs = t.variants`, or one passed to
+  a method) or a pointer converted with `.to`: those are undefined
+  behaviour at run time (the tables are `static const` and the C casts
+  `const` away; the write may be ignored or fault) and succeed at compile
+  time.
 - Macros: a `quote` inside a splice must fit on one line, because newlines
   are suppressed inside splices (`#{if a then quote do x end else quote do
   end end}` works; a multi-line `quote` there doesn't). Code spliced from

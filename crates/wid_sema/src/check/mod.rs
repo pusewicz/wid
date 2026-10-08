@@ -232,6 +232,20 @@ pub(crate) struct Checker<'a> {
     pub pending_types: Vec<DeclId>,
     /// How many indirections deep the type being resolved is.
     pub shallow: u32,
+    /// Types that stored a struct or union not laid out yet when they were
+    /// written (an array of it behind a pointer), with their span and
+    /// generic instance: their size is checked once it is (see
+    /// `check_type_size`).
+    pub size_checks: Vec<(TyId, Span, Option<TyId>)>,
+    /// For a variable that a field or element write left unread (see
+    /// `write_place`), by its declaration's span: the first such write,
+    /// which an unused-variable error points at.
+    pub write_only: HashMap<Span, Span>,
+    /// The by-value bindings of `for` loops over a place (`s` in
+    /// `for s in ships`), by the binding's span: the loop's collection,
+    /// which an unused-variable error for a binding only written through
+    /// suggests binding by reference (`for &s in ships`).
+    pub loop_copies: HashMap<Span, Span>,
     pub errors: Vec<Name>,
     pub body: Body,
     pub source_texts: HashMap<FileId, std::sync::Arc<str>>,
@@ -343,6 +357,9 @@ fn run(input: &ProgramInput, index: bool) -> (ir::Program, Diagnostics, Option<c
         resolving: Vec::new(),
         pending_types: Vec::new(),
         shallow: 0,
+        size_checks: Vec::new(),
+        write_only: HashMap::new(),
+        loop_copies: HashMap::new(),
         errors: Vec::new(),
         body: Body::default(),
         no_bounds_check: false,

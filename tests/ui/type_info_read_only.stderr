@@ -1,0 +1,127 @@
+error[E0309]: `type_info` tables are read-only
+  --> tests/ui/type_info_read_only.wid:10:3
+   |
+10 |   t.size = 99
+   |   ^^^^^^ this is part of a `type_info` table
+   = note: `type_info` points at a table the compiler emits as constant data, shared by every use of the type
+help: copy the value into a variable and change the copy, like `size = t.size`
+   = see `wid explain E0309`
+
+error[E0309]: `type_info` tables are read-only
+  --> tests/ui/type_info_read_only.wid:11:3
+   |
+11 |   t.size += 1
+   |   ^^^^^^ this is part of a `type_info` table
+   = note: `type_info` points at a table the compiler emits as constant data, shared by every use of the type
+help: copy the value into a variable and change the copy, like `size = t.size`
+   = see `wid explain E0309`
+
+error[E0309]: `type_info` tables are read-only
+  --> tests/ui/type_info_read_only.wid:12:3
+   |
+12 |   t.align ||= 4
+   |   ^^^^^^^ this is part of a `type_info` table
+   = note: `type_info` points at a table the compiler emits as constant data, shared by every use of the type
+help: copy the value into a variable and change the copy, like `align = t.align`
+   = see `wid explain E0309`
+
+error[E0309]: `type_info` tables are read-only
+  --> tests/ui/type_info_read_only.wid:13:3
+   |
+13 |   t.fields[0] = t.fields[1]
+   |   ^^^^^^^^^^^ this is part of a `type_info` table
+   = note: `type_info` points at a table the compiler emits as constant data, shared by every use of the type
+help: copy the value into a variable and change the copy, like `copy = t.fields[0]`
+   = see `wid explain E0309`
+
+error[E0309]: `type_info` tables are read-only
+  --> tests/ui/type_info_read_only.wid:14:3
+   |
+14 |   t.fields[0].offset = 3
+   |   ^^^^^^^^^^^^^^^^^^ this is part of a `type_info` table
+   = note: `type_info` points at a table the compiler emits as constant data, shared by every use of the type
+help: copy the value into a variable and change the copy, like `offset = t.fields[0].offset`
+   = see `wid explain E0309`
+
+error[E0309]: `type_info` tables are read-only
+  --> tests/ui/type_info_read_only.wid:15:3
+   |
+15 |   t^ = type_info(Int)^
+   |   ^^ this is part of a `type_info` table
+   = note: `type_info` points at a table the compiler emits as constant data, shared by every use of the type
+help: copy the value into a variable and change the copy, like `copy = t^`
+   = see `wid explain E0309`
+
+error[E0309]: `type_info` tables are read-only
+  --> tests/ui/type_info_read_only.wid:16:10
+   |
+16 |   first, t.count = 1, 2
+   |          ^^^^^^^ this is part of a `type_info` table
+   = note: `type_info` points at a table the compiler emits as constant data, shared by every use of the type
+help: copy the value into a variable and change the copy, like `count = t.count`
+   = see `wid explain E0309`
+
+error[E0309]: `type_info` tables are read-only
+  --> tests/ui/type_info_read_only.wid:19:5
+   |
+19 |     f.offset = 1
+   |     ^^^^^^^^ this is part of a `type_info` table
+   = note: `type_info` points at a table the compiler emits as constant data, shared by every use of the type
+help: copy the value into a variable and change the copy, like `offset = f.offset`
+   = see `wid explain E0309`
+
+error[E0309]: `type_info` tables are read-only
+  --> tests/ui/type_info_read_only.wid:20:5
+   |
+20 |     f = t.fields[1]
+   |     ^ this is part of a `type_info` table
+   = note: `type_info` points at a table the compiler emits as constant data, shared by every use of the type
+help: `f` points into the table: loop over copies, `for f in …`, and change the copy
+   = see `wid explain E0309`
+
+error[E0309]: `type_info` tables are read-only
+  --> tests/ui/type_info_read_only.wid:23:3
+   |
+23 |   field.type.size = 1
+   |   ^^^^^^^^^^^^^^^ this is part of a `type_info` table
+   = note: `type_info` points at a table the compiler emits as constant data, shared by every use of the type
+help: copy the value into a variable and change the copy, like `size = field.type.size`
+   = see `wid explain E0309`
+
+error[E0309]: `type_info` tables are read-only
+  --> tests/ui/type_info_read_only.wid:25:5
+   |
+25 |     elem.size = 2
+   |     ^^^^^^^^^ this is part of a `type_info` table
+   = note: `type_info` points at a table the compiler emits as constant data, shared by every use of the type
+help: copy the value into a variable and change the copy, like `size = elem.size`
+   = see `wid explain E0309`
+
+error[E0309]: `type_info` tables are read-only
+  --> tests/ui/type_info_read_only.wid:28:3
+   |
+28 |   u.variants[0] = t
+   |   ^^^^^^^^^^^^^ this is part of a `type_info` table
+   = note: `type_info` points at a table the compiler emits as constant data, shared by every use of the type
+help: copy the value into a variable and change the copy, like `copy = u.variants[0]`
+   = see `wid explain E0309`
+
+error[E0309]: `type_info` tables are read-only
+  --> tests/ui/type_info_read_only.wid:29:13
+   |
+29 |   for &v in u.variants
+   |             ^^^^^^^^^^ binding these elements by reference would let code change a `type_info` table
+   = note: `type_info` points at a table the compiler emits as constant data, shared by every use of the type
+help: drop the `&` to loop over copies of the elements
+   = see `wid explain E0309`
+
+error[E0309]: `type_info` tables are read-only
+  --> tests/ui/type_info_read_only.wid:32:9
+   |
+32 |   ptr = &t.size
+   |         ^^^^^^^ this pointer would let code change a `type_info` table
+   = note: `type_info` points at a table the compiler emits as constant data, shared by every use of the type
+help: read the value instead, or copy it into a variable and take the variable's address
+   = see `wid explain E0309`
+
+error: could not compile due to 14 errors

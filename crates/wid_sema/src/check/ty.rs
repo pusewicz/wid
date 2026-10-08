@@ -255,7 +255,15 @@ impl<'a> Checker<'a> {
                 }
                 let loc = self.virtual_file(len.span.file).map_or(ctx.loc, |v| v.loc);
                 match bound.or_else(|| self.eval_const_in(len, loc, &ctx.subst)) {
-                    Some(ConstValue::Int(n)) if n >= 0 => self.types.intern(TyKind::Array(elem, n as u64)),
+                    Some(ConstValue::Int(n)) if n >= 0 => {
+                        let within = self.resolving_instance(ctx.self_ty);
+                        let Ok(n) = u64::try_from(n) else {
+                            self.report_long_array(elem, n, texpr.span, within);
+                            return self.types.unknown();
+                        };
+                        let ty = self.types.intern(TyKind::Array(elem, n));
+                        self.check_type_size(ty, texpr.span, within)
+                    }
                     Some(ConstValue::Int(n)) => {
                         self.report(
                             Diagnostic::error(codes::TYPE_MISMATCH, "array length cannot be negative")
@@ -335,11 +343,13 @@ impl<'a> Checker<'a> {
                             .primary(texpr.span, "`T??` is the same as `T?`"),
                     );
                 }
-                self.types.optional(t)
+                let ty = self.types.optional(t);
+                self.check_type_size(ty, texpr.span, self.resolving_instance(ctx.self_ty))
             }
             T::Tuple(elems) => {
                 let elems = elems.iter().map(|e| self.resolve_type(e, ctx)).collect();
-                self.types.tuple(elems)
+                let ty = self.types.tuple(elems);
+                self.check_type_size(ty, texpr.span, self.resolving_instance(ctx.self_ty))
             }
             T::Distinct(inner) => {
                 let base = self.source_text(inner.span);

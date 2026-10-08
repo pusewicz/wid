@@ -696,8 +696,10 @@ impl<'a> Checker<'a> {
                 Some((local, ty, indirect)) => {
                     let v = self.coerce(value, ty, target.span);
                     self.invalidate(local);
-                    let target = self.var_place(local, ty, indirect);
-                    self.emit(Stmt::Assign { target, value: v });
+                    let place = self.var_place(local, ty, indirect);
+                    if !self.report_type_table_write(&place, target.span) {
+                        self.emit(Stmt::Assign { target: place, value: v });
+                    }
                 }
                 None => {
                     let ty = self.value_type(value.ty, target.span);
@@ -708,7 +710,8 @@ impl<'a> Checker<'a> {
             }
             return;
         }
-        let place = self.place(target);
+        let root = self.unread_root(target);
+        let place = self.write_place(target, root);
         let v = self.coerce(value, place.ty, target.span);
         self.emit(Stmt::Assign { target: place, value: v });
     }

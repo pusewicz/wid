@@ -73,7 +73,7 @@ use std::collections::{HashMap, HashSet};
 
 use wid_diagnostics::{Applicability, Diagnostic, FileId, Span, codes};
 use wid_syntax::ast::{self, ExprKind as E, ItemKind, StmtKind, TypeKind, splice_index};
-use wid_syntax::visit::{VisitMut, walk_expr, walk_item, walk_type};
+use wid_syntax::visit::{VisitMut, walk_expr, walk_item, walk_stmt, walk_type};
 use wid_syntax::{Name, ast::Ident};
 
 use super::body::Dest;
@@ -356,6 +356,14 @@ impl<'a> Checker<'a> {
         } else {
             diag
         }
+    }
+
+    /// The macro that spliced the expression at `span`, a name or `Code`
+    /// from outside the expansion, if one did.
+    pub(super) fn spliced_by(&self, span: Span) -> Option<String> {
+        let splice = self.macros.splices.get(&span.file)?.iter().find(|s| s.code == span)?;
+        let v = self.virtual_file(splice.site.file)?;
+        Some(self.macros.expansions[v.expansion as usize].name.clone())
     }
 
     /// Records where each file's names resolve, for virtual files made from
@@ -1449,6 +1457,34 @@ fn describe(value: &SpliceValue) -> &'static str {
     }
 }
 
+/// Whether an expression has the shape of an assignment target, as the
+/// parser requires of written code: a variable, `@field`, a field, an
+/// element or a dereference.
+fn is_target_shape(e: &ast::Expr) -> bool {
+    match &e.kind {
+        E::Ident(_) | E::IVar(_) | E::Index { .. } | E::Deref(_) => true,
+        E::Member { safe, .. } => !safe,
+        E::Paren(inner) => is_target_shape(inner),
+        _ => false,
+    }
+}
+
+/// What spliced code that can't be assigned to is, for messages.
+fn code_shape(e: &ast::Expr) -> &'static str {
+    match &e.kind {
+        E::Int(_) => "code that is an integer literal",
+        E::Float(_) => "code that is a float literal",
+        E::Str(_) => "code that is a string literal",
+        E::True | E::False => "code that is a `Bool` literal",
+        E::Nil => "code that is `nil`",
+        E::Symbol(_) => "code that is a symbol literal",
+        E::Call(_) => "code that is a call",
+        E::Member { .. } => "code that is a `&.` field read",
+        E::Unary { .. } | E::Binary { .. } => "code that is an operation",
+        _ => "code that is a value, not a place",
+    }
+}
+
 /// An identifier expression: a constant name if it starts with an
 /// uppercase letter, like the parser reads it.
 fn name_expr(name: Name, span: Span) -> ast::Expr {
@@ -1478,6 +1514,74 @@ impl Splicer<'_, '_> {
                 .secondary(at, format!("this splice is {found}"))
                 .help(help.to_string()),
         );
+    }
+
+    /// For an assignment target that is a splice (in parentheses or not)
+    /// of one value, substitutes it and checks that the result can be
+    /// assigned to, which the parser can only check for code written as it
+    /// is (E0107). A result that can't is reported (E0911) and replaced by
+    /// an error. Returns whether the target was substituted, and so is
+    /// final.
+    fn splice_target(&mut self, target: &mut ast::Expr) -> bool {
+        if let E::Paren(inner) = &mut target.kind {
+            return self.splice_target(inner);
+        }
+        let inner = target;
+        let E::Splice(i) = inner.kind else { return false };
+        let Some(value) = self.value(i) else { return false };
+        if matches!(value, SpliceValue::Codes(_) | SpliceValue::Symbols(_)) {
+            // Several targets, or an error that `list_for` leaves to
+            // `expr_for`.
+            return false;
+        }
+        let at = inner.span;
+        let spliced = self.expr_for(i, at);
+        // A constant's name is a target among declarations, where
+        // `NAME = value` declares the constant; in a method,
+        // `Checker::place` reports it.
+        if matches!(spliced.kind, E::Error | E::Const(_)) || is_target_shape(&spliced) {
+            *inner = spliced;
+            return true;
+        }
+        let found = match &value {
+            SpliceValue::Code(_) => code_shape(&spliced).to_string(),
+            SpliceValue::Int(v) => format!("the integer `{v}`"),
+            SpliceValue::Float(f) => format!("the float `{f:?}`"),
+            SpliceValue::Bool(b) => format!("the `Bool` `{b}`"),
+            SpliceValue::Str(s) => format!("the `String` `{s:?}`"),
+            _ => describe(&value).to_string(),
+        };
+        let code = matches!(value, SpliceValue::Code(_)).then_some(spliced.span);
+        self.target_mismatch(at, &found, code);
+        *inner = ast::Expr { kind: E::Error, span: at };
+        true
+    }
+
+    /// Reports a splice as an assignment target whose value can't be
+    /// assigned to (E0911). `code` is where spliced `Code` is written.
+    fn target_mismatch(&mut self, at: Span, found: &str, code: Option<Span>) {
+        let name = self.ex.name;
+        let call = self.ex.call;
+        let mut diag = Diagnostic::error(
+            codes::SPLICE_MISMATCH,
+            format!("the macro `{name}` splices {found} where an assignment target goes"),
+        )
+        .primary(call, format!("`{name}` expands here"))
+        .secondary(at, format!("this splice is {found}, which can't be assigned to"));
+        let outside_call = |s: Span| s.file != call.file || s.start < call.start || s.end > call.end;
+        if let Some(code) = code.filter(|s| outside_call(*s)) {
+            diag = diag.secondary(code, "this code is spliced there");
+        }
+        let help = if code.is_some() {
+            format!(
+                "splice code that can be assigned to: a variable, a field or an element, like `{name} count`, `{name} ball.hp` or `{name} grid[i]` for a `Code` parameter"
+            )
+        } else {
+            format!(
+                "splice something that can be assigned to: a variable's name as a `Symbol` (a parameter like `name: Symbol`, called like `{name} :count`), or `Code` for a field or an element (`@hp`, `ball.hp`, `grid[i]`)"
+            )
+        };
+        self.ex.errors.push(diag.help(help));
     }
 
     /// Where a name spliced from a `Symbol` at `at` is: in the symbol
@@ -1735,6 +1839,30 @@ impl VisitMut for Splicer<'_, '_> {
             }
             self.visit_stmt(&mut stmt);
             stmts.push(stmt);
+        }
+    }
+
+    fn visit_stmt(&mut self, stmt: &mut ast::Stmt) {
+        let StmtKind::Assign { targets, .. } = &mut stmt.kind else {
+            walk_stmt(self, stmt);
+            return;
+        };
+        // The targets are substituted first, so that a spliced one can be
+        // checked (`splice_target`); the walk then visits the rest.
+        let mut done = Vec::with_capacity(targets.len());
+        for mut target in std::mem::take(targets) {
+            if let Some(list) = self.list_for(&target) {
+                done.extend(list);
+                continue;
+            }
+            if !self.splice_target(&mut target) {
+                self.visit_expr(&mut target);
+            }
+            done.push(target);
+        }
+        walk_stmt(self, stmt);
+        if let StmtKind::Assign { targets, .. } = &mut stmt.kind {
+            *targets = done;
         }
     }
 

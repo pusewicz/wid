@@ -1,0 +1,57 @@
+error[E0203]: `cells` is assigned but never read
+ --> tests/ui/write_only_locals.wid:7:3
+  |
+7 |   cells: [3]Int = {}
+  |   ^^^^^ this value is never used
+8 |   cells[0] = 1
+  |   -------- this writes into `cells` but doesn't read it
+help: if this is intentional, prefix the name with an underscore
+  |   _cells: [3]Int = {}
+  = see `wid explain E0203`
+
+error[E0203]: `ship` is assigned but never read
+  --> tests/ui/write_only_locals.wid:9:3
+   |
+ 9 |   ship = Ship.new
+   |   ^^^^ this value is never used
+10 |   ship.hp = 9
+   |   ------- this writes into `ship` but doesn't read it
+help: if this is intentional, prefix the name with an underscore
+   |   _ship = Ship.new
+   = see `wid explain E0203`
+
+error[E0203]: `pair` is assigned but never read
+  --> tests/ui/write_only_locals.wid:12:3
+   |
+12 |   pair: [2]Int = {}
+   |   ^^^^ this value is never used
+13 |   pair[0], pair[1] = 1, 2
+   |   ------- this writes into `pair` but doesn't read it
+help: if this is intentional, prefix the name with an underscore
+   |   _pair: [2]Int = {}
+   = see `wid explain E0203`
+
+error[E0203]: `grid` is assigned but never read
+  --> tests/ui/write_only_locals.wid:14:3
+   |
+14 |   grid: matrix[2, 2]F32 = {}
+   |   ^^^^ this value is never used
+15 |   grid[0, 1] = 2.0
+   |   ---------- this writes into `grid` but doesn't read it
+help: if this is intentional, prefix the name with an underscore
+   |   _grid: matrix[2, 2]F32 = {}
+   = see `wid explain E0203`
+
+error[E0203]: `s` is assigned but never read
+  --> tests/ui/write_only_locals.wid:17:7
+   |
+17 |   for s in ships
+   |       ^ this value is never used
+18 |     s.hp = 1
+   |     ---- this changes a copy of an element of `ships`, not the element
+   = note: `for s in …` binds a copy of each element
+help: to change the elements of `ships`, bind them by reference with `&`
+   |   for &s in ships
+   = see `wid explain E0203`
+
+error: could not compile due to 5 errors

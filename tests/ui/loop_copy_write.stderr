@@ -1,0 +1,36 @@
+error[E0203]: `s` is assigned but never read
+  --> tests/ui/loop_copy_write.wid:9:7
+   |
+ 9 |   for s in ships
+   |       ^ this value is never used
+10 |     s.hp = 1
+   |     ---- this changes a copy of an element of `ships`, not the element
+   = note: `for s in …` binds a copy of each element
+help: to change the elements of `ships`, bind them by reference with `&`
+   |   for &s in ships
+   = see `wid explain E0203`
+
+error[E0203]: `s` is assigned but never read
+  --> tests/ui/loop_copy_write.wid:12:7
+   |
+12 |   for s, i in ships
+   |       ^ this value is never used
+13 |     s.hp = i
+   |     ---- this changes a copy of an element of `ships`, not the element
+   = note: `for s in …` binds a copy of each element
+help: to change the elements of `ships`, bind them by reference with `&`
+   |   for &s, i in ships
+   = see `wid explain E0203`
+
+error[E0203]: `t` is assigned but never read
+  --> tests/ui/loop_copy_write.wid:16:7
+   |
+16 |   for t in fleet
+   |       ^ this value is never used
+17 |     t.hp = 2
+   |     ---- this writes into `t` but doesn't read it
+help: if this is intentional, prefix the name with an underscore
+   |   for _t in fleet
+   = see `wid explain E0203`
+
+error: could not compile due to 3 errors

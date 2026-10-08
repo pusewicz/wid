@@ -1,0 +1,24 @@
+struct Ship
+  hp: Int
+end
+
+def fleet -> [2]Ship = [Ship.new, Ship.new]
+
+def main
+  ships = [Ship.new, Ship.new]
+  for s in ships
+    s.hp = 1
+  end
+  for s, i in ships
+    s.hp = i
+  end
+  # A temporary has no elements to bind by reference.
+  for t in fleet
+    t.hp = 2
+  end
+  # Bound by reference, the elements change.
+  for &s in ships
+    s.hp = 3
+  end
+  p ships
+end

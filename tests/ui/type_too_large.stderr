@@ -1,0 +1,129 @@
+error[E0329]: this type is too large
+ --> tests/ui/type_too_large.wid:4:10
+  |
+4 |   cells: [1 << 61]I64
+  |          ^^^^^^^^^^^^ `[2305843009213693952]I64` would take 18446744073709551616 bytes
+  = note: a type can take at most 2305843009213693951 bytes (2^61 - 1), the most that every supported C compiler accepts
+help: use a smaller length; for data sized at run time, allocate a slice with `alloc([]I64, n)` or use a `[dynamic]I64`
+  = see `wid explain E0329`
+
+error[E0329]: `Big` is too large
+ --> tests/ui/type_too_large.wid:9:6
+  |
+9 |   b: [1 << 60]U8
+  |      ^^^^^^^^^^^ with this field, `Big` would take 2305843009213693952 bytes
+  = note: all its fields together would take 3458764513820540928 bytes
+  = note: a type can take at most 2305843009213693951 bytes (2^61 - 1), the most that every supported C compiler accepts
+help: keep large data behind a pointer, or in a slice allocated at run time
+  = see `wid explain E0329`
+
+error[E0329]: this type is too large
+  --> tests/ui/type_too_large.wid:14:10
+   |
+14 |   cells: [N]I64
+   |          ^^^^^^ `[2305843009213693952]I64` would take 18446744073709551616 bytes
+   = note: a type can take at most 2305843009213693951 bytes (2^61 - 1), the most that every supported C compiler accepts
+   = note: in `Grid(2305843009213693952)`
+help: use a smaller length; for data sized at run time, allocate a slice with `alloc([]I64, n)` or use a `[dynamic]I64`
+   = see `wid explain E0329`
+
+error[E0329]: `Blob` is too large
+  --> tests/ui/type_too_large.wid:17:14
+   |
+17 | union Blob = [(1 << 61) - 1]U8 | Int
+   |              ^^^^^^^^^^^^^^^^^ with this variant and its tag, `Blob` would take 2305843009213693956 bytes
+   = note: a type can take at most 2305843009213693951 bytes (2^61 - 1), the most that every supported C compiler accepts
+help: store the variant behind a pointer, like `^T`
+   = see `wid explain E0329`
+
+error[E0329]: this type is too large
+  --> tests/ui/type_too_large.wid:34:13
+   |
+34 |   p size_of([1 << 61]I64)
+   |             ^^^^^^^^^^^^ `[2305843009213693952]I64` would take 18446744073709551616 bytes
+   = note: a type can take at most 2305843009213693951 bytes (2^61 - 1), the most that every supported C compiler accepts
+help: use a smaller length; for data sized at run time, allocate a slice with `alloc([]I64, n)` or use a `[dynamic]I64`
+   = see `wid explain E0329`
+
+error[E0329]: this type is too large
+  --> tests/ui/type_too_large.wid:35:22
+   |
+35 |   p comptime size_of([1 << 61]I64)
+   |                      ^^^^^^^^^^^^ `[2305843009213693952]I64` would take 18446744073709551616 bytes
+   = note: a type can take at most 2305843009213693951 bytes (2^61 - 1), the most that every supported C compiler accepts
+help: use a smaller length; for data sized at run time, allocate a slice with `alloc([]I64, n)` or use a `[dynamic]I64`
+   = see `wid explain E0329`
+
+error[E0329]: this type is too large
+  --> tests/ui/type_too_large.wid:36:13
+   |
+36 |   show_size [1 << 61]I64
+   |             ^^^^^^^^^^^^ `[2305843009213693952]I64` would take 18446744073709551616 bytes
+   = note: a type can take at most 2305843009213693951 bytes (2^61 - 1), the most that every supported C compiler accepts
+help: use a smaller length; for data sized at run time, allocate a slice with `alloc([]I64, n)` or use a `[dynamic]I64`
+   = see `wid explain E0329`
+
+error[E0329]: this type is too large
+  --> tests/ui/type_too_large.wid:37:17
+   |
+37 |   t = type_info([1 << 62]U8)
+   |                 ^^^^^^^^^^^ `[4611686018427387904]U8` would take 4611686018427387904 bytes
+   = note: a type can take at most 2305843009213693951 bytes (2^61 - 1), the most that every supported C compiler accepts
+help: use a smaller length; for data sized at run time, allocate a slice with `alloc([]U8, n)` or use a `[dynamic]U8`
+   = see `wid explain E0329`
+
+error[E0329]: this type is too large
+  --> tests/ui/type_too_large.wid:39:6
+   |
+39 |   a: [N]U8
+   |      ^^^^^ `[4611686018427387904]U8` would take 4611686018427387904 bytes
+   = note: a type can take at most 2305843009213693951 bytes (2^61 - 1), the most that every supported C compiler accepts
+help: use a smaller length; for data sized at run time, allocate a slice with `alloc([]U8, n)` or use a `[dynamic]U8`
+   = see `wid explain E0329`
+
+error[E0329]: this type is too large
+  --> tests/ui/type_too_large.wid:43:6
+   |
+43 |   e: [1 << 62]Empty
+   |      ^^^^^^^^^^^^^^ `[4611686018427387904]Empty` would take 4611686018427387904 bytes
+   = note: a type can take at most 2305843009213693951 bytes (2^61 - 1), the most that every supported C compiler accepts
+help: use a smaller length; for data sized at run time, allocate a slice with `alloc([]Empty, n)` or use a `[dynamic]Empty`
+   = see `wid explain E0329`
+
+error[E0329]: this type is too large
+  --> tests/ui/type_too_large.wid:45:6
+   |
+45 |   o: ([(1 << 61) - 1]U8)?
+   |      ^^^^^^^^^^^^^^^^^^^^ `[2305843009213693951]U8?` would take 2305843009213693952 bytes
+   = note: a type can take at most 2305843009213693951 bytes (2^61 - 1), the most that every supported C compiler accepts
+help: make its parts smaller, or keep large data behind a pointer or in a slice allocated at run time
+   = see `wid explain E0329`
+
+error[E0329]: this type is too large
+  --> tests/ui/type_too_large.wid:47:6
+   |
+47 |   w: [1 << 64]U8
+   |      ^^^^^^^^^^^ `[18446744073709551616]U8` would take 18446744073709551616 bytes
+   = note: a type can take at most 2305843009213693951 bytes (2^61 - 1), the most that every supported C compiler accepts
+help: use a smaller length; for data sized at run time, allocate a slice with `alloc([]U8, n)` or use a `[dynamic]U8`
+   = see `wid explain E0329`
+
+error[E0329]: this type is too large
+  --> tests/ui/type_too_large.wid:50:7
+   |
+50 |   d = dup(half)
+   |       ^^^^^^^^^ `dup` would return `[4][1152921504606846976]U8` here, which would take 4611686018427387904 bytes
+   = note: a type can take at most 2305843009213693951 bytes (2^61 - 1), the most that every supported C compiler accepts
+help: pass a smaller value, or make `dup` return a pointer or a slice
+   = see `wid explain E0329`
+
+error[E0329]: this type is too large
+  --> tests/ui/type_too_large.wid:52:7
+   |
+52 |   l = [half, half, half]
+   |       ^^^^^^^^^^^^^^^^^^ `[3][1152921504606846976]U8` would take 3458764513820540928 bytes
+   = note: a type can take at most 2305843009213693951 bytes (2^61 - 1), the most that every supported C compiler accepts
+help: use a smaller length; for data sized at run time, allocate a slice with `alloc([][1152921504606846976]U8, n)` or use a `[dynamic][1152921504606846976]U8`
+   = see `wid explain E0329`
+
+error: could not compile due to 14 errors

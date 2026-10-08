@@ -1425,6 +1425,9 @@ impl<'a> Checker<'a> {
             );
             return ir::Expr::new(ExprKind::Zero, self.types.unknown());
         }
+        if self.report_type_table_address(&v, span) {
+            return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+        }
         let ptr = self.types.pointer(v.ty);
         ir::Expr::new(ExprKind::AddrOf(Box::new(v)), ptr)
     }
@@ -1724,6 +1727,11 @@ impl<'a> Checker<'a> {
                 return ir::Expr::new(ExprKind::Zero, self.types.unknown());
             };
             let inst = self.fn_sig_inst(decl, &subst);
+            // `def dup(x: $T) -> [4]T` with a large `T`: the instance would
+            // return a type over the size limit.
+            if self.report_too_large_return(inst.ret, fname, span) {
+                return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+            }
             let offset = lowered.len() - inst.params.len();
             let d = self.decls[decl.0 as usize].clone();
             let ast_params: &[ast::Param] = match d.kind {

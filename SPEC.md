@@ -63,7 +63,10 @@ end
   is a compile-time constant: `MAX = 256`, `Vec2 = [2]F32`. Reading an
   undeclared name is an error with a "did you mean", and so is a local
   variable that is assigned but never read (prefix it with `_` to keep it).
-  Unused parameters are allowed.
+  Writing a field or an element of a variable (`ship.hp = 9`,
+  `cells[0] = 1`) doesn't read it; writing through a pointer, a slice or a
+  dynamic array reads the variable that holds it, and so does a compound
+  assignment like `cells[0] += 1`. Unused parameters are allowed.
 - **Calls.** Parentheses are optional for zero-argument calls and for the
   outermost call of a statement (`puts "hi"`). Any parameter can be passed by
   name. Defaults are written `hp: Int = 100`.
@@ -159,6 +162,13 @@ end
 - **Constructors (Odin):** `^T`, `[^]T`, `[N]T`, `[]T`, `[dynamic]T`,
   `map[K]V`, `proc(A) -> R`, `distinct T` and `matrix[R, C]T`. Small numeric
   arrays support element-wise math and swizzles (`v.xy`, `c.rgb`).
+- **Size limit:** a type can take at most `2^61 - 1` bytes, and an array can
+  have at most `2^61 - 1` elements. Clang rejects larger arrays, so every
+  type within the limit compiles with every supported C compiler. A larger
+  type is an error (E0329) where it is written: an array, optional or tuple
+  type, the field or union variant that takes its struct or union over the
+  limit, an array literal, or a call of a generic method whose instance
+  would return one.
 - **Distinct types** are declared as constants, `Meters = distinct F64`, and
   each declaration is a new type with the base type's representation and
   operators. Untyped literals convert to it; typed values convert with `.to`
@@ -539,6 +549,13 @@ end
       elsewhere, so `#{t}.new(…)`, `x.to(#{t})` and `size_of(#{t})` work.
     - Numbers, `Bool`s and strings insert literals; a negative number is
       parenthesized, and a float that is not finite can't be spliced.
+    - A splice that is an assignment target (`#{x} = v`, `#{x} += v`,
+      `#{x} ||= v`, `a, #{x} = …`) must insert something that can be
+      assigned to: a variable's name from a `Symbol`, or `Code` that is a
+      variable, a field, an element or a dereference. Among declarations a
+      capitalized name declares a constant instead (`#{name} = v`). A
+      number, string, `Bool`, `Type`, call or other value there, or a
+      capitalized name in a method, is E0911.
     - A `quote` splices only these types; splicing another is E0911 in the
       macro.
   - **Lexing:** `#{` outside a string literal always starts a splice, and a
@@ -714,7 +731,17 @@ end
     values to describe (E0323).
   - The tables are static data: only types the program passes to
     `type_info`, and the types those point at, are emitted, and nothing is
-    allocated. Don't write through the pointer; the tables are read-only.
+    allocated.
+  - The tables are read-only. An assignment (`=`, compound or `||=`) to a
+    `TypeInfo`, `TypeInfoField` or `TypeInfoMember` reached through a
+    pointer or a slice, or to anything reached through a pointer or slice
+    read out of one, is E0309, and so are `&` of a value inside a table
+    other than a whole record and `for &v` over a table's list. A copy in a
+    variable can be changed (`info = t^`), and a variable can point at
+    another table. This is a rule for these records, not a read-only
+    pointer type: a `[]^TypeInfo` copied out of a table
+    (`vs = t.variants`, then `vs[0] = …`) and pointers converted with `.to`
+    can still be written through, which is undefined behaviour.
   - `type_info` works in `comptime` code too. Its result is a pointer, so it
     can't cross to run time (E0905), but what is read from it can:
     `comptime type_info(Ball).size`.

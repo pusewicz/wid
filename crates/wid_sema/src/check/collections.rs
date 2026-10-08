@@ -57,6 +57,9 @@ impl<'a> Checker<'a> {
             Some(TyKind::Slice(elem)) => {
                 let arr = self.types.intern(TyKind::Array(elem, elems.len() as u64));
                 let values = self.lower_elems(elems, elem);
+                if self.report_too_large(arr, span, None) {
+                    return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+                }
                 let tmp = self.spill(ir::Expr::new(ExprKind::Aggregate(values), arr));
                 self.full_slice(tmp, expected.expect("checked above"))
             }
@@ -93,6 +96,9 @@ impl<'a> Checker<'a> {
                     values.push(x);
                 }
                 let ty = self.types.intern(TyKind::Array(elem, elems.len() as u64));
+                if self.report_too_large(ty, span, None) {
+                    return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+                }
                 ir::Expr::new(ExprKind::Aggregate(values), ty)
             }
         }
@@ -932,6 +938,23 @@ impl<'a> Checker<'a> {
         let int = self.types.int();
         let bool_ty = self.types.bool();
         let by_ref = f.bindings.first().is_some_and(|b| b.by_ref);
+        if by_ref && is_place(&iter) {
+            // `for &v in t.variants`: `v` would point into a table.
+            let zero = ir::Expr::new(ExprKind::Int(0), int);
+            let element = ir::Expr::new(
+                ExprKind::Index { base: Box::new(iter.clone()), index: Box::new(zero), checked: false, span },
+                elem,
+            );
+            if self.report_type_table_address(&element, f.iter.span) {
+                return;
+            }
+        }
+        if !by_ref
+            && is_place(&iter)
+            && let Some(b) = f.bindings.first()
+        {
+            self.loop_copies.insert(b.name.span, f.iter.span);
+        }
         let base = if is_place(&iter) {
             let ptr = self.address_of(iter);
             let ptr = self.spill(ptr);
