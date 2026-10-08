@@ -577,6 +577,11 @@ impl<'a> Checker<'a> {
                         )),
                 );
                 self.macros.rejected_fields.insert((o, f.name.name));
+                // A `using` field would have promoted members, which aren't
+                // reported missing either.
+                if f.using {
+                    self.macros.failed_owners.insert(o);
+                }
                 continue;
             }
             if p.item.private {

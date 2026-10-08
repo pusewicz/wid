@@ -949,6 +949,22 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `Parser::glued_in_splice` reads the name as that `to_sym` call, so the
   code it lands in adds no errors. In a name position there (a method
   name after `.`), the help explains it without edits.
+- `quote` lines (#75): `#{name} = distinct F64`, `#{name} = proc(Int) ->
+  Int` and `#{name} = @[c] proc(…)` are constant declarations
+  (`Parser::quote_item_ahead`, `type_only_value_at`), as `NAME = v` is;
+  `#{name} = 5` stays an assignment, which among declarations is a
+  constant (they were E0201 "undefined method `distinct`"). `#{t}?` is
+  the optional type in any expression, as `Int?` is (`names_type` takes a
+  splice; it read as a conditional). A `using` line is a field, parsed as
+  in a struct, so a fragment spliced into a generated struct may hold
+  one (it was E0105 and up to 12 errors); generated in the struct whose
+  body holds the call, it is E0913 alone, since the struct's missing
+  members may be ones it would have promoted. A splice where the parser
+  takes none is one error: `recover_line` skips a splice whole (its `}`
+  ended the `quote` and cascaded into up to 11 errors), as do the
+  attribute list and generic parameters; `overload #{name}` gets the fix
+  `:#{name}` and reads as it, and `import #{path}` notes that generated
+  code can't import.
 - A C compiler without C23 (one that rejects `-std=c23`, like gcc 13 or
   clang 17, or lacks `<stdckdint.h>` or `#embed`) is E0702 "the C compiler
   `cc` doesn't support C23", with the first line of its `--version`, the

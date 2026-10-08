@@ -129,9 +129,10 @@ end
     declaration ends with that line. A named argument's value may go on
     the next line only indented deeper than the call's own line.
   - `x ? a : b` needs spaces around `?`, because `x?` is a predicate name.
-    So a `?` written right after a type's name or its closing `)`
-    (`Int?`, `rl.Color?`, `Pool(Ball, 64)?`, `(proc(Int) -> Int)?`) ends
-    that type, written in place, unless a conditional's `:` follows it:
+    So a `?` written right after a type's name, its closing `)` or a
+    splice (`Int?`, `rl.Color?`, `Pool(Ball, 64)?`,
+    `(proc(Int) -> Int)?`, `#{t}?` in a `quote`) ends that type, written
+    in place, unless a conditional's `:` follows it:
     `t = Int?` is the type `Int?` (a value goes there, E0323). In `C.int?`
     the `?` is read as part of the name, as in a predicate's, but `core:c`
     has no member `int?`: `C.int?` is the optional C type wherever it is
@@ -529,8 +530,12 @@ end
     `str.to_sym`. In compile-time code a symbol literal where no enum is
     expected is a `Symbol`. A zero `Code` (`{}`) is no code.
   - **Quotes:** the code in a `quote` may be statements or declarations
-    (`def`, `struct`, constants, other macro calls, …); which it must be
-    depends on where the macro is called. `quote` works only in a
+    (`def`, `struct`, constants, `using` fields, other macro calls, …);
+    which it must be depends on where the macro is called. A line
+    `#{name} = v` reads as an assignment, which among declarations is a
+    constant; when `v` can only be a type (`distinct F64`,
+    `proc(Int) -> Int`, `@[c] proc(I32)`), the line is that constant's
+    declaration wherever it is, as `NAME = v` is. `quote` works only in a
     `macro def`, the procs inside it included (E0910).
   - **Splices:** a spliced value is inserted according to its type, and must
     fit where the splice is (E0911, reported at the call):
@@ -632,13 +637,13 @@ end
     - Each line of the generated code must be a declaration: `def`,
       `macro def`, `struct`, `enum`, `union`, `module`, `extend`,
       `overload`, `include`, a constant (`NAME = v` or `NAME: T = v`, also
-      with a spliced name, `#{name} = v`), a field (`name: T`), a
-      `comptime if` whose branches follow the same rule, or a macro call (a
-      call or a name alone on a line, maybe after `private`), which
-      expands in turn and counts against the budgets. Any other statement
-      is E0108. Code spliced among declarations inside a `quote`, like
-      `#{fields}` in a `struct` body, follows the same rule (E0911 for a
-      statement).
+      with a spliced name, `#{name} = v`), a field (`name: T` or
+      `using name: T`), a `comptime if` whose branches follow the same
+      rule, or a macro call (a call or a name alone on a line, maybe after
+      `private`), which expands in turn and counts against the budgets.
+      Any other statement is E0108. Code spliced among declarations inside
+      a `quote`, like `#{fields}` in a `struct` body, follows the same rule
+      (E0911 for a statement).
     - What a call may generate follows what may be written where it is
       (types only at package level, fields only in a struct, and so on),
       with two exceptions (E0913). A macro can't add fields to the struct

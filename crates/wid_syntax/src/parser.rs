@@ -496,18 +496,21 @@ impl<'a> Parser<'a> {
     }
 
     /// Skips to the end of the current line, or of the enclosing splice,
-    /// after an error. A bracket opened on the line goes on over the
-    /// lines up to its closer, but a declaration, or an `end` that no
-    /// `do` skipped here opened, starting a later line was never part of
+    /// after an error. A splice on the line is skipped whole, so its `}`
+    /// doesn't end a `quote`'s body. A bracket opened on the line goes on
+    /// over the lines up to its closer, but a declaration, or an `end` that
+    /// no `do` skipped here opened, starting a later line was never part of
     /// the line: it was left open (`X = Foo{` followed by `def main`), so
     /// the skipping stops there, and the declaration is parsed on its own.
     fn recover_line(&mut self) {
         let mut depth = 0i32;
-        let mut blocks = 0u32;
+        let (mut blocks, mut splices) = (0u32, 0u32);
         loop {
             let tok = self.peek();
             match tok.kind {
                 T::Eof => return,
+                T::SpliceBegin => splices += 1,
+                T::SpliceEnd if splices > 0 => splices -= 1,
                 T::Newline | T::SpliceEnd if depth <= 0 => return,
                 T::Kw(K::End) if blocks > 0 => blocks -= 1,
                 kind if starts_declaration(kind) && self.pos > 0 => {
@@ -1422,8 +1425,8 @@ impl<'a> Parser<'a> {
     /// start one, otherwise a statement.
     fn parse_quote_line(&mut self) -> Stmt {
         let start = self.peek().span;
-        if self.quote_item_ahead() {
-            let kind = match self.parse_item(ItemCtx::Package) {
+        if let Some(ctx) = self.quote_item_ahead() {
+            let kind = match self.parse_item(ctx) {
                 Some(item) => StmtKind::Item(Box::new(item)),
                 None => StmtKind::Error,
             };
@@ -1439,8 +1442,13 @@ impl<'a> Parser<'a> {
     }
 
     /// Whether the line ahead, after any attributes and `private`, starts a
-    /// declaration that can't be a statement.
-    fn quote_item_ahead(&self) -> bool {
+    /// declaration that can't be a statement, and where it is parsed as
+    /// one: a `using` field as in a struct, the rest as at package level.
+    /// A constant whose name is spliced (`#{name} = v`) is a declaration
+    /// when its value can only be a type (`distinct F64`, `proc(Int)`,
+    /// `@[c] proc()`); otherwise it reads as an assignment, which among
+    /// declarations is that constant too.
+    fn quote_item_ahead(&self) -> Option<ItemCtx> {
         let mut i = 0;
         while self.nth(i).kind == T::AtBracket {
             let mut depth = 0u32;
@@ -1449,7 +1457,7 @@ impl<'a> Parser<'a> {
                     T::AtBracket | T::LBracket => depth += 1,
                     T::RBracket if depth <= 1 => break,
                     T::RBracket => depth -= 1,
-                    T::Eof => return false,
+                    T::Eof => return None,
                     _ => {}
                 }
                 i += 1;
@@ -1462,7 +1470,7 @@ impl<'a> Parser<'a> {
         if self.nth(i).kind == T::Kw(K::Private) {
             i += 1;
         }
-        match self.nth(i).kind {
+        let item = match self.nth(i).kind {
             T::Kw(
                 K::Def
                 | K::Macro
@@ -1476,7 +1484,30 @@ impl<'a> Parser<'a> {
                 | K::Import
                 | K::Cimport,
             ) => true,
+            T::Kw(K::Using) => return Some(ItemCtx::Struct),
             T::Const => matches!(self.nth(i + 1).kind, T::Eq | T::Colon),
+            T::SpliceBegin => self
+                .name_len(i)
+                .is_some_and(|len| self.nth(i + len).kind == T::Eq && self.type_only_value_at(i + len + 1)),
+            _ => false,
+        };
+        item.then_some(ItemCtx::Package)
+    }
+
+    /// Whether the value that starts `n` tokens ahead, after any `(`s, can
+    /// only be a type: `distinct T`, `proc(…)` (unless a local has the
+    /// name) or `@[c] proc(…)`.
+    fn type_only_value_at(&self, mut n: usize) -> bool {
+        while self.nth(n).kind == T::LParen {
+            n += 1;
+        }
+        let tok = self.nth(n);
+        match tok.kind {
+            T::AtBracket => true,
+            T::Ident => {
+                let text = self.text_of(tok.span);
+                matches!(text, "distinct" | "proc") && !self.is_local(Name::new(text))
+            }
             _ => false,
         }
     }
@@ -1659,6 +1690,10 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 let name = self.expect_ident("an attribute name");
+                if self.at(T::SpliceBegin) {
+                    // Reported as not a name.
+                    self.skip_token();
+                }
                 let mut args = Vec::new();
                 if self.at(T::LParen) && !self.peek().space_before {
                     self.bump();
@@ -1944,6 +1979,25 @@ impl<'a> Parser<'a> {
         self.report(diag);
     }
 
+    /// Reports a splice where an `import` or `cimport` (`keyword`) in a
+    /// `quote` expects its path, and skips the line. Generated code can't
+    /// import anything, whatever the path, which the note says.
+    fn spliced_path(&mut self, what: &str, keyword: &str) -> bool {
+        if !self.at(T::SpliceBegin) || self.quotes.is_empty() {
+            return false;
+        }
+        let tok = self.peek();
+        let end = self.splice_len(0).map_or(tok.span, |n| self.nth(n - 1).span);
+        self.report(
+            Diagnostic::error(codes::UNEXPECTED_TOKEN, format!("expected {what}, found a splice"))
+                .primary(tok.span.to(end), "the path is a string literal")
+                .note(format!("generated code can't `{keyword}` anything: packages are loaded before any macro runs"))
+                .help(format!("write the `{keyword}` in the macro's file; the `quote`'s code uses its imports")),
+        );
+        self.recover_line();
+        true
+    }
+
     fn parse_string_literal(&mut self, what: &str) -> Option<(String, Span)> {
         let tok = self.peek();
         if let T::Str(idx) = tok.kind {
@@ -1957,7 +2011,11 @@ impl<'a> Parser<'a> {
 
     fn parse_import(&mut self) -> ItemKind {
         self.bump();
-        let Some((path, path_span)) = self.parse_string_literal("an import path like \"core:fmt\"") else {
+        let what = "an import path like \"core:fmt\"";
+        if self.spliced_path(what, "import") {
+            return ItemKind::Error;
+        }
+        let Some((path, path_span)) = self.parse_string_literal(what) else {
             self.recover_line();
             return ItemKind::Error;
         };
@@ -1987,7 +2045,11 @@ impl<'a> Parser<'a> {
 
     fn parse_cimport(&mut self) -> ItemKind {
         self.bump();
-        let Some((header, header_span)) = self.parse_string_literal("a header path like \"stb_image.h\"") else {
+        let what = "a header path like \"stb_image.h\"";
+        if self.spliced_path(what, "cimport") {
+            return ItemKind::Error;
+        }
+        let Some((header, header_span)) = self.parse_string_literal(what) else {
             self.recover_line();
             return ItemKind::Error;
         };
@@ -2584,7 +2646,7 @@ impl<'a> Parser<'a> {
                 out.push(GenericParam { name, ty, span: tok.span.to(self.prev_span()) });
             } else {
                 self.error_expected("a generic parameter like `$T`");
-                self.bump();
+                self.skip_token();
             }
             if !self.eat(T::Comma) {
                 break;
@@ -2592,6 +2654,14 @@ impl<'a> Parser<'a> {
         }
         self.expect(T::RParen, "`)`");
         out
+    }
+
+    /// Skips the token here after an error, or all of the splice it starts,
+    /// whose `}` would otherwise end a `quote`'s body.
+    fn skip_token(&mut self) {
+        for _ in 0..self.splice_len(0).unwrap_or(1) {
+            self.bump();
+        }
     }
 
     fn parse_struct(&mut self) -> ItemKind {
@@ -2744,6 +2814,21 @@ impl<'a> Parser<'a> {
         if tok.kind == T::ColonSplice {
             self.bump();
             return self.parse_splice_name().map(|name| Ident { span: tok.span.to(name.span), ..name });
+        }
+        // `overload #{name}, …` in a `quote`: the splice inserts a name, but
+        // a symbol is expected. Read as the `:#{name}` it needs.
+        if tok.kind == T::SpliceBegin && !self.quotes.is_empty() {
+            let end = self.splice_len(0).map_or(tok.span, |n| self.nth(n - 1).span);
+            self.report(
+                Diagnostic::error(codes::UNEXPECTED_TOKEN, format!("expected {what}, found a splice"))
+                    .primary(tok.span.to(end), "this splice inserts a name, not a symbol")
+                    .suggest(
+                        "splice it as a symbol literal",
+                        vec![Edit { span: tok.span.shrink_to_start(), replacement: ":".into() }],
+                        Applicability::MachineApplicable,
+                    ),
+            );
+            return self.parse_splice_name();
         }
         if tok.kind == T::Symbol {
             self.bump();
@@ -5318,13 +5403,15 @@ fn is_constant_name(name: &str) -> bool {
 }
 
 /// Whether an expression reads as the name of a type that a `?` could make
-/// optional: `Int`, `rl.Color`, `Pool(Ball, 64)`, `geo.Pool(Ball, 64)`, one
-/// of those in parentheses, or a type parsed in place (`[]Int`).
+/// optional: `Int`, `rl.Color`, `Pool(Ball, 64)`, `geo.Pool(Ball, 64)`, a
+/// splice, one of those in parentheses, or a type parsed in place
+/// (`[]Int`).
 fn names_type(e: &Expr) -> bool {
     let upper = |name: &Ident| name.as_str().starts_with(|c: char| c.is_ascii_uppercase());
     let package = |recv: &Expr| matches!(recv.kind, ExprKind::Ident(_) | ExprKind::Const(_));
     match &e.kind {
-        ExprKind::Const(_) | ExprKind::Type(_) => true,
+        // A splice may insert a type (`#{t}?`).
+        ExprKind::Const(_) | ExprKind::Type(_) | ExprKind::Splice(_) => true,
         ExprKind::Paren(inner) => names_type(inner),
         ExprKind::Member { recv, name, safe: false } => package(recv) && upper(name),
         ExprKind::Call(call) if call.block.is_none() => match &call.callee {
@@ -5725,6 +5812,60 @@ end
         assert!(matches!(q.body[8].kind, StmtKind::Expr(Expr { kind: ExprKind::Splice(1), .. })));
         assert!(matches!(q.body[9].kind, StmtKind::Assign { .. }));
         assert_eq!(q.body[9].attrs[0].name.as_str(), "no_bounds_check");
+    }
+
+    #[test]
+    fn quote_lines_with_spliced_declarations() {
+        let file = parse_ok(
+            "macro def m(n: Symbol, t: Type) -> Code\n\
+             \x20 quote do\n\
+             \x20   #{n} = distinct F64\n\
+             \x20   #{n} = proc(Int) -> Int\n\
+             \x20   #{n} = 5\n\
+             \x20   OptT = #{t}?\n\
+             \x20   using base: #{t}\n\
+             \x20 end\n\
+             end\n",
+        );
+        let q = first_quote(&file);
+        let item = |stmt: &Stmt| match &stmt.kind {
+            StmtKind::Item(item) => (**item).clone(),
+            other => panic!("not an item: {other:?}"),
+        };
+        // A spliced name whose value can only be a type is a constant; one
+        // with a value is an assignment, a constant among declarations.
+        for stmt in &q.body[..2] {
+            let ItemKind::Const(c) = item(stmt).kind else { panic!("a constant") };
+            assert!(matches!(c.value.kind, ExprKind::Type(_)));
+        }
+        assert!(matches!(q.body[2].kind, StmtKind::Assign { .. }));
+        // `#{t}?` is the optional type.
+        let ItemKind::Const(c) = item(&q.body[3]).kind else { panic!("a constant") };
+        let ExprKind::Type(ty) = &c.value.kind else { panic!("a type") };
+        assert!(matches!(&ty.kind, TypeKind::Optional(inner) if matches!(inner.kind, TypeKind::Splice(_))));
+        let ItemKind::Field(f) = item(&q.body[4]).kind else { panic!("a field") };
+        assert!(f.using);
+        // A splice where the parser takes none is one error, and the rest
+        // of the `quote` still parses; for `overload`, the fix makes it a
+        // symbol.
+        for (line, fixed) in [
+            ("overload #{n}, :a, :b", Some("overload :#{n}, :a, :b")),
+            ("import #{n}", None),
+            ("cimport #{n}", None),
+            ("@[#{n}] def f = 1", None),
+            ("struct S(#{n})\n    end", None),
+        ] {
+            let src = format!(
+                "macro def m(n: Symbol) -> Code\n  quote do\n    {line}\n    def g = 1\n  end\nend\ndef main\nend\n"
+            );
+            let (file, diags) = parse_file(FileId(0), &src);
+            assert_eq!(diags.iter().count(), 1, "{src:?}");
+            assert_eq!(file.items.len(), 2, "{src:?}");
+            assert_eq!(first_quote(&file).body.len(), 2, "{src:?}");
+            if let Some(fixed) = fixed {
+                assert_eq!(fix_all(&src).1, src.replace(line, fixed));
+            }
+        }
     }
 
     #[test]
