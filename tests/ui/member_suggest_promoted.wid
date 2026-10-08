@@ -1,0 +1,32 @@
+# A member that isn't found suggests, and lists, every member the access
+# reaches: the type's own, those its modules mix in, those `extend` blocks
+# add and those `using` promotes, listed by the field they come through.
+module Healing
+  def mend(n: Int) -> Int = n
+end
+
+struct Mob
+  health: Int = 1
+  def regen(n: Int) -> Int = n
+  def self.spawn -> Mob = Mob.new
+end
+
+struct P
+  include Healing
+  using mob: Mob
+  def a -> Int = @healt
+  def b -> Int = @zzz
+end
+
+extend P
+  def boost(n: Int) -> Int = n
+end
+
+def main
+  pl = P.new
+  p pl.healt
+  p pl.regem(1)
+  p pl.mendd(1)
+  p pl.bost(1)
+  p pl.zzz
+end

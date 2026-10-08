@@ -86,7 +86,8 @@ impl Checker<'_> {
                 None => self.lookup_pkg(d.loc.pkg, m.name),
             };
             let Some(decl) = found else {
-                let candidates = self.scope_method_names(d.owner, d.loc.pkg);
+                let listed: Vec<Name> = o.members.iter().map(|x| x.name).collect();
+                let candidates = self.scope_method_names(d.owner, d.loc.pkg, &listed);
                 let mut diag = Diagnostic::error(
                     codes::UNDEFINED_NAME,
                     format!("overload set `{}` names unknown method `{}`", o.name.as_str(), m.as_str()),
@@ -218,18 +219,29 @@ impl Checker<'_> {
         self.overload_members(set);
     }
 
-    /// Method names declared in a type, or names in a package, for "did you
-    /// mean" hints, sorted, since ties in a suggestion go to the first.
-    fn scope_method_names(&self, owner: Option<DeclId>, pkg: crate::input::PackageId) -> Vec<&'static str> {
-        match owner {
-            Some(o) => {
-                let mut names: Vec<&'static str> =
-                    self.members.get(&o).map(|m| m.keys().map(|n| n.as_str()).collect()).unwrap_or_default();
-                names.sort_unstable();
-                names
-            }
-            None => self.package_names(pkg),
-        }
+    /// The methods an overload set may have meant to list, for "did you
+    /// mean" hints: those declared next to it (in its type, or in its
+    /// package) that aren't overload sets themselves and that the set
+    /// doesn't list already (`listed`). Sorted, since ties in a suggestion
+    /// go to the first.
+    fn scope_method_names(
+        &self,
+        owner: Option<DeclId>,
+        pkg: crate::input::PackageId,
+        listed: &[Name],
+    ) -> Vec<&'static str> {
+        let scope = match owner {
+            Some(o) => self.members.get(&o),
+            None => self.pkg_scopes.get(pkg.0 as usize),
+        };
+        let mut names: Vec<&'static str> = scope
+            .into_iter()
+            .flatten()
+            .filter(|(n, d)| matches!(self.decls[d.0 as usize].kind, DeclKind::Fn(_)) && !listed.contains(n))
+            .map(|(n, _)| n.as_str())
+            .collect();
+        names.sort_unstable();
+        names
     }
 
     /// The bindings a member of an overload set is instantiated with: the

@@ -563,7 +563,7 @@ impl<'a> Checker<'a> {
 
     /// The methods of `ty` by name: its own, then those its modules mix in,
     /// then those `extend` blocks add.
-    fn method_decls(&mut self, ty: TyId) -> Vec<(Name, super::DeclId)> {
+    pub(super) fn method_decls(&mut self, ty: TyId) -> Vec<(Name, super::DeclId)> {
         let mut owners: Vec<super::DeclId> = self.type_decl(ty).into_iter().collect();
         owners.extend(self.extends_of(ty));
         let mut next = 0;

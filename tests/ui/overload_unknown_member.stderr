@@ -1,0 +1,37 @@
+error[E0201]: overload set `add` names unknown method `sux`
+ --> tests/ui/overload_unknown_member.wid:6:24
+  |
+6 |   overload :add, :sum, :sux
+  |                        ^^^^ no method with this name next to the set
+  = note: an overload set lists methods declared in the same scope as the `overload` line
+help: a similar method exists: `sun`
+  |   overload :add, :sum, :sun
+  = see `wid explain E0201`
+
+error[E0201]: overload set `addd` names unknown method `addx`
+ --> tests/ui/overload_unknown_member.wid:7:25
+  |
+7 |   overload :addd, :sun, :addx
+  |                         ^^^^^ no method with this name next to the set
+  = note: an overload set lists methods declared in the same scope as the `overload` line
+  = see `wid explain E0201`
+
+error[E0201]: overload set `double` names unknown method `twine`
+  --> tests/ui/overload_unknown_member.wid:12:27
+   |
+12 | overload :double, :twice, :twine
+   |                           ^^^^^^ no method with this name next to the set
+   = note: an overload set lists methods declared in the same scope as the `overload` line
+help: a similar method exists: `twin`
+   | overload :double, :twice, :twin
+   = see `wid explain E0201`
+
+error[E0201]: overload set `doubles` names unknown method `doubled`
+  --> tests/ui/overload_unknown_member.wid:13:27
+   |
+13 | overload :doubles, :twin, :doubled
+   |                           ^^^^^^^^ no method with this name next to the set
+   = note: an overload set lists methods declared in the same scope as the `overload` line
+   = see `wid explain E0201`
+
+error: could not compile due to 4 errors

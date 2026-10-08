@@ -1335,6 +1335,14 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   bare `zap(1)`, `self.zap(1)` and `pl.zap(1)` reach `self.mob.zap(1)`,
   transitively, two fields providing it are E0204 until the access names
   one, and `@zap(1)` says `zap` is a promoted method.
+- E0204 for a missing member suggests, and lists, every member the access
+  reaches (#93): for `value.name`, the type's own, mixed-in and extension
+  methods and what `using` promotes; for `@name`, the fields of `self`
+  and promoted ones (`@health`). The "available" note groups promoted
+  names by the field they come through ("available: a, mob; through
+  `mob`: health, regen"); `Type.name` keeps the type's own members. An
+  `overload` naming an unknown method suggests only methods next to it
+  that aren't sets and that the set doesn't list already.
 
 ## Next
 

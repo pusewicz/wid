@@ -48,6 +48,21 @@ pub(crate) struct IvarUse<'s> {
     site: Option<Span>,
 }
 
+/// How a member that wasn't found was asked for, which decides the names
+/// it could have meant (see [`Checker::no_member`]).
+#[derive(Clone, Copy)]
+pub(crate) enum Access<'s> {
+    /// `value.name`: the value's fields and methods (its own, those its
+    /// modules mix in and those `extend` blocks add) and those `using`
+    /// promotes.
+    Value,
+    /// `@name`, written as [`IvarUse`] says: the fields of `self`, its own
+    /// and those `using` promotes.
+    Ivar(IvarUse<'s>),
+    /// `Type.name`: the fields and members the type declares.
+    Type,
+}
+
 /// Method names people reach for that Wid spells differently.
 const SYNONYMS: &[(&str, &str)] = &[
     ("length", "size"),
@@ -191,7 +206,7 @@ impl<'a> Checker<'a> {
             return None;
         }
         if hits.is_empty() {
-            self.no_member(base.ty, name, span, Some(written));
+            self.no_member(base.ty, name, span, Access::Ivar(written));
             return None;
         }
         let self_ty = base.ty;
@@ -211,7 +226,7 @@ impl<'a> Checker<'a> {
         // A method that `using` promotes, unless the type's own, mixed-in
         // or extension method of that name is the one a call reaches.
         if !self.ivar_names_method(self_ty, name, span, written) {
-            self.no_member(self_ty, name, span, Some(written));
+            self.no_member(self_ty, name, span, Access::Ivar(written));
         }
         None
     }
@@ -646,7 +661,7 @@ impl<'a> Checker<'a> {
             return ir::Expr::new(ExprKind::Zero, ty);
         }
         let _ = recv_span;
-        self.no_member(ty, name.name, name.span, None);
+        self.no_member(ty, name.name, name.span, Access::Type);
         ir::Expr::new(ExprKind::Zero, self.types.unknown())
     }
 
@@ -819,7 +834,7 @@ impl<'a> Checker<'a> {
             return self.field_called(name, field, args, block, span);
         }
         if !self.macro_as_method(ty, name, recv_span, args, block.is_some(), span) {
-            self.no_member(ty, name.name, name.span, None);
+            self.no_member(ty, name.name, name.span, Access::Value);
         }
         if let Some(args) = args {
             for a in args {
@@ -1157,9 +1172,14 @@ impl<'a> Checker<'a> {
         Some(ir::Expr::new(ExprKind::Cast { kind, expr: Box::new(v) }, target))
     }
 
-    /// Reports a missing field or method with suggestions. `ivar` is set for
-    /// `@name`, to how it was written, which the fixes follow.
-    pub fn no_member(&mut self, ty: TyId, name: Name, span: Span, ivar: Option<IvarUse>) {
+    /// Reports a missing field or method with suggestions among the names
+    /// that `access` reaches: for `@name`, the fixes follow how it was
+    /// written.
+    pub fn no_member(&mut self, ty: TyId, name: Name, span: Span, access: Access) {
+        let ivar = match access {
+            Access::Ivar(written) => Some(written),
+            Access::Value | Access::Type => None,
+        };
         let is_ivar = ivar.is_some();
         if self.report_skipped_field(ty, name, span) {
             return;
@@ -1185,15 +1205,29 @@ impl<'a> Checker<'a> {
         {
             return;
         }
-        if !is_ivar
-            && let Some(d) = decl
-            && let Some(m) = self.members.get(&d)
-        {
-            // Fields come first, in declaration order, then the methods
-            // sorted, since ties in a suggestion go to the first.
-            let mut methods: Vec<&'static str> = m.keys().map(|n| n.as_str()).collect();
-            methods.sort_unstable();
-            candidates.extend(methods);
+        let user_type = matches!(self.types.kind(ty), TyKind::Struct(_) | TyKind::Enum(_));
+        // Fields come first, in declaration order, then the methods
+        // sorted, since ties in a suggestion go to the first.
+        let mut methods: Vec<&'static str> = match access {
+            Access::Ivar(_) => Vec::new(),
+            Access::Value if user_type => self.method_decls(ty).into_iter().map(|(n, _)| n.as_str()).collect(),
+            Access::Value | Access::Type => match decl.and_then(|d| self.members.get(&d)) {
+                Some(m) => m.keys().map(|n| n.as_str()).collect(),
+                None => Vec::new(),
+            },
+        };
+        methods.sort_unstable();
+        methods.dedup();
+        methods.retain(|m| !candidates.contains(m));
+        candidates.extend(methods);
+        let promoted = match access {
+            Access::Type => Vec::new(),
+            Access::Ivar(_) => self.promoted_names(ty, false, &candidates),
+            Access::Value => self.promoted_names(ty, true, &candidates),
+        };
+        let mut reachable = candidates.clone();
+        for (_, names) in &promoted {
+            reachable.extend(names.iter().filter(|n| !reachable.contains(n)).collect::<Vec<_>>());
         }
         // A field's name has no `@`, even when `@name` looked for it.
         let what = if is_ivar { "field" } else { "field or method" };
@@ -1204,13 +1238,12 @@ impl<'a> Checker<'a> {
             self.report(diag);
             return;
         }
-        let user_type = matches!(self.types.kind(ty), TyKind::Struct(_) | TyKind::Enum(_));
         if let Some((_, wid)) = SYNONYMS
             .iter()
-            .find(|(other, target)| *other == name.as_str() && (!user_type || candidates.contains(target)))
+            .find(|(other, target)| *other == name.as_str() && (!user_type || reachable.contains(target)))
         {
             diag = diag.help(format!("Wid calls this `{wid}`"));
-        } else if let Some(best) = did_you_mean(name.as_str(), candidates.iter().copied()) {
+        } else if let Some(best) = did_you_mean(name.as_str(), reachable.iter().copied()) {
             // A name spliced into `@#{name}` is fixed where it was given,
             // as the name it is.
             let spliced = ivar.is_some_and(|w| w.site.is_some());
@@ -1221,11 +1254,77 @@ impl<'a> Checker<'a> {
                 replacement,
                 Applicability::MaybeIncorrect,
             );
-        } else if !candidates.is_empty() {
+        } else if !reachable.is_empty() {
             candidates.sort();
-            diag = diag.note(format!("available: {}", candidates.join(", ")));
+            let mut parts: Vec<String> = Vec::new();
+            if !candidates.is_empty() {
+                parts.push(candidates.join(", "));
+            }
+            for (field, names) in &promoted {
+                parts.push(format!("through `{field}`: {}", names.join(", ")));
+            }
+            diag = diag.note(format!("available: {}", parts.join("; ")));
         }
         self.report(diag);
+    }
+
+    /// The names that each `using` field of `ty` promotes, transitively,
+    /// with the field they are reached through, in declaration order: the
+    /// fields of its type and, with `methods`, its instance methods (its
+    /// own, those its modules mix in and those `extend` blocks add). Names
+    /// in `own`, which `ty`'s own members hide, are left out.
+    fn promoted_names(&mut self, ty: TyId, methods: bool, own: &[&'static str]) -> Vec<(Name, Vec<&'static str>)> {
+        let unpointed = |this: &Self, t: TyId| match *this.types.kind(t) {
+            TyKind::Pointer(inner) => inner,
+            _ => t,
+        };
+        let TyKind::Struct(id) = *self.types.kind(ty) else { return Vec::new() };
+        let using: Vec<(Name, TyId)> =
+            self.types.struct_info(id).fields.iter().filter(|f| f.using).map(|f| (f.name, f.ty)).collect();
+        let mut groups = Vec::new();
+        for (field, fty) in using {
+            let mut names: Vec<&'static str> = Vec::new();
+            let mut types = vec![unpointed(self, fty)];
+            let mut visited = vec![ty];
+            let mut next = 0;
+            while let Some(&t) = types.get(next) {
+                next += 1;
+                if visited.contains(&t) {
+                    continue;
+                }
+                visited.push(t);
+                if let TyKind::Struct(sid) = *self.types.kind(t) {
+                    for f in &self.types.struct_info(sid).fields {
+                        names.push(f.name.as_str());
+                        if f.using {
+                            types.push(unpointed(self, f.ty));
+                        }
+                    }
+                }
+                if !methods {
+                    continue;
+                }
+                // A promoted method is called on the field's value, so
+                // type-level methods and operators are left out.
+                for (n, d) in self.method_decls(t) {
+                    let instance = match self.decls[d.0 as usize].kind {
+                        DeclKind::Fn(f) => !f.is_static,
+                        DeclKind::Overload(_) => true,
+                        _ => false,
+                    };
+                    if instance && n.as_str().starts_with(|c: char| c.is_alphabetic() || c == '_') {
+                        names.push(n.as_str());
+                    }
+                }
+            }
+            names.retain(|n| !own.contains(n));
+            names.sort_unstable();
+            names.dedup();
+            if !names.is_empty() {
+                groups.push((field, names));
+            }
+        }
+        groups
     }
 }
 
