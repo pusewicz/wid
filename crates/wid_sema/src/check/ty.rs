@@ -352,6 +352,9 @@ impl<'a> Checker<'a> {
                             .primary(texpr.span, "`T??` is the same as `T?`"),
                     );
                 }
+                if self.optional_union(inner, t, texpr.span, ctx) {
+                    return t;
+                }
                 let ty = self.types.optional(t);
                 self.check_type_size(ty, texpr.span, self.resolving_instance(ctx.self_ty))
             }
@@ -372,6 +375,36 @@ impl<'a> Checker<'a> {
             }
             T::Matrix { rows, cols, elem } => self.resolve_matrix(rows, cols, elem, ctx),
         }
+    }
+
+    /// Reports `U?` written for a union `U` (E0301), which is nil-able
+    /// already, with the fix that removes the `?`. A type parameter bound
+    /// to a union (`T?`) is fine: the type is written for every `T`.
+    fn optional_union(&mut self, inner: &ast::TypeExpr, t: TyId, span: Span, ctx: &TyCtx) -> bool {
+        if !matches!(self.types.kind(t), TyKind::Union(_)) {
+            return false;
+        }
+        if let T::Path { segments, .. } = &inner.kind
+            && let [only] = segments.as_slice()
+            && (only.as_str() == "Self" || super::generics::lookup(&ctx.subst, only.name).is_some())
+        {
+            return false;
+        }
+        if !matches!(inner.kind, T::Path { .. }) {
+            return false;
+        }
+        let shown = self.types.display(t);
+        self.report(
+            Diagnostic::error(codes::TYPE_MISMATCH, format!("`{shown}` is a union, which can be nil already"))
+                .primary(span, format!("`{shown}?` adds nothing to `{shown}`"))
+                .note("a union's zero value is `nil`: it holds one of its variants or nothing, and works as an error value")
+                .suggest(
+                    "remove the `?`",
+                    vec![wid_diagnostics::Edit { span: Span::new(span.file, inner.span.end, span.end), replacement: String::new() }],
+                    wid_diagnostics::Applicability::MachineApplicable,
+                ),
+        );
+        true
     }
 
     fn resolve_path_type(

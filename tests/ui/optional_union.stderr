@@ -1,0 +1,31 @@
+error[E0301]: `Failure` is a union, which can be nil already
+  --> tests/ui/optional_union.wid:13:16
+   |
+13 | MaybeFailure = Failure?
+   |                ^^^^^^^^ `Failure?` adds nothing to `Failure`
+   = note: a union's zero value is `nil`: it holds one of its variants or nothing, and works as an error value
+help: remove the `?`
+   | MaybeFailure = Failure
+   = see `wid explain E0301`
+
+error[E0301]: `Failure` is a union, which can be nil already
+  --> tests/ui/optional_union.wid:15:27
+   |
+15 | def load(n: Int) -> (Int, Failure?)
+   |                           ^^^^^^^^ `Failure?` adds nothing to `Failure`
+   = note: a union's zero value is `nil`: it holds one of its variants or nothing, and works as an error value
+help: remove the `?`
+   | def load(n: Int) -> (Int, Failure)
+   = see `wid explain E0301`
+
+error[E0301]: `Failure` is a union, which can be nil already
+  --> tests/ui/optional_union.wid:24:6
+   |
+24 |   e: Failure? = nil
+   |      ^^^^^^^^ `Failure?` adds nothing to `Failure`
+   = note: a union's zero value is `nil`: it holds one of its variants or nothing, and works as an error value
+help: remove the `?`
+   |   e: Failure = nil
+   = see `wid explain E0301`
+
+error: could not compile due to 3 errors

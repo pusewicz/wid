@@ -224,7 +224,9 @@ end
   to `T?`: `x: F32? = 1.0`, `v: Vec2? = [1.0, 2.0]`,
   `w: [2]F32? = [1.0, nil]`, `d: Dir? = :north`. Pointers can't be nil
   unless written `^T?` (the `?` after `^T` or `[^]T` makes the pointer
-  nil-able; `^(T?)` points at an optional). Use `x || default` to unwrap with a fallback, `x&.f` to
+  nil-able; `^(T?)` points at an optional). A union can be nil already (its
+  zero value is `nil`), so writing `U?` for a union `U` is an error (E0301)
+  whose fix removes the `?`. Use `x || default` to unwrap with a fallback, `x&.f` to
   chain, `if v = maybe … end` to bind, and `while v = maybe … end` to loop
   until it is nil. `a ||= b` assigns when `a` is nil or false (on a map entry:
   when the key is missing) and `a &&= b` when it holds a value or is true;
@@ -501,8 +503,10 @@ end
   error last.
 - `Error` is a built-in enum made of every error symbol the program uses, like
   Zig's `anyerror`: writing `:name` where an `Error` is expected (returning it,
-  comparing with it, matching it in `case`) adds it to the set. A union that
-  can be nil also works as the error value. `nil` means success.
+  comparing with it, matching it in `case`) adds it to the set. A union
+  also works as the error value, since it can be nil (`union Failure =
+  ParseErr | IoErr`, not `Failure?`); `case` over it takes `when nil` for
+  success. `nil` means success.
 - `guard a, b = f() else |err| … end` binds the non-error values, or unwraps a
   `T?`, for the rest of the scope. The `else` branch must leave the scope with
   `return`, `break`, `next` or `panic`. Like any block, it starts on the line

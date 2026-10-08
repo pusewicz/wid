@@ -1650,6 +1650,12 @@ the language server.
   instance methods; `private` ones are E0205 outside the type; a misspelled
   one is suggested; and `Type.name` for an extension's instance method says
   it is one, as for the type's own (it was "no field or method").
+- `U?` for a union (#139, SPEC "Types" and "Errors"): a union can be nil
+  already, so writing `Failure?` is E0301 with the machine-applicable fix
+  that removes the `?` (`optional_union` in `check/ty.rs`), and the type
+  resolves to `Failure`, so `case` over it with `when nil` adds no error
+  (it gave two errors per `when`). A `$T?` that a union fills, or `Self?`,
+  isn't reported.
 
 ## Next
 

@@ -1,0 +1,51 @@
+# A union works as the error value: it can be nil, `guard` takes it, and
+# `case` over it matches `when nil` for success (SPEC "Errors").
+struct ParseErr
+  at: Int
+end
+
+struct IoErr
+  code: Int
+end
+
+union Failure = ParseErr | IoErr
+
+def parse(text: String) -> (Int, Failure)
+  return 0, IoErr.new(5) if text.empty?
+  return 0, ParseErr.new(1) unless text == "42"
+  return 42, nil
+end
+
+def describe(e: Failure) -> String
+  case e
+  when nil then "ok"
+  when ParseErr then "parse error at #{e.at}"
+  when IoErr then "io error #{e.code}"
+  end
+end
+
+def total(texts: []String) -> (Int, Failure)
+  sum = 0
+  for t in texts
+    guard n = parse(t) else |err|
+      return {}, err
+    end
+    sum += n
+  end
+  return sum, nil
+end
+
+def main
+  for text in ["42", "x", ""]
+    _, err = parse(text)
+    puts describe(err)
+  end
+  sum, err = total(["42", "42"])
+  puts "#{sum} #{describe(err)}"
+  _, err = total(["42", "?"])
+  puts describe(err)
+  e: Failure = nil
+  p e
+  e = IoErr.new(2)
+  p e
+end

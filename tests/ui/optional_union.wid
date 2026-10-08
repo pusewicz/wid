@@ -1,0 +1,38 @@
+# A union can be nil already, so `U?` is E0301 with a fix that removes the
+# `?`; the code is checked as if it were `U`, so `case` adds no error.
+struct ParseErr
+  at: Int
+end
+
+struct IoErr
+  code: Int
+end
+
+union Failure = ParseErr | IoErr
+
+MaybeFailure = Failure?
+
+def load(n: Int) -> (Int, Failure?)
+  return n, nil if n > 0
+  return 0, ParseErr.new(n)
+end
+
+# A `$T?` filled with a union is fine: it is written for every `T`.
+def wrap(x: $T) -> T? = x
+
+def main
+  e: Failure? = nil
+  case e
+  when nil then p 0
+  when ParseErr then p e.at
+  when IoErr then p e.code
+  end
+  m: MaybeFailure = IoErr.new(1)
+  p m
+  guard n = load(1) else |err|
+    p err
+    return
+  end
+  p n
+  p wrap(m)
+end
