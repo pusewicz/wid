@@ -25,7 +25,8 @@
 //!    and its splices replaced by their values (a `Code` value is built the
 //!    same way, recursively, and an argument fragment is copied as written);
 //! 4. lowers the code where the call is ([`Checker::lower_generated`]):
-//!    every statement in place, the last one giving the call's value.
+//!    every statement in place, the last one giving the call's value, or
+//!    for a call that is a statement of its own, as a statement too.
 //!
 //! Generated statements are allocated in `Checker::generated`, an arena
 //! that lives as long as the input syntax, so declarations built from them
@@ -191,6 +192,15 @@ pub(crate) struct MacroState {
     /// The code every expansion spliced in from outside it, by the file of
     /// its span.
     pub splices: HashMap<FileId, Vec<Splice>>,
+    /// While the last line of an expansion whose call is a statement is
+    /// lowered, that line's span: a macro call that is the whole line is a
+    /// statement too (see [`Checker::lower_generated`]).
+    pub discarded: Option<Span>,
+    /// While the last line of an expansion gives the call's value and is an
+    /// `if`, `case` or `comptime if`: the expressions that end its branches,
+    /// the macro's name and the line's keyword, innermost expansion last
+    /// (see [`Checker::call_value_note`]).
+    pub value_tails: Vec<(Vec<Span>, String, &'static str)>,
 }
 
 /// A call of a macro.
@@ -234,8 +244,10 @@ impl<'a> Checker<'a> {
     /// macro computed has the call's span, so the primary label there says
     /// which name it is (`` `label`, spliced by `wrap`, has type … `` for a
     /// label about "this"), and an edit there, which would replace the call,
-    /// is dropped.
-    pub(super) fn splice_context(&self, mut diag: Diagnostic) -> Diagnostic {
+    /// is dropped. An error about a value that gives a call's value gets a
+    /// note saying so ([`Checker::call_value_note`]).
+    pub(super) fn splice_context(&self, diag: Diagnostic) -> Diagnostic {
+        let mut diag = self.call_value_note(diag);
         if diag.labels.iter().any(|l| l.splice) {
             return diag;
         }
@@ -318,6 +330,32 @@ impl<'a> Checker<'a> {
             return Some(name.end);
         }
         self.splice_site(name, call).map(|s| s.end)
+    }
+
+    /// Explains an error about the value that ends a branch of an `if`,
+    /// `case` or `comptime if` on the last line of an expansion whose value
+    /// is used: that line gives the call's value, where a statement's last
+    /// line would need none (see [`Checker::lower_generated`]).
+    fn call_value_note(&self, diag: Diagnostic) -> Diagnostic {
+        if diag.code != codes::NOT_A_VALUE && diag.code != codes::TYPE_MISMATCH {
+            return diag;
+        }
+        let Some(primary) = diag.primary_span() else { return diag };
+        let Some((_, name, keyword)) =
+            self.macros.value_tails.iter().rev().find(|(tails, ..)| tails.contains(&primary))
+        else {
+            return diag;
+        };
+        let diag = diag.note(format!(
+            "this ends a branch of the `{keyword}` on the last line of `{name}`'s code, which gives the call's value, and the code around the call uses that value"
+        ));
+        if diag.code == codes::NOT_A_VALUE {
+            diag.help(format!(
+                "if the value isn't needed, call `{name}` as a statement of its own: then its last line needs no value"
+            ))
+        } else {
+            diag
+        }
     }
 
     /// Records where each file's names resolve, for virtual files made from
@@ -580,10 +618,13 @@ impl<'a> Checker<'a> {
     // ----- calls ----------------------------------------------------------------------
 
     /// Expands a macro call and lowers the code it generates where the call
-    /// is. The value is the value of the code's last statement.
+    /// is. The value is the value of the code's last statement, unless the
+    /// call is a statement of its own: a whole statement, or the whole last
+    /// line of the code of a call that is one.
     pub fn call_macro(&mut self, call: MacroCall<'_>, expected: Option<TyId>) -> ir::Expr {
+        let statement = self.macros.line == call.span || self.macros.discarded == Some(call.span);
         match self.expand(&call) {
-            Some(code) => self.lower_generated(code, expected),
+            Some(code) => self.lower_generated(code, expected, &call.shown, statement),
             None => {
                 // What the code would have read and declared is unknown.
                 self.failed_expansion(call.span);
@@ -936,8 +977,16 @@ impl<'a> Checker<'a> {
     }
 
     /// Lowers generated statements where the call was: each in place, the
-    /// last one giving the value.
-    fn lower_generated(&mut self, stmts: &'a [ast::Stmt], expected: Option<TyId>) -> ir::Expr {
+    /// last one giving the value. When the call is a statement of its own
+    /// (`statement`), so is the last line, the way the caller would have
+    /// written it: an `if`, `case` or `comptime if` there needs no value.
+    fn lower_generated(
+        &mut self,
+        stmts: &'a [ast::Stmt],
+        expected: Option<TyId>,
+        name: &str,
+        statement: bool,
+    ) -> ir::Expr {
         let void = self.types.void();
         let Some((last, init)) = stmts.split_last() else {
             return ir::Expr::new(ExprKind::Zero, void);
@@ -948,13 +997,35 @@ impl<'a> Checker<'a> {
         let line = self.macros.line;
         self.lower_stmts(init, Dest::Discard);
         let mut lines = !init.is_empty();
+        let branching = match &last.kind {
+            StmtKind::Expr(e) => branching_keyword(e),
+            _ => None,
+        };
         let value = match &last.kind {
-            StmtKind::Expr(e) if last.attrs.is_empty() && produces_value(last) && !self.current_block_diverges() => {
+            StmtKind::Expr(e)
+                if last.attrs.is_empty()
+                    && produces_value(last)
+                    && !(statement && branching.is_some())
+                    && !self.current_block_diverges() =>
+            {
                 if lines {
                     self.emit(Stmt::Line(last.span));
                 }
                 let saved = self.enter_site(last.span);
+                // A macro call that is the whole line is a statement when
+                // this call is one; the branches of an `if` that gives the
+                // call's value give it a value.
+                let outer = std::mem::replace(&mut self.macros.discarded, statement.then_some(e.span));
+                if let Some(keyword) = branching {
+                    let mut tails = Vec::new();
+                    branch_tails(e, &mut tails);
+                    self.macros.value_tails.push((tails, name.to_string(), keyword));
+                }
                 let v = self.expr(e, expected);
+                if branching.is_some() {
+                    self.macros.value_tails.pop();
+                }
+                self.macros.discarded = outer;
                 self.leave_site(saved);
                 v
             }
@@ -968,6 +1039,40 @@ impl<'a> Checker<'a> {
             self.emit(Stmt::Line(line));
         }
         value
+    }
+}
+
+/// The keyword of an expression that chooses among branches of statements
+/// (`if`, `unless`, `case`, `comptime if`), which a statement may write
+/// without values.
+fn branching_keyword(e: &ast::Expr) -> Option<&'static str> {
+    match &e.kind {
+        E::If(i) if i.unless => Some("unless"),
+        E::If(_) => Some("if"),
+        E::Case(_) => Some("case"),
+        E::ComptimeIf(_) => Some("comptime if"),
+        _ => None,
+    }
+}
+
+/// The spans of the expressions that end the branches of `e` and give its
+/// value, through nested `if`s and `case`s.
+fn branch_tails(e: &ast::Expr, out: &mut Vec<Span>) {
+    let bodies: Vec<&[ast::Stmt]> = match &e.kind {
+        E::If(i) | E::ComptimeIf(i) => std::iter::once(i.then.as_slice())
+            .chain(i.elifs.iter().map(|(_, b)| b.as_slice()))
+            .chain(i.else_.as_deref())
+            .collect(),
+        E::Case(c) => c.whens.iter().map(|w| w.body.as_slice()).chain(c.else_.as_deref()).collect(),
+        _ => {
+            out.push(e.span);
+            return;
+        }
+    };
+    for body in bodies {
+        if let Some(ast::Stmt { kind: StmtKind::Expr(tail), .. }) = body.last() {
+            branch_tails(tail, out);
+        }
     }
 }
 

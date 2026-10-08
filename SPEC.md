@@ -614,6 +614,11 @@ end
     one is the call's value. So the variables a spliced name declares stay
     visible after the call, a generated `defer` runs when the caller's
     block ends, and `return`, `break` and `next` act on the caller.
+    - When the call is a statement of its own, its last line is a
+      statement too, as if the caller had written it: an `if`, `case` or
+      `comptime if` there needs no value in its branches. Where the call's
+      value is used (`x = say("hi")`), the last line gives it, so each such
+      branch must end with one (E0323 otherwise).
   - **Names** in the quote's own code that aren't locals bound in the
     quote or members of `self` (reached with `@name` or an implicit-self
     call), that is methods, types, constants and packages, resolve where

@@ -176,7 +176,13 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
     `check_program`, so generated syntax lives for `'a`).
     `lower_generated` lowers them in place: all but the last with
     `lower_stmts`, the last as the value (with the expected type), then
-    re-emits the caller's `Line`.
+    re-emits the caller's `Line`. A call that is a statement of its own
+    (the statement being lowered, `MacroState::line`, or the whole last
+    line of the code of such a call, `MacroState::discarded`) lowers a
+    last `if`, `case` or `comptime if` as a statement. Where the value is
+    used, `MacroState::value_tails` holds the spans that end that line's
+    branches, and `call_value_note` (run by `splice_context`) adds a note
+    to an E0323 or E0301 there saying the line gives the call's value.
   - `Code` values are numbers: 0 is no code, `1..=n` the argument
     fragments, then the fragments the macro's `quote`s recorded, in order.
     `Builtin::Quote { template }` (lowered by `lower_quote`; `template`
@@ -814,6 +820,12 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   name, as a block parameter's is: the proc's body and code spliced from
   the call site see it (#73; it was E0201). `lower_lambda` declares each
   parameter at its name's span instead of the whole parameter's.
+- A macro call that is a statement of its own runs its last line as a
+  statement too: an `if`, `case` or `comptime if` whose branches have no
+  value works there, in a method body, a branch or a block, also through
+  nested calls (#72; it was E0323 on each branch). Where the call's value
+  is used, E0323 (or E0301) on a branch says that the last line gives the
+  call's value, and the help calls the macro as a statement.
 - A C compiler without C23 (one that rejects `-std=c23`, like gcc 13 or
   clang 17, or lacks `<stdckdint.h>` or `#embed`) is E0702 "the C compiler
   `cc` doesn't support C23", with the first line of its `--version`, the

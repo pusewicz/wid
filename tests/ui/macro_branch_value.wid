@@ -1,0 +1,39 @@
+# Where a macro call's value is used, the last line of its code gives it:
+# each branch of an `if`, `case` or `comptime if` there needs a value of the
+# call's type. Called as a statement, the same code is fine.
+
+macro def say(s: String) -> Code
+  quote do
+    if #{s} == ""
+      puts "nothing"
+    else
+      puts #{s}
+    end
+  end
+end
+
+macro def mixed(n: Int) -> Code
+  quote do
+    case #{n}
+    when 1 then 1
+    else "many"
+    end
+  end
+end
+
+macro def only_when(flag: Bool) -> Code
+  quote do
+    comptime if #{flag}
+      puts "flag set"
+    end
+  end
+end
+
+def main
+  say "fine"
+  only_when true
+  x = say("x")
+  y: Int = mixed(2)
+  z = only_when(true)
+  p x, y, z
+end
