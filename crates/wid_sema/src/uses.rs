@@ -1,7 +1,8 @@
 //! What names and expressions resolve to, by source span: the declaration,
 //! field, enum member, package, builtin type or local each name refers to,
 //! and the type of every expression, binding and written type. `wid query
-//! refs`, `calls` and `type` read it, and the LSP is meant to.
+//! refs`, `calls` and `type` read it, and so do `wid lsp`'s hover and
+//! go-to-definition.
 //!
 //! [`check_program_indexed`](crate::check_program_indexed) records it as it
 //! checks, next to the [`Index`](crate::index::Index); `check_program`

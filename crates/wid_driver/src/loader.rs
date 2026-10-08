@@ -11,6 +11,7 @@ use wid_syntax::ast::ItemKind;
 use crate::Options;
 use crate::cimport;
 use crate::cmdline::{CommandLine, FileRequest, dir_target, file_target};
+use crate::overlay::{Overlay, normalize};
 
 /// Finds the directory holding `core/`, `vendor/` and `runtime/`.
 pub fn find_wid_root(opts: &Options) -> PathBuf {
@@ -34,6 +35,8 @@ pub fn find_wid_root(opts: &Options) -> PathBuf {
 
 struct Loader<'o> {
     opts: &'o Options,
+    /// Unsaved buffers, read instead of the files on disk.
+    overlay: &'o Overlay,
     root: PathBuf,
     sources: SourceMap,
     diags: Diagnostics,
@@ -43,10 +46,12 @@ struct Loader<'o> {
     cimports_done: HashSet<(usize, usize, u32)>,
 }
 
-/// Reads and parses the target package and everything it imports.
-pub fn load_program(opts: &Options) -> (SourceMap, Option<ProgramInput>, Diagnostics) {
+/// Reads and parses the target package and everything it imports. A file
+/// the overlay holds is read from it instead of from disk.
+pub fn load_program(opts: &Options, overlay: &Overlay) -> (SourceMap, Option<ProgramInput>, Diagnostics) {
     let mut loader = Loader {
         opts,
+        overlay,
         root: find_wid_root(opts),
         sources: SourceMap::new(),
         diags: Diagnostics::new(),
@@ -67,7 +72,9 @@ pub fn load_program(opts: &Options) -> (SourceMap, Option<ProgramInput>, Diagnos
             other => other,
         };
         let request = FileRequest { cmd: &cmd, arg, code: codes::UNKNOWN_IMPORT, verb, prefix: "" };
-        if let Err(pending) = file_target(Path::new("."), request) {
+        if overlay.get(target).is_none()
+            && let Err(pending) = file_target(Path::new("."), request)
+        {
             let file = cmd.add(&mut loader.sources);
             loader.diags.push(pending(file));
             return (loader.sources, None, loader.diags);
@@ -75,11 +82,14 @@ pub fn load_program(opts: &Options) -> (SourceMap, Option<ProgramInput>, Diagnos
         let dir = target.parent().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."));
         (dir, vec![target.clone()])
     } else {
-        // The errors point into the command line `wid check nothere`.
+        // The errors point into the command line `wid check nothere`. A
+        // directory the overlay holds `.wid` files in is a package, even
+        // when they aren't on disk yet.
         let mut cmd = CommandLine::new(&format!("wid {}", opts.command));
         let text = target.to_string_lossy();
         let arg = cmd.arg("", &text);
-        if let Err(pending) = dir_target(&cmd, arg, &text, target) {
+        let unsaved = overlay.files_in(target).any(|p| p.extension().is_some_and(|e| e == "wid"));
+        if !unsaved && let Err(pending) = dir_target(&cmd, arg, &text, target) {
             let file = cmd.add(&mut loader.sources);
             loader.diags.push(pending(file));
             return (loader.sources, None, loader.diags);
@@ -206,20 +216,31 @@ impl Loader<'_> {
         self.diags.push(Diagnostic::error(codes::UNKNOWN_IMPORT, message));
     }
 
+    /// The package's `.wid` files in `dir` (with `_test.wid` ones when
+    /// testing): those on disk and those only the overlay holds.
     fn wid_files(&self, dir: &Path) -> Vec<PathBuf> {
+        let wanted = |p: &Path| {
+            p.extension().is_some_and(|e| e == "wid")
+                && (self.opts.testing || !p.file_stem().is_some_and(|s| s.to_string_lossy().ends_with("_test")))
+        };
         let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
-            .map(|rd| {
-                rd.flatten()
-                    .map(|e| e.path())
-                    .filter(|p| p.extension().is_some_and(|e| e == "wid"))
-                    .filter(|p| {
-                        self.opts.testing || !p.file_stem().is_some_and(|s| s.to_string_lossy().ends_with("_test"))
-                    })
-                    .collect()
-            })
+            .map(|rd| rd.flatten().map(|e| e.path()).filter(|p| wanted(p)).collect())
             .unwrap_or_default();
+        if !self.overlay.is_empty() {
+            let on_disk: HashSet<PathBuf> = files.iter().map(|p| normalize(p)).collect();
+            let unsaved = self.overlay.files_in(dir).filter(|p| wanted(p) && !on_disk.contains(*p));
+            files.extend(unsaved.cloned());
+        }
         files.sort();
         files
+    }
+
+    /// The text of a file: the overlay's, or what is on disk.
+    fn read(&self, path: &Path) -> std::io::Result<Arc<str>> {
+        match self.overlay.get(path) {
+            Some(text) => Ok(text.clone()),
+            None => std::fs::read_to_string(path).map(Arc::from),
+        }
     }
 
     fn c_files(dir: &Path) -> Vec<PathBuf> {
@@ -244,7 +265,7 @@ impl Loader<'_> {
         let cwd = std::env::current_dir().unwrap_or_default();
         let mut inputs = Vec::new();
         for path in files {
-            let text = match std::fs::read_to_string(&path) {
+            let text = match self.read(&path) {
                 Ok(t) => t,
                 Err(e) => {
                     self.fatal(format!("cannot read `{}`: {e}", path.display()));
@@ -252,7 +273,6 @@ impl Loader<'_> {
                 }
             };
             let display = clean_path(path.strip_prefix(&cwd).unwrap_or(&path)).display().to_string();
-            let text: Arc<str> = Arc::from(text);
             let file = self.sources.add(path.clone(), display.clone(), text.clone());
             let (ast, diags) = wid_syntax::parse_file(file, &text);
             // The checker reports struct literal errors, fitted to the type.

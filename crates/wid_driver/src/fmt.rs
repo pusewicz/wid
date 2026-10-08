@@ -9,7 +9,7 @@
 
 use std::path::{Path, PathBuf};
 
-use wid_diagnostics::{Diagnostic, Diagnostics, SourceMap, codes};
+use wid_diagnostics::{Diagnostic, Diagnostics, FileId, SourceMap, codes};
 
 use crate::Options;
 use crate::cmdline::{CommandLine, FileRequest, Pending, file_target};
@@ -87,19 +87,19 @@ pub fn fmt(opts: &Options, check: bool) -> FmtOutput {
             }
         };
         let file = out.sources.add(path.clone(), display.clone(), text.as_str());
-        let (ast, diags) = wid_syntax::parse_file(file, &text);
-        if !diags.is_empty() {
-            out.diags.extend(diags);
-            out.files.push(FmtFile { path, display, formatted: None, changed: false });
-            continue;
-        }
-        let formatted = wid_syntax::fmt::format(&text, &ast);
-        let (again, again_diags) = wid_syntax::parse_file(file, &formatted);
-        if !again_diags.is_empty() || !wid_syntax::fmt::same_tree(&ast, &again) {
-            out.internal_errors.push(display.clone());
-            out.files.push(FmtFile { path, display, formatted: None, changed: false });
-            continue;
-        }
+        let formatted = match format_text(file, &text) {
+            Formatted::Text(formatted) => formatted,
+            Formatted::Errors(diags) => {
+                out.diags.extend(diags);
+                out.files.push(FmtFile { path, display, formatted: None, changed: false });
+                continue;
+            }
+            Formatted::Bug => {
+                out.internal_errors.push(display.clone());
+                out.files.push(FmtFile { path, display, formatted: None, changed: false });
+                continue;
+            }
+        };
         let changed = formatted != text;
         if changed
             && !check
@@ -110,6 +110,36 @@ pub fn fmt(opts: &Options, check: bool) -> FmtOutput {
         out.files.push(FmtFile { path, display, formatted: Some(formatted), changed });
     }
     out
+}
+
+/// What formatting the text of one file gives.
+#[derive(Debug)]
+pub enum Formatted {
+    /// The canonical text, which is the text itself when it was canonical.
+    Text(String),
+    /// The text doesn't parse; these are its errors, and it isn't
+    /// formatted.
+    Errors(Diagnostics),
+    /// Formatting would change the text's syntax tree or comments: a bug
+    /// in the formatter.
+    Bug,
+}
+
+/// Formats the text of one file, `file` in the caller's source map, as
+/// `wid fmt` and the LSP's formatting request do: only text that parses
+/// without errors is formatted, and the result only stands when it parses
+/// to the same tree with the same comments.
+pub fn format_text(file: FileId, text: &str) -> Formatted {
+    let (ast, diags) = wid_syntax::parse_file(file, text);
+    if !diags.is_empty() {
+        return Formatted::Errors(diags);
+    }
+    let formatted = wid_syntax::fmt::format(text, &ast);
+    let (again, again_diags) = wid_syntax::parse_file(file, &formatted);
+    if !again_diags.is_empty() || !wid_syntax::fmt::same_tree(&ast, &again) {
+        return Formatted::Bug;
+    }
+    Formatted::Text(formatted)
 }
 
 /// Why there is nothing to format: a plain error, or one that points into

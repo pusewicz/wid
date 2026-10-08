@@ -6,6 +6,7 @@ mod cmdline;
 pub mod doc;
 pub mod fmt;
 mod loader;
+mod overlay;
 pub mod query;
 mod test;
 
@@ -19,6 +20,7 @@ use wid_sema::ir::Program;
 use wid_sema::{CheckOptions, ProgramInput};
 
 pub use loader::{find_wid_root, load_program};
+pub use overlay::Overlay;
 pub use test::{TestResult, TestRun, TestStatus, render_test_report, test};
 
 /// The runtime header, embedded so the compiler works from any directory.
@@ -220,7 +222,7 @@ pub struct Checked {
 
 /// Loads, parses and checks a program.
 pub fn check(opts: &Options) -> Checked {
-    let (mut sources, input, mut diags) = load_program(opts);
+    let (mut sources, input, mut diags) = load_program(opts, &Overlay::new());
     let Some(input) = input else {
         diags.sort();
         return Checked { sources, diags, input: None, program: None };
@@ -235,17 +237,19 @@ pub fn check(opts: &Options) -> Checked {
 }
 
 /// Loads and checks a package for the tools that read it rather than build
-/// it (`wid doc`, `wid query`, and the LSP later): as a library, so it needs
-/// no `def main`, and without generating code. The result holds the
+/// it (`wid doc`, `wid query` and `wid lsp`): as a library, so it needs no
+/// `def main`, and without generating code. The result holds the
 /// diagnostics and every declaration the checker collected, even when the
-/// package has errors. Like every stage, it is a pure function of the
-/// options and the files on disk, so a long-lived caller reruns it when a
+/// package has errors. Files the overlay holds are read from it rather than
+/// from disk: the LSP passes its unsaved buffers, the other tools an empty
+/// overlay. Like every stage, it is a pure function of the options, the
+/// overlay and the files on disk, so a long-lived caller reruns it when a
 /// file changes.
-pub fn analyze(opts: &Options) -> wid_query::Analysis {
+pub fn analyze(opts: &Options, overlay: &Overlay) -> wid_query::Analysis {
     let mut opts = opts.clone();
     opts.library = true;
     opts.check_all_packages = false;
-    let (sources, input, diags) = load_program(&opts);
+    let (sources, input, diags) = load_program(&opts, overlay);
     match input {
         Some(input) => wid_query::Analysis::check(&input, sources, diags),
         None => wid_query::Analysis::unloaded(sources, diags),

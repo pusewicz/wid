@@ -103,7 +103,7 @@ pub fn doc(opts: &Options, request: &DocRequest) -> DocOutput {
     let mut opts = opts.clone();
     opts.target = target;
     opts.testing = false;
-    let mut analysis = crate::analyze(&opts);
+    let mut analysis = crate::analyze(&opts, &crate::Overlay::new());
     let file = cmd.add(&mut analysis.sources);
     let Some(root) = analysis.root() else {
         return DocOutput { sources: analysis.sources, diags: analysis.diags, page: None };
