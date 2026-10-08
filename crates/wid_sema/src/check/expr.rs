@@ -371,8 +371,15 @@ impl<'a> Checker<'a> {
         self.const_with_expected(ConstValue::Float(v), expected, span)
     }
 
-    /// Types an untyped constant using the expected type when it fits.
+    /// Types an untyped constant using the expected type when it fits. For
+    /// an expected `T?`, it converts to `T` and then to `T?`.
     pub fn const_with_expected(&mut self, v: ConstValue, expected: Option<TyId>, span: Span) -> ir::Expr {
+        if let Some(ty) = expected
+            && let Some(inner) = self.optional_inner(ty)
+        {
+            let v = self.const_with_expected(v, Some(inner), span);
+            return if v.ty == inner { self.opt_some(v, ty) } else { v };
+        }
         if let Some(ty) = expected {
             let base = self.types.base(ty);
             let fits = matches!(
@@ -516,22 +523,17 @@ impl<'a> Checker<'a> {
                 ast::StrPart::Interp(_) => return self.interpolate(parts, span),
             }
         }
-        if let Some(ty) = expected
-            && let TyKind::Optional(inner) = *self.types.kind(ty)
-            && matches!(self.types.kind(inner), TyKind::CString)
-        {
-            let v = self.const_with_expected(ConstValue::Str(text), Some(inner), span);
-            return ir::Expr::new(ExprKind::OptSome(Box::new(v)), ty);
-        }
         self.const_with_expected(ConstValue::Str(text), expected, span)
     }
 
     // ----- names ---------------------------------------------------------
 
-    /// Lowers `:name`, which selects an enum member when one is expected,
-    /// and is otherwise a `Symbol` value (an error at run time).
+    /// Lowers `:name`, which selects an enum member when one is expected
+    /// (also as a `T?`, which the member converts to), and is otherwise a
+    /// `Symbol` value (an error at run time).
     fn symbol(&mut self, name: Name, span: Span, expected: Option<TyId>) -> ir::Expr {
         if let Some(ty) = expected {
+            let ty = self.optional_inner(ty).unwrap_or(ty);
             let base = self.types.base(ty);
             match self.types.kind(base) {
                 TyKind::Enum(_) => return self.enum_member(base, name, span),

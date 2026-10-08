@@ -1,0 +1,76 @@
+# Untyped literals convert to `T` and then to `T?` wherever a `T?` is
+# expected (#131).
+
+Vec2 = [2]F32
+M2 = matrix[2, 2]F32
+
+enum Dir
+  north
+  south
+end
+
+LIMIT = 7
+HALF: F32? = 0.5
+SMALL: U8? = 3
+ORIGIN: Vec2? = [0.0, 0.0]
+COUNT: Int = 4
+MAYBE_COUNT: Int? = COUNT
+
+struct Body
+  pos: Vec2?
+  vel: Vec2? = [3.0, 4.0]
+  hp: U8? = 9
+end
+
+def first(v: Vec2?) -> F32
+  if w = v
+    return w[0]
+  end
+  -1.0
+end
+
+def spawn -> Vec2?
+  return [1.0, 2.0]
+end
+
+def scale -> F32? = 1.5
+
+def pair -> (F32?, U8?)
+  return 1.0, 2
+end
+
+def turn -> M2?
+  [0.0, -1.0, 1.0, 0.0]
+end
+
+def pick(c: Bool) -> F32? = c ? 2.5 : nil
+
+def main
+  x: F32? = 1.0
+  y: U8? = 3
+  p x, y
+  v: Vec2? = [1.0, 2.0]
+  p v
+  b = Body.new(pos: [5.0, 6.0])
+  p b
+  p first([7.0, 8.0])
+  p spawn, scale
+  w: [2]F32? = [1.0, nil]
+  p w
+  a, c = pair
+  p a, c
+  p turn
+  p pick(true), pick(false)
+  n: I16? = -3
+  m: U8? = LIMIT
+  q: F32? = 1.0 + 2.0
+  p n, m, q
+  d: Dir? = :south
+  p d
+  r: Rune? = "r"
+  p r
+  t: F32? = nil
+  t ||= 4.0
+  p t
+  p HALF, SMALL, ORIGIN, MAYBE_COUNT
+end

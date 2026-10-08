@@ -187,7 +187,11 @@ end
   operators. Untyped literals convert to it; typed values convert with `.to`
   in either direction (`f.to(Meters)`, `m.to(F64)`), never implicitly.
 - **Optionals:** `T?`, whose empty value is `nil`. A `T` converts to `T?`
-  implicitly; the reverse needs an unwrap. Pointers can't be nil
+  implicitly; the reverse needs an unwrap. An untyped literal where a `T?`
+  is expected (a number, string, symbol or array literal, in a declaration,
+  a field, an argument, a return or an element) converts to `T` and then
+  to `T?`: `x: F32? = 1.0`, `v: Vec2? = [1.0, 2.0]`,
+  `w: [2]F32? = [1.0, nil]`, `d: Dir? = :north`. Pointers can't be nil
   unless written `^T?` (the `?` after `^T` or `[^]T` makes the pointer
   nil-able; `^(T?)` points at an optional). Use `x || default` to unwrap with a fallback, `x&.f` to
   chain, `if v = maybe … end` to bind, and `while v = maybe … end` to loop

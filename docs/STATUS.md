@@ -1462,6 +1462,14 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   current directory" (a `cimport` line's keep `include_dirs:`,
   `pkg_config:` and `define:`), and the help for a missing pkg-config no
   longer offers `link:`. Tested by `crates/wid_driver/tests/cimport_dump.rs`.
+- Untyped literals into optionals (#131, SPEC "Types"): where a `T?` is
+  expected, `const_with_expected` and `typed_const` (constants) convert a
+  number or string literal to `T` and wrap it, `array_literal` builds a
+  `T` array, matrix or slice and wraps it, and a symbol selects a member
+  of an expected `Dir?`. So `x: F32? = 1.0`, `y: U8? = 3`,
+  `v: Vec2? = [1.0, 2.0]`, `[2]F32? = [1.0, nil]` and `H: F32? = 0.5`
+  work in declarations, fields, arguments and returns, and an error in
+  the literal names `T`'s rule (`300` doesn't fit in `U8`).
 
 ## Next
 
@@ -1602,7 +1610,6 @@ only on `main` and can run in parallel with the macro stack.
 7. **SPEC conformance audit: done** (at e73c919). Every finding was
    reproduced on main and filed as a GitHub issue, so the open issues are
    now its queue. In order of value:
-   - untyped literals into optionals (#131);
    - methods ending in an endless loop (#132);
    - `<=>` deriving the comparisons, and the definable operator set (#134);
    - `def self.` in an `extend` (#135);

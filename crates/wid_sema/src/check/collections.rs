@@ -36,6 +36,17 @@ impl<'a> Checker<'a> {
 
     /// Lowers an array literal `[a, b, c]`.
     pub fn array_literal(&mut self, elems: &[ast::Expr], expected: Option<TyId>, span: Span) -> ir::Expr {
+        // Where a `T?` is expected, the literal is a `T`, then a `T?`.
+        if let Some(ty) = expected
+            && let Some(inner) = self.optional_inner(ty)
+            && matches!(
+                self.types.kind(self.types.base(inner)),
+                TyKind::Array(..) | TyKind::Matrix(..) | TyKind::Slice(_)
+            )
+        {
+            let v = self.array_literal(elems, Some(inner), span);
+            return if v.ty == inner { self.opt_some(v, ty) } else { v };
+        }
         let expected_kind = expected.map(|t| self.types.kind(self.types.base(t)).clone());
         match expected_kind {
             Some(TyKind::Matrix(..)) => self.matrix_literal(elems, expected.expect("checked above"), span),
