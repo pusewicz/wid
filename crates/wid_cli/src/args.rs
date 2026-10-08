@@ -13,6 +13,7 @@ pub enum Command {
     Check,
     Test,
     Doc,
+    Query,
     Explain,
     Cimport,
     Version,
@@ -54,9 +55,13 @@ pub struct Parsed {
     pub json: bool,
     /// `wid doc -private`.
     pub private: bool,
+    /// `wid query`'s positional arguments: the query and its argument.
+    pub query_args: Vec<String>,
+    /// `wid query -in:`: the package to query.
+    pub query_in: Option<String>,
 }
 
-const COMMANDS: &[&str] = &["build", "run", "check", "test", "doc", "explain", "cimport", "version", "help"];
+const COMMANDS: &[&str] = &["build", "run", "check", "test", "doc", "query", "explain", "cimport", "version", "help"];
 
 const FLAGS: &[&str] = &[
     "-file",
@@ -78,7 +83,11 @@ const FLAGS: &[&str] = &[
     "-pkg-config:",
     "-json",
     "-private",
+    "-in:",
 ];
+
+/// Flags that only one command takes.
+const COMMAND_FLAGS: &[(&str, &str)] = &[("-json", "doc"), ("-private", "doc"), ("-in", "query"), ("-dump", "cimport")];
 
 /// Parses the arguments after the program name.
 pub fn parse(argv: &[String]) -> Result<Parsed, String> {
@@ -107,6 +116,8 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
         doc_args: Vec::new(),
         json: false,
         private: false,
+        query_args: Vec::new(),
+        query_in: None,
     };
     let Some(first) = argv.first() else { return Ok(parsed) };
     parsed.command = match first.as_str() {
@@ -115,6 +126,7 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
         "check" => Command::Check,
         "test" => Command::Test,
         "doc" => Command::Doc,
+        "query" => Command::Query,
         "explain" => Command::Explain,
         "cimport" => Command::Cimport,
         "version" | "-version" | "--version" => Command::Version,
@@ -143,6 +155,10 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
                 ));
             }
             parsed.doc_args.push(arg.clone());
+            continue;
+        }
+        if parsed.command == Command::Query && (!arg.starts_with('-') || arg == "-") {
+            parsed.query_args.push(arg.clone());
             continue;
         }
         if !arg.starts_with('-') || arg == "-" {
@@ -191,10 +207,14 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
             "-dump" | "--dump" if parsed.command == Command::Cimport => {}
             "-json" if parsed.command == Command::Doc => parsed.json = true,
             "-private" if parsed.command == Command::Doc => parsed.private = true,
+            "-in" if parsed.command == Command::Query => parsed.query_in = Some(need("path/to/package")?),
             "-strip-prefix" => parsed.strip_prefixes.push(need("SDL_")?),
             "-include-dir" => parsed.include_dirs.push(PathBuf::from(need("path")?)),
             "-pkg-config" => parsed.pkg_config.push(need("raylib")?),
             _ => {
+                if let Some((_, owner)) = COMMAND_FLAGS.iter().find(|(flag, _)| *flag == name) {
+                    return Err(format!("`{name}` only applies to `wid {owner}`"));
+                }
                 let names: Vec<&str> = FLAGS.iter().map(|f| f.trim_end_matches(':')).collect();
                 let hint = if name.starts_with("--") {
                     format!("; Wid flags use one dash, like `{}`", &name[1..])
@@ -222,6 +242,7 @@ pub fn usage(topic: Option<&str>) -> String {
         Some("check") => "wid check [dir] [flags]\n\nType-checks the package without generating code.\n".to_string() + FLAG_HELP,
         Some("test") => "wid test [dir] [flags]\n\nBuilds the package with its `_test.wid` files and runs every `@[test]` method,\neach in its own process. `-filter:<text>` runs only tests whose name contains\nthe text. Exits with 1 when a test fails.\n".to_string() + FLAG_HELP,
         Some("doc") => DOC_HELP.to_string(),
+        Some("query") => QUERY_HELP.to_string(),
         Some("explain") => "wid explain [CODE]\n\nPrints the long explanation of an error code, or lists all codes.\n".to_string(),
         Some("cimport") => "wid cimport --dump <header> [flags]\n\nPrints the Wid declarations `cimport` makes of a C header. A header that\nisn't a file is looked up on the include path, like `#include <name>`.\n\nFlags:\n  -strip-prefix:<prefix>  Remove a prefix from every name\n  -include-dir:<dir>      Search a directory for headers\n  -pkg-config:<name>      Use pkg-config's flags for a library\n  -define:NAME=value      Define a C macro first\n".to_string(),
         _ => format!(
@@ -233,6 +254,7 @@ pub fn usage(topic: Option<&str>) -> String {
                check    Type-check a package\n  \
                test     Run a package's tests\n  \
                doc      Show the documentation of a package or symbol\n  \
+               query    Answer questions about a package, as JSON\n  \
                explain  Explain an error code\n  \
                cimport  Print the Wid view of a C header\n  \
                version  Print the version\n  \
@@ -269,6 +291,39 @@ Flags:
   -json-errors           Print diagnostics as JSON (on stderr)
   -define:NAME=value     Set a value that `config(:NAME, default)` reads
   -target:<os_arch>      Document another target's code (sets OS and ARCH)
+  -collection:name=path  Add an import collection
+";
+
+const QUERY_HELP: &str = "wid query <query> [argument] [flags]
+
+Answers a question about a package with one JSON document on stdout, for
+editors, scripts and LLMs. Diagnostics go to stderr, as JSON too. A package
+with errors is still answered from what the checker collected; the exit
+status is 1 then, and when the request fails.
+
+Queries:
+  outline          Every declaration of the package, private ones too, with
+                   fields, enum members and methods under their type
+  def <symbol>     The declaration a symbol path names: `Name`,
+                   `Type.member`, or an import name first, `rl.draw_circle_v`;
+                   an overload set gives the set and each of its members
+  methods <Type>   Every method callable on a type, grouped by where it comes
+                   from: the type itself, `include`, `extend` and `using`
+
+The package is the one in `.`, or the one `-in:` names: a directory, a `.wid`
+file with `-file`, or a collection path like `core:fmt`. The JSON shapes are
+described in SPEC.md (\"Toolchain and CLI\").
+
+Examples:
+  wid query outline
+  wid query def Ball.update -in:game
+  wid query methods String -in:core:strings
+
+Flags:
+  -in:<package>          The package to query (default `.`)
+  -file                  Treat the package as a single file
+  -define:NAME=value     Set a value that `config(:NAME, default)` reads
+  -target:<os_arch>      Query another target's code (sets OS and ARCH)
   -collection:name=path  Add an import collection
 ";
 

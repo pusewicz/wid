@@ -1,6 +1,6 @@
 [package]
-name = "wid_driver"
-description = "Loads Wid packages, runs the compiler stages and invokes the C compiler"
+name = "wid_query"
+description = "The Wid introspection engine: outlines, definitions and methods of a checked package, as plain data"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,14 +9,7 @@ license.workspace = true
 wid_diagnostics.workspace = true
 wid_syntax.workspace = true
 wid_sema.workspace = true
-wid_codegen_c.workspace = true
-wid_cimport.workspace = true
-wid_query.workspace = true
 serde_json.workspace = true
-
-[[test]]
-name = "suite"
-harness = false
 
 [lints]
 workspace = true

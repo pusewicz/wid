@@ -38,6 +38,7 @@ fn main() -> ExitCode {
         Command::Run => run(&parsed),
         Command::Test => test(&parsed),
         Command::Doc => doc(&parsed),
+        Command::Query => query(&parsed),
     }
 }
 
@@ -114,6 +115,28 @@ fn doc(parsed: &Parsed) -> ExitCode {
         wid_driver::doc::DocRequest { args: parsed.doc_args.clone(), private: parsed.private, dir: PathBuf::new() };
     let out = wid_driver::doc::doc(&opts, &request);
     let printed = wid_driver::doc::print(&out, parsed.json, parsed.json_errors, color_stderr());
+    eprint!("{}", printed.stderr);
+    print!("{}", printed.stdout);
+    if printed.success { ExitCode::SUCCESS } else { ExitCode::from(1) }
+}
+
+/// `wid query`: prints the answer as one JSON document on stdout and the
+/// diagnostics as JSON on stderr. A package with errors is still answered;
+/// the exit status is 1 then, and when the request fails. A malformed
+/// command line is a usage error (status 2), as for every command.
+fn query(parsed: &Parsed) -> ExitCode {
+    let query = match wid_driver::query::Query::parse(&parsed.query_args) {
+        Ok(query) => query,
+        Err(message) => {
+            eprintln!("{}", error_line(&message));
+            eprintln!("run `wid help query` for usage");
+            return ExitCode::from(2);
+        }
+    };
+    let opts = options(parsed);
+    let request = wid_driver::query::QueryRequest { query, package: parsed.query_in.clone(), dir: PathBuf::new() };
+    let out = wid_driver::query::query(&opts, &request);
+    let printed = wid_driver::query::print(&out);
     eprint!("{}", printed.stderr);
     print!("{}", printed.stdout);
     if printed.success { ExitCode::SUCCESS } else { ExitCode::from(1) }

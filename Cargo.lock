@@ -180,6 +180,17 @@ dependencies = [
  "wid_cimport",
  "wid_codegen_c",
  "wid_diagnostics",
+ "wid_query",
+ "wid_sema",
+ "wid_syntax",
+]
+
+[[package]]
+name = "wid_query"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "wid_diagnostics",
  "wid_sema",
  "wid_syntax",
 ]
