@@ -1,0 +1,34 @@
+error[E0201]: undefined constant `Foo`
+ --> tests/ui/const_undefined_name.wid:3:5
+  |
+3 | X = Foo
+  |     ^^^ not found in this scope
+  = see `wid explain E0201`
+
+error[E0201]: undefined constant `LIMT`
+ --> tests/ui/const_undefined_name.wid:6:5
+  |
+6 | Y = LIMT * 2
+  |     ^^^^ not found in this scope
+help: a similar name exists: `LIMIT`
+  | Y = LIMIT * 2
+  = see `wid explain E0201`
+
+error[E0201]: undefined constant `Bar`
+ --> tests/ui/const_undefined_name.wid:7:6
+  |
+7 | Z = -Bar
+  |      ^^^ not found in this scope
+  = see `wid explain E0201`
+
+error[E0327]: a constant can't call `width` without `comptime`
+  --> tests/ui/const_undefined_name.wid:12:5
+   |
+12 | W = width
+   |     ^^^^^ this method would run while compiling
+   = note: constants are computed at compile time; `comptime` marks code that runs then
+help: run the initializer with `comptime`
+   | W = comptime width
+   = see `wid explain E0327`
+
+error: could not compile due to 4 errors

@@ -643,6 +643,15 @@ runs the stages; `wid_cli` is the `wid` binary.
   `holds_parse_error` walks the whole expression with the new read-only
   `wid_syntax::visit::Visit` (generated with `VisitMut` from one macro), so
   constants, array lengths and type arguments see errors at any depth too.
+- A constant's value that doesn't fold and needs no interpreter (a name, or
+  arithmetic on names) is checked as code instead of being E0327 "constant
+  value is not known at compile time" (#59): `X = Foo` with `Foo`
+  undefined is E0201 "undefined constant `Foo`" with its did-you-mean, as
+  in a method; `X = width` is E0327 with the `comptime` fix; and values
+  that failed before evaluate (`START = ORIGIN` for a struct constant,
+  `FACING: Dir = :north`, `X = 1 / 0` is E0901). The E0327 that remains
+  says the compiler can't compute the value, with a note on what a
+  constant's value may be.
 - Errors in code a macro spliced in from its call site (a `Code` argument,
   a name from a `Symbol`) point at the splice in the `quote` and list the
   calls, in both renderers; a name the macro computed is named in the

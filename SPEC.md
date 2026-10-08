@@ -446,10 +446,13 @@ end
   what the built program would. It always runs with the checks of a `-debug`
   build: bounds, nil and integer overflow.
 - **Constants** are evaluated while compiling. Literal arithmetic stays
-  untyped (`SIZE = 4 * 64`). Struct literals, `T.size`, indexing other
-  constants and the like evaluate too (`ORIGIN = Vec2.new(x: 0.0, y: 0.0)`).
-  Calling a method needs `comptime`, so every place where code runs at compile
-  time says so (E0327 suggests adding it).
+  untyped (`SIZE = 4 * 64`). Struct literals, `T.size`, other constants of
+  any type, enum members, indexing other constants and the like evaluate too
+  (`ORIGIN = Vec2.new(x: 0.0, y: 0.0)`, `START = ORIGIN`,
+  `FACING: Dir = :north`). Calling a method needs `comptime`, so every place
+  where code runs at compile time says so (E0327 suggests adding it). The
+  value's names resolve as in a method: an undefined one is E0201 with a
+  did-you-mean.
 - `comptime` code can use constants, literals and any Wid method, but not the
   variables around it, which have no value yet. It can allocate:
   `context.allocator` is a compile-time heap. `puts` and `p` show their output
