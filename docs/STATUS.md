@@ -1347,7 +1347,9 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   (#94): `place` lowers an `@name` target through `ivar_target`, and E0204
   says a method can't be assigned to and `@name` only names fields, with
   no fix that drops the `@` (which would declare a variable); a field of
-  a similar name, its own or promoted, is suggested instead.
+  a similar name, its own or promoted, is suggested instead. For a
+  spliced `@#{name} = …`, the error and the fix point at the name the
+  macro call gave, as for a read.
 - A value that failed to parse is reported once (#109): `match_args`
   doesn't report spreading for `f(*)` nor arguments missing after one
   that failed to parse (`g(a: , b: 2)`), and a range with a bound that

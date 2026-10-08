@@ -1,6 +1,15 @@
 # `@name` assigned to when `name` is a method: a method can't be assigned
 # to, and `name = …` would declare a variable instead, so there is no fix
-# that drops the `@`. A field of a similar name is suggested.
+# that drops the `@`. A field of a similar name is suggested; for a name a
+# macro spliced in, at the call that gave it.
+macro def zero(name: Symbol) -> Code
+  quote do
+    def clear
+      @#{name} = 0
+    end
+  end
+end
+
 struct Mob
   recovery: Int = 1
   def recover(n: Int) -> Int = n
@@ -25,6 +34,13 @@ struct P
   end
 end
 
+struct S
+  heat: Int = 0
+  def heal(n: Int) -> Int = n
+  zero :heal
+end
+
 def main
   P.new.a
+  S.new.clear
 end

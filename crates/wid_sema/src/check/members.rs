@@ -143,9 +143,13 @@ impl<'a> Checker<'a> {
 
     /// Lowers `@name` as the target of an assignment. A method of that
     /// name is reported as one that can't be assigned to, with no fix that
-    /// calls it.
+    /// calls it. As for [`Self::ivar`], a missing name in `@#{name}` is
+    /// reported where the macro call gave it.
     pub fn ivar_target(&mut self, name: Name, span: Span) -> ir::Expr {
-        let written = IvarUse { assigned: true, ..IvarUse::default() };
+        let (span, written) = match self.spliced_ivar(span) {
+            Some(at) => (at, IvarUse { site: Some(span), assigned: true, ..IvarUse::default() }),
+            None => (span, IvarUse { assigned: true, ..IvarUse::default() }),
+        };
         match self.ivar_owner(name, span, written) {
             Some((owner, index, ty)) => ir::Expr::new(ExprKind::Field { base: Box::new(owner), index }, ty),
             None => ir::Expr::new(ExprKind::Zero, self.types.unknown()),
@@ -312,10 +316,13 @@ impl<'a> Checker<'a> {
             let promoted = self.promoted_names(ty, false, &fields);
             fields.extend(promoted.into_iter().flat_map(|(_, names)| names));
             if let Some(best) = did_you_mean(name.as_str(), fields.iter().copied()) {
+                // A name spliced into `@#{name}` is fixed where it was
+                // given, as the name it is.
+                let fix = if written.site.is_some() { best.to_string() } else { format!("@{best}") };
                 diag = diag.suggest_replace(
                     format!("did you mean the field `@{best}`?"),
                     span,
-                    format!("@{best}"),
+                    fix,
                     Applicability::MaybeIncorrect,
                 );
             }
