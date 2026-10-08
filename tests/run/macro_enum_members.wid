@@ -1,0 +1,71 @@
+# Code spliced alone on a line in a generated enum's body: a line that is a
+# name alone, or `name = value`, is a member, in the place of the splice
+# among the written members; the other lines are declarations.
+
+# Members without values count up from 0.
+macro def make_enum(name: Symbol, *members: Symbol) -> Code
+  lines = [dynamic]Code.new
+  for m in members
+    lines << quote do
+      #{m}
+    end
+  end
+  quote do
+    enum #{name}
+      #{lines}
+    end
+  end
+end
+
+# Members with values, between written ones, and a method.
+macro def scaled_enum(name: Symbol, step: Int, *members: Symbol) -> Code
+  lines = [dynamic]Code.new
+  value = step
+  for m in members
+    lines << quote do
+      #{m} = #{value}
+    end
+    value += step
+  end
+  lines << quote do
+    def twice -> Int = self.to_i * 2
+  end
+  quote do
+    enum #{name}
+      none
+      #{lines}
+      top
+    end
+  end
+end
+
+# One `Code` value of several lines, and `Symbol`s, keep their places too.
+macro def mixed_enum(name: Symbol, extra: Symbol) -> Code
+  pair = quote do
+    left
+    right = 7
+  end
+  quote do
+    enum #{name}
+      start
+      #{pair}
+      middle
+      #{extra}
+      finish
+    end
+  end
+end
+
+make_enum :Color, :red, :green, :blue
+scaled_enum :Level, 10, :low, :high
+mixed_enum :Side, :up
+
+def main
+  c: Color = :green
+  p c, c.to_i, Color.blue.to_i
+  l: Level = :high
+  p l, l.to_i, l.twice, Level.none.to_i, Level.top.to_i
+  for s in [Side.start, Side.left, Side.right, Side.middle, Side.up, Side.finish]
+    p s, s.to_i
+  end
+end

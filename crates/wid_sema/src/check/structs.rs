@@ -380,8 +380,12 @@ impl<'a> Checker<'a> {
         }
         let names: Vec<&'static str> = info.members.iter().map(|(n, _)| n.as_str()).collect();
         let mut diag = Diagnostic::error(codes::NO_SUCH_MEMBER, format!("`{}` has no member `{name}`", info.name))
-            .primary(span, format!("not a member of `{}`", info.name))
-            .note(format!("members: {}", names.iter().map(|n| format!(":{n}")).collect::<Vec<_>>().join(", ")));
+            .primary(span, format!("not a member of `{}`", info.name));
+        // An enum without members was reported where it is declared.
+        if !names.is_empty() {
+            diag =
+                diag.note(format!("members: {}", names.iter().map(|n| format!(":{n}")).collect::<Vec<_>>().join(", ")));
+        }
         if let Some(best) = did_you_mean(name.as_str(), names.iter().copied()) {
             let text = self.source_text(span);
             let replacement = if text.starts_with(':') { format!(":{best}") } else { best.to_string() };

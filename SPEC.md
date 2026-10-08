@@ -557,6 +557,12 @@ end
       capitalized name declares a constant instead (`#{name} = v`). A
       number, string, `Bool`, `Type`, call or other value there, or a
       capitalized name in a method, is E0911.
+    - In an `enum`'s body, a splice alone on a line gives members, in its
+      place among the written ones: a `Symbol` (or `[]Symbol`) one per
+      name, and code (`Code` or `[]Code`) one per line that is a name
+      alone or `name = value`, so a macro can build the members from
+      fragments (`quote do #{m} = #{v} end`). The code's other lines are
+      declarations, and a line that is neither is E0911.
     - A `quote` splices only these types; splicing another is E0911 in the
       macro.
   - **Lexing:** `#{` outside a string literal always starts a splice, and a

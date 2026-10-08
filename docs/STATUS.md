@@ -216,8 +216,13 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
     `ast::TypeKind::Spliced(TyId)`, resolved by `resolve_type`, also inside
     `ExprKind::Type` where a value goes). A nested `quote` is left alone. A
     name from a `Symbol` gets the span of the matching symbol argument
-    (past its colon), or of the call. Splices that don't fit are E0911 at
-    the call, and the code is then not lowered.
+    (past its colon), or of the call. In an enum's body (`visit_item`), a
+    splice alone on a line of `Symbol`s or of code gives members, inserted
+    after the written members whose spans come before it (counted before
+    the walk splices their names): a code line that is a name alone or
+    `name = value` is a member (`enum_member_line`), and the others go
+    through `lines_to_items` (`enum_lines`). Splices that don't fit are
+    E0911 at the call, and the code is then not lowered.
   - Virtual files: `FileId::expansion(i)` (ids from `1 << 31`) is
     `MacroState::files[i]`, one per (expansion, template file); it records
     the template file, the expansion (call span, name as called, depth)
@@ -884,6 +889,14 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   at run time, E0906). Package operators skip macros, so a use is E0307
   like any missing operator. An operator's `overload` set can't list a
   macro either (E0915).
+- Code spliced alone on a line in a generated enum's body gives members:
+  each line that is a name alone (`#{m}`) or `name = value`, in the place
+  of the splice among the written members, so `[]Code` fragments build an
+  enum (#76; the names were read as undefined macro calls, E0201, and
+  `name = value` as a statement, E0911). A spliced `Symbol` member keeps
+  its place too (it went last). A line that is neither a member nor a
+  declaration is one E0911 that quotes it, and E0204 leaves out an empty
+  "members:" note.
 - A C compiler without C23 (one that rejects `-std=c23`, like gcc 13 or
   clang 17, or lacks `<stdckdint.h>` or `#embed`) is E0702 "the C compiler
   `cc` doesn't support C23", with the first line of its `--version`, the

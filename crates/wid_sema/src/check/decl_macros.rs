@@ -410,9 +410,16 @@ impl<'a> Checker<'a> {
                     "remove the call and use the field itself, like `hero.{field}{set}` or `@{field}{set}` in a method"
                 ));
         } else if in_enum && bare {
+            // An enum a macro generated gets its members from splices.
+            let generated = owner.is_some_and(|o| self.decls[o.0 as usize].item.span.file.expansion_index().is_some());
+            let help = if generated {
+                "splice the members into the generated `enum` itself: code of names alone or `name = value`, alone on a line in its body"
+            } else {
+                "list the member in the enum itself, or have a macro called at package level generate the whole `enum`"
+            };
             diag = diag
                 .note("an enum's members are fixed before the macros in its body run, so a macro can't add members")
-                .help("list the member in the enum itself, or have a macro called at package level generate the whole `enum`");
+                .help(help);
         } else if let Some(best) = did_you_mean(name, macros.iter().copied()) {
             diag = diag.suggest_replace(
                 format!("a macro with a similar name exists: `{best}`"),

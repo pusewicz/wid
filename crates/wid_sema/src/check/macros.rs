@@ -965,6 +965,7 @@ impl<'a> Checker<'a> {
             files,
             file_ids,
             file_locs,
+            texts: &self.source_texts,
             errors: Vec::new(),
             splices: Vec::new(),
         };
@@ -1374,6 +1375,8 @@ struct Expander<'x> {
     files: &'x mut Vec<VirtualFile>,
     file_ids: &'x mut HashMap<(u32, FileId), u32>,
     file_locs: &'x HashMap<FileId, DeclLoc>,
+    /// The text of each real file, to quote code in messages.
+    texts: &'x HashMap<FileId, std::sync::Arc<str>>,
     errors: Vec<Diagnostic>,
     /// The code spliced in from outside the expansion so far.
     splices: Vec<Splice>,
@@ -1401,6 +1404,15 @@ impl Expander<'_> {
         Respan { from: template.file, to }.visit_stmts(&mut body);
         Splicer { ex: self, values: &fragment.values }.visit_stmts(&mut body);
         body
+    }
+
+    /// The source text of a span, in a real file or a virtual one.
+    fn text(&self, span: Span) -> Option<&str> {
+        let mut file = span.file;
+        while let Some(i) = file.expansion_index() {
+            file = self.files.get(i as usize)?.template;
+        }
+        self.texts.get(&file)?.get(span.start as usize..span.end as usize)
     }
 
     /// The virtual file of a template file in this expansion.
@@ -1766,6 +1778,70 @@ impl Splicer<'_, '_> {
             );
         }
     }
+
+    /// The enum member a `Symbol` spliced at `at` names.
+    fn symbol_member(&mut self, name: Name, at: Span) -> ast::EnumMember {
+        let span = self.name_span(name, at);
+        ast::EnumMember { name: Ident { name, span }, value: None }
+    }
+
+    /// Sorts the lines of code spliced at `at` among an enum's members:
+    /// a name alone or `name = value` is a member, and the other lines are
+    /// declarations. A line that is neither is E0911, one per line.
+    fn enum_lines(
+        &mut self,
+        stmts: Vec<ast::Stmt>,
+        at: Span,
+        members: &mut Vec<ast::EnumMember>,
+        body: &mut Vec<ast::Item>,
+    ) {
+        let mut rest = Vec::new();
+        for stmt in stmts {
+            match enum_member_line(&stmt) {
+                Some(member) => members.push(member),
+                None => rest.push(stmt),
+            }
+        }
+        let mut statements = Vec::new();
+        body.extend(lines_to_items(rest, &mut statements));
+        for stmt in statements {
+            let name = self.ex.name;
+            let fragment = match self.ex.text(stmt.span) {
+                Some(text) if !text.contains('\n') && text.len() <= 40 => format!("`{text}`"),
+                _ => "a statement".to_string(),
+            };
+            self.ex.errors.push(
+                Diagnostic::error(
+                    codes::SPLICE_MISMATCH,
+                    format!("the macro `{name}` splices {fragment} where an enum member goes"),
+                )
+                .primary(self.ex.call, format!("`{name}` expands here"))
+                .secondary(stmt.span, "this line is neither a member nor a declaration")
+                .secondary(at, "it is spliced here, among an enum's members")
+                .help("each line spliced among an enum's members is a member, written as a name alone (`#{name}`) or `name = value`, or a declaration such as a `def`"),
+            );
+        }
+    }
+}
+
+/// A line of code spliced among an enum's members as a member, if it is
+/// one: a name alone, or `name = value`.
+fn enum_member_line(stmt: &ast::Stmt) -> Option<ast::EnumMember> {
+    if !stmt.attrs.is_empty() {
+        return None;
+    }
+    match &stmt.kind {
+        StmtKind::Expr(ast::Expr { kind: E::Ident(name), span }) => {
+            Some(ast::EnumMember { name: Ident { name: *name, span: *span }, value: None })
+        }
+        StmtKind::Assign { targets, op: None, values } => match (targets.as_slice(), values.as_slice()) {
+            ([ast::Expr { kind: E::Ident(name), span }], [value]) => {
+                Some(ast::EnumMember { name: Ident { name: *name, span: *span }, value: Some(value.clone()) })
+            }
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 /// Finds the first `Self` in a macro's own code: outside its `quote`
@@ -1899,30 +1975,52 @@ impl VisitMut for Splicer<'_, '_> {
     }
 
     fn visit_item(&mut self, item: &mut ast::Item) {
-        // In an enum body, `Symbol`s spliced alone on a line are members.
-        if let ItemKind::Enum(e) = &mut item.kind {
-            let mut body = Vec::with_capacity(e.body.len());
-            for it in std::mem::take(&mut e.body) {
-                let value = match it.kind {
-                    ItemKind::Splice(i) => self.value(i),
-                    _ => None,
-                };
-                let names = match value {
-                    Some(SpliceValue::Symbol(n)) => vec![n],
-                    Some(SpliceValue::Symbols(ns)) => ns,
-                    _ => {
-                        body.push(it);
-                        continue;
-                    }
-                };
-                for n in names {
-                    let span = self.name_span(n, it.span);
-                    e.members.push(ast::EnumMember { name: Ident { name: n, span }, value: None });
-                }
+        let ItemKind::Enum(e) = &mut item.kind else { return walk_item(self, item) };
+        // In an enum body, a splice alone on a line of `Symbol`s, or of code
+        // whose lines are names alone or `name = value`, gives members, in
+        // the place of the splice among the written ones. The written
+        // members are counted before the walk splices their names.
+        let mut spliced = Vec::new();
+        for it in std::mem::take(&mut e.body) {
+            if let ItemKind::Splice(i) = it.kind
+                && let Some(
+                    value @ (SpliceValue::Symbol(_)
+                    | SpliceValue::Symbols(_)
+                    | SpliceValue::Code(_)
+                    | SpliceValue::Codes(_)),
+                ) = self.value(i)
+            {
+                let before = |s: Span| s.file == it.span.file && s.start < it.span.start;
+                let at = e.members.iter().filter(|m| before(m.name.span)).count();
+                spliced.push((at, value, it.span));
+                continue;
             }
-            e.body = body;
+            e.body.push(it);
         }
         walk_item(self, item);
+        let ItemKind::Enum(e) = &mut item.kind else { return };
+        let mut added = 0;
+        for (at, value, span) in spliced {
+            let mut members = Vec::new();
+            match value {
+                SpliceValue::Symbol(n) => members.push(self.symbol_member(n, span)),
+                SpliceValue::Symbols(names) => members.extend(names.into_iter().map(|n| self.symbol_member(n, span))),
+                SpliceValue::Code(c) => {
+                    let stmts = self.ex.code(c, Some(span));
+                    self.enum_lines(stmts, span, &mut members, &mut e.body);
+                }
+                SpliceValue::Codes(codes) => {
+                    for c in codes {
+                        let stmts = self.ex.code(c, Some(span));
+                        self.enum_lines(stmts, span, &mut members, &mut e.body);
+                    }
+                }
+                _ => {}
+            }
+            let count = members.len();
+            e.members.splice(at + added..at + added, members);
+            added += count;
+        }
     }
 
     fn visit_expr(&mut self, e: &mut ast::Expr) {
