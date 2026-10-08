@@ -919,8 +919,13 @@ impl<'a> Parser<'a> {
     /// or inside a `quote` a splice standing for one (or a name glued from
     /// both, which is reported, see [`Parser::glued_len`]).
     fn name_len(&self, n: usize) -> Option<usize> {
-        match self.nth(n).kind {
-            T::Ident | T::SpliceBegin if let Some(len) = self.glued_len(n) => Some(len),
+        let kind = self.nth(n).kind;
+        if matches!(kind, T::Ident | T::SpliceBegin)
+            && let Some(len) = self.glued_len(n)
+        {
+            return Some(len);
+        }
+        match kind {
             T::Ident => Some(1),
             T::SpliceBegin if !self.quotes.is_empty() => self.splice_len(n),
             _ => None,
@@ -4592,17 +4597,17 @@ impl<'a> Parser<'a> {
                     self.skip_newlines();
                     let name_tok = self.peek();
                     let glued = self.glued_name().map(|(name, _)| name);
-                    let name = match name_tok.kind {
-                        _ if let Some(name) = glued => name,
-                        T::Ident | T::Const => {
+                    let name = match (glued, name_tok.kind) {
+                        (Some(name), _) => name,
+                        (None, T::Ident | T::Const) => {
                             self.bump();
                             Ident { name: Name::new(self.text_of(name_tok.span)), span: name_tok.span }
                         }
-                        T::Kw(k) => {
+                        (None, T::Kw(k)) => {
                             self.bump();
                             Ident { name: Name::new(k.as_str()), span: name_tok.span }
                         }
-                        T::SpliceBegin => match self.parse_splice_name() {
+                        (None, T::SpliceBegin) => match self.parse_splice_name() {
                             Some(name) => name,
                             None => return Expr { kind: ExprKind::Error, span: expr.span.to(self.prev_span()) },
                         },
