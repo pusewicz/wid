@@ -1,0 +1,97 @@
+# A macro's code runs in place of the call. In an operand that may not run
+# (the right side of `&&` or `||`, the value of `||=` or `&&=`), that never
+# runs (`type_info`'s operand) or that runs on each test (a `while`
+# condition), its statements run with the operand, and the names they
+# declare are the operand's own.
+
+# Declares the caller's `name` and gives a `Bool`.
+macro def positive(name: Symbol, value: Code) -> Code
+  quote do
+    #{name} = #{value}
+    puts "computed #{#{name}}"
+    #{name} > 0
+  end
+end
+
+macro def maybe(name: Symbol, value: Code) -> Code
+  quote do
+    #{name}: Int? = #{value}
+    puts "made #{#{name}}"
+    #{name}
+  end
+end
+
+# A loop condition that counts down a counter through a pointer.
+macro def counting(name: Symbol, counter: Code) -> Code
+  quote do
+    #{name} = #{counter}^
+    #{counter}^ -= 1
+    #{name} > 0
+  end
+end
+
+macro def tens(name: Symbol, counter: Code) -> Code
+  quote do
+    #{name} = #{counter}^
+    #{counter}^ -= 1
+    found: Int? = nil
+    found = #{name} * 10 if #{name} > 0
+    found
+  end
+end
+
+def main
+  a = false && positive(:zz, 5)
+  b = true && positive(:zz, 5)
+  c = true || positive(:zz, -1)
+  d = false || positive(:zz, -1)
+  p a, b, c, d
+
+  # A name the caller already has is the caller's: the operand assigns it
+  # when it runs.
+  zz = 0
+  e = true && positive(:zz, 2) && positive(:zz, 3)
+  f = false && positive(:zz, 9)
+  p e, f, zz
+
+  # `opt || default` runs the default only for nil.
+  some: Int? = 4
+  none: Int? = nil
+  p some || maybe(:m, 9), none || maybe(:m, 9)
+
+  # `||=` and `&&=` run the value only when they assign.
+  flag = true
+  flag ||= positive(:g, 1)
+  off = false
+  off ||= positive(:g, 1)
+  on = true
+  on &&= positive(:g, -1)
+  p flag, off, on
+  slot: Int? = nil
+  slot ||= maybe(:s, 7)
+  slot ||= maybe(:s, 8)
+  p slot
+  counts = map[String]Int.new
+  counts["x"] ||= 1
+  counts["x"] ||= positive(:n, 2) ? 10 : 20
+  p counts["x"]
+
+  # A `while` condition runs on each test.
+  left = 3
+  while counting(:now, &left)
+    puts "loop #{left}"
+  end
+  left = 2
+  until !counting(:now, &left)
+    puts "until #{left}"
+  end
+  # In `while v = …` the body sees the names too, as it sees `v`.
+  left = 2
+  while got = tens(:now, &left)
+    puts "got #{got} from #{now}"
+  end
+
+  # `type_info`'s operand is checked, never run.
+  info = type_info(positive(:t, 1))
+  puts info.name
+end

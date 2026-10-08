@@ -107,6 +107,7 @@ codes! {
     GUARD_NOT_FALLIBLE = "E0403", "`guard` on a value that cannot fail";
     LOOP_CONTROL_OUTSIDE_LOOP = "E0404", "`break` or `next` outside a loop";
     EXIT_IN_DEFER = "E0405", "control flow leaves a `defer`";
+    DEFER_IN_OPERAND = "E0406", "macro code in an operand has a `defer`";
 
     // Tools: `wid doc` and `wid query`.
     DOC_UNKNOWN_PACKAGE = "E0601", "package to document or query not found";

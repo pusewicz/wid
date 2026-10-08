@@ -145,7 +145,7 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   tests and exported functions calls one.
 - `type_info(x)` lowers to `Builtin::TypeInfo` whose one argument is a `Zero`
   of the described type, never evaluated (`check/type_info.rs` checks `x` in
-  a block it then drops). `wid_sema::type_info::describe` says what a table
+  a block and scope of its own, `lower_operand`, then drops the block). `wid_sema::type_info::describe` says what a table
   holds, and `type_info::check` rejects types whose tables would reach a
   `Type` (E0906) or `Never` (E0323). Codegen (`type_info.rs`) emits one
   `static const` object, `wid_typeinfo`, with arrays `types`, `fields`,
@@ -245,6 +245,21 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
     Parameters of a generated method (`declare_param`,
     and inlined block methods) are `open`: also visible to code with the
     mark of the expansion's call site.
+  - Operands that don't run once with their statement (`macros::Operand`:
+    the right side of `&&`/`||` in `logical` and `or_default`, the value of
+    `||=`/`&&=` in `lower_logical_assign` and `map_logical_assign`,
+    `type_info`'s operand, and `while`/`until` conditions) are lowered by
+    `lower_operand`, in a block and a `Scope` of their own whose `operand`
+    is set; the caller places the statements right before the value's use
+    (a value read after a context-shadowing block is first stored in a
+    temporary declared before it). Popping the scope moves its variables
+    into the enclosing scope's `scoped_out`, so `ident` reports a later use
+    with `report_scoped_out` (E0201 naming the macro and the operand,
+    hygiene marks respected). `lower_defer` asks `defer_in_operand`, which
+    reports a `defer` whose scope is an operand's (E0406, at the call that
+    generated it) and keeps it out of the exit stack; its body is still
+    checked. For `while v = …` the operand scope wraps `lower_if_bind`, so
+    the body sees the names.
   - Budgets: depth comes from the call span's virtual file (parent depth +
     1, at most 64); at most 65,536 expansions per build; each E0903 is
     reported once (per macro for depth). A macro whose reachable functions
@@ -826,6 +841,14 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   nested calls (#72; it was E0323 on each branch). Where the call's value
   is used, E0323 (or E0301) on a branch says that the last line gives the
   call's value, and the help calls the macro as a statement.
+- A macro call in an operand that may not run (the right side of `&&` or
+  `||`, the value of `||=` or `&&=`), never runs (`type_info`'s operand) or
+  runs on each test (a `while` or `until` condition) runs its code with the
+  operand (#70). The names it declares are the operand's: a use after it
+  is E0201 with a note naming the macro and the operand, where the C
+  compiler rejected an undeclared variable. A `defer` there is the new
+  E0406 at the call, where it ran at the end of the block even when the
+  operand didn't.
 - A C compiler without C23 (one that rejects `-std=c23`, like gcc 13 or
   clang 17, or lacks `<stdckdint.h>` or `#embed`) is E0702 "the C compiler
   `cc` doesn't support C23", with the first line of its `--version`, the

@@ -263,11 +263,15 @@ impl<'a> Checker<'a> {
         let opt_ty = l.ty;
         let inner = self.optional_inner(opt_ty).unwrap_or(opt_ty);
         let l = if l.is_pure() { l } else { self.spill(l) };
-        self.begin_block();
-        let r = self.expr(rhs, Some(inner));
-        let result_ty = if r.ty == opt_ty { opt_ty } else { inner };
-        let r = self.coerce(r, result_ty, rhs.span);
-        let stmts = self.end_block().stmts;
+        // The default runs only when the left side is nil.
+        let kind = super::macros::OperandKind::Logical { or: true };
+        let operand = super::macros::Operand { kind, span: rhs.span };
+        let mut result_ty = inner;
+        let (stmts, r) = self.lower_operand(operand, |this| {
+            let r = this.expr(rhs, Some(inner));
+            result_ty = if r.ty == opt_ty { opt_ty } else { inner };
+            this.coerce(r, result_ty, rhs.span)
+        });
         let some = self.is_some(l.clone());
         let got = if result_ty == opt_ty { l.clone() } else { self.opt_get(l.clone()) };
         if stmts.is_empty() && r.is_pure() {

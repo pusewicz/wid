@@ -1,0 +1,169 @@
+error[E0201]: undefined name `aa`
+  --> tests/ui/macro_operand_scope.wid:36:22
+   |
+28 |   a = false && decl(:aa)
+   |                      -- `decl` declares `aa` here, but only for the right side of `&&`
+...
+36 |   p a, b, c, d.name, aa, bb, cc, dd, ee
+   |                      ^^ not found in this scope
+   = note: the code a macro generates in the right side of `&&` runs only when the left side is true, so the names it declares are visible only there
+help: to use `aa` here, call `decl` as a statement of its own before this line, so its code always runs
+   = see `wid explain E0201`
+
+error[E0201]: undefined name `bb`
+  --> tests/ui/macro_operand_scope.wid:36:26
+   |
+29 |   b = true || decl(:bb)
+   |                     -- `decl` declares `bb` here, but only for the right side of `||`
+...
+36 |   p a, b, c, d.name, aa, bb, cc, dd, ee
+   |                          ^^ not found in this scope
+   = note: the code a macro generates in the right side of `||` runs only when the left side is false or nil, so the names it declares are visible only there
+help: to use `bb` here, call `decl` as a statement of its own before this line, so its code always runs
+   = see `wid explain E0201`
+
+error[E0201]: undefined name `cc`
+  --> tests/ui/macro_operand_scope.wid:36:30
+   |
+31 |   c ||= decl(:cc)
+   |               -- `decl` declares `cc` here, but only for the value of `||=`
+...
+36 |   p a, b, c, d.name, aa, bb, cc, dd, ee
+   |                              ^^ not found in this scope
+   = note: the code a macro generates in the value of `||=` runs only when the target is false or nil, so the names it declares are visible only there
+help: to use `cc` here, call `decl` as a statement of its own before this line, so its code always runs
+   = see `wid explain E0201`
+
+error[E0201]: undefined name `dd`
+  --> tests/ui/macro_operand_scope.wid:36:34
+   |
+32 |   d = type_info(decl(:dd))
+   |                       -- `decl` declares `dd` here, but only for `type_info`'s operand
+...
+36 |   p a, b, c, d.name, aa, bb, cc, dd, ee
+   |                                  ^^ not found in this scope
+   = note: the code a macro generates in `type_info`'s operand is checked but never runs, so the names it declares are visible only there
+help: to use `dd` here, call `decl` as a statement of its own before this line, so its code always runs
+   = see `wid explain E0201`
+
+error[E0201]: undefined name `ee`
+  --> tests/ui/macro_operand_scope.wid:36:38
+   |
+33 |   while decl(:ee)
+   |               -- `decl` declares `ee` here, but only for a `while` condition
+...
+36 |   p a, b, c, d.name, aa, bb, cc, dd, ee
+   |                                      ^^ not found in this scope
+   = note: the code a macro generates in a `while` condition runs again on each test of the loop, so the names it declares are visible only there
+help: to use `ee` here, call `decl` as a statement of its own before this line, so its code always runs
+   = see `wid explain E0201`
+
+error[E0406]: the code `deferred` generates in the right side of `&&` has a `defer`
+  --> tests/ui/macro_operand_scope.wid:38:16
+   |
+38 |   e = false && deferred(true)
+   |                ^^^^^^^^^^^^^^ `deferred` expands here, in the right side of `&&`
+  ::: tests/ui/macro_operand_scope.wid:15:5
+   |
+15 |     defer puts("deferred ran")
+   |     -------------------------- this `defer` would wait for the end of the block around it
+   = note: a `defer` runs when its block ends, but the right side of `&&` runs only when the left side is true, so the end of the block around it can't tell whether the `defer` was reached
+help: call `deferred` in a branch of an `if` instead, whose end runs the `defer`; or, if its code may always run, as a statement of its own before this line (`v = deferred(…)`), and use `v` here
+   = see `wid explain E0406`
+
+error[E0406]: the code `deferred` generates in the right side of `||` has a `defer`
+  --> tests/ui/macro_operand_scope.wid:39:15
+   |
+39 |   f = true || deferred(true)
+   |               ^^^^^^^^^^^^^^ `deferred` expands here, in the right side of `||`
+  ::: tests/ui/macro_operand_scope.wid:15:5
+   |
+15 |     defer puts("deferred ran")
+   |     -------------------------- this `defer` would wait for the end of the block around it
+   = note: a `defer` runs when its block ends, but the right side of `||` runs only when the left side is false or nil, so the end of the block around it can't tell whether the `defer` was reached
+help: call `deferred` in a branch of an `if` instead, whose end runs the `defer`; or, if its code may always run, as a statement of its own before this line (`v = deferred(…)`), and use `v` here
+   = see `wid explain E0406`
+
+error[E0406]: the code `deferred` generates in the value of `||=` has a `defer`
+  --> tests/ui/macro_operand_scope.wid:41:9
+   |
+41 |   g ||= deferred(true)
+   |         ^^^^^^^^^^^^^^ `deferred` expands here, in the value of `||=`
+  ::: tests/ui/macro_operand_scope.wid:15:5
+   |
+15 |     defer puts("deferred ran")
+   |     -------------------------- this `defer` would wait for the end of the block around it
+   = note: a `defer` runs when its block ends, but the value of `||=` runs only when the target is false or nil, so the end of the block around it can't tell whether the `defer` was reached
+help: call `deferred` in a branch of an `if` instead, whose end runs the `defer`; or, if its code may always run, as a statement of its own before this line (`v = deferred(…)`), and use `v` here
+   = see `wid explain E0406`
+
+error[E0406]: the code `deferred` generates in the value of `&&=` has a `defer`
+  --> tests/ui/macro_operand_scope.wid:42:9
+   |
+42 |   g &&= deferred(true)
+   |         ^^^^^^^^^^^^^^ `deferred` expands here, in the value of `&&=`
+  ::: tests/ui/macro_operand_scope.wid:15:5
+   |
+15 |     defer puts("deferred ran")
+   |     -------------------------- this `defer` would wait for the end of the block around it
+   = note: a `defer` runs when its block ends, but the value of `&&=` runs only when the target is true or holds a value, so the end of the block around it can't tell whether the `defer` was reached
+help: call `deferred` in a branch of an `if` instead, whose end runs the `defer`; or, if its code may always run, as a statement of its own before this line (`v = deferred(…)`), and use `v` here
+   = see `wid explain E0406`
+
+error[E0406]: the code `deferred` generates in `type_info`'s operand has a `defer`
+  --> tests/ui/macro_operand_scope.wid:43:17
+   |
+43 |   h = type_info(deferred(true))
+   |                 ^^^^^^^^^^^^^^ `deferred` expands here, in `type_info`'s operand
+  ::: tests/ui/macro_operand_scope.wid:15:5
+   |
+15 |     defer puts("deferred ran")
+   |     -------------------------- this `defer` would wait for the end of the block around it
+   = note: a `defer` runs when its block ends, but `type_info`'s operand is checked and never runs, so nothing would reach the `defer`
+help: call `deferred` as a statement of its own (`v = deferred(…)`), where the `defer` runs when the block ends, and pass `v` to `type_info`
+   = see `wid explain E0406`
+
+error[E0406]: the code `deferred` generates in a `while` condition has a `defer`
+  --> tests/ui/macro_operand_scope.wid:44:9
+   |
+44 |   while deferred(false)
+   |         ^^^^^^^^^^^^^^^ `deferred` expands here, in a `while` condition
+  ::: tests/ui/macro_operand_scope.wid:15:5
+   |
+15 |     defer puts("deferred ran")
+   |     -------------------------- this `defer` would wait for the end of the block around it
+   = note: a `defer` runs when its block ends, but a `while` condition runs again on each test of the loop and has no block of its own
+help: test the condition in the loop's body instead: in a `loop`, `break unless deferred(…)` runs the `defer` when each pass ends
+   = see `wid explain E0406`
+
+error[E0406]: the code `deferred` generates in an `until` condition has a `defer`
+  --> tests/ui/macro_operand_scope.wid:46:9
+   |
+46 |   until deferred(true)
+   |         ^^^^^^^^^^^^^^ `deferred` expands here, in an `until` condition
+  ::: tests/ui/macro_operand_scope.wid:15:5
+   |
+15 |     defer puts("deferred ran")
+   |     -------------------------- this `defer` would wait for the end of the block around it
+   = note: a `defer` runs when its block ends, but an `until` condition runs again on each test of the loop and has no block of its own
+help: test the condition in the loop's body instead: in a `loop`, `break if deferred(…)` runs the `defer` when each pass ends
+   = see `wid explain E0406`
+
+error[E0406]: the code `deferred` generates in the right side of `&&` has a `defer`
+  --> tests/ui/macro_operand_scope.wid:23:5
+   |
+23 |     deferred(true)
+   |     ^^^^^^^^^^^^^^ `deferred` expands here, in the right side of `&&`
+  ::: tests/ui/macro_operand_scope.wid:15:5
+   |
+15 |     defer puts("deferred ran")
+   |     -------------------------- this `defer` would wait for the end of the block around it
+  ::: tests/ui/macro_operand_scope.wid:48:16
+   |
+48 |   i = false && outer
+   |                ----- `outer` expands here
+   = note: a `defer` runs when its block ends, but the right side of `&&` runs only when the left side is true, so the end of the block around it can't tell whether the `defer` was reached
+help: call `deferred` in a branch of an `if` instead, whose end runs the `defer`; or, if its code may always run, as a statement of its own before this line (`v = deferred(…)`), and use `v` here
+   = see `wid explain E0406`
+
+error: could not compile due to 13 errors

@@ -5,6 +5,7 @@ use wid_syntax::ast::{self, ExprKind as E, StmtKind as S};
 
 use super::Checker;
 use super::body::{Dest, Exit};
+use super::macros::{Operand, OperandKind};
 use super::runtime::holds_parse_error;
 use crate::ir::{self, ExprKind, Stmt};
 use crate::types::TyKind;
@@ -119,7 +120,7 @@ impl<'a> Checker<'a> {
                 let is_break = matches!(stmt.kind, S::Break(_));
                 self.lower_loop_exit(is_break, value.as_ref(), stmt.span);
             }
-            S::Defer(body) => self.lower_defer(body),
+            S::Defer(body) => self.lower_defer(body, stmt.span),
             S::Guard { names, value, err, else_body } => self.lower_guard(names, value, *err, else_body, stmt.span),
             S::Item(item) => {
                 self.report(
@@ -400,12 +401,16 @@ impl<'a> Checker<'a> {
         if Self::is_context_place(&place) {
             self.shadow_context();
         }
-        self.begin_block();
-        let v = self.expr_coerced(value, ty);
-        let known_some = matches!(v.kind, ExprKind::OptSome(_));
-        self.emit(Stmt::Assign { target: place, value: v });
-        let then = self.end_block();
-        self.emit(Stmt::If { cond, then, else_: ir::Block::default() });
+        // The value runs only when the assignment happens.
+        let operand = Operand { kind: OperandKind::LogicalAssign { or: is_or }, span: value.span };
+        let mut known_some = false;
+        let (stmts, _) = self.lower_operand(operand, |this| {
+            let v = this.expr_coerced(value, ty);
+            known_some = matches!(v.kind, ExprKind::OptSome(_));
+            this.emit(Stmt::Assign { target: place, value: v });
+            ir::Expr::new(ExprKind::Zero, this.types.void())
+        });
+        self.emit(Stmt::If { cond, then: ir::Block { stmts }, else_: ir::Block::default() });
         if let Some(l) = local {
             self.invalidate(l);
             if optional && is_or && known_some {
@@ -515,7 +520,10 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn lower_defer(&mut self, body: &[ast::Stmt]) {
+    fn lower_defer(&mut self, body: &[ast::Stmt], span: Span) {
+        // In an operand's code no block ends when the `defer` should run;
+        // its body is still checked.
+        let rejected = self.defer_in_operand(span);
         self.begin_block();
         self.body.exits.push(Exit::Defer);
         self.push_scope();
@@ -523,7 +531,9 @@ impl<'a> Checker<'a> {
         self.pop_scope();
         self.body.exits.pop();
         let block = self.end_block();
-        self.add_defer(block);
+        if !rejected {
+            self.add_defer(block);
+        }
     }
 
     /// Lowers `if`/`unless` delivering each branch's value to `dest`.
@@ -964,18 +974,37 @@ impl<'a> Checker<'a> {
         self.invalidate_assigned(body);
         let break_label = self.new_label();
         let continue_label = self.new_label();
+        // The condition runs on each test, and the names its macro calls
+        // declare are its own.
+        let span = match cond {
+            ast::Cond::Expr(e) => e.span,
+            ast::Cond::Bind { value, .. } => value.span,
+        };
+        let operand = Operand { kind: OperandKind::Condition { until }, span };
         if let ast::Cond::Bind { name, value } = cond {
             self.begin_block();
             self.body.exits.push(Exit::Loop { break_label, continue_label });
-            let (c, then) = self.lower_if_bind(*name, value, body, false, Dest::Discard);
+            // The body sees the names, as it sees the bound one.
+            let mut then = ir::Block::default();
+            let (stmts, c) = self.lower_operand(operand, |this| {
+                let (c, block) = this.lower_if_bind(*name, value, body, false, Dest::Discard);
+                then = block;
+                c
+            });
             self.body.exits.pop();
+            for s in stmts {
+                self.emit(s);
+            }
             self.emit(Stmt::If { cond: c, then, else_: ir::Block { stmts: vec![Stmt::Goto(break_label)] } });
             let block = self.end_block();
             self.emit(Stmt::Loop { body: block, continue_label, break_label });
             return;
         }
         self.begin_block();
-        let c = self.cond_expr(cond, !until);
+        let (stmts, c) = self.lower_operand(operand, |this| this.cond_expr(cond, !until));
+        for s in stmts {
+            self.emit(s);
+        }
         let skip = matches!(c.kind, ExprKind::Bool(false));
         if !skip {
             self.emit(Stmt::If {

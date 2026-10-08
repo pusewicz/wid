@@ -619,6 +619,19 @@ end
       `comptime if` there needs no value in its branches. Where the call's
       value is used (`x = say("hi")`), the last line gives it, so each such
       branch must end with one (E0323 otherwise).
+    - In an operand that doesn't run once with the statement around it,
+      the generated statements run with the operand: the right side of
+      `&&` or `||` and the value of `||=` or `&&=` may not run,
+      `type_info`'s operand never runs (it is only checked), and a
+      `while` or `until` condition runs on each test of the loop. The
+      names they declare are visible only in that operand, as in a branch
+      of a ternary or a postfix `if`; using one after it is E0201, with a
+      note that the expansion in the operand declared it. In
+      `while v = …`, the loop's body sees them too, as it sees `v`.
+    - A `defer` that such an operand's code generates is an error at the
+      call (E0406): a `defer` runs when its block ends, and no block ends
+      when the operand's code does. Call the macro in a branch of an `if`,
+      or as a statement of its own, instead.
   - **Names** in the quote's own code that aren't locals bound in the
     quote or members of `self` (reached with `@name` or an implicit-self
     call), that is methods, types, constants and packages, resolve where

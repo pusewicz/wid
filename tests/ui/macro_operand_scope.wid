@@ -1,0 +1,50 @@
+# The statements a macro generates in an operand that may not run, never
+# runs or runs on each test belong to that operand: the names they declare
+# are visible only there (E0201 after it), and a `defer` there has no block
+# to run at the end of (E0406).
+
+macro def decl(n: Symbol) -> Code
+  quote do
+    #{n} = 5
+    #{n} > 0
+  end
+end
+
+macro def deferred(x: Bool) -> Code
+  quote do
+    defer puts("deferred ran")
+    #{x}
+  end
+end
+
+# A `defer` that a nested call generates is reported at that call.
+macro def outer -> Code
+  quote do
+    deferred(true)
+  end
+end
+
+def main
+  a = false && decl(:aa)
+  b = true || decl(:bb)
+  c = false
+  c ||= decl(:cc)
+  d = type_info(decl(:dd))
+  while decl(:ee)
+    break
+  end
+  p a, b, c, d.name, aa, bb, cc, dd, ee
+
+  e = false && deferred(true)
+  f = true || deferred(true)
+  g = false
+  g ||= deferred(true)
+  g &&= deferred(true)
+  h = type_info(deferred(true))
+  while deferred(false)
+  end
+  until deferred(true)
+  end
+  i = false && outer
+  p e, f, g, h.name, i
+end

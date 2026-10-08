@@ -6,7 +6,7 @@ use wid_syntax::ast::{self, ExprKind as E};
 
 use super::body::Dest;
 use super::items::{ConstValue, conversion_help};
-use super::macros::MacroCall;
+use super::macros::{MacroCall, Operand, OperandKind};
 use super::{Checker, DeclKind};
 use crate::ir::{self, Builtin, ExprKind, Stmt};
 use crate::types::{TyId, TyKind};
@@ -466,7 +466,7 @@ impl<'a> Checker<'a> {
         {
             var.read = true;
         }
-        if !self.declared_by_failed_macro(true, true) {
+        if !self.declared_by_failed_macro(true, true) && !self.report_scoped_out(name, span) {
             match self.self_field(name) {
                 Some((owner, _)) => self.undefined_field_name(name, span, owner, None),
                 None => self.undefined_near(name, span, &candidates, &own, "name"),
@@ -1328,10 +1328,11 @@ impl<'a> Checker<'a> {
             return self.or_default(l, rhs, span);
         }
         let l = self.truthy(l, lhs.span);
-        self.begin_block();
-        let r = self.expr(rhs, Some(bool_ty));
-        let r = self.truthy(r, rhs.span);
-        let stmts = self.end_block().stmts;
+        let operand = Operand { kind: OperandKind::Logical { or: op == ast::BinOp::Or }, span: rhs.span };
+        let (stmts, r) = self.lower_operand(operand, |this| {
+            let r = this.expr(rhs, Some(bool_ty));
+            this.truthy(r, rhs.span)
+        });
         let ir_op = if op == ast::BinOp::And { ir::BinaryOp::And } else { ir::BinaryOp::Or };
         if stmts.is_empty() {
             return ir::Expr::new(ExprKind::Binary { op: ir_op, lhs: Box::new(l), rhs: Box::new(r), span }, bool_ty);
