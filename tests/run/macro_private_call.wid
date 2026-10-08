@@ -1,0 +1,20 @@
+# `private` before a declaration-level macro call in a `quote` makes what
+# the call generates private, as it does written at package level. `foo`
+# is private to this package, so `main` can still call it.
+macro def helpers(name: Symbol) -> Code
+  quote do
+    def #{name} -> Int = 1
+  end
+end
+
+macro def wrap -> Code
+  quote do
+    private helpers :foo
+  end
+end
+
+wrap
+
+def main
+  p foo
+end

@@ -1,0 +1,18 @@
+macro def helpers(name: Symbol) -> Code
+  quote do
+    def #{name} -> Int = 1
+  end
+end
+
+# A `quote` can make a declaration-level macro call private, as code
+# written at package level can: what the call generates is private.
+macro def wrap -> Code
+  quote do
+    private helpers :hidden
+    helpers :shown
+  end
+end
+
+wrap
+
+def both -> Int = hidden + shown

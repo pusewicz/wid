@@ -557,10 +557,11 @@ end
       `overload`, `include`, a constant (`NAME = v` or `NAME: T = v`, also
       with a spliced name, `#{name} = v`), a field (`name: T`), a
       `comptime if` whose branches follow the same rule, or a macro call (a
-      call or a name alone on a line), which expands in turn and counts
-      against the budgets. Any other statement is E0108. Code spliced
-      among declarations inside a `quote`, like `#{fields}` in a `struct`
-      body, follows the same rule (E0911 for a statement).
+      call or a name alone on a line, maybe after `private`), which
+      expands in turn and counts against the budgets. Any other statement
+      is E0108. Code spliced among declarations inside a `quote`, like
+      `#{fields}` in a `struct` body, follows the same rule (E0911 for a
+      statement).
     - What a call may generate follows what may be written where it is
       (types only at package level, fields only in a struct, and so on),
       with two exceptions (E0913). A macro can't add fields to the struct
@@ -570,7 +571,10 @@ end
       or `cimport`, because packages are loaded before any macro runs; the
       quote's own code uses the imports of the macro's file instead.
     - `private` before a call (`private helpers :hp`) makes every
-      declaration it generates private. A call takes no attributes (E0328).
+      declaration it generates private, whether the call is written among
+      declarations or is a line of a `quote` (where `private` before a
+      call or a name alone makes the line such a call). A call takes no
+      attributes (E0328).
     - In a generic struct's body a macro runs once, for the declaration,
       not once per instance. The methods it generates are checked for each
       instance, like written ones, and `Self` in them is the instance.

@@ -114,6 +114,15 @@ enum ListStep {
     Open,
 }
 
+/// The parser's state before a speculative parse (see [`Parser::mark`]).
+struct Mark {
+    pos: usize,
+    diags: usize,
+    last_error_at: Option<u32>,
+    splices: usize,
+    inserted: usize,
+}
+
 /// A block that was closed by an `end`, kept to diagnose misplaced `end`s.
 struct Closed {
     keyword: &'static str,
@@ -1041,6 +1050,9 @@ impl<'a> Parser<'a> {
         if self.at_kw(K::Comptime) && self.nth(1).kind == T::Kw(K::If) {
             return self.parse_quote_comptime_if();
         }
+        if let Some(stmt) = self.quote_private_call() {
+            return stmt;
+        }
         self.parse_stmt()
     }
 
@@ -1350,24 +1362,14 @@ impl<'a> Parser<'a> {
                 let save = self.pos;
                 let splices = self.splice_mark();
                 let expr = self.parse_expr_cmd();
-                let is_statement =
-                    self.at(T::Eq) || is_assign_op(self.kind()) || self.at(T::Comma) || self.at_modifier();
-                // A call, a name, or a package member (`lib.make`) may be a
-                // macro call.
-                let qualified = matches!(
-                    &expr.kind,
-                    ExprKind::Member { recv, safe: false, .. } if matches!(recv.kind, ExprKind::Ident(_))
-                );
-                match &expr.kind {
-                    ExprKind::Call(_) | ExprKind::Ident(_) if !is_statement => ItemKind::MacroCall(Box::new(expr)),
-                    _ if qualified && !is_statement => ItemKind::MacroCall(Box::new(expr)),
-                    _ => {
-                        self.pos = save;
-                        self.rewind_splices(splices);
-                        let stmt = self.parse_stmt();
-                        self.top_level_statement(stmt.span, ctx);
-                        ItemKind::Error
-                    }
+                if is_macro_call(&expr) && !self.at_statement_rest() {
+                    ItemKind::MacroCall(Box::new(expr))
+                } else {
+                    self.pos = save;
+                    self.rewind_splices(splices);
+                    let stmt = self.parse_stmt();
+                    self.top_level_statement(stmt.span, ctx);
+                    ItemKind::Error
                 }
             }
             _ => {
@@ -1426,6 +1428,39 @@ impl<'a> Parser<'a> {
         }
         let span = start.to(self.prev_span());
         Some(Item { kind, span, attrs, private, doc })
+    }
+
+    /// Whether what follows a line's first expression makes the line a
+    /// statement: an assignment (`=`, `+=`), a list of values or targets
+    /// (`,`) or a modifier (`if`, `unless`).
+    fn at_statement_rest(&self) -> bool {
+        self.at(T::Eq) || is_assign_op(self.kind()) || self.at(T::Comma) || self.at_modifier()
+    }
+
+    /// `private` before a macro call on a line of a `quote` (`private
+    /// helpers :hp`), as at package level: a declaration-level call whose
+    /// declarations are all private. Anything else after `private` (a
+    /// local, an assignment) is left to the statement parser, which
+    /// reports `private` there.
+    fn quote_private_call(&mut self) -> Option<Stmt> {
+        if !self.at_kw(K::Private)
+            || self.nth(1).kind != T::Ident
+            || (self.nth(2).kind == T::Colon && !self.nth(2).space_before)
+        {
+            return None;
+        }
+        let start = self.peek().span;
+        let mark = self.mark();
+        self.bump();
+        let expr = self.parse_expr_cmd();
+        if !is_macro_call(&expr) || self.at_statement_rest() || !self.clean_since(&mark) {
+            self.rewind(mark);
+            return None;
+        }
+        let span = start.to(self.prev_span());
+        let item =
+            Item { kind: ItemKind::MacroCall(Box::new(expr)), span, attrs: Vec::new(), private: true, doc: None };
+        Some(Stmt { kind: StmtKind::Item(Box::new(item)), span, attrs: Vec::new() })
     }
 
     /// `private` and the space after it, consumed, for a fix that removes
@@ -2721,25 +2756,42 @@ impl<'a> Parser<'a> {
     /// Tries to parse a type at the current position without reporting
     /// errors; restores the position on failure.
     fn try_parse_type(&mut self) -> Option<TypeExpr> {
-        let saved_pos = self.pos;
-        let saved_diags = self.diags.len();
-        let saved_last = self.last_error_at;
-        let saved_splices = self.splice_mark();
-        let saved_inserted = self.inserted.len();
+        let mark = self.mark();
         let ty = self.parse_type();
-        if self.diags.len() > saved_diags || self.inserted.len() > saved_inserted || matches!(ty.kind, TypeKind::Error)
-        {
-            self.pos = saved_pos;
-            self.diags.truncate(saved_diags);
-            self.last_error_at = saved_last;
-            self.rewind_splices(saved_splices);
-            while self.inserted.len() > saved_inserted {
-                let at = self.inserted.pop().expect("invariant: more line ends than saved");
-                self.tokens.remove(at);
-            }
+        if !self.clean_since(&mark) || matches!(ty.kind, TypeKind::Error) {
+            self.rewind(mark);
             return None;
         }
         Some(ty)
+    }
+
+    /// The parser's state here, for a speculative parse to go back to.
+    fn mark(&self) -> Mark {
+        Mark {
+            pos: self.pos,
+            diags: self.diags.len(),
+            last_error_at: self.last_error_at,
+            splices: self.splice_mark(),
+            inserted: self.inserted.len(),
+        }
+    }
+
+    /// Whether nothing was reported, and no line end put back, since `mark`.
+    fn clean_since(&self, mark: &Mark) -> bool {
+        self.diags.len() == mark.diags && self.inserted.len() == mark.inserted
+    }
+
+    /// Goes back to `mark`, dropping what was reported and the line ends
+    /// put back since.
+    fn rewind(&mut self, mark: Mark) {
+        self.pos = mark.pos;
+        self.diags.truncate(mark.diags);
+        self.last_error_at = mark.last_error_at;
+        self.rewind_splices(mark.splices);
+        while self.inserted.len() > mark.inserted {
+            let at = self.inserted.pop().expect("invariant: more line ends than marked");
+            self.tokens.remove(at);
+        }
     }
 
     // ----- statements ----------------------------------------------------
@@ -4594,6 +4646,17 @@ fn starts_declaration(kind: TokenKind) -> bool {
     )
 }
 
+/// Whether a line among declarations that parsed as `expr` (with no `=`,
+/// `,` or modifier after it) is a macro call: a call, a name, or a
+/// package member (`lib.make`).
+fn is_macro_call(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Call(_) | ExprKind::Ident(_) => true,
+        ExprKind::Member { recv, safe: false, .. } => matches!(recv.kind, ExprKind::Ident(_)),
+        _ => false,
+    }
+}
+
 /// For a declaration-level line that declares no name `private` could
 /// hide, what it is and why `private` means nothing there.
 fn nameless_item(kind: &ItemKind) -> Option<(&'static str, &'static str)> {
@@ -5069,6 +5132,29 @@ end
         assert_eq!(fixed, "macro def m -> Code\n  quote do\n    hp: Int\n  end\nend\n");
         // A declaration in a method keeps it; nesting is the checker's error.
         assert!(codes_of("def main\n  private def f -> Int = 1\nend\n").is_empty());
+    }
+
+    #[test]
+    fn private_macro_calls_in_a_quote() {
+        // `private` before a call or a name in a `quote` is a private
+        // declaration-level macro call, as at package level; before an
+        // assignment it is still reported, once.
+        let src = "macro def m -> Code\n  quote do\n    private helpers :foo\n    private lib.make\n    \
+                   private setup\n    private x = 1\n    private y, z = 1, 2\n    helpers :bar\n  end\nend\n";
+        let (file, diags) = parse_file(FileId(0), src);
+        let messages: Vec<_> = diags.iter().map(|d| d.message.as_str()).collect();
+        assert_eq!(messages, ["`private` applies only to declarations"; 2]);
+        let ItemKind::Def(def) = &file.items[0].kind else { panic!() };
+        let FnBody::Block(body) = &def.body else { panic!() };
+        let Some(Stmt { kind: StmtKind::Expr(Expr { kind: ExprKind::Quote(quote), .. }), .. }) = body.first() else {
+            panic!()
+        };
+        let private_calls: Vec<bool> = quote
+            .body
+            .iter()
+            .map(|s| matches!(&s.kind, StmtKind::Item(i) if i.private && matches!(i.kind, ItemKind::MacroCall(_))))
+            .collect();
+        assert_eq!(private_calls, [true, true, true, false, false, false]);
     }
 
     #[test]

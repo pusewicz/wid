@@ -488,6 +488,14 @@ runs the stages; `wid_cli` is the `wid` binary.
   `int?` or `int` (#41). The checker recognizes the C type name, with the
   `?` the lexer glues to a lowercase name taken off, where the member
   lookup fails; predicates like `xs.empty?` are untouched.
+- `private` before a call or a name alone on a line of a `quote`
+  (`private helpers :foo`) is a private declaration-level macro call, as
+  written at package level: the parser makes the line that item, so what
+  the call generates is private (#42; it was E0105 "`private` applies
+  only to declarations"). Before an assignment or a local it is still that
+  E0105. Expanded in a method, the line is a nested declaration. The
+  speculative parses share a `Mark` that also takes back put-back line
+  ends.
 - Any type written where a `Type` is expected, or in `comptime` code, is a
   `Type` value: constructors (`name_of([]Int)`, `name_of(Int?)`,
   `name_of(^Node)`, `name_of((proc(Int) -> Int)?)`), generic instances and
