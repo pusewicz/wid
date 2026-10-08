@@ -9,6 +9,7 @@ mod decl_macros;
 mod expr;
 mod flow;
 mod generics;
+mod index;
 mod inline;
 mod items;
 mod macros;
@@ -292,6 +293,21 @@ pub(crate) struct Checker<'a> {
 
 /// Checks a whole program and lowers it to IR.
 pub fn check_program(input: &ProgramInput) -> (ir::Program, Diagnostics) {
+    let (program, diags, _) = run(input, false);
+    (program, diags)
+}
+
+/// Checks a whole program like [`check_program`], and also builds the
+/// index of every declaration it collected, for tools such as `wid doc`.
+/// The index is complete even when the program has errors: it holds every
+/// declaration the checker could collect.
+pub fn check_program_indexed(input: &ProgramInput) -> (ir::Program, Diagnostics, crate::index::Index) {
+    let (program, diags, index) = run(input, true);
+    (program, diags, index.unwrap_or_default())
+}
+
+/// Checks a program, building the index when `index` is set.
+fn run(input: &ProgramInput, index: bool) -> (ir::Program, Diagnostics, Option<crate::index::Index>) {
     let generated = typed_arena::Arena::new();
     let mut checker = Checker {
         input,
@@ -375,6 +391,7 @@ pub fn check_program(input: &ProgramInput) -> (ir::Program, Diagnostics) {
             .map(|(i, _)| FnId(i as u32)),
     );
     checker.check_comptime_only(&roots);
+    let index = index.then(|| checker.build_index());
     let expansions = checker.expansion_files();
     let functions = checker.functions.into_iter().map(|f| f.expect("every queued function is lowered")).collect();
     let mut c = cimport::CBuild::default();
@@ -403,7 +420,7 @@ pub fn check_program(input: &ProgramInput) -> (ir::Program, Diagnostics) {
     };
     let mut diags = checker.diags;
     diags.sort();
-    (program, diags)
+    (program, diags, index)
 }
 
 impl<'a> Checker<'a> {
@@ -433,7 +450,7 @@ impl<'a> Checker<'a> {
     fn find_main(&mut self) -> Option<FnId> {
         let name = Name::new("main");
         let Some(&decl) = self.pkg_scopes[0].get(&name) else {
-            if !self.input.options.testing {
+            if !self.input.options.testing && !self.input.options.library {
                 let first = self.input.packages[0].files.first();
                 let span = first.map(|f| Span::new(f.ast.file, 0, 0)).unwrap_or_default();
                 let mut diag = Diagnostic::error(codes::NO_MAIN, "this package has no `def main`")

@@ -156,12 +156,13 @@ impl Renderer<'_> {
                 list.push((c_name.clone(), location.clone()));
             }
         }
-        for (wid, c_name, _, index) in claims {
+        for (wid, c_name, location, index) in claims {
             let list = &owners[&wid];
             if list.len() > 1 || self.taken.contains_key(&wid) {
                 continue;
             }
             self.taken.insert(wid.clone(), c_name);
+            self.binding.locations.insert(wid.clone(), location);
             if let Some(index) = index {
                 self.names.insert(index, wid);
             }

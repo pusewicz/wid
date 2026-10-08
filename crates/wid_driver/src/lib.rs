@@ -2,6 +2,7 @@
 //! code generation, and invokes the host C compiler.
 
 mod cimport;
+pub mod doc;
 mod loader;
 mod test;
 
@@ -95,6 +96,8 @@ pub struct Options {
     pub testing: bool,
     /// Check every function of every package.
     pub check_all_packages: bool,
+    /// Check the package as a library, without requiring `def main`.
+    pub library: bool,
     /// Override for the Wid root directory.
     pub wid_root: Option<PathBuf>,
 }
@@ -119,6 +122,7 @@ impl Options {
             sanitize: Vec::new(),
             testing: false,
             check_all_packages: false,
+            library: false,
             wid_root: None,
         }
     }
@@ -133,6 +137,7 @@ impl Options {
             debug: self.debug,
             testing: self.testing,
             check_all_packages: self.check_all_packages,
+            library: self.library,
         }
     }
 }

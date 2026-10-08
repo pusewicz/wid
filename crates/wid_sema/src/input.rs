@@ -69,6 +69,9 @@ pub struct CBinding {
     pub record_names: HashMap<String, String>,
     /// Declarations that could not be imported, for error messages.
     pub skipped: Vec<CSkipped>,
+    /// Where C declares each imported declaration, by Wid name, as
+    /// `file:line` (for `wid doc`).
+    pub locations: HashMap<String, String>,
     /// Functions declared anywhere in the header's translation unit (the C
     /// library included) that an `@[extern]` method of the program names, by
     /// C name.
@@ -169,6 +172,9 @@ pub struct CheckOptions {
     pub testing: bool,
     /// Check every function in non-root packages too.
     pub check_all_packages: bool,
+    /// Check the root package as a library, for tools like `wid doc`:
+    /// `def main` is optional.
+    pub library: bool,
 }
 
 /// Operating systems `-target:` accepts, as the prelude's `Os` names them.
@@ -218,6 +224,7 @@ impl Default for CheckOptions {
             debug: false,
             testing: false,
             check_all_packages: false,
+            library: false,
         }
     }
 }

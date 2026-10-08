@@ -107,6 +107,12 @@ codes! {
     LOOP_CONTROL_OUTSIDE_LOOP = "E0404", "`break` or `next` outside a loop";
     EXIT_IN_DEFER = "E0405", "control flow leaves a `defer`";
 
+    // Tools: `wid doc`.
+    DOC_UNKNOWN_PACKAGE = "E0601", "package to document not found";
+    DOC_UNKNOWN_SYMBOL = "E0602", "symbol to document not found";
+    DOC_NO_MEMBER = "E0603", "no member with that name to document";
+    DOC_PRIVATE = "E0604", "symbol to document is private";
+
     // Packages and C interop.
     CIMPORT_FAILED = "E0701", "C header import failed";
     C_COMPILER_FAILED = "E0702", "C compiler failed";
