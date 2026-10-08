@@ -114,8 +114,9 @@ everything into the prompt:
   write into `SPEC.md`;
 - known hazards: hot files, ordering problems, platform differences;
 - the gate: `cargo fmt --check`,
-  `cargo clippy --all-targets -- -D warnings`, and `cargo test` with every C
-  compiler available;
+  `cargo clippy --all-targets -- -D warnings`,
+  `cargo +1.88 check --workspace --all-targets --locked` (the MSRV CI
+  checks), and `cargo test` with every C compiler available;
 - for anything that touches diagnostics, a run of `ruby scripts/errdocs_drift.rb`;
 - the turn limit. Agents stop after about 200 turns, so say: "If you run low on
   turns, stop on a green build and list exactly what remains." Then resume the
@@ -133,9 +134,8 @@ Agents should commit in their worktree. You push and open the PR.
 - **The error-page drift check.** `scripts/errdocs_drift.rb` checks that every
   `docs/errors/EXXXX.md` example still produces the output it shows, and that
   its fixed program passes `check`. Pages it can't reproduce carry
-  `<!-- drift: skip REASON -->`. E0902 fails until macros land. After an
-  intended change, run `scripts/errdocs_update.rb`, review the diff, then
-  rerun the drift check.
+  `<!-- drift: skip REASON -->`. After an intended change, run
+  `scripts/errdocs_update.rb`, review the diff, then rerun the drift check.
 - **Probing.** `scripts/probe.rb` runs one-off programs through the compiler.
   Use it to look for bad diagnostics. A dedicated "bug hunt" agent that only
   probes and files GitHub issues found 46 real bugs last time, and is worth
