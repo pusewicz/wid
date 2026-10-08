@@ -303,8 +303,9 @@ end
   builds a value and **never allocates**. It takes fields by position (in
   declaration order) or by name; missing fields use their declared default or
   zero. A default is checked against its field's type whether or not a `new`
-  takes it, and runs at each `new` that does. `new` is reserved for this, so name custom constructors otherwise
-  (`def self.create`). There is no struct literal syntax: a type followed
+  takes it, and runs at each `new` that does. `new` is reserved for this, so
+  name custom constructors otherwise (`def self.create`). There is no struct
+  literal syntax: a type followed
   directly by `{` (`Vec2{x: 1.0}`, `geo.Vec2{1.0, 2.0}`, `Pool(Int, 4){}`,
   as in Odin, Go, Rust or Zig) is E0113, with a fix that writes the `new`
   call, and is read as that call. A constant never takes a block, so a `{`
