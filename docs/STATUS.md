@@ -1343,6 +1343,11 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   `mob`: health, regen"); `Type.name` keeps the type's own members. An
   `overload` naming an unknown method suggests only methods next to it
   that aren't sets and that the set doesn't list already.
+- `@heal = 1` (`+=`, `||=`, several targets) when `heal` is a method
+  (#94): `place` lowers an `@name` target through `ivar_target`, and E0204
+  says a method can't be assigned to and `@name` only names fields, with
+  no fix that drops the `@` (which would declare a variable); a field of
+  a similar name, its own or promoted, is suggested instead.
 
 ## Next
 

@@ -536,7 +536,16 @@ impl<'a> Checker<'a> {
             }
             E::Paren(inner) => self.place(inner),
             E::IVar(_) | E::Member { .. } | E::SelfRef | E::Deref(_) | E::Index { .. } => {
-                let v = self.expr(target, None);
+                let v = match target.kind {
+                    // `@name = v` on a method says it can't be assigned.
+                    E::IVar(name) => {
+                        let site = self.enter_site(target.span);
+                        let v = self.ivar_target(name, target.span);
+                        self.leave_site(site);
+                        v
+                    }
+                    _ => self.expr(target, None),
+                };
                 if let ExprKind::Index { base, .. } = &v.kind
                     && matches!(self.types.kind(self.types.base(base.ty)), TyKind::String)
                 {

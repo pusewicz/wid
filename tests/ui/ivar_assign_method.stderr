@@ -1,0 +1,60 @@
+error[E0204]: cannot assign to `@heal`: `heal` is a method
+  --> tests/ui/ivar_assign_method.wid:17:5
+   |
+17 |     @heal = 1
+   |     ^^^^^ `P` has no field `heal`
+   = note: `@name` names a field of `self`, and a method can't be assigned to
+help: did you mean the field `@heat`?
+   |     @heat = 1
+   = see `wid explain E0204`
+
+error[E0204]: cannot assign to `@heal`: `heal` is a method
+  --> tests/ui/ivar_assign_method.wid:18:5
+   |
+18 |     @heal += 1
+   |     ^^^^^ `P` has no field `heal`
+   = note: `@name` names a field of `self`, and a method can't be assigned to
+help: did you mean the field `@heat`?
+   |     @heat += 1
+   = see `wid explain E0204`
+
+error[E0204]: cannot assign to `@heal`: `heal` is a method
+  --> tests/ui/ivar_assign_method.wid:19:5
+   |
+19 |     @heal ||= 1
+   |     ^^^^^ `P` has no field `heal`
+   = note: `@name` names a field of `self`, and a method can't be assigned to
+help: did you mean the field `@heat`?
+   |     @heat ||= 1
+   = see `wid explain E0204`
+
+error[E0204]: cannot assign to `@plain`: `plain` is a method
+  --> tests/ui/ivar_assign_method.wid:20:5
+   |
+20 |     @plain = 2
+   |     ^^^^^^ `P` has no field `plain`
+   = note: `@name` names a field of `self`, and a method can't be assigned to
+   = see `wid explain E0204`
+
+error[E0204]: cannot assign to `@recover`: `recover` is a method
+  --> tests/ui/ivar_assign_method.wid:21:5
+   |
+21 |     @recover = 3
+   |     ^^^^^^^^ `P` has no field `recover`
+   = note: `recover` is a method of `Mob`, promoted into `P` by `using`
+   = note: `@name` names a field of `self`, and a method can't be assigned to
+help: did you mean the field `@recovery`?
+   |     @recovery = 3
+   = see `wid explain E0204`
+
+error[E0204]: cannot assign to `@heal`: `heal` is a method
+  --> tests/ui/ivar_assign_method.wid:23:5
+   |
+23 |     @heal, x = 1, 2
+   |     ^^^^^ `P` has no field `heal`
+   = note: `@name` names a field of `self`, and a method can't be assigned to
+help: did you mean the field `@heat`?
+   |     @heat, x = 1, 2
+   = see `wid explain E0204`
+
+error: could not compile due to 6 errors

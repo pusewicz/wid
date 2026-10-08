@@ -46,6 +46,8 @@ pub(crate) struct IvarUse<'s> {
     /// the name's own span is at the macro call that gave it, so fixes to
     /// the code go here.
     site: Option<Span>,
+    /// Whether `@name` is the target of an assignment (`=`, `+=`, `||=`, …).
+    assigned: bool,
 }
 
 /// How a member that wasn't found was asked for, which decides the names
@@ -139,6 +141,17 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// Lowers `@name` as the target of an assignment. A method of that
+    /// name is reported as one that can't be assigned to, with no fix that
+    /// calls it.
+    pub fn ivar_target(&mut self, name: Name, span: Span) -> ir::Expr {
+        let written = IvarUse { assigned: true, ..IvarUse::default() };
+        match self.ivar_owner(name, span, written) {
+            Some((owner, index, ty)) => ir::Expr::new(ExprKind::Field { base: Box::new(owner), index }, ty),
+            None => ir::Expr::new(ExprKind::Zero, self.types.unknown()),
+        }
+    }
+
     /// Lowers `@name(args)`, which calls the proc that a field of `self`
     /// holds, like `self.name(args)`: `name` is the `@name` at the start.
     /// Another field is E0305, as `self.hp()` is, and a method is called
@@ -156,8 +169,8 @@ impl<'a> Checker<'a> {
         let long = written.is_empty() || written.contains('\n') || written.chars().count() > 24;
         let called = if long { "(…)" } else { written };
         let empty_call = (args.is_empty() && block.is_none()).then_some(span);
-        let Some((owner, index, fty)) = self.ivar_owner(name.name, name.span, IvarUse { called, empty_call, site })
-        else {
+        let written = IvarUse { called, empty_call, site, assigned: false };
+        let Some((owner, index, fty)) = self.ivar_owner(name.name, name.span, written) else {
             for a in args {
                 self.expr(&a.value, None);
             }
@@ -262,14 +275,20 @@ impl<'a> Checker<'a> {
     /// the fix that calls it by name and keeps the argument list `@name(…)`
     /// was written with. The method may be the type's own, mixed in with
     /// `include`, added by `extend` or promoted by `using`; a note says
-    /// which when it isn't the type's own. Returns false when `name` is no
+    /// which when it isn't the type's own. Assigned to, `@name` gets no
+    /// such fix (`name = 1` would declare a variable), and a field of a
+    /// similar name is suggested instead. Returns false when `name` is no
     /// method that a call in a method of `ty` reaches.
     fn ivar_names_method(&mut self, ty: TyId, name: Name, span: Span, written: IvarUse) -> bool {
         let Some(origin) = self.self_method_origin(ty, name) else { return false };
         let shown = self.types.display(ty);
+        let message = if written.assigned {
+            format!("cannot assign to `@{name}`: `{name}` is a method")
+        } else {
+            format!("`@{name}` reads a field, but `{name}` is a method")
+        };
         let mut diag =
-            Diagnostic::error(codes::NO_SUCH_MEMBER, format!("`@{name}` reads a field, but `{name}` is a method"))
-                .primary(span, format!("`{shown}` has no field `{name}`"));
+            Diagnostic::error(codes::NO_SUCH_MEMBER, message).primary(span, format!("`{shown}` has no field `{name}`"));
         match origin {
             MethodOrigin::Own => {}
             MethodOrigin::Included(module) => {
@@ -283,6 +302,25 @@ impl<'a> Checker<'a> {
                 let owner = self.types.display(owner);
                 diag = diag.note(format!("`{name}` is a method of `{owner}`, promoted into `{shown}` by `using`"));
             }
+        }
+        if written.assigned {
+            diag = diag.note("`@name` names a field of `self`, and a method can't be assigned to");
+            let mut fields: Vec<&'static str> = match *self.types.kind(ty) {
+                TyKind::Struct(id) => self.types.struct_info(id).fields.iter().map(|f| f.name.as_str()).collect(),
+                _ => Vec::new(),
+            };
+            let promoted = self.promoted_names(ty, false, &fields);
+            fields.extend(promoted.into_iter().flat_map(|(_, names)| names));
+            if let Some(best) = did_you_mean(name.as_str(), fields.iter().copied()) {
+                diag = diag.suggest_replace(
+                    format!("did you mean the field `@{best}`?"),
+                    span,
+                    format!("@{best}"),
+                    Applicability::MaybeIncorrect,
+                );
+            }
+            self.report(diag);
+            return true;
         }
         // A variable of the same name would take a bare `name`. A spliced
         // name keeps its splice, `#{name}(1)`, and the fix changes what
