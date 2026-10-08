@@ -48,9 +48,10 @@ error[E0203]: `s` is assigned but never read
 17 |   for s in ships
    |       ^ this value is never used
 18 |     s.hp = 1
-   |     ---- this writes into `s` but doesn't read it
-help: if this is intentional, prefix the name with an underscore
-   |   for _s in ships
+   |     ---- this changes a copy of an element of `ships`, not the element
+   = note: `for s in …` binds a copy of each element
+help: to change the elements of `ships`, bind them by reference with `&`
+   |   for &s in ships
    = see `wid explain E0203`
 
 error: could not compile due to 5 errors

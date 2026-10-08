@@ -239,7 +239,24 @@ impl<'a> Checker<'a> {
             let text = var.name.as_str();
             let mut diag = Diagnostic::error(codes::UNUSED_VARIABLE, format!("`{text}` is assigned but never read"))
                 .primary(var.span, "this value is never used");
-            if let Some(&write) = self.write_only.get(&var.span) {
+            let write = self.write_only.get(&var.span).copied();
+            if let Some(write) = write
+                && let Some(&iter) = self.loop_copies.get(&var.span)
+            {
+                // `for s in ships` with `s.hp = 1`: the write changes a copy.
+                let coll = self.source_text(iter);
+                self.report(
+                    diag.secondary(write, format!("this changes a copy of an element of `{coll}`, not the element"))
+                        .note(format!("`for {text} in …` binds a copy of each element"))
+                        .suggest(
+                            format!("to change the elements of `{coll}`, bind them by reference with `&`"),
+                            vec![Edit { span: var.span.shrink_to_start(), replacement: "&".into() }],
+                            Applicability::MaybeIncorrect,
+                        ),
+                );
+                continue;
+            }
+            if let Some(write) = write {
                 diag = diag.secondary(write, format!("this writes into `{text}` but doesn't read it"));
             }
             self.report(diag.suggest(

@@ -949,6 +949,12 @@ impl<'a> Checker<'a> {
                 return;
             }
         }
+        if !by_ref
+            && is_place(&iter)
+            && let Some(b) = f.bindings.first()
+        {
+            self.loop_copies.insert(b.name.span, f.iter.span);
+        }
         let base = if is_place(&iter) {
             let ptr = self.address_of(iter);
             let ptr = self.spill(ptr);

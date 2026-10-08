@@ -898,7 +898,11 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   (`ir::Expr::written_local`) and nothing else in the target names it;
   codegen counts reads the same way, so parameters and `_` locals written
   that way get `[[maybe_unused]]`. `tests/run/write_only_locals` covers the
-  shapes that stay valid under gcc's strict flags.
+  shapes that stay valid under gcc's strict flags. A by-value `for` binding
+  over a place that is only written that way (`for s in ships` with
+  `s.hp = 1`) is told the write changes a copy, with a `MaybeIncorrect` fix
+  that binds by reference (`for &s in ships`, `Checker::loop_copies`)
+  instead of the `_s` one.
 - Writing into a `type_info` table is E0309 "`type_info` tables are
   read-only" (#81); it built and silently wrote to the `static const`
   tables (STATUS said it faulted). `Checker::place`, the assignments to

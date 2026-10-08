@@ -241,6 +241,11 @@ pub(crate) struct Checker<'a> {
     /// `write_place`), by its declaration's span: the first such write,
     /// which an unused-variable error points at.
     pub write_only: HashMap<Span, Span>,
+    /// The by-value bindings of `for` loops over a place (`s` in
+    /// `for s in ships`), by the binding's span: the loop's collection,
+    /// which an unused-variable error for a binding only written through
+    /// suggests binding by reference (`for &s in ships`).
+    pub loop_copies: HashMap<Span, Span>,
     pub errors: Vec<Name>,
     pub body: Body,
     pub source_texts: HashMap<FileId, std::sync::Arc<str>>,
@@ -354,6 +359,7 @@ fn run(input: &ProgramInput, index: bool) -> (ir::Program, Diagnostics, Option<c
         shallow: 0,
         size_checks: Vec::new(),
         write_only: HashMap::new(),
+        loop_copies: HashMap::new(),
         errors: Vec::new(),
         body: Body::default(),
         no_bounds_check: false,
