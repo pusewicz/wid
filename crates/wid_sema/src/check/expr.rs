@@ -192,7 +192,7 @@ impl<'a> Checker<'a> {
                 ir::Expr::new(ExprKind::Zero, self.types.unknown())
             }
             E::Comptime(body) => self.comptime_expr(body, expected, e.span),
-            E::ComptimeIf(if_expr) => self.comptime_if_value(if_expr, expected),
+            E::ComptimeIf(if_expr) => self.comptime_if_value(if_expr, expected, e.span),
             E::Quote(quote) => self.lower_quote(quote, e.span),
             // Expansion replaces every splice of a `quote`; the parser
             // reports one anywhere else.

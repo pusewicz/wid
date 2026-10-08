@@ -84,7 +84,7 @@ impl<'a> Checker<'a> {
         match &stmt.kind {
             S::Expr(e) => match &e.kind {
                 E::If(if_expr) => self.lower_if(if_expr, dest, e.span),
-                E::ComptimeIf(if_expr) => self.lower_comptime_if(if_expr, dest),
+                E::ComptimeIf(if_expr) => self.lower_comptime_if(if_expr, dest, e.span),
                 E::Case(case) => self.lower_case(case, dest, e.span),
                 E::Paren(inner) if matches!(inner.kind, E::If(_)) => {
                     let wrapped = ast::Stmt { kind: S::Expr((**inner).clone()), span: stmt.span, attrs: Vec::new() };
@@ -179,7 +179,7 @@ impl<'a> Checker<'a> {
     fn lower_expr_stmt(&mut self, e: &ast::Expr) {
         match &e.kind {
             E::If(if_expr) => self.lower_if(if_expr, Dest::Discard, e.span),
-            E::ComptimeIf(if_expr) => self.lower_comptime_if(if_expr, Dest::Discard),
+            E::ComptimeIf(if_expr) => self.lower_comptime_if(if_expr, Dest::Discard, e.span),
             E::Case(case) => self.lower_case(case, Dest::Discard, e.span),
             E::While { cond, body, until } => self.lower_while(cond, body, *until),
             E::Loop(body) => self.lower_loop(body),
@@ -1097,7 +1097,7 @@ impl<'a> Checker<'a> {
 
     /// The error for an `if` or `case` used as a value without an `else`,
     /// with a fix that inserts one before the closing `end`.
-    fn missing_else(&self, code: wid_diagnostics::Code, span: Span, what: &str, label: &str) -> Diagnostic {
+    pub(super) fn missing_else(&self, code: wid_diagnostics::Code, span: Span, what: &str, label: &str) -> Diagnostic {
         let diag =
             Diagnostic::error(code, format!("this {what} is used as a value but has no `else`")).primary(span, label);
         let text = self.source_text(span);

@@ -500,7 +500,9 @@ end
   the others are only parsed, so a branch may `cimport` a header or call an API
   that exists on one platform only. Declaration-level conditions run once every
   declaration outside them is known, in source order. A struct's fields can't
-  be conditional.
+  be conditional. Used as a value (`n = comptime if … end`), it needs an
+  `else`, like `if`, even when a branch is chosen: on another target none
+  may be (E0324).
 - `OS` and `ARCH` hold the target, as members of the prelude enums `Os`
   (`:darwin`, `:linux`, `:windows`, `:freebsd`, …) and `Arch` (`:arm64`,
   `:amd64`, `:wasm32`, …). `-target:os_arch` sets them (default: the host).

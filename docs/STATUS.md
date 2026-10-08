@@ -1082,6 +1082,11 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   E0201 where it is declared (#89); it was also E0314 where `X` was first
   used as a type. `decl_as_type` resolves a constant whose value isn't a
   type first, and a constant that failed is the unknown type, silently.
+- A `comptime if` used as a value without an `else` is E0324 with the
+  `if`'s fix, whether or not a branch is chosen, `elsif` chains included
+  (#97); it emitted `void` variables the C compiler rejected (E0702).
+  `comptime do … end` whose last statement is a `comptime if` without
+  `else` discards it, like an `if`.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
