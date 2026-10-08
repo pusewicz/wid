@@ -427,6 +427,12 @@ runs the stages; `wid_cli` is the `wid` binary.
   a statement in a method or a `quote` (which cascaded; the line is now
   parsed as if `private` weren't there, so `private x = 1` declares `x`).
   Keywords in parser messages are in backticks (`found `end``).
+- An unclosed `(` in an expression (`X = (1 + 2`, `E = ([]`) is one E0105
+  at the end of its line, with a machine-applicable fix that adds the `)`,
+  when the expression is complete and the next line isn't its `)`; the
+  next line is parsed on its own, so a `def main` after it is no longer
+  lost (#33). A `(` that ends its line before a declaration or an `end`
+  (`X = (`) is one "expected an expression" there.
 - Any type written where a `Type` is expected, or in `comptime` code, is a
   `Type` value: constructors (`name_of([]Int)`, `name_of(Int?)`,
   `name_of(^Node)`, `name_of((proc(Int) -> Int)?)`), generic instances and

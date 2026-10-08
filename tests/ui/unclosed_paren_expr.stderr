@@ -1,0 +1,30 @@
+error[E0105]: expected `)`, found end of line
+ --> tests/ui/unclosed_paren_expr.wid:5:11
+  |
+5 | X = (1 + 2
+  |           ^ expected `)`
+  |     - this `(` is never closed
+help: close it
+  | X = (1 + 2)
+  = see `wid explain E0105`
+
+error[E0105]: expected an expression, found end of line
+ --> tests/ui/unclosed_paren_expr.wid:6:6
+  |
+6 | Y = (
+  |      ^ expected an expression
+  |     - this `(` is never closed
+help: write the value after the `(`, and close it on the same line
+  = see `wid explain E0105`
+
+error[E0105]: expected `)`, found end of line
+ --> tests/ui/unclosed_paren_expr.wid:8:13
+  |
+8 |   z = (X * 3
+  |             ^ expected `)`
+  |       - this `(` is never closed
+help: close it
+  |   z = (X * 3)
+  = see `wid explain E0105`
+
+error: could not compile due to 3 errors

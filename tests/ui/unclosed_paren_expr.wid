@@ -1,0 +1,13 @@
+# An unclosed `(` in an expression ends at the end of its line when the
+# next line doesn't continue the expression: one error there, with a fix
+# that closes it, and the next line is parsed on its own, so `main` is
+# still found. A `(` with nothing after it is one error too.
+X = (1 + 2
+Y = (
+def main
+  z = (X * 3
+  p X, z
+  w = (z +
+    1)
+  p w
+end

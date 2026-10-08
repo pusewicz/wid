@@ -488,6 +488,31 @@ impl<'a> Parser<'a> {
         );
     }
 
+    /// Reports a line that ends with the `(` at `open` (just consumed) when
+    /// the next line starts a declaration or the `end` of a block, as in
+    /// `X = (` followed by `def main`: the expression is missing. The lexer
+    /// joined the lines, because a newline after `(` continues the line;
+    /// the line end is restored, so the next line is parsed on its own.
+    fn empty_paren_line(&mut self, open: Span) -> bool {
+        let restored = self.at(T::Newline);
+        let next = self.tokens[self.pos..].iter().find(|t| t.kind != T::Newline).copied();
+        let Some(next) = next else { return false };
+        if !starts_declaration(next.kind) || self.line_of(next.span.start) == self.line_of(open.start) {
+            return false;
+        }
+        let at = open.shrink_to_end();
+        self.report(
+            Diagnostic::error(codes::UNEXPECTED_TOKEN, "expected an expression, found end of line")
+                .primary(at, "expected an expression")
+                .secondary(open, "this `(` is never closed")
+                .help("write the value after the `(`, and close it on the same line"),
+        );
+        if !restored {
+            self.tokens.insert(self.pos, Token { kind: T::Newline, span: at, space_before: false });
+        }
+        true
+    }
+
     /// Whether what follows the `(`s here can only start a type: `proc`,
     /// `block`, `distinct`, `map[`, `matrix[`, `^`, `@[`, `$T`, `[]T`,
     /// `[^]` or `[dynamic]`. Used where no local can have those names.
@@ -3447,13 +3472,28 @@ impl<'a> Parser<'a> {
             }
             T::LParen => {
                 self.bump();
+                if self.empty_paren_line(span) {
+                    return Expr { kind: ExprKind::Error, span };
+                }
                 let saved = self.no_do;
                 self.no_do = false;
                 self.skip_newlines();
                 let inner = self.parse_expr_cmd();
-                self.skip_newlines();
                 self.no_do = saved;
-                self.expect(T::RParen, "`)`");
+                // The expression is complete: newlines may only lead to its
+                // `)`. Anything else on the next line (a `def`, another
+                // statement) is not part of it, so the `(` was left open at
+                // the end of this line.
+                let (last, before) = (self.prev_span(), self.pos);
+                self.skip_newlines();
+                if !self.eat(T::RParen) {
+                    if self.pos > before || self.at(T::Eof) {
+                        self.pos = before;
+                        self.unclosed_paren(span, last);
+                    } else {
+                        self.error_expected("`)`");
+                    }
+                }
                 Expr { kind: ExprKind::Paren(Box::new(inner)), span: span.to(self.prev_span()) }
             }
             T::Arrow => self.parse_lambda(),
@@ -4162,6 +4202,28 @@ fn is_keyword_member(kind: TokenKind) -> bool {
     matches!(kind, T::Kw(Keyword::Struct | Keyword::Enum | Keyword::Union))
 }
 
+/// Whether a line starting with this token can't continue an expression
+/// from the line before: a declaration, or the `end` of a block.
+fn starts_declaration(kind: TokenKind) -> bool {
+    matches!(
+        kind,
+        T::Kw(
+            K::Def
+                | K::Macro
+                | K::Struct
+                | K::Enum
+                | K::Union
+                | K::Module
+                | K::Extend
+                | K::Overload
+                | K::Import
+                | K::Cimport
+                | K::Private
+                | K::End
+        )
+    )
+}
+
 /// For a declaration-level line that declares no name `private` could
 /// hide, what it is and why `private` means nothing there.
 fn nameless_item(kind: &ItemKind) -> Option<(&'static str, &'static str)> {
@@ -4637,6 +4699,41 @@ end
         assert_eq!(fixed, "macro def m -> Code\n  quote do\n    hp: Int\n  end\nend\n");
         // A declaration in a method keeps it; nesting is the checker's error.
         assert!(codes_of("def main\n  private def f -> Int = 1\nend\n").is_empty());
+    }
+
+    #[test]
+    fn unclosed_paren_ends_at_the_line_end() {
+        // The `)` goes at the end of the line, and `main` is still parsed.
+        for value in ["(1 + 2", "([]"] {
+            let src = format!("X = {value}\ndef main\n  p X\nend\n");
+            let (messages, fixed) = fix_all(&src);
+            assert_eq!(messages, ["expected `)`, found end of line"], "{value}");
+            assert_eq!(fixed, src.replacen('\n', ")\n", 1));
+            assert_eq!(parse_file(FileId(0), &src).0.items.len(), 2);
+        }
+        let src = "def main\n  x = (1 + 2\n  p x\nend\n";
+        let (messages, fixed) = fix_all(src);
+        assert_eq!(messages, ["expected `)`, found end of line"]);
+        assert_eq!(fixed, "def main\n  x = (1 + 2)\n  p x\nend\n");
+        // At the end of the file.
+        assert_eq!(fix_all("X = (1 + 2").1, "X = (1 + 2)");
+        // A `(` with nothing after it, before a declaration or an `end`.
+        for src in ["X = (\ndef main\nend\n", "def main\n  x = (\nend\n"] {
+            let (file, diags) = parse_file(FileId(0), src);
+            let messages: Vec<_> = diags.iter().map(|d| d.message.as_str()).collect();
+            assert_eq!(messages, ["expected an expression, found end of line"], "{src:?}");
+            assert!(matches!(file.items.last().map(|i| &i.kind), Some(ItemKind::Def(_))));
+        }
+        // Newlines inside parentheses still work where the expression goes
+        // on, and before the `)`.
+        parse_ok(
+            "def main\n  a = (1 +\n    2)\n  b = (\n    3 * 4\n  )\n  c = (a > 1 ?\n    5 : 6)\n\
+             \x20 d = ([1, 2]\n    .size)\n  e = foo(a,\n    b)\n  f = (xs.map do |x|\n    x\n  end)\n\
+             \x20 g = (if a > 1\n    1\n  else\n    2\n  end)\n  h = ((a +\n    b))\nend\n",
+        );
+        // A token that doesn't continue it on the same line is reported there.
+        let (messages, _) = fix_all("def main\n  x = (1 + 2 3)\nend\n");
+        assert_eq!(messages, ["expected `)`, found `3`"]);
     }
 
     #[test]
