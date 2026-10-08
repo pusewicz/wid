@@ -22,6 +22,9 @@ Syntax highlighting and filetype plugins need to be on (`syntax on` and
 `filetype plugin indent on`). The indent rules read the syntax groups, so they
 need highlighting too.
 
+For diagnostics, hover, go to definition and formatting in Neovim, use the
+language server, `wid lsp`; `docs/editors.md` shows how to set it up.
+
 ## Options
 
 - `let g:wid_highlight_operators = 1` highlights operators.

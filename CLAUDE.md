@@ -38,8 +38,9 @@ what is implemented, which conventions are fixed and what comes next.
   data, and the item model and JSON that `wid doc` shares;
   `wid_driver::analyze` loads and checks for it, `wid_driver::query` runs
   the command
-- `crates/wid_lsp` (planned): LSP server, sharing the query engine with
-  `wid query`
+- `crates/wid_lsp`: `wid lsp`, the LSP server over stdio, checking with
+  `wid_driver::analyze` (open buffers as an overlay) and answering from
+  `wid_query`
 - `runtime/wid_runtime.h`: the C23 runtime, embedded into the compiler
 - `core/`, `vendor/`: Wid collections. Each `core` package has `_test.wid`
   files that the suite runs with `wid test`. `core` code reaches the runtime
