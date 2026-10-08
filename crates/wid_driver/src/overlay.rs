@@ -110,6 +110,10 @@ mod tests {
         let analysis = crate::analyze(&file_opts, &overlay);
         let found: Vec<&str> = analysis.diags.iter().map(|d| d.code.as_str()).collect();
         assert_eq!(found, ["E0201"], "a `-file` target only the overlay holds");
+        let new_dir = dir.join("not_saved_yet");
+        overlay.insert(&new_dir.join("main.wid"), "def main\n  puts 1\nend\n");
+        let analysis = crate::analyze(&crate::Options::new(&new_dir), &overlay);
+        assert!(analysis.diags.is_empty(), "a package only the overlay holds: {:?}", analysis.diags);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -499,10 +499,14 @@ the language server.
   positions with its own line index (LSP's `\r` line breaks included).
   Formatting goes through `wid_driver::fmt::format_text`, the check `wid
   fmt` runs (parse, format, same tree). Checks and request handlers run
-  under `catch_unwind`, so a compiler crash is reported, not fatal.
-  `crates/wid_cli/tests/lsp.rs` drives the built binary over pipes; the
-  framing, positions, URIs, conversions and the server's lifecycle and
-  cancellation have unit tests.
+  under `catch_unwind`, so a compiler crash is reported, not fatal. The
+  server writes its answers itself (a failed write stops it with status
+  1, as a closed stdout means the client is gone) and logs with
+  `wid_lsp::log`, which ignores a closed stderr; `wid help lsp` and its
+  usage errors go through `wid_cli::output`. `crates/wid_cli/tests/lsp.rs`
+  drives the built binary over pipes, `closed_pipe.rs` covers both closed
+  streams, and the framing, positions, URIs, conversions and the server's
+  lifecycle and cancellation have unit tests.
 - Every `core` package opens the file named after it (`core/mem/mem.wid`,
   `core/builtin/builtin.wid`) with its package doc, and every public
   declaration in `core` has a `# ` doc comment directly above it: types,
@@ -1418,7 +1422,9 @@ the language server.
   (`refers_to`), document symbols from `outline`, formatting with
   `wid fmt`'s checks. Positions in UTF-8 when the client offers it, UTF-16
   otherwise. `-collection:`, `-define:` and `-target:` from the command
-  line and `initializationOptions`.
+  line and `initializationOptions`; `-stdio` and `--stdio` are accepted,
+  and other commands' flags are usage errors. A closed stdout stops the
+  server quietly with status 1, and a closed stderr is ignored.
 - Linux and CI (`.github/workflows/ci.yml`, cached with sccache and
   rust-cache): `cargo fmt --check`; clippy and the full `cargo test` on
   Ubuntu 26.04 (clang-22, gcc-15, libclang 22, SDL3) and macOS 26 (Apple
