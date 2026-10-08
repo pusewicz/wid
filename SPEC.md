@@ -74,7 +74,8 @@ end
   (`@[extern("struct Foo"), size(8), align(4)]`, or `opaque` when only C
   knows its fields), a field with a different C name, and a constant C reads
   by name (`@[extern("RED")] RED: Color = ---`). Other declarations take
-  none. Inside a method, `@name` means `self.name`.
+  none. Inside a method, `@name` means `self.name`, and `@name(args)` calls
+  the proc that field holds; methods are called by name.
 - **Smaller syntax rules:**
   - `def self.name` declares a type-level function (`Vec2.zero`).
   - `def -` with no parameters is unary minus.

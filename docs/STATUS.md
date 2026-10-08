@@ -670,6 +670,16 @@ runs the stages; `wid_cli` is the `wid` binary.
   `def self.`) suggests it with a machine-applicable fix: `heall(1)` gets
   `heal(1)` (#54). Ties go to a variable, then a method, then a package
   name, then a field (`Checker::self_names`, `SelfNames`).
+- `@name(args)` calls the proc a field of `self` holds, its own or promoted
+  by `using`, like `self.name(args)` (#55; `@cb()` was E0301 and E0105).
+  The parser reads it as `Callee::IVar` when the `(` follows the name with
+  no space, with a trailing block the way `self.name(args)` takes one;
+  `Checker::ivar_call` lowers it. `@hp()` on another field is E0305 with a
+  fix that drops `()`, as for `self.hp()`; `@heal(1)` on a method is E0204
+  with the fix `heal(1)`; an ambiguous `@id()` gets `@body.id`. An own proc
+  field called by bare name (`on_hit(3)`) gets the fix `@on_hit(3)`
+  instead of `@on_hit.call(3)`, and a call close to a proc field's name
+  suggests `@on_hit`.
 - A C compiler without C23 (one that rejects `-std=c23`, like gcc 13 or
   clang 17, or lacks `<stdckdint.h>` or `#embed`) is E0702 "the C compiler
   `cc` doesn't support C23", with the first line of its `--version`, the

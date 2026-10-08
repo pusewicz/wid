@@ -177,7 +177,7 @@ impl<'a> Checker<'a> {
                 }?;
                 (self.lookup_pkg(pkg, name.name)?, *name)
             }
-            ast::Callee::Method { .. } => return None,
+            ast::Callee::Method { .. } | ast::Callee::IVar(_) => return None,
         };
         let union = match self.decls[decl.0 as usize].kind {
             DeclKind::Struct(s) if !s.generics.is_empty() => false,

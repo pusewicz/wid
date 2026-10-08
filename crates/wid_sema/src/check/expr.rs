@@ -48,18 +48,19 @@ pub(super) const BUILTINS: &[&str] = &[
 
 /// What a name reaches through `self`: a field of the struct `owner` (its
 /// own, or one `using` promotes), or a method.
-enum SelfMember {
+pub(super) enum SelfMember {
     Field { owner: TyId, is_proc: bool },
     Method,
 }
 
 /// A field of `self` called like a method without `@`: the whole call,
-/// whether it passes arguments or a block, and whether the field holds a
-/// proc.
+/// whether it passes arguments, in parentheses or not, or a block, and
+/// whether the field holds a proc.
 #[derive(Clone, Copy)]
 struct FieldCall {
     span: Span,
     args: bool,
+    parens: bool,
     block: bool,
     is_proc: bool,
 }
@@ -474,11 +475,11 @@ impl<'a> Checker<'a> {
     }
 
     /// What a name without a receiver may have meant here, for "did you
-    /// mean" hints: the methods a call without a receiver reaches, and,
-    /// unless it is a call (`calls`), the fields `@name` reads.
+    /// mean" hints: the methods a call without a receiver reaches, and the
+    /// fields `@name` reads; for a call (`calls`), only the fields that hold
+    /// a proc, which `@name(…)` calls.
     pub(super) fn self_names(&mut self, calls: bool) -> super::SelfNames {
-        let fields = if calls { Vec::new() } else { self.self_field_names() };
-        super::SelfNames { methods: self.self_method_names(), fields }
+        super::SelfNames { methods: self.self_method_names(), fields: self.self_field_names(calls) }
     }
 
     /// The names of the methods a call without a receiver reaches in a
@@ -563,8 +564,9 @@ impl<'a> Checker<'a> {
     }
 
     /// The names of the fields that `@name` reads in an instance method:
-    /// the fields of `self`, then those each `using` field promotes.
-    fn self_field_names(&self) -> Vec<&'static str> {
+    /// the fields of `self`, then those each `using` field promotes; with
+    /// `procs`, only those that hold a proc.
+    fn self_field_names(&self, procs: bool) -> Vec<&'static str> {
         let (Some(self_ty), Some(_)) = (self.frame().self_ty, self.frame().self_local) else { return Vec::new() };
         let (mut names, mut types) = (Vec::new(), vec![self_ty]);
         let mut next = 0;
@@ -572,7 +574,9 @@ impl<'a> Checker<'a> {
             next += 1;
             let TyKind::Struct(id) = *self.types.kind(ty) else { continue };
             for f in &self.types.struct_info(id).fields {
-                names.push(f.name.as_str());
+                if !procs || matches!(self.types.kind(f.ty), TyKind::Proc(_)) {
+                    names.push(f.name.as_str());
+                }
                 let used = match *self.types.kind(f.ty) {
                     TyKind::Pointer(t) => t,
                     _ => f.ty,
@@ -587,7 +591,7 @@ impl<'a> Checker<'a> {
 
     /// Finds what `name` reaches in `ty`, as `self.name` does: the struct's
     /// own members first, then each `using` field in order.
-    fn self_member(&mut self, ty: TyId, name: Name, visited: &mut Vec<TyId>) -> Option<SelfMember> {
+    pub(super) fn self_member(&mut self, ty: TyId, name: Name, visited: &mut Vec<TyId>) -> Option<SelfMember> {
         let ty = match *self.types.kind(ty) {
             TyKind::Pointer(t) => t,
             _ => ty,
@@ -627,14 +631,19 @@ impl<'a> Checker<'a> {
         let read = format!("read the field with `@{name}`, which means `self.{name}`");
         let diag = match call {
             None => diag.suggest_replace(read, span, format!("@{name}"), Applicability::MachineApplicable),
-            Some(FieldCall { is_proc: true, block: false, .. }) => diag.suggest_replace(
-                format!("call the proc the field holds with `@{name}.call`"),
-                span,
-                format!("@{name}.call"),
-                Applicability::MachineApplicable,
-            ),
+            // `on_hit(3)` is `@on_hit(3)`, and `on_hit 3` too.
+            Some(FieldCall { is_proc: true, block: false, args, parens, span: call_span }) => {
+                let (at, text) = if parens || !args {
+                    (span, format!("@{name}"))
+                } else {
+                    let written = self.source_text(Span { start: span.end, ..call_span });
+                    (call_span, format!("@{name}({})", written.trim()))
+                };
+                let help = format!("call the proc the field holds with `@{name}(…)`");
+                diag.suggest_replace(help, at, text, Applicability::MachineApplicable)
+            }
             Some(FieldCall { is_proc: true, .. }) => {
-                diag.help(format!("call the proc the field holds with `@{name}.call(…)`, without a block"))
+                diag.help(format!("call the proc the field holds with `@{name}(…)`, without a block"))
             }
             // `hp()` reads the field: `@hp`.
             Some(FieldCall { span, args: false, block: false, .. }) => {
@@ -1525,8 +1534,8 @@ impl<'a> Checker<'a> {
                 }
                 if let Some((owner, is_proc)) = self.self_field(name.name) {
                     if !self.declared_by_failed_macro(false, true) {
-                        let (args, block) = (!call.args.is_empty(), block.is_some());
-                        let field_call = FieldCall { span, args, block, is_proc };
+                        let (args, parens, block) = (!call.args.is_empty(), call.parens, block.is_some());
+                        let field_call = FieldCall { span, args, parens, block, is_proc };
                         self.undefined_field_name(name.name, name.span, owner, Some(field_call));
                     }
                     for arg in &call.args {
@@ -1543,6 +1552,7 @@ impl<'a> Checker<'a> {
             ast::Callee::Method { recv, name, safe } => {
                 self.member_call(recv, *name, Some(&call.args), block, *safe, span, expected)
             }
+            ast::Callee::IVar(name) => self.ivar_call(*name, &call.args, block, span),
         }
     }
 

@@ -355,7 +355,7 @@ pub fn walk_expr<V: VisitMut + ?Sized>(v: &mut V, expr: &mut Expr) {
         }
         ExprKind::Call(call) => {
             match &mut call.callee {
-                Callee::Name(name) => v.visit_ident(name),
+                Callee::Name(name) | Callee::IVar(name) => v.visit_ident(name),
                 Callee::Method { recv, name, .. } => {
                     v.visit_expr(recv);
                     v.visit_ident(name);

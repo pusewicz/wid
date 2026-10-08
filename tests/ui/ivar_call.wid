@@ -1,0 +1,35 @@
+struct Body
+  id: Int = 1
+  def push(n: Int) -> Int = n
+end
+
+struct Sprite
+  id: Int = 2
+end
+
+struct Player
+  using body: Body
+  using sprite: Sprite
+  hp: Int = 100
+  on_hit: proc(n: Int) -> Int
+
+  def heal(n: Int) -> Int = n
+  def health -> Int = @hp()
+  def scaled -> Int = @hp(2)
+  def healed -> Int = @heal(1)
+  def pushed -> Int = @push(3)
+  def hit -> Int = @on_hitt(3)
+  def blocked -> Int = @on_hit(3) do
+    1
+  end
+  def either -> Int = @id()
+  def command -> Int = on_hit 3
+  def near -> Int = on_hitt(3)
+end
+
+def loose -> Int = @on_hit(3)
+
+def main
+  pl = Player.new
+  p pl.health + pl.scaled + pl.healed + pl.pushed + pl.hit + pl.blocked + pl.either + pl.command + pl.near + loose
+end

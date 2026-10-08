@@ -4173,7 +4173,13 @@ impl<'a> Parser<'a> {
             T::Arrow => self.parse_lambda(),
             T::IVar => {
                 self.bump();
-                simple(ExprKind::IVar(Name::new(&self.text_of(span)[1..])))
+                let name = Ident { name: Name::new(&self.text_of(span)[1..]), span };
+                // `@name(args)` calls the proc the field holds, like
+                // `self.name(args)`.
+                if self.at(T::LParen) && !self.peek().space_before {
+                    return self.parse_call_with_parens(Callee::IVar(name), span);
+                }
+                simple(ExprKind::IVar(name.name))
             }
             T::Const => {
                 self.bump();
@@ -5001,7 +5007,7 @@ fn names_type(e: &Expr) -> bool {
         ExprKind::Call(call) if call.block.is_none() => match &call.callee {
             Callee::Name(name) => upper(name),
             Callee::Method { recv, name, safe: false } => package(recv) && upper(name),
-            Callee::Method { .. } => false,
+            Callee::Method { .. } | Callee::IVar(_) => false,
         },
         _ => false,
     }

@@ -1,0 +1,44 @@
+struct Clock
+  on_tick: proc() -> Int
+  scale: proc(Int) -> Int
+end
+
+struct Timer
+  using clock: Clock
+  on_done: proc() -> Int
+  twice: proc(Int) -> Int
+  label: String = "timer"
+
+  def done -> Int = @on_done()
+  def doubled(n: Int) -> Int = @twice(n)
+  def nested -> Int = @twice(@twice(3)) + 1
+  def ticked -> Int = @on_tick()
+  def scaled -> Int = @scale(5)
+  def report
+    puts "#{@label}: #{@on_done()} #{@twice(21)} #{@on_tick()} #{@scale(2)}"
+  end
+end
+
+struct Shared
+  using clock: ^Clock
+
+  def ticks -> Int = @on_tick() + @scale(1)
+end
+
+def one -> Int = 1
+def seven -> Int = 7
+def double(n: Int) -> Int = n * 2
+def tenfold(n: Int) -> Int = n * 10
+
+def main
+  clock = Clock.new(method(:seven), method(:tenfold))
+  t = Timer.new(clock, method(:one), method(:double))
+  puts t.done
+  puts t.doubled(4)
+  puts t.nested
+  puts t.ticked
+  puts t.scaled
+  t.report
+  s = Shared.new(&clock)
+  puts s.ticks
+end

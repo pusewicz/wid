@@ -64,7 +64,7 @@ fn item_call(e: &ast::Expr) -> Option<ItemCall<'_>> {
                 let pkg = Some(Ident { name: *p, span: *span });
                 Some(ItemCall { pkg, name: *name, args: &c.args, block: c.block.as_ref() })
             }
-            ast::Callee::Method { .. } => None,
+            ast::Callee::Method { .. } | ast::Callee::IVar(_) => None,
         },
         E::Member { recv, name, safe: false } => match recv.kind {
             E::Ident(p) => {
