@@ -33,6 +33,21 @@ enum MethodOrigin {
     Promoted(TyId),
 }
 
+/// How `@name` or `@name(…)` was written, for the fixes of its errors.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct IvarUse<'s> {
+    /// The argument list `@name(…)` was written with, which the fix that
+    /// calls a method keeps; empty for `@name`.
+    called: &'s str,
+    /// The whole call when it passes nothing (`@hp()`), which the fix for
+    /// an ambiguous field reads (`@body.hp`).
+    empty_call: Option<Span>,
+    /// For a name spliced in by `@#{name}(…)`, the splice in the `quote`:
+    /// the name's own span is at the macro call that gave it, so fixes to
+    /// the code go here.
+    site: Option<Span>,
+}
+
 /// Method names people reach for that Wid spells differently.
 const SYNONYMS: &[(&str, &str)] = &[
     ("length", "size"),
@@ -97,7 +112,7 @@ impl<'a> Checker<'a> {
 
     /// Lowers `@name`.
     pub fn ivar(&mut self, name: Name, span: Span) -> ir::Expr {
-        match self.ivar_owner(name, span, "", None) {
+        match self.ivar_owner(name, span, IvarUse::default()) {
             Some((owner, index, ty)) => ir::Expr::new(ExprKind::Field { base: Box::new(owner), index }, ty),
             None => ir::Expr::new(ExprKind::Zero, self.types.unknown()),
         }
@@ -108,13 +123,20 @@ impl<'a> Checker<'a> {
     /// Another field is E0305, as `self.hp()` is, and a method is called
     /// by name instead (E0204).
     pub fn ivar_call(&mut self, name: Ident, args: &[ast::Arg], block: Option<&ast::BlockArg>, span: Span) -> ir::Expr {
-        // The fix for a method shows the call without `@`: `heal(1)`.
+        // The fix for a method shows the call without `@`: `heal(1)`. The
+        // arguments follow the name, or the splice that put it there.
         let args_end = block.map_or(span.end, |b| b.span.start);
-        let written = self.source_text(Span { start: name.span.end, end: args_end, ..span });
+        let site = self.splice_site(name.span, span);
+        let written = match self.name_end(name.span, span) {
+            Some(start) => self.source_text(Span { start, end: args_end, ..span }),
+            None => String::new(),
+        };
         let written = written.trim_end();
-        let shown_args = if written.contains('\n') || written.chars().count() > 24 { "(…)" } else { written };
-        let empty = (args.is_empty() && block.is_none()).then_some(span);
-        let Some((owner, index, fty)) = self.ivar_owner(name.name, name.span, shown_args, empty) else {
+        let long = written.is_empty() || written.contains('\n') || written.chars().count() > 24;
+        let called = if long { "(…)" } else { written };
+        let empty_call = (args.is_empty() && block.is_none()).then_some(span);
+        let Some((owner, index, fty)) = self.ivar_owner(name.name, name.span, IvarUse { called, empty_call, site })
+        else {
             for a in args {
                 self.expr(&a.value, None);
             }
@@ -130,17 +152,9 @@ impl<'a> Checker<'a> {
 
     /// Finds the field `@name` reads, its own or promoted by `using`: the
     /// struct value that declares it, with the field's index and type.
-    /// Reports a name that reaches no field: `called` is the argument list
-    /// `@name(…)` was written with, which the fix for a method keeps, and
-    /// `empty_call` the whole call when it passes nothing (`@hp()`), which
-    /// the fix for an ambiguous field reads (`@body.hp`).
-    fn ivar_owner(
-        &mut self,
-        name: Name,
-        span: Span,
-        called: &str,
-        empty_call: Option<Span>,
-    ) -> Option<(ir::Expr, u32, TyId)> {
+    /// Reports a name that reaches no field, with fixes that `written`
+    /// says how to make.
+    fn ivar_owner(&mut self, name: Name, span: Span, written: IvarUse) -> Option<(ir::Expr, u32, TyId)> {
         let base = self.self_place(span, &format!("`@{name}`"));
         if matches!(self.types.kind(base.ty), TyKind::Unknown) {
             return None;
@@ -150,21 +164,27 @@ impl<'a> Checker<'a> {
         }
         let hits = self.using_hits(base.ty, name);
         if let [(_, first_ty, first), _, ..] = hits[..] {
-            let at = format!("@{first}.{name}");
             let reads = |this: &mut Self| {
                 let member = this.self_member(first_ty, name, &mut Vec::new());
                 matches!(member, Some(super::expr::SelfMember::Field { is_proc: false, .. }))
             };
-            let fix_span = match empty_call {
-                Some(call) if reads(self) => call,
-                _ => span,
+            // A spliced name is reached through the field in the `quote`:
+            // `@#{name}` becomes `@body.#{name}`.
+            let (at, name_span) = match written.site {
+                Some(site) => (format!("@{first}.{}", self.source_text(site).trim_start_matches('@')), site),
+                None => (format!("@{first}.{name}"), span),
             };
-            let fix = super::overloads::UsingFix { like: at.clone(), span: fix_span, replacement: at };
+            let fix_span = match written.empty_call {
+                Some(call) if reads(self) => Span { start: name_span.start, ..call },
+                _ => name_span,
+            };
+            let like = format!("@{first}.{name}");
+            let fix = super::overloads::UsingFix { like, span: fix_span, replacement: at };
             self.ambiguous_using(base.ty, name, span, &hits, fix);
             return None;
         }
         if hits.is_empty() {
-            self.no_member(base.ty, name, span, Some(called));
+            self.no_member(base.ty, name, span, Some(written));
             return None;
         }
         let self_ty = base.ty;
@@ -182,8 +202,8 @@ impl<'a> Checker<'a> {
         }
         // A method that `using` promotes, unless the type's own, mixed-in
         // or extension method of that name is the one a call reaches.
-        if !self.ivar_names_method(self_ty, name, span, called) {
-            self.no_member(self_ty, name, span, Some(called));
+        if !self.ivar_names_method(self_ty, name, span, written) {
+            self.no_member(self_ty, name, span, Some(written));
         }
         None
     }
@@ -219,12 +239,12 @@ impl<'a> Checker<'a> {
     }
 
     /// Reports `@name` naming a method of `self` instead of a field, with
-    /// the fix that calls it by name and keeps `called`, the argument list
-    /// `@name(…)` was written with. The method may be the type's own, mixed
-    /// in with `include`, added by `extend` or promoted by `using`; a note
-    /// says which when it isn't the type's own. Returns false when `name`
-    /// is no method that a call in a method of `ty` reaches.
-    fn ivar_names_method(&mut self, ty: TyId, name: Name, span: Span, called: &str) -> bool {
+    /// the fix that calls it by name and keeps the argument list `@name(…)`
+    /// was written with. The method may be the type's own, mixed in with
+    /// `include`, added by `extend` or promoted by `using`; a note says
+    /// which when it isn't the type's own. Returns false when `name` is no
+    /// method that a call in a method of `ty` reaches.
+    fn ivar_names_method(&mut self, ty: TyId, name: Name, span: Span, written: IvarUse) -> bool {
         let Some(origin) = self.self_method_origin(ty, name) else { return false };
         let shown = self.types.display(ty);
         let mut diag =
@@ -244,17 +264,23 @@ impl<'a> Checker<'a> {
                 diag = diag.note(format!("`{name}` is a method of `{owner}`, promoted into `{shown}` by `using`"));
             }
         }
-        // A variable of the same name would take a bare `name`.
-        let call = if self.visible_var_names().contains(&name.as_str()) {
-            format!("self.{name}")
-        } else {
-            name.as_str().to_string()
+        // A variable of the same name would take a bare `name`. A spliced
+        // name keeps its splice, `#{name}(1)`, and the fix changes what
+        // every call of the macro generates.
+        let callee = match written.site {
+            Some(site) => self.source_text(site).trim_start_matches('@').to_string(),
+            None => name.as_str().to_string(),
+        };
+        let call = if self.visible_var_names().contains(&name.as_str()) { format!("self.{callee}") } else { callee };
+        let (fix_span, applicability) = match written.site {
+            Some(site) => (site, Applicability::MaybeIncorrect),
+            None => (span, Applicability::MachineApplicable),
         };
         self.report(diag.note("`@name` reads a field of `self`; methods are called by name").suggest_replace(
-            format!("call the method: `{call}{called}`"),
-            span,
+            format!("call the method: `{call}{}`", written.called),
+            fix_span,
             call,
-            Applicability::MachineApplicable,
+            applicability,
         ));
         true
     }
@@ -801,11 +827,18 @@ impl<'a> Checker<'a> {
         span: Span,
     ) -> ir::Expr {
         let shown = self.types.display(field.ty);
-        let call_span = Span { start: name.span.end, ..span };
+        // `()` follows the name, or the splice that put it there. A fix in
+        // a `quote` changes what every call of the macro generates.
+        let call_span = self.name_end(name.span, span).map(|start| Span { start, ..span });
+        let applicability =
+            if name.span.file == span.file { Applicability::MachineApplicable } else { Applicability::MaybeIncorrect };
         let mut diag = Diagnostic::error(codes::NOT_CALLABLE, format!("`{}` is a field, not a method", name.as_str()))
             .primary(name.span, format!("this field's type is `{shown}`"));
-        if args.is_some_and(|a| a.is_empty()) && block.is_none() && call_span.end > call_span.start {
-            diag = diag.suggest_replace("read the field without `()`", call_span, "", Applicability::MachineApplicable);
+        if args.is_some_and(|a| a.is_empty())
+            && block.is_none()
+            && let Some(call_span) = call_span.filter(|s| s.end > s.start)
+        {
+            diag = diag.suggest_replace("read the field without `()`", call_span, "", applicability);
         } else {
             diag = diag.help("read the field without arguments or a block");
         }
@@ -1061,9 +1094,8 @@ impl<'a> Checker<'a> {
     }
 
     /// Reports a missing field or method with suggestions. `ivar` is set for
-    /// `@name`, to the argument list it was called with, if any, which the
-    /// fix for a method keeps.
-    pub fn no_member(&mut self, ty: TyId, name: Name, span: Span, ivar: Option<&str>) {
+    /// `@name`, to how it was written, which the fixes follow.
+    pub fn no_member(&mut self, ty: TyId, name: Name, span: Span, ivar: Option<IvarUse>) {
         let is_ivar = ivar.is_some();
         if self.report_skipped_field(ty, name, span) {
             return;
@@ -1084,8 +1116,8 @@ impl<'a> Checker<'a> {
             TyKind::Enum(id) => self.enum_decls.get(id).copied(),
             _ => None,
         };
-        if let Some(called) = ivar
-            && self.ivar_names_method(ty, name, span, called)
+        if let Some(written) = ivar
+            && self.ivar_names_method(ty, name, span, written)
         {
             return;
         }
@@ -1115,7 +1147,10 @@ impl<'a> Checker<'a> {
         {
             diag = diag.help(format!("Wid calls this `{wid}`"));
         } else if let Some(best) = did_you_mean(name.as_str(), candidates.iter().copied()) {
-            let replacement = if is_ivar { format!("@{best}") } else { best.to_string() };
+            // A name spliced into `@#{name}` is fixed where it was given,
+            // as the name it is.
+            let spliced = ivar.is_some_and(|w| w.site.is_some());
+            let replacement = if is_ivar && !spliced { format!("@{best}") } else { best.to_string() };
             diag = diag.suggest_replace(
                 format!("did you mean `{replacement}`?"),
                 span,

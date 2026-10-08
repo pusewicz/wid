@@ -527,9 +527,10 @@ end
       arguments, array elements, returned values, …), one per element.
       Nowhere else.
     - `Symbol` inserts a name, usable as an identifier, a method name
-      (`def #{name}`, `x.#{name}`), a field (`@#{name}`) or a parameter
-      name. In an expression it is that identifier (a constant's, if
-      capitalized), and where a type goes, the type of that name.
+      (`def #{name}`, `x.#{name}`), a field (`@#{name}`, or
+      `@#{name}(args)` to call the proc it holds) or a parameter name. In
+      an expression it is that identifier (a constant's, if capitalized),
+      and where a type goes, the type of that name.
       `:#{name}` inserts a symbol literal; its value must be a `Symbol`.
       In a list, a `[]Symbol` inserts one identifier (or, written
       `:#{names}`, one symbol literal) per name.

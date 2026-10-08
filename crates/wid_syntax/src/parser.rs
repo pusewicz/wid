@@ -4102,6 +4102,12 @@ impl<'a> Parser<'a> {
                 let Some(name) = self.parse_splice_name() else {
                     return Expr { kind: ExprKind::Error, span: span.to(self.prev_span()) };
                 };
+                // `@#{name}(args)` calls the proc the field holds, as
+                // `@name(args)` does.
+                if tok.kind == T::AtSplice && self.at(T::LParen) && !self.peek().space_before {
+                    let name = Ident { span: span.to(name.span), ..name };
+                    return self.parse_call_with_parens(Callee::IVar(name), name.span);
+                }
                 let kind =
                     if tok.kind == T::AtSplice { ExprKind::IVar(name.name) } else { ExprKind::Symbol(name.name) };
                 Expr { kind, span: span.to(name.span) }

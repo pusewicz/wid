@@ -767,6 +767,17 @@ runs the stages; `wid_cli` is the `wid` binary.
   `mend` is in scope. `Checker::self_method_origin` searches as a call
   without a receiver does. A missing field reads "`P` has no field
   `on_hitt`", without the `@`.
+- A macro can generate `@#{name}(args)`, which calls the proc the field
+  holds as `@name(args)` does (#67; it was E0105 and E0301). The parser
+  reads it as `Callee::IVar` when `(` follows the splice's `}` with no
+  space, and the splicer substitutes the name like any call's. Its errors
+  point at the name the macro call gave, with the splice and the call, as
+  for `#{name}(args)`; fixes in the `quote` keep the splice and are
+  `MaybeIncorrect`: `@#{name}()` on a field drops `()`, on a method it
+  becomes `#{name}(1)`, an ambiguous name `@body.#{name}`, and a misspelled
+  field is fixed at the call (`:hp`). `Checker::splice_site` and
+  `name_end` find the splice, which also fixes the `()` fix for a field
+  called as `self.#{name}()` (it edited unrelated text).
 - A C compiler without C23 (one that rejects `-std=c23`, like gcc 13 or
   clang 17, or lacks `<stdckdint.h>` or `#embed`) is E0702 "the C compiler
   `cc` doesn't support C23", with the first line of its `--version`, the
@@ -850,7 +861,8 @@ macro stack.
        line in a type body (in an enum body it may be `Symbol`s, i.e.
        members). In every name position (method, field, parameter, local,
        block-parameter, loop-variable, type and enum-member names, `x.#{m}`,
-       `@#{f}`, `:#{s}`, named arguments, `#{name}(args)`) it is an
+       `@#{f}`, `:#{s}`, named arguments, `#{name}(args)`,
+       `@#{f}(args)`) it is an
        `Ident`, `IVar` or `Symbol` named `#{i}` (`ast::splice_name`,
        `Ident::splice_index`), spanning the whole `#{…}`. A splice in a
        generic argument list is a `GenericArg::Expr`.
