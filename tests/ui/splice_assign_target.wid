@@ -1,0 +1,89 @@
+macro def set_int(n: Int) -> Code
+  quote do
+    #{n} = 1
+  end
+end
+
+macro def set_text(s: String) -> Code
+  quote do
+    #{s} = 1
+  end
+end
+
+macro def set_flag(b: Bool) -> Code
+  quote do
+    (#{b}) = 1
+  end
+end
+
+macro def set_code(c: Code) -> Code
+  quote do
+    #{c} = 1
+  end
+end
+
+macro def add_one(n: Int) -> Code
+  quote do
+    #{n} += 1
+  end
+end
+
+macro def default_one(n: Int) -> Code
+  quote do
+    #{n} ||= 1
+  end
+end
+
+macro def set_pair(n: Int) -> Code
+  quote do
+    first, #{n} = 1, 2
+    p first
+  end
+end
+
+macro def set_name(name: Symbol) -> Code
+  quote do
+    #{name} = 1
+  end
+end
+
+macro def set_built -> Code
+  c = quote do
+    7
+  end
+  quote do
+    #{c} = 1
+  end
+end
+
+def three -> Int = 3
+
+LIMIT = 10
+
+struct Ball
+  hp: Int
+end
+
+def main
+  set_int 3
+  set_text "x"
+  set_flag true
+  set_code 5
+  set_code three()
+  add_one 3
+  default_one 3
+  set_pair 3
+  set_name :LIMIT
+  set_code LIMIT
+  set_built
+  # These fit: a variable's name, a field and an element.
+  count = 0
+  set_name :count
+  p count
+  ball = Ball.new
+  set_code ball.hp
+  p ball
+  grid = [0, 0]
+  set_code grid[1]
+  p grid
+end

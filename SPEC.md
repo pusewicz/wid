@@ -546,6 +546,13 @@ end
       elsewhere, so `#{t}.new(…)`, `x.to(#{t})` and `size_of(#{t})` work.
     - Numbers, `Bool`s and strings insert literals; a negative number is
       parenthesized, and a float that is not finite can't be spliced.
+    - A splice that is an assignment target (`#{x} = v`, `#{x} += v`,
+      `#{x} ||= v`, `a, #{x} = …`) must insert something that can be
+      assigned to: a variable's name from a `Symbol`, or `Code` that is a
+      variable, a field, an element or a dereference. Among declarations a
+      capitalized name declares a constant instead (`#{name} = v`). A
+      number, string, `Bool`, `Type`, call or other value there, or a
+      capitalized name in a method, is E0911.
     - A `quote` splices only these types; splicing another is E0911 in the
       macro.
   - **Lexing:** `#{` outside a string literal always starts a splice, and a

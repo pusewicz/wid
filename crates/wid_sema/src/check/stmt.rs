@@ -461,9 +461,26 @@ impl<'a> Checker<'a> {
                 );
                 ir::Expr::new(ExprKind::Zero, self.types.unknown())
             }
-            // The parser reports every other target (E0107). Its parts are
-            // still checked, so names it reads are not reported as unused.
-            E::Const(_) => ir::Expr::new(ExprKind::Zero, self.types.unknown()),
+            // A constant's name spliced into a `quote` (`#{name} = 1` with
+            // `:LIMIT`), which declares a constant only among declarations.
+            E::Const(name) => {
+                if let Some(by) = self.spliced_by(target.span) {
+                    self.report(
+                        Diagnostic::error(
+                            codes::SPLICE_MISMATCH,
+                            format!("the macro `{by}` splices the constant name `{name}` where an assignment target goes"),
+                        )
+                        .primary(target.span, "this is a constant's name")
+                        .note("`NAME = value` declares a constant among declarations; in a method, a constant can't be assigned")
+                        .help("to assign to a variable, splice a lowercase name"),
+                    );
+                }
+                ir::Expr::new(ExprKind::Zero, self.types.unknown())
+            }
+            // The parser reports every other target written as it is
+            // (E0107), and the macro expander one spliced into a `quote`
+            // (E0911, `Splicer::splice_target`). Its parts are still
+            // checked, so names it reads are not reported as unused.
             _ => {
                 self.begin_block();
                 let _ = self.expr(target, None);

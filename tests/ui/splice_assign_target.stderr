@@ -1,0 +1,146 @@
+error[E0911]: the macro `set_int` splices the integer `3` where an assignment target goes
+  --> tests/ui/splice_assign_target.wid:68:3
+   |
+68 |   set_int 3
+   |   ^^^^^^^^^ `set_int` expands here
+  ::: tests/ui/splice_assign_target.wid:3:5
+   |
+ 3 |     #{n} = 1
+   |     ---- this splice is the integer `3`, which can't be assigned to
+help: splice something that can be assigned to: a variable's name as a `Symbol` (a parameter like `name: Symbol`, called like `set_int :count`), or `Code` for a field or an element (`@hp`, `ball.hp`, `grid[i]`)
+   = see `wid explain E0911`
+
+error[E0911]: the macro `set_text` splices the `String` `"x"` where an assignment target goes
+  --> tests/ui/splice_assign_target.wid:69:3
+   |
+69 |   set_text "x"
+   |   ^^^^^^^^^^^^ `set_text` expands here
+  ::: tests/ui/splice_assign_target.wid:9:5
+   |
+ 9 |     #{s} = 1
+   |     ---- this splice is the `String` `"x"`, which can't be assigned to
+help: splice something that can be assigned to: a variable's name as a `Symbol` (a parameter like `name: Symbol`, called like `set_text :count`), or `Code` for a field or an element (`@hp`, `ball.hp`, `grid[i]`)
+   = see `wid explain E0911`
+
+error[E0911]: the macro `set_flag` splices the `Bool` `true` where an assignment target goes
+  --> tests/ui/splice_assign_target.wid:70:3
+   |
+70 |   set_flag true
+   |   ^^^^^^^^^^^^^ `set_flag` expands here
+  ::: tests/ui/splice_assign_target.wid:15:6
+   |
+15 |     (#{b}) = 1
+   |      ---- this splice is the `Bool` `true`, which can't be assigned to
+help: splice something that can be assigned to: a variable's name as a `Symbol` (a parameter like `name: Symbol`, called like `set_flag :count`), or `Code` for a field or an element (`@hp`, `ball.hp`, `grid[i]`)
+   = see `wid explain E0911`
+
+error[E0911]: the macro `set_code` splices code that is an integer literal where an assignment target goes
+  --> tests/ui/splice_assign_target.wid:71:3
+   |
+71 |   set_code 5
+   |   ^^^^^^^^^^ `set_code` expands here
+  ::: tests/ui/splice_assign_target.wid:21:5
+   |
+21 |     #{c} = 1
+   |     ---- this splice is code that is an integer literal, which can't be assigned to
+help: splice code that can be assigned to: a variable, a field or an element, like `set_code count`, `set_code ball.hp` or `set_code grid[i]` for a `Code` parameter
+   = see `wid explain E0911`
+
+error[E0911]: the macro `set_code` splices code that is a call where an assignment target goes
+  --> tests/ui/splice_assign_target.wid:72:3
+   |
+72 |   set_code three()
+   |   ^^^^^^^^^^^^^^^^ `set_code` expands here
+  ::: tests/ui/splice_assign_target.wid:21:5
+   |
+21 |     #{c} = 1
+   |     ---- this splice is code that is a call, which can't be assigned to
+help: splice code that can be assigned to: a variable, a field or an element, like `set_code count`, `set_code ball.hp` or `set_code grid[i]` for a `Code` parameter
+   = see `wid explain E0911`
+
+error[E0911]: the macro `add_one` splices the integer `3` where an assignment target goes
+  --> tests/ui/splice_assign_target.wid:73:3
+   |
+73 |   add_one 3
+   |   ^^^^^^^^^ `add_one` expands here
+  ::: tests/ui/splice_assign_target.wid:27:5
+   |
+27 |     #{n} += 1
+   |     ---- this splice is the integer `3`, which can't be assigned to
+help: splice something that can be assigned to: a variable's name as a `Symbol` (a parameter like `name: Symbol`, called like `add_one :count`), or `Code` for a field or an element (`@hp`, `ball.hp`, `grid[i]`)
+   = see `wid explain E0911`
+
+error[E0911]: the macro `default_one` splices the integer `3` where an assignment target goes
+  --> tests/ui/splice_assign_target.wid:74:3
+   |
+74 |   default_one 3
+   |   ^^^^^^^^^^^^^ `default_one` expands here
+  ::: tests/ui/splice_assign_target.wid:33:5
+   |
+33 |     #{n} ||= 1
+   |     ---- this splice is the integer `3`, which can't be assigned to
+help: splice something that can be assigned to: a variable's name as a `Symbol` (a parameter like `name: Symbol`, called like `default_one :count`), or `Code` for a field or an element (`@hp`, `ball.hp`, `grid[i]`)
+   = see `wid explain E0911`
+
+error[E0911]: the macro `set_pair` splices the integer `3` where an assignment target goes
+  --> tests/ui/splice_assign_target.wid:75:3
+   |
+75 |   set_pair 3
+   |   ^^^^^^^^^^ `set_pair` expands here
+  ::: tests/ui/splice_assign_target.wid:39:12
+   |
+39 |     first, #{n} = 1, 2
+   |            ---- this splice is the integer `3`, which can't be assigned to
+help: splice something that can be assigned to: a variable's name as a `Symbol` (a parameter like `name: Symbol`, called like `set_pair :count`), or `Code` for a field or an element (`@hp`, `ball.hp`, `grid[i]`)
+   = see `wid explain E0911`
+
+error[E0911]: the macro `set_name` splices the constant name `LIMIT` where an assignment target goes
+  --> tests/ui/splice_assign_target.wid:76:13
+   |
+76 |   set_name :LIMIT
+   |             ^^^^^ this is a constant's name
+  ::: tests/ui/splice_assign_target.wid:46:5
+   |
+46 |     #{name} = 1
+   |     ------- `LIMIT` is spliced here by `set_name`
+  ::: tests/ui/splice_assign_target.wid:76:3
+   |
+76 |   set_name :LIMIT
+   |   --------------- `set_name` expands here
+   = note: `NAME = value` declares a constant among declarations; in a method, a constant can't be assigned
+help: to assign to a variable, splice a lowercase name
+   = see `wid explain E0911`
+
+error[E0911]: the macro `set_code` splices the constant name `LIMIT` where an assignment target goes
+  --> tests/ui/splice_assign_target.wid:77:12
+   |
+77 |   set_code LIMIT
+   |            ^^^^^ this is a constant's name
+  ::: tests/ui/splice_assign_target.wid:21:5
+   |
+21 |     #{c} = 1
+   |     ---- spliced here by `set_code`
+  ::: tests/ui/splice_assign_target.wid:77:3
+   |
+77 |   set_code LIMIT
+   |   -------------- `set_code` expands here
+   = note: `NAME = value` declares a constant among declarations; in a method, a constant can't be assigned
+help: to assign to a variable, splice a lowercase name
+   = see `wid explain E0911`
+
+error[E0911]: the macro `set_built` splices code that is an integer literal where an assignment target goes
+  --> tests/ui/splice_assign_target.wid:78:3
+   |
+78 |   set_built
+   |   ^^^^^^^^^ `set_built` expands here
+  ::: tests/ui/splice_assign_target.wid:55:5
+   |
+52 |     7
+   |     - this code is spliced there
+...
+55 |     #{c} = 1
+   |     ---- this splice is code that is an integer literal, which can't be assigned to
+help: splice code that can be assigned to: a variable, a field or an element, like `set_built count`, `set_built ball.hp` or `set_built grid[i]` for a `Code` parameter
+   = see `wid explain E0911`
+
+error: could not compile due to 11 errors

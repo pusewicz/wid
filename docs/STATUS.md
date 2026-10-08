@@ -877,6 +877,16 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   struct still being resolved, behind a pointer, once it is), the field or
   union variant that takes its type over (it becomes unknown), array
   literals, and generic calls whose instance would return one.
+- A splice used as an assignment target (`=`, `+=`, `||=`, `a, #{n} = …`)
+  that gives something that can't be assigned to (a number, string, `Bool`
+  or `Type`, a capitalized `Symbol`, or `Code` that is a call or a literal)
+  is E0911 at the call, marking the splice and naming what it holds (#69);
+  it checked and then failed in the C compiler (`((void)0) = …`), or built
+  for `||=`. `Splicer::splice_target` substitutes targets before the rest of
+  the statement and applies the parser's E0107 shape rule to the result; a
+  constant's name passes there (among declarations it declares the
+  constant), and `Checker::place` reports one spliced into a method
+  (`Checker::spliced_by`).
 - Test suite: `tests/run` (clang and gcc-16, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
   `tests/test` (`wid test` reports), `tests/doc` (`wid doc` pages and
