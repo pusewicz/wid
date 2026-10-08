@@ -921,6 +921,12 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   its place too (it went last). A line that is neither a member nor a
   declaration is one E0911 that quotes it, and E0204 leaves out an empty
   "members:" note.
+- An operator with nothing after it before a closer (`[1, 2 +]`, `(1 +)`,
+  `f(1, 2 *)`, `{ |x| x > }`, `[1, -]`) is one E0105 "expected an
+  expression after `+`, found `]`" (`Parser::missing_operand`), with a fix
+  to review that removes a binary operator; the closer is no longer
+  consumed, so it still closes its bracket (#85; `[1, 2 +]` also got
+  "expected `]`" with a fix that added a second `]`).
 - A C compiler without C23 (one that rejects `-std=c23`, like gcc 13 or
   clang 17, or lacks `<stdckdint.h>` or `#embed`) is E0702 "the C compiler
   `cc` doesn't support C23", with the first line of its `--version`, the

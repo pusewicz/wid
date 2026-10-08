@@ -6,39 +6,59 @@ error[E0105]: expected an expression, found end of line
 help: write the value after `a:` on this line
    = see `wid explain E0105`
 
-error[E0105]: expected an expression, found `)`
+error[E0105]: expected an expression after `+`, found `)`
   --> tests/ui/unused_after_nested_parse_error.wid:15:15
    |
 15 |   x = add(1 + )
    |               ^ expected an expression
+   |             - `+` needs a value after it
+help: remove the `+`
+   |   x = add(1)
+help: or write the missing value after `+`
    = see `wid explain E0105`
 
-error[E0105]: expected an expression, found `)`
+error[E0105]: expected an expression after `*`, found `)`
   --> tests/ui/unused_after_nested_parse_error.wid:16:23
    |
 16 |   y: Int = add(a: 1 * )
    |                       ^ expected an expression
+   |                     - `*` needs a value after it
+help: remove the `*`
+   |   y: Int = add(a: 1)
+help: or write the missing value after `*`
    = see `wid explain E0105`
 
-error[E0105]: expected an expression, found `)`
+error[E0105]: expected an expression after `-`, found `)`
   --> tests/ui/unused_after_nested_parse_error.wid:17:19
    |
 17 |   z = [1, add(2 - ), 3]
    |                   ^ expected an expression
+   |                 - `-` needs a value after it
+help: remove the `-`
+   |   z = [1, add(2), 3]
+help: or write the missing value after `-`
    = see `wid explain E0105`
 
-error[E0105]: expected an expression, found `)`
+error[E0105]: expected an expression after `*`, found `)`
   --> tests/ui/unused_after_nested_parse_error.wid:21:19
    |
 21 |   a, b = pair(1 * )
    |                   ^ expected an expression
+   |                 - `*` needs a value after it
+help: remove the `*`
+   |   a, b = pair(1)
+help: or write the missing value after `*`
    = see `wid explain E0105`
 
-error[E0105]: expected an expression, found `)`
+error[E0105]: expected an expression after `-`, found `)`
   --> tests/ui/unused_after_nested_parse_error.wid:22:21
    |
 22 |   c, d = 1, add(2 - )
    |                     ^ expected an expression
+   |                   - `-` needs a value after it
+help: remove the `-`
+   |   c, d = 1, add(2)
+help: or write the missing value after `-`
    = see `wid explain E0105`
 
 error[E0203]: `w` is assigned but never read

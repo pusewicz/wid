@@ -4287,13 +4287,62 @@ impl<'a> Parser<'a> {
                     self.restore_line_end(last.span);
                     return Expr { kind: ExprKind::Error, span: at };
                 }
-                self.error_expected("an expression");
-                if !self.at_stmt_end() {
+                if !self.missing_operand() {
+                    self.error_expected("an expression");
+                }
+                // A closer or the line's end still closes what it closes:
+                // `[1, 2 +]` is one error, and the `]` ends the array.
+                if !self.at_stmt_end() && !self.at(T::RBracket) {
                     self.bump();
                 }
                 simple(ExprKind::Error)
             }
         }
+    }
+
+    /// Reports a missing expression after an operator (`[1, 2 +]`,
+    /// `(1 +)`, `-]`), naming the operator, with a fix that removes a binary
+    /// one. Returns false, with nothing reported, when no operator comes
+    /// before the position.
+    fn missing_operand(&mut self) -> bool {
+        let Some(op) = self.pos.checked_sub(1).map(|i| self.tokens[i]) else { return false };
+        // A binary operator follows the end of its left operand, on its line.
+        let before = self
+            .pos
+            .checked_sub(2)
+            .map(|i| self.tokens[i])
+            .filter(|t| ends_operand(t.kind) && self.line_of(t.span.start) == self.line_of(op.span.start));
+        let binary = infix_bp(op.kind).is_some() && op.kind != T::Question && before.is_some();
+        let prefix = matches!(op.kind, T::Minus | T::Bang | T::Tilde | T::Amp | T::DotDot | T::DotDotDot);
+        if !binary && !prefix {
+            return false;
+        }
+        let tok = self.peek();
+        let text = self.text_of(op.span);
+        let diag = Diagnostic::error(
+            codes::UNEXPECTED_TOKEN,
+            format!("expected an expression after `{text}`, found {}", self.found()),
+        )
+        .primary(tok.span, "expected an expression")
+        .secondary(op.span, format!("`{text}` needs a value after it"));
+        let diag = match before.filter(|_| binary) {
+            // Removing the operator, and the space around it before a `)`
+            // or `]`, leaves its left operand.
+            Some(before) => {
+                let closer = matches!(tok.kind, T::RParen | T::RBracket)
+                    && self.line_of(tok.span.start) == self.line_of(op.span.start);
+                let end = if closer { tok.span.start } else { op.span.end };
+                diag.suggest(
+                    format!("remove the `{text}`"),
+                    vec![Edit { span: Span::new(self.file, before.span.end, end), replacement: String::new() }],
+                    Applicability::MaybeIncorrect,
+                )
+                .help(format!("or write the missing value after `{text}`"))
+            }
+            None => diag.help(format!("write the value after `{text}`")),
+        };
+        self.report(diag);
+        true
     }
 
     /// Parses `(args)`. `types` is true for the builtins whose arguments are
@@ -5135,6 +5184,29 @@ fn is_plain_name(kind: &TypeKind, name: Name) -> bool {
     matches!(kind, TypeKind::Path { segments, args } if args.is_empty() && segments.len() == 1 && segments[0].name == name)
 }
 
+/// Whether a token can end an operand, so an operator after it is binary.
+fn ends_operand(kind: TokenKind) -> bool {
+    matches!(
+        kind,
+        T::Int
+            | T::Float
+            | T::Str(_)
+            | T::StrEnd
+            | T::Symbol
+            | T::Ident
+            | T::Const
+            | T::IVar
+            | T::TypeParam
+            | T::RParen
+            | T::RBracket
+            | T::RBrace
+            | T::SpliceEnd
+            | T::Question
+            | T::Caret
+            | T::Kw(K::Nil | K::True | K::False | K::SelfKw | K::End)
+    )
+}
+
 fn is_assignable(expr: &Expr) -> bool {
     match &expr.kind {
         ExprKind::Ident(_) | ExprKind::IVar(_) | ExprKind::Index { .. } | ExprKind::Deref(_) | ExprKind::Splice(_) => {
@@ -5951,6 +6023,24 @@ end
     fn keywords_are_quoted_in_messages() {
         let (messages, _) = fix_all("def main\n  x = def\nend\n");
         assert_eq!(messages, ["expected an expression, found `def`"]);
+    }
+
+    #[test]
+    fn missing_operands_leave_the_closer() {
+        // One error naming the operator, and the closer still closes its
+        // bracket; the fix to review removes a binary operator.
+        for (line, message, fixed) in [
+            ("x = [1, 2 +]", "expected an expression after `+`, found `]`", "x = [1, 2]"),
+            ("x = (1 +)", "expected an expression after `+`, found `)`", "x = (1)"),
+            ("x = f(1, 2 * )", "expected an expression after `*`, found `)`", "x = f(1, 2)"),
+            ("x = xs.count { |y| y > }", "expected an expression after `>`, found `}`", "x = xs.count { |y| y }"),
+            ("x = [1, -]", "expected an expression after `-`, found `]`", "x = [1, -]"),
+        ] {
+            let src = format!("def main\n  {line}\n  p x\nend\n");
+            let (messages, out) = apply_fixes(&src, Applicability::MaybeIncorrect);
+            assert_eq!(messages, [message], "{src:?}");
+            assert_eq!(out, format!("def main\n  {fixed}\n  p x\nend\n"), "{src:?}");
+        }
     }
 
     #[test]
