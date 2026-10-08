@@ -521,6 +521,29 @@ impl Expr {
         Expr { kind, ty }
     }
 
+    /// For a place, the local that an assignment to it writes into in
+    /// place: the place is the local or a field or element of it, reached
+    /// through fields, optional and union payloads, and fixed array or
+    /// matrix elements, but no pointer, slice or dynamic array. Such an
+    /// assignment doesn't read the local (only the indexes on the way).
+    pub fn written_local(&self, types: &crate::types::TypeTable) -> Option<LocalId> {
+        match &self.kind {
+            ExprKind::Local(l) => Some(*l),
+            ExprKind::Field { base, .. } | ExprKind::OptGet(base) | ExprKind::UnionGet { value: base, .. } => {
+                base.written_local(types)
+            }
+            ExprKind::Index { base, .. }
+                if matches!(
+                    types.kind(types.base(base.ty)),
+                    crate::types::TyKind::Array(..) | crate::types::TyKind::Matrix(..)
+                ) =>
+            {
+                base.written_local(types)
+            }
+            _ => None,
+        }
+    }
+
     /// Returns true for values that cannot change: literals and function
     /// references. Unlike pure expressions they may be read after other code
     /// (such as deferred blocks) has run.

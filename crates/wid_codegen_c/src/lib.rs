@@ -15,7 +15,7 @@ use std::fmt::Write as _;
 
 use wid_diagnostics::{SourceMap, Span};
 use wid_sema::ir::{self, Builtin, ExprKind, FnId, LabelId, LocalId, Program, Stmt};
-use wid_sema::types::{Abi, FloatTy, IntTy, TyId, TyKind};
+use wid_sema::types::{Abi, FloatTy, IntTy, TyId, TyKind, TypeTable};
 
 pub use cconv::implementation_unit;
 use cconv::{c_includes, is_lvalue};
@@ -269,7 +269,7 @@ impl<'p> Gen<'p> {
         let mut used_labels = HashSet::new();
         collect_gotos(body, &mut used_labels);
         let mut reads = HashSet::new();
-        collect_reads(body, &mut reads);
+        collect_reads(body, &self.p.types, &mut reads);
         let sig = self.signature(f, Some(&reads));
         let mut ctx = FnCtx { contexts: 0, used_labels, reads, out: String::new(), indent: 1 };
         let _ = writeln!(out, "{sig} {{");
@@ -1324,14 +1324,17 @@ fn collect_gotos(block: &ir::Block, out: &mut HashSet<LabelId>) {
     }
 }
 
-/// Collects locals that are read somewhere (not merely assigned).
-fn collect_reads(block: &ir::Block, out: &mut HashSet<LocalId>) {
+/// Collects locals that are read somewhere (not merely assigned). Writing
+/// a field or an element of a local stored in place (`a_0.data[i] = v`)
+/// doesn't read it, and gcc reports a local or parameter that is only
+/// written as "set but not used".
+fn collect_reads(block: &ir::Block, types: &TypeTable, out: &mut HashSet<LocalId>) {
     for s in &block.stmts {
-        collect_reads_stmt(s, out);
+        collect_reads_stmt(s, types, out);
     }
 }
 
-fn collect_reads_stmt(stmt: &Stmt, out: &mut HashSet<LocalId>) {
+fn collect_reads_stmt(stmt: &Stmt, types: &TypeTable, out: &mut HashSet<LocalId>) {
     let add = |e: &ir::Expr, out: &mut HashSet<LocalId>| {
         visit_expr(e, &mut |x| {
             if let ExprKind::Local(l) = x.kind {
@@ -1342,18 +1345,33 @@ fn collect_reads_stmt(stmt: &Stmt, out: &mut HashSet<LocalId>) {
     match stmt {
         Stmt::Let { init: Some(e), .. } | Stmt::Expr(e) | Stmt::Return(Some(e)) => add(e, out),
         Stmt::Assign { target, value } => {
-            if !matches!(target.kind, ExprKind::Local(_)) {
+            if target.written_local(types).is_some() {
+                // Only the indexes on the way to the local are read.
+                let mut place = target;
+                loop {
+                    match &place.kind {
+                        ExprKind::Field { base, .. }
+                        | ExprKind::OptGet(base)
+                        | ExprKind::UnionGet { value: base, .. } => place = base,
+                        ExprKind::Index { base, index, .. } => {
+                            add(index, out);
+                            place = base;
+                        }
+                        _ => break,
+                    }
+                }
+            } else {
                 add(target, out);
             }
             add(value, out);
         }
         Stmt::If { cond, then, else_ } => {
             add(cond, out);
-            collect_reads(then, out);
-            collect_reads(else_, out);
+            collect_reads(then, types, out);
+            collect_reads(else_, types, out);
         }
         Stmt::Loop { body, .. } | Stmt::Labeled { body, .. } | Stmt::Scope(body) | Stmt::WithContext(body) => {
-            collect_reads(body, out)
+            collect_reads(body, types, out)
         }
         _ => {}
     }

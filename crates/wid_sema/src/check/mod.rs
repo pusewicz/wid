@@ -237,6 +237,10 @@ pub(crate) struct Checker<'a> {
     /// generic instance: their size is checked once it is (see
     /// `check_type_size`).
     pub size_checks: Vec<(TyId, Span, Option<TyId>)>,
+    /// For a variable that a field or element write left unread (see
+    /// `write_place`), by its declaration's span: the first such write,
+    /// which an unused-variable error points at.
+    pub write_only: HashMap<Span, Span>,
     pub errors: Vec<Name>,
     pub body: Body,
     pub source_texts: HashMap<FileId, std::sync::Arc<str>>,
@@ -349,6 +353,7 @@ fn run(input: &ProgramInput, index: bool) -> (ir::Program, Diagnostics, Option<c
         pending_types: Vec::new(),
         shallow: 0,
         size_checks: Vec::new(),
+        write_only: HashMap::new(),
         errors: Vec::new(),
         body: Body::default(),
         no_bounds_check: false,

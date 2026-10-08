@@ -1,0 +1,63 @@
+# Locals and parameters that are only written through a field or an
+# element. Wid allows them when they start with `_` or are parameters, and
+# the generated C must still compile with -Werror (gcc reports them as
+# "set but not used").
+
+struct Ship
+  hp: Int
+  pos: [2]Int
+end
+
+union Shape = Ship | Int
+
+def damage(s: Ship)
+  s.hp = 9
+  s.pos[1] = 3
+end
+
+def clear(cells: [3]Int)
+  cells[1] = 0
+end
+
+def heal(s: ^Ship)
+  s.hp = 100
+end
+
+def main
+  _cells: [3]Int = {}
+  _cells[0] = 1
+  _ship = Ship.new
+  _ship.hp = 9
+  _ship.pos[1] = 3
+  _pair: [2]Int = {}
+  _pair[0], _pair[1] = 1, 2
+  _grid: matrix[2, 2]F32 = {}
+  _grid[0, 1] = 2.0
+  damage(Ship.new)
+  clear([1, 2, 3])
+  ships = [Ship.new, Ship.new]
+  for _s in ships
+    _s.hp = 1
+  end
+  for &s in ships
+    s.hp = 7
+  end
+  p ships
+  ship = Ship.new
+  heal(&ship)
+  ptr = &ship
+  ptr.pos[0] = 4
+  p ship
+  maybe: Ship? = Ship.new
+  if maybe
+    maybe.hp = 5
+  end
+  shape: Shape = Ship.new
+  case shape
+  when Ship
+    shape.hp = 6
+  else
+  end
+  idx: [3]Int = {}
+  idx[idx[0] + 1] = 2
+end

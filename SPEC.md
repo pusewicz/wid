@@ -63,7 +63,10 @@ end
   is a compile-time constant: `MAX = 256`, `Vec2 = [2]F32`. Reading an
   undeclared name is an error with a "did you mean", and so is a local
   variable that is assigned but never read (prefix it with `_` to keep it).
-  Unused parameters are allowed.
+  Writing a field or an element of a variable (`ship.hp = 9`,
+  `cells[0] = 1`) doesn't read it; writing through a pointer, a slice or a
+  dynamic array reads the variable that holds it, and so does a compound
+  assignment like `cells[0] += 1`. Unused parameters are allowed.
 - **Calls.** Parentheses are optional for zero-argument calls and for the
   outermost call of a statement (`puts "hi"`). Any parameter can be passed by
   name. Defaults are written `hp: Int = 100`.

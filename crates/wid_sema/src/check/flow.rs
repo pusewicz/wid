@@ -708,7 +708,8 @@ impl<'a> Checker<'a> {
             }
             return;
         }
-        let place = self.place(target);
+        let root = self.unread_root(target);
+        let place = self.write_place(target, root);
         let v = self.coerce(value, place.ty, target.span);
         self.emit(Stmt::Assign { target: place, value: v });
     }

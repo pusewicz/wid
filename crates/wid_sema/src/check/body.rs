@@ -237,15 +237,16 @@ impl<'a> Checker<'a> {
                 continue;
             }
             let text = var.name.as_str();
-            self.report(
-                Diagnostic::error(codes::UNUSED_VARIABLE, format!("`{text}` is assigned but never read"))
-                    .primary(var.span, "this value is never used")
-                    .suggest(
-                        "if this is intentional, prefix the name with an underscore",
-                        vec![Edit { span: var.span, replacement: format!("_{text}") }],
-                        Applicability::MaybeIncorrect,
-                    ),
-            );
+            let mut diag = Diagnostic::error(codes::UNUSED_VARIABLE, format!("`{text}` is assigned but never read"))
+                .primary(var.span, "this value is never used");
+            if let Some(&write) = self.write_only.get(&var.span) {
+                diag = diag.secondary(write, format!("this writes into `{text}` but doesn't read it"));
+            }
+            self.report(diag.suggest(
+                "if this is intentional, prefix the name with an underscore",
+                vec![Edit { span: var.span, replacement: format!("_{text}") }],
+                Applicability::MaybeIncorrect,
+            ));
         }
     }
 

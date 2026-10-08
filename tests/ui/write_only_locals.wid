@@ -1,0 +1,30 @@
+struct Ship
+  hp: Int
+  pos: [2]Int
+end
+
+def main
+  cells: [3]Int = {}
+  cells[0] = 1
+  ship = Ship.new
+  ship.hp = 9
+  ship.pos[1] = 3
+  pair: [2]Int = {}
+  pair[0], pair[1] = 1, 2
+  grid: matrix[2, 2]F32 = {}
+  grid[0, 1] = 2.0
+  ships = [Ship.new, Ship.new]
+  for s in ships
+    s.hp = 1
+  end
+  p ships
+  # These read the variable: through a pointer, in an index, by `+=`.
+  other = Ship.new
+  ptr = &other
+  ptr.hp = 3
+  p other
+  idx: [3]Int = {}
+  idx[idx[0]] = 2
+  sum: [2]Int = {}
+  sum[0] += 1
+end

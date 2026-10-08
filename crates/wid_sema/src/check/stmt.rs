@@ -1,7 +1,9 @@
 //! Lowering statements.
 
 use wid_diagnostics::{Applicability, Diagnostic, Span, and_list, codes};
+use wid_syntax::Name;
 use wid_syntax::ast::{self, ExprKind as E, StmtKind as S};
+use wid_syntax::visit::{VisitMut, walk_expr};
 
 use super::Checker;
 use super::body::{Dest, Exit};
@@ -9,6 +11,48 @@ use super::macros::{Operand, OperandKind};
 use super::runtime::holds_parse_error;
 use crate::ir::{self, ExprKind, Stmt};
 use crate::types::TyKind;
+
+/// The variable an assignment's target writes a field or an element of,
+/// unread when the assignment starts (see [`Checker::unread_root`]).
+pub(super) struct UnreadRoot {
+    name: Name,
+    /// Where the target names it.
+    span: Span,
+    local: ir::LocalId,
+    /// Where it is declared.
+    decl: Span,
+    /// The number of errors reported before the target was lowered: a
+    /// target with errors may have hidden reads (a failed macro call reads
+    /// every variable).
+    errors: usize,
+}
+
+/// The variable an assignment target writes a field or an element of, as
+/// written: `a` in `a[0]`, `m.pos[1]` or `(m).hp`, with its span.
+fn written_root(target: &ast::Expr) -> Option<(Name, Span)> {
+    match &target.kind {
+        E::Ident(name) => Some((*name, target.span)),
+        E::Paren(inner) => written_root(inner),
+        E::Index { recv, .. } | E::Member { recv, safe: false, .. } => written_root(recv),
+        _ => None,
+    }
+}
+
+/// How many times an expression names the variable `name`.
+fn mentions(e: &ast::Expr, name: Name) -> usize {
+    struct Count(Name, usize);
+    impl VisitMut for Count {
+        fn visit_expr(&mut self, e: &mut ast::Expr) {
+            if matches!(e.kind, E::Ident(n) if n == self.0) {
+                self.1 += 1;
+            }
+            walk_expr(self, e);
+        }
+    }
+    let mut count = Count(name, 0);
+    count.visit_expr(&mut e.clone());
+    count.1
+}
 
 impl<'a> Checker<'a> {
     /// Lowers a statement list, delivering the value of the last statement
@@ -251,6 +295,7 @@ impl<'a> Checker<'a> {
             self.lower_op_assign(target, op, value, span);
             return;
         }
+        let root = self.unread_root(target);
         if self.assign_index_method(target, None, value, span) || self.assign_map_index(target, value) {
             return;
         }
@@ -290,7 +335,7 @@ impl<'a> Checker<'a> {
             }
             return;
         }
-        let place = self.place(target);
+        let place = self.write_place(target, root);
         let v = self.expr_coerced(value, place.ty);
         if Self::is_context_place(&place) {
             self.shadow_context();
@@ -417,6 +462,41 @@ impl<'a> Checker<'a> {
                 self.narrow(l);
             }
         }
+    }
+
+    /// For the target of `=` that writes a field or an element of a
+    /// variable (`a[0] = 1`, `m.hp = 9`), the variable, if nothing read it
+    /// so far: what [`Checker::write_place`] needs, taken before anything
+    /// looks at the target.
+    pub(super) fn unread_root(&mut self, target: &ast::Expr) -> Option<UnreadRoot> {
+        if matches!(target.kind, E::Ident(_)) {
+            return None;
+        }
+        let (name, span) = written_root(target)?;
+        let var = self.find_var_at(name, span)?;
+        let (read, local, decl) = (var.read, var.local, var.span);
+        let errors = self.diags.error_count();
+        (!read).then_some(UnreadRoot { name, span, local, decl, errors })
+    }
+
+    /// Lowers the target of `=`, alone or among several. Writing a field or
+    /// an element of a variable stored in place (`a[0] = 1`, `m.hp = 9`)
+    /// doesn't read the variable, so one that is only ever written is
+    /// reported unused (E0203), with a label on the first such write.
+    /// Writing through a pointer, a slice or a dynamic array reads the
+    /// variable that holds it. `root` comes from [`Checker::unread_root`].
+    pub(super) fn write_place(&mut self, target: &ast::Expr, root: Option<UnreadRoot>) -> ir::Expr {
+        let place = self.place(target);
+        if let Some(root) = root
+            && self.diags.error_count() == root.errors
+            && place.written_local(&self.types) == Some(root.local)
+            && mentions(target, root.name) == 1
+            && let Some(var) = self.find_var_at(root.name, root.span)
+        {
+            var.read = false;
+            self.write_only.entry(root.decl).or_insert(target.span);
+        }
+        place
     }
 
     /// Lowers an expression used as an assignment target.

@@ -54,8 +54,11 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   (`call_with_values`), so compound assignments and `[]=` reuse it without
   re-evaluating operands. Module and generic-struct members of a set are
   instantiated with the receiver's bindings plus `Self`.
-- Codegen marks parameters the body never reads `[[maybe_unused]]` in
-  definitions (Wid allows unused parameters).
+- Codegen marks parameters and locals the body never reads
+  `[[maybe_unused]]` (Wid allows unused parameters and `_` names). An
+  assignment to a field or an element of a local stored in place
+  (`ir::Expr::written_local`) reads only its indexes, as in sema, since gcc
+  reports such a local as "set but not used".
 - `@[extern("sym")]` emits `extern R wid_extern_sym(params)
   __asm__(WID_SYMBOL("sym"));`: its own name bound to the C symbol, so it never
   conflicts with a header's declaration of `sym`. `wid_` symbols get no
@@ -887,7 +890,17 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   constant's name passes there (among declarations it declares the
   constant), and `Checker::place` reports one spliced into a method
   (`Checker::spliced_by`).
-- Test suite: `tests/run` (clang and gcc-16, strict flags), `tests/ui`
+- A local that is only written through a field or an element (`a[0] = 1`,
+  `m.hp = 9`, `a[0], a[1] = …`, a loop variable's field) is E0203, with a
+  label on the first such write (#71); it counted as read, and gcc-15
+  rejected the C ("set but not used"). `Checker::write_place` lowers `=`
+  targets and leaves the variable unread when the place is in it
+  (`ir::Expr::written_local`) and nothing else in the target names it;
+  codegen counts reads the same way, so parameters and `_` locals written
+  that way get `[[maybe_unused]]`. `tests/run/write_only_locals` covers the
+  shapes that stay valid under gcc's strict flags.
+- Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
+  missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
   `tests/test` (`wid test` reports), `tests/doc` (`wid doc` pages and
   errors), `tests/query` (`wid query` documents and errors) and every
