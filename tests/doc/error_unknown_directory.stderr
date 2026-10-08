@@ -1,0 +1,10 @@
+error[E0601]: package `shapez` not found
+ --> command line:1:9
+  |
+1 | wid doc shapez Ball
+  |         ^^^^^^ no directory with this path
+help: a similar package exists: `shapes`
+  | wid doc shapes Ball
+  = see `wid explain E0601`
+
+error: could not compile due to 1 error

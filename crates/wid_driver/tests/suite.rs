@@ -13,6 +13,11 @@
 //!   `tests/test/NAME.stdout`.
 //! - Every `core/` package with `_test.wid` files is run with `wid test`, and
 //!   all of its tests must pass.
+//! - `tests/doc/NAME.args` holds the arguments of a `wid doc` command, run
+//!   from `tests/doc/` (or from `tests/doc/DIR` when the first argument is
+//!   `-in:DIR`, for the forms that document the package in `.`). Its stdout
+//!   must match `NAME.stdout` and its stderr `NAME.stderr`; a missing file
+//!   expects nothing. The directories there are the packages they document.
 //!
 //! Set `WID_BLESS=1` to rewrite expectations, `WID_TEST_FILTER=text` to run a
 //! subset, and `WID_TEST_CC=clang,gcc-16` to choose compilers.
@@ -47,6 +52,11 @@ enum Case {
         name: String,
         target: PathBuf,
         expect: Option<PathBuf>,
+    },
+    /// `wid doc` with the arguments in `args`.
+    Doc {
+        name: String,
+        args: PathBuf,
     },
 }
 
@@ -93,6 +103,15 @@ fn collect(root: &Path, filter: &str) -> Vec<Case> {
             }
         }
     }
+    if let Ok(rd) = std::fs::read_dir(root.join("tests/doc")) {
+        for entry in rd.flatten() {
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e == "args") {
+                let name = path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+                cases.push(Case::Doc { name: format!("doc/{name}"), args: path });
+            }
+        }
+    }
     if let Ok(rd) = std::fs::read_dir(root.join("core")) {
         for entry in rd.flatten() {
             let path = entry.path();
@@ -111,7 +130,7 @@ fn collect(root: &Path, filter: &str) -> Vec<Case> {
 
 fn name_of(c: &Case) -> &str {
     match c {
-        Case::Run { name, .. } | Case::Ui { name, .. } | Case::Test { name, .. } => name,
+        Case::Run { name, .. } | Case::Ui { name, .. } | Case::Test { name, .. } | Case::Doc { name, .. } => name,
     }
 }
 
@@ -208,9 +227,48 @@ fn diff(expected: &str, actual: &str) -> String {
     out
 }
 
+/// Compares output that may be empty: a missing file expects none.
+fn compare_optional(label: &str, path: &Path, actual: &str, bless: bool, failures: &mut Vec<String>) {
+    if !actual.is_empty() || path.exists() {
+        if actual.is_empty() && bless {
+            let _ = std::fs::remove_file(path);
+            return;
+        }
+        compare(label, path, actual, bless, failures);
+    }
+}
+
+/// Runs the `wid doc` command in an args file (see the module docs).
+fn run_doc(args: &Path, root: &Path, bless: bool) -> Vec<String> {
+    let mut failures = Vec::new();
+    let text = std::fs::read_to_string(args).expect("read the args file");
+    let base = root.join("tests/doc");
+    let mut opts = Options::new(".");
+    opts.wid_root = Some(root.to_path_buf());
+    let mut request = wid_driver::doc::DocRequest { args: Vec::new(), private: false, dir: base.clone() };
+    let (mut json, mut json_errors) = (false, false);
+    for (i, arg) in text.split_whitespace().enumerate() {
+        match arg {
+            "-json" => json = true,
+            "-json-errors" => json_errors = true,
+            "-private" => request.private = true,
+            "-file" => opts.file_mode = true,
+            _ if i == 0 && arg.starts_with("-in:") => request.dir = base.join(&arg[4..]),
+            _ if arg.starts_with('-') => panic!("unknown flag `{arg}` in {}", args.display()),
+            _ => request.args.push(arg.to_string()),
+        }
+    }
+    let out = wid_driver::doc::doc(&opts, &request);
+    let printed = wid_driver::doc::print(&out, json, json_errors, false);
+    compare_optional("stdout", &args.with_extension("stdout"), &normalize(&printed.stdout, root), bless, &mut failures);
+    compare_optional("stderr", &args.with_extension("stderr"), &normalize(&printed.stderr, root), bless, &mut failures);
+    failures
+}
+
 fn run_case(case: &Case, root: &Path, ccs: &[String], bless: bool) -> Vec<String> {
     let mut failures = Vec::new();
     match case {
+        Case::Doc { args, .. } => return run_doc(args, root, bless),
         Case::Ui { file, .. } => {
             let mut opts = Options::new(file);
             opts.file_mode = !file.is_dir();
@@ -306,17 +364,19 @@ fn run_case(case: &Case, root: &Path, ccs: &[String], bless: bool) -> Vec<String
     failures
 }
 
-/// Every error code that appears in a UI expectation must be documented.
+/// Every error code that appears in a UI (or `wid doc`) expectation must
+/// be documented.
 fn check_code_docs(root: &Path) -> (Vec<String>, Vec<String>) {
     let mut errors = Vec::new();
     let mut covered = std::collections::HashSet::new();
-    if let Ok(rd) = std::fs::read_dir(root.join("tests/ui")) {
+    for dir in ["tests/ui", "tests/doc"] {
+        let Ok(rd) = std::fs::read_dir(root.join(dir)) else { continue };
         for entry in rd.flatten() {
             let path = entry.path();
             if path.extension().is_some_and(|e| e == "stderr") {
                 let text = std::fs::read_to_string(&path).unwrap_or_default();
                 for info in wid_diagnostics::codes::ALL {
-                    if text.contains(&format!("[{}]", info.code)) {
+                    if text.contains(&format!("[{}]", info.code)) || text.contains(&format!("\"{}\"", info.code)) {
                         covered.insert(info.code.as_str());
                     }
                 }

@@ -1,0 +1,8 @@
+package shapes
+
+def heal(amount: Int)
+    Restores `amount` hit points, up to 100.
+
+    Healing a dead player brings it back.
+
+    method of struct Player, defined at tests/doc/shapes/shapes.wid:78

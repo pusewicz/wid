@@ -7,6 +7,8 @@
 #
 # Single-file states run as `check main.wid -file`; multi-file states run as
 # `check .` inside the package directory, and as `build` when a .c file exists.
+# A page with `<!-- command: ARGS -->` runs `wid ARGS` instead (see
+# scripts/errdocs_drift.rb).
 #
 # Run it after an intended diagnostic change, review the diff, then confirm
 # with scripts/errdocs_drift.rb (which also checks the fix programs).
@@ -58,16 +60,18 @@ def parse(text)
 end
 
 # Runs the compiler on a file set; returns the output lines without trailers.
-def run(files, tag, flags = [])
+def run(files, tag, flags = [], command = nil)
   dir = File.join(WORK, tag)
   FileUtils.rm_rf(dir)
+  FileUtils.mkdir_p(dir)
   files.each do |path, body|
     FileUtils.mkdir_p(File.dirname(File.join(dir, path)))
     File.write(File.join(dir, path), body.join("\n") + "\n")
   end
   env = { "WID_ROOT" => ROOT, "NO_COLOR" => "1" }
   args =
-    if files.keys == ["main.wid"] then ["check", "main.wid", "-file"]
+    if command then command
+    elsif files.keys == ["main.wid"] then ["check", "main.wid", "-file"]
     elsif files.keys.any? { |k| k.end_with?(".c") } then ["build", "."]
     else ["check", "."]
     end
@@ -89,6 +93,7 @@ codes.each do |code|
     next
   end
   flags = page[/<!-- flags: (.*?) -->/, 1].to_s.split
+  command = page[/<!-- command: (.*?) -->/, 1]&.split
   blocks = parse(page)
   files = {}
   prev_section = nil
@@ -99,7 +104,7 @@ codes.each do |code|
     case b.lang
     when "wid", "c" then files[b.label || "main.wid"] = b.body
     when "text"
-      out = run(files, "#{code}-#{i}", flags)
+      out = run(files, "#{code}-#{i}", flags, command)
       replacements << [b.line, b.body.size, out] if out != b.body
     end
   end

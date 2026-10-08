@@ -1,0 +1,9 @@
+package shapes
+
+String
+    builtin type; listed below are the methods extensions in this program add to it
+
+METHODS FROM extend String (tests/doc/shapes/shapes.wid:152)
+
+def loudness -> Int
+    The size, shouted.

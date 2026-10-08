@@ -1,0 +1,13 @@
+package shapes
+
+overload :clamp, :clamp_int, :clamp_f32
+    Clamps either kind of number.
+
+    overload set, defined at tests/doc/shapes/shapes.wid:128
+
+MEMBERS
+
+def clamp_int(x: Int) -> Int
+    Clamps an `Int` to 0..10.
+def clamp_f32(x: F32) -> F32
+    Clamps an `F32` to 0..10.

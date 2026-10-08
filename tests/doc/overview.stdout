@@ -1,0 +1,121 @@
+package shapes
+
+Shapes for a small 2D game: balls, players and the methods that move
+them.
+
+A second paragraph, which only the overview shows.
+
+CONSTANTS
+
+MAX_BALLS = 64
+    How many balls fit on the screen.
+
+DEBUG_SHAPES = false
+
+TYPES
+
+Vec2 = [2]F32
+    A 2D vector.
+
+Pixels = distinct F32
+    Screen pixels, kept apart from other numbers.
+
+enum Dir : U8
+    A compass direction.
+
+    north
+        Up the screen.
+    south
+    east = 4
+        Values can skip ahead.
+    west
+
+    def opposite -> Dir
+        The opposite direction.
+
+union Shape = Ball | geo.Rect
+    Something to draw.
+
+struct Entity
+    Shared by everything that moves.
+
+    hp: Int = 100
+        Hit points; 0 is dead.
+    pos: Vec2
+
+    def move(delta: Vec2)
+        Moves by `delta`.
+
+struct Player
+    The one the player controls.
+
+    using base: Entity
+    name: String
+        The name shown above the player.
+
+    def heal(amount: Int)
+        Restores `amount` hit points, up to 100.
+    def self.create(name: String) -> Player
+        A player at the origin.
+    def kills -> Int
+
+struct Ball
+    A bouncing ball.
+
+    pos: Vec2
+    vel: Vec2 = [120.0, 80.0]
+        Pixels per second.
+    radius: F32 = 8.0
+
+struct Pool($T, $N: Int)
+    A fixed-size pool of `N` items.
+
+    items: [N]T
+    count: Int
+
+    def push(x: T) -> Bool
+        Adds `x`, unless the pool is full.
+
+MODULES
+
+module Greeter
+    Gives a type a greeting.
+
+    def greet -> String
+        Says hello.
+
+METHODS
+
+def max_of(a: $T, b: T) -> T
+    The larger of two values.
+
+def clamp_int(x: Int) -> Int
+    Clamps an `Int` to 0..10.
+
+def clamp_f32(x: F32) -> F32
+    Clamps an `F32` to 0..10.
+
+overload :clamp, :clamp_int, :clamp_f32
+    Clamps either kind of number.
+
+def dump_shapes
+    Does nothing outside debug builds.
+
+MACROS
+
+macro def counter(name: Symbol) -> Code
+    Declares a method `name` that counts nothing yet.
+
+EXTENSIONS
+
+extend Shape
+    def label -> String
+        What the shape is called in messages.
+
+extend Player
+    def boost
+        Doubles the player's speed.
+
+extend String
+    def loudness -> Int
+        The size, shouted.

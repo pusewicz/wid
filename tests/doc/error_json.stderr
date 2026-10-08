@@ -1,0 +1,48 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0602",
+      "column": 16,
+      "expansions": [],
+      "explain": "wid explain E0602",
+      "file": "command line",
+      "helps": [
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [
+            {
+              "column": 16,
+              "end": 18,
+              "end_column": 19,
+              "end_line": 1,
+              "file": "command line",
+              "line": 1,
+              "replacement": "Ball",
+              "start": 15
+            }
+          ],
+          "message": "a similar name exists: `Ball`"
+        }
+      ],
+      "labels": [
+        {
+          "column": 16,
+          "end": 18,
+          "end_column": 19,
+          "end_line": 1,
+          "file": "command line",
+          "line": 1,
+          "message": "not declared in this package",
+          "primary": true,
+          "start": 15
+        }
+      ],
+      "line": 1,
+      "message": "no symbol `Bal` in this package",
+      "notes": [],
+      "severity": "error"
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}

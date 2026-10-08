@@ -1,0 +1,11 @@
+error[E0603]: `MAX_BALLS` has no members
+ --> command line:1:26
+  |
+1 | wid doc shapes MAX_BALLS.x
+  |                          ^ `MAX_BALLS` is a constant, so nothing can follow it
+  = note: only structs, enums, unions, modules and the type aliases of them have members
+help: document `MAX_BALLS` itself
+  | wid doc shapes MAX_BALLS
+  = see `wid explain E0603`
+
+error: could not compile due to 1 error

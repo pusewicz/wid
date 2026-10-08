@@ -1,0 +1,16 @@
+package shapes
+
+struct Pool($T, $N: Int)
+    A fixed-size pool of `N` items.
+
+    struct, defined at tests/doc/shapes/shapes.wid:105
+
+FIELDS
+
+items: [N]T
+count: Int
+
+METHODS
+
+def push(x: T) -> Bool
+    Adds `x`, unless the pool is full.

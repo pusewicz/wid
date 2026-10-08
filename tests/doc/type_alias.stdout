@@ -1,0 +1,6 @@
+package shapes
+
+Vec2 = [2]F32
+    A 2D vector.
+
+    type alias, defined at tests/doc/shapes/shapes.wid:12

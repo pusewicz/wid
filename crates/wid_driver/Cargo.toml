@@ -11,6 +11,7 @@ wid_syntax.workspace = true
 wid_sema.workspace = true
 wid_codegen_c.workspace = true
 wid_cimport.workspace = true
+serde_json.workspace = true
 
 [[test]]
 name = "suite"

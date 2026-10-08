@@ -176,6 +176,7 @@ dependencies = [
 name = "wid_driver"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "wid_cimport",
  "wid_codegen_c",
  "wid_diagnostics",

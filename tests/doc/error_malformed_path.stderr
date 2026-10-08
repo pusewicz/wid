@@ -1,0 +1,9 @@
+error[E0602]: `Player.` is not a symbol path
+ --> command line:1:16
+  |
+1 | wid doc shapes Player.
+  |                ^^^^^^^ a name is missing around a `.`
+help: write a name, a type and its member, or an import name first: `Ball`, `Ball.update`, `rl.draw_circle_v`
+  = see `wid explain E0602`
+
+error: could not compile due to 1 error

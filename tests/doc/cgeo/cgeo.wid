@@ -1,0 +1,6 @@
+# Geometry from C, through `cimport`.
+
+cimport "geo.h", as: :geo
+
+# The area of the unit circle.
+def unit_area -> F64 = geo.circle_area(1.0)

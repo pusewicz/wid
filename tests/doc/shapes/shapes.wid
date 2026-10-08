@@ -1,0 +1,155 @@
+# Shapes for a small 2D game: balls, players and the methods that move
+# them.
+#
+# A second paragraph, which only the overview shows.
+
+import "./geo"
+
+# How many balls fit on the screen.
+MAX_BALLS = 64
+
+# A 2D vector.
+Vec2 = [2]F32
+
+# Screen pixels, kept apart from other numbers.
+Pixels = distinct F32
+
+DEBUG_SHAPES = false
+
+# A compass direction.
+enum Dir : U8
+  # Up the screen.
+  north
+  south
+  # Values can skip ahead.
+  east = 4
+  west
+
+  # The opposite direction.
+  def opposite -> Dir
+    case self
+    when :north then :south
+    when :south then :north
+    when :east then :west
+    else :east
+    end
+  end
+end
+
+# Something to draw.
+union Shape = Ball | geo.Rect
+
+extend Shape
+  # What the shape is called in messages.
+  def label -> String = "shape"
+end
+
+# Shared by everything that moves.
+struct Entity
+  # Hit points; 0 is dead.
+  hp: Int = 100
+  pos: Vec2
+
+  # Moves by `delta`.
+  def move(delta: Vec2)
+    @pos += delta
+  end
+end
+
+# Gives a type a greeting.
+module Greeter
+  # Says hello.
+  def greet -> String = "hello"
+end
+
+# The one the player controls.
+#
+# Players have a name, hit points and a position.
+struct Player
+  using base: Entity
+  # The name shown above the player.
+  name: String
+  include Greeter
+  counter :kills
+
+  # Restores `amount` hit points, up to 100.
+  #
+  # Healing a dead player brings it back.
+  def heal(amount: Int)
+    @hp = (@hp + amount).min(100)
+  end
+
+  # A player at the origin.
+  def self.create(name: String) -> Player = Player.new(name: name)
+
+  # Only the player's own methods call this.
+  private def secret
+  end
+end
+
+extend Player
+  # Doubles the player's speed.
+  def boost
+  end
+end
+
+# A bouncing ball.
+struct Ball
+  pos: Vec2
+  # Pixels per second.
+  vel: Vec2 = [120.0, 80.0]
+  radius: F32 = 8.0
+end
+
+# A fixed-size pool of `N` items.
+struct Pool($T, $N: Int)
+  items: [N]T
+  count: Int
+
+  # Adds `x`, unless the pool is full.
+  def push(x: T) -> Bool
+    return false if @count == N
+    @items[@count] = x
+    @count += 1
+    true
+  end
+end
+
+# The larger of two values.
+def max_of(a: $T, b: T) -> T = a > b ? a : b
+
+# Clamps an `Int` to 0..10.
+def clamp_int(x: Int) -> Int = x.clamp(0, 10)
+
+# Clamps an `F32` to 0..10.
+def clamp_f32(x: F32) -> F32 = x.clamp(0.0, 10.0)
+
+# Clamps either kind of number.
+overload :clamp, :clamp_int, :clamp_f32
+
+# Declares a method `name` that counts nothing yet.
+#
+# Called in a struct body, like `counter :kills`.
+macro def counter(name: Symbol) -> Code
+  quote do
+    def #{name} -> Int = 0
+  end
+end
+
+comptime if DEBUG_SHAPES
+  # Prints every shape.
+  def dump_shapes
+    puts "shapes"
+  end
+else
+  # Does nothing outside debug builds.
+  def dump_shapes
+  end
+end
+
+private def secret_helper -> Int = 1
+
+extend String
+  # The size, shouted.
+  def loudness -> Int = self.size * 2
+end

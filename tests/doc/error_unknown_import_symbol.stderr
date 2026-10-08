@@ -1,0 +1,11 @@
+error[E0602]: no symbol `Pont` in package `geo` (imported as `geo`)
+ --> command line:1:13
+  |
+1 | wid doc geo.Pont
+  |             ^^^^ not declared in package `geo` (imported as `geo`)
+  = note: `geo.Pont` is not a directory, a file or a collection path (like `core:fmt`), so it was read as a symbol of the package in `.`
+help: a similar name exists: `Point`
+  | wid doc geo.Point
+  = see `wid explain E0602`
+
+error: could not compile due to 1 error

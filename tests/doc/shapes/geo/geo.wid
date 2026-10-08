@@ -1,0 +1,18 @@
+# Plane geometry for the shapes package.
+
+# An axis-aligned rectangle.
+struct Rect
+  x: F32
+  y: F32
+  w: F32
+  h: F32
+
+  # The area.
+  def area -> F32 = @w * @h
+end
+
+# A point in the plane.
+struct Point
+  x: F32
+  y: F32
+end

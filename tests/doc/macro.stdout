@@ -1,0 +1,8 @@
+package shapes
+
+macro def counter(name: Symbol) -> Code
+    Declares a method `name` that counts nothing yet.
+
+    Called in a struct body, like `counter :kills`.
+
+    macro, defined at tests/doc/shapes/shapes.wid:133

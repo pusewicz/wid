@@ -12,6 +12,7 @@ pub enum Command {
     Run,
     Check,
     Test,
+    Doc,
     Explain,
     Cimport,
     Version,
@@ -47,9 +48,15 @@ pub struct Parsed {
     pub include_dirs: Vec<PathBuf>,
     /// `wid cimport -pkg-config:`.
     pub pkg_config: Vec<String>,
+    /// `wid doc`'s positional arguments: a package, a symbol, or both.
+    pub doc_args: Vec<String>,
+    /// `wid doc -json`.
+    pub json: bool,
+    /// `wid doc -private`.
+    pub private: bool,
 }
 
-const COMMANDS: &[&str] = &["build", "run", "check", "test", "explain", "cimport", "version", "help"];
+const COMMANDS: &[&str] = &["build", "run", "check", "test", "doc", "explain", "cimport", "version", "help"];
 
 const FLAGS: &[&str] = &[
     "-file",
@@ -69,6 +76,8 @@ const FLAGS: &[&str] = &[
     "-strip-prefix:",
     "-include-dir:",
     "-pkg-config:",
+    "-json",
+    "-private",
 ];
 
 /// Parses the arguments after the program name.
@@ -95,6 +104,9 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
         strip_prefixes: Vec::new(),
         include_dirs: Vec::new(),
         pkg_config: Vec::new(),
+        doc_args: Vec::new(),
+        json: false,
+        private: false,
     };
     let Some(first) = argv.first() else { return Ok(parsed) };
     parsed.command = match first.as_str() {
@@ -102,6 +114,7 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
         "run" => Command::Run,
         "check" => Command::Check,
         "test" => Command::Test,
+        "doc" => Command::Doc,
         "explain" => Command::Explain,
         "cimport" => Command::Cimport,
         "version" | "-version" | "--version" => Command::Version,
@@ -121,6 +134,15 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
         }
         if parsed.command == Command::Help {
             parsed.help_topic = Some(arg.clone());
+            continue;
+        }
+        if parsed.command == Command::Doc && (!arg.starts_with('-') || arg == "-") {
+            if parsed.doc_args.len() == 2 {
+                return Err(format!(
+                    "unexpected argument `{arg}`; `wid doc` takes a package and a symbol, like `wid doc core:fmt int`"
+                ));
+            }
+            parsed.doc_args.push(arg.clone());
             continue;
         }
         if !arg.starts_with('-') || arg == "-" {
@@ -167,6 +189,8 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
             "-json-errors" => parsed.json_errors = true,
             "-filter" => parsed.filter = Some(need("name")?),
             "-dump" | "--dump" if parsed.command == Command::Cimport => {}
+            "-json" if parsed.command == Command::Doc => parsed.json = true,
+            "-private" if parsed.command == Command::Doc => parsed.private = true,
             "-strip-prefix" => parsed.strip_prefixes.push(need("SDL_")?),
             "-include-dir" => parsed.include_dirs.push(PathBuf::from(need("path")?)),
             "-pkg-config" => parsed.pkg_config.push(need("raylib")?),
@@ -197,6 +221,7 @@ pub fn usage(topic: Option<&str>) -> String {
         }
         Some("check") => "wid check [dir] [flags]\n\nType-checks the package without generating code.\n".to_string() + FLAG_HELP,
         Some("test") => "wid test [dir] [flags]\n\nBuilds the package with its `_test.wid` files and runs every `@[test]` method,\neach in its own process. `-filter:<text>` runs only tests whose name contains\nthe text. Exits with 1 when a test fails.\n".to_string() + FLAG_HELP,
+        Some("doc") => DOC_HELP.to_string(),
         Some("explain") => "wid explain [CODE]\n\nPrints the long explanation of an error code, or lists all codes.\n".to_string(),
         Some("cimport") => "wid cimport --dump <header> [flags]\n\nPrints the Wid declarations `cimport` makes of a C header. A header that\nisn't a file is looked up on the include path, like `#include <name>`.\n\nFlags:\n  -strip-prefix:<prefix>  Remove a prefix from every name\n  -include-dir:<dir>      Search a directory for headers\n  -pkg-config:<name>      Use pkg-config's flags for a library\n  -define:NAME=value      Define a C macro first\n".to_string(),
         _ => format!(
@@ -207,6 +232,7 @@ pub fn usage(topic: Option<&str>) -> String {
                run      Build and run a package\n  \
                check    Type-check a package\n  \
                test     Run a package's tests\n  \
+               doc      Show the documentation of a package or symbol\n  \
                explain  Explain an error code\n  \
                cimport  Print the Wid view of a C header\n  \
                version  Print the version\n  \
@@ -215,6 +241,36 @@ pub fn usage(topic: Option<&str>) -> String {
         ),
     }
 }
+
+const DOC_HELP: &str = "wid doc [package] [symbol] [flags]
+
+Shows the documentation of a package, or of one of its symbols, from the doc
+comments: the `# ` lines directly above a declaration. Without a symbol it
+lists every public declaration of the package with the first paragraph of its
+doc; with one it shows the whole doc, and for a type its fields, members and
+methods, including those from `include`, `extend` and `using`.
+
+The package is a directory (default `.`), a file with `-file`, or a collection
+path like `core:fmt` or `vendor:raylib`. The symbol is a path: `Name`,
+`Type.member`, or an import name first, `rl.draw_circle_v`. A single argument
+is the package if it names a directory or file or contains `:`, and otherwise
+a symbol of the package in `.`.
+
+Examples:
+  wid doc core:strings
+  wid doc core:fmt int
+  wid doc rl.draw_circle_v      (in a package that imports raylib as `rl`)
+  wid doc . Ball.update -json
+
+Flags:
+  -json                  Print the documentation as JSON
+  -private               Include private declarations
+  -file                  Treat the package as a single file
+  -json-errors           Print diagnostics as JSON (on stderr)
+  -define:NAME=value     Set a value that `config(:NAME, default)` reads
+  -target:<os_arch>      Document another target's code (sets OS and ARCH)
+  -collection:name=path  Add an import collection
+";
 
 const FLAG_HELP: &str = "Flags:\n  \
     -file                  Treat the target as a single-file package\n  \

@@ -1,0 +1,11 @@
+error[E0602]: no symbol `Bal` in this package
+ --> command line:1:9
+  |
+1 | wid doc Bal
+  |         ^^^ not declared in this package
+  = note: `Bal` is not a directory, a file or a collection path (like `core:fmt`), so it was read as a symbol of the package in `.`
+help: a similar name exists: `Ball`
+  | wid doc Ball
+  = see `wid explain E0602`
+
+error: could not compile due to 1 error

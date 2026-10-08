@@ -1,0 +1,73 @@
+{
+  "items": [
+    {
+      "attributes": [
+        "extern(\"GeoRect\")",
+        "size(8)",
+        "align(4)"
+      ],
+      "c": {
+        "declared_at": "geo.h:10",
+        "header": "geo.h",
+        "name": "GeoRect"
+      },
+      "doc": "A rectangle.\nC struct: 8 bytes, aligned to 4",
+      "fields": [
+        {
+          "attributes": [],
+          "doc": "The width.",
+          "kind": "field",
+          "location": null,
+          "name": "w",
+          "origin": {
+            "kind": "own",
+            "location": null,
+            "via": null
+          },
+          "owner": {
+            "kind": "struct",
+            "name": "GeoRect"
+          },
+          "package": "cimport:geo.h",
+          "path": "GeoRect.w",
+          "private": false,
+          "signature": "w: C.float"
+        },
+        {
+          "attributes": [],
+          "doc": null,
+          "kind": "field",
+          "location": null,
+          "name": "h",
+          "origin": {
+            "kind": "own",
+            "location": null,
+            "via": null
+          },
+          "owner": {
+            "kind": "struct",
+            "name": "GeoRect"
+          },
+          "package": "cimport:geo.h",
+          "path": "GeoRect.h",
+          "private": false,
+          "signature": "h: C.float"
+        }
+      ],
+      "kind": "struct",
+      "location": null,
+      "methods": [],
+      "name": "GeoRect",
+      "package": "cimport:geo.h",
+      "path": "GeoRect",
+      "private": false,
+      "signature": "struct GeoRect"
+    }
+  ],
+  "package": {
+    "doc": "Geometry from C, through `cimport`.",
+    "name": "cgeo",
+    "path": "."
+  },
+  "symbol": "geo.GeoRect"
+}

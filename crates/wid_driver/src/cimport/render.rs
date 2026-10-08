@@ -156,12 +156,13 @@ impl Renderer<'_> {
                 list.push((c_name.clone(), location.clone()));
             }
         }
-        for (wid, c_name, _, index) in claims {
+        for (wid, c_name, location, index) in claims {
             let list = &owners[&wid];
             if list.len() > 1 || self.taken.contains_key(&wid) {
                 continue;
             }
             self.taken.insert(wid.clone(), c_name);
+            self.binding.locations.insert(wid.clone(), location);
             if let Some(index) = index {
                 self.names.insert(index, wid);
             }
@@ -922,6 +923,9 @@ fn doc_lines(doc: &str) -> Vec<String> {
         .lines()
         .map(|line| {
             let line = line.trim();
+            // Doxygen's comments on the member before them: `///<`, `/**<`.
+            let line =
+                ["///<", "//!<", "/**<", "/*!<"].iter().find_map(|marker| line.strip_prefix(marker)).unwrap_or(line);
             let line = line.trim_start_matches("/**").trim_start_matches("/*!").trim_start_matches("/*");
             let line = line.trim_start_matches("///").trim_start_matches("//!").trim_start_matches("//");
             let line = line.trim_end_matches("*/");

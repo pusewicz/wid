@@ -1,0 +1,16 @@
+package shapes
+
+union Shape = Ball | geo.Rect
+    Something to draw.
+
+    union, defined at tests/doc/shapes/shapes.wid:40
+
+VARIANTS
+
+Ball
+geo.Rect
+
+METHODS FROM extend Shape (tests/doc/shapes/shapes.wid:42)
+
+def label -> String
+    What the shape is called in messages.

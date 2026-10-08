@@ -1,0 +1,20 @@
+package shapes
+
+enum Dir : U8
+    A compass direction.
+
+    enum, defined at tests/doc/shapes/shapes.wid:20
+
+MEMBERS
+
+north
+    Up the screen.
+south
+east = 4
+    Values can skip ahead.
+west
+
+METHODS
+
+def opposite -> Dir
+    The opposite direction.

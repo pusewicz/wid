@@ -7,6 +7,10 @@
 #
 # Single-file states run as `check main.wid -file`; multi-file states run as
 # `check .` inside the package directory, and as `build` when a .c file exists.
+# A page about another command says which with `<!-- command: ARGS -->`, like
+# `<!-- command: doc . Ball.sped -->`: its examples run as `wid ARGS` in the
+# package directory, and `<!-- fix-command: ARGS -->` is its fix, which must
+# succeed with nothing on stderr.
 #
 # Pages are read as UTF-8 whatever the locale. The C compiler defaults to
 # `clang` (set WID_CC to override) because pages that show C compiler output,
@@ -54,21 +58,30 @@ def parse(text)
   out
 end
 
-# Runs the compiler on a file set; returns the output lines without trailers.
-def run(files, tag, flags = [])
+# Writes a file set into a fresh directory named after `tag`.
+def write_files(files, tag)
   dir = File.join(WORK, tag)
   FileUtils.rm_rf(dir)
+  FileUtils.mkdir_p(dir)
   files.each do |path, body|
     FileUtils.mkdir_p(File.dirname(File.join(dir, path)))
     File.write(File.join(dir, path), body.join("\n") + "\n")
   end
-  env = { "WID_ROOT" => ROOT, "NO_COLOR" => "1" }
+  dir
+end
+
+ENV_VARS = { "WID_ROOT" => ROOT, "NO_COLOR" => "1" }.freeze
+
+# Runs the compiler on a file set; returns the output lines without trailers.
+def run(files, tag, flags = [], command = nil)
+  dir = write_files(files, tag)
   args =
-    if files.keys == ["main.wid"] then ["check", "main.wid", "-file"]
+    if command then command
+    elsif files.keys == ["main.wid"] then ["check", "main.wid", "-file"]
     elsif files.keys.any? { |k| k.end_with?(".c") } then ["build", "."]
     else ["check", "."]
     end
-  out, = Open3.capture2e(env, WID, *args, *flags, chdir: dir)
+  out, = Open3.capture2e(ENV_VARS, WID, *args, *flags, chdir: dir)
   lines = out.lines.map(&:chomp).reject { |l| l =~ TRAILER }
   lines.pop while lines.last == ""
   lines
@@ -86,6 +99,8 @@ codes.each do |code|
   end
   # `<!-- flags: ... -->` gives the example (not the fix) compiler flags.
   flags = page[/<!-- flags: (.*?) -->/, 1].to_s.split
+  command = page[/<!-- command: (.*?) -->/, 1]&.split
+  fix_command = page[/<!-- fix-command: (.*?) -->/, 1]&.split
   blocks = parse(page)
   files = {}
   pending = false
@@ -115,7 +130,7 @@ codes.each do |code|
       pending = true
       fix_seen = true if b.section == "How to fix"
     when "text"
-      out = run(files, "#{code}-#{i}", flags)
+      out = run(files, "#{code}-#{i}", flags, command)
       if out == b.body
         report << "text@#{b.line} OK"
       else
@@ -130,7 +145,16 @@ codes.each do |code|
       pending = false
     end
   end
-  if fix_seen && pending
+  if fix_command
+    dir = write_files(files, "#{code}-fix")
+    out, err, status = Open3.capture3(ENV_VARS, WID, *fix_command, chdir: dir)
+    if status.success? && err.empty?
+      report << "fix OK"
+    else
+      report << "fix FAIL"
+      (err + out).lines.each { |l| report << "    | #{l.chomp}" } if verbose
+    end
+  elsif fix_seen && pending
     check_fix.call
   elsif !blocks.any? { |b| b.section == "How to fix" && b.lang == "wid" }
     report << "no fix program"

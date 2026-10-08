@@ -1,0 +1,43 @@
+package shapes
+
+struct Player
+    The one the player controls.
+
+    Players have a name, hit points and a position.
+
+    struct, defined at tests/doc/shapes/shapes.wid:68
+
+FIELDS
+
+using base: Entity
+name: String
+    The name shown above the player.
+
+FIELDS FROM using base: Entity
+
+hp: Int = 100
+    Hit points; 0 is dead.
+pos: Vec2
+
+METHODS
+
+def heal(amount: Int)
+    Restores `amount` hit points, up to 100.
+def self.create(name: String) -> Player
+    A player at the origin.
+def kills -> Int
+
+METHODS FROM include Greeter (tests/doc/shapes/shapes.wid:60)
+
+def greet -> String
+    Says hello.
+
+METHODS FROM extend Player (tests/doc/shapes/shapes.wid:90)
+
+def boost
+    Doubles the player's speed.
+
+METHODS FROM using base: Entity
+
+def move(delta: Vec2)
+    Moves by `delta`.

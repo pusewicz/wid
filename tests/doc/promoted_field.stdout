@@ -1,0 +1,6 @@
+package shapes
+
+hp: Int = 100
+    Hit points; 0 is dead.
+
+    field of struct Entity, promoted into Player by `using base: Entity`, defined at tests/doc/shapes/shapes.wid:50

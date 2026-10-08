@@ -37,6 +37,7 @@ fn main() -> ExitCode {
         Command::Build => build(&parsed),
         Command::Run => run(&parsed),
         Command::Test => test(&parsed),
+        Command::Doc => doc(&parsed),
     }
 }
 
@@ -101,6 +102,21 @@ fn cimport(parsed: &Parsed) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// `wid doc`: prints the documentation on stdout (as JSON with `-json`) and
+/// the diagnostics on stderr (as JSON with `-json-errors`). The page is
+/// shown even when the package has errors; the exit status is 1 then, and
+/// when the request fails.
+fn doc(parsed: &Parsed) -> ExitCode {
+    let opts = options(parsed);
+    let request =
+        wid_driver::doc::DocRequest { args: parsed.doc_args.clone(), private: parsed.private, dir: PathBuf::new() };
+    let out = wid_driver::doc::doc(&opts, &request);
+    let printed = wid_driver::doc::print(&out, parsed.json, parsed.json_errors, color_stderr());
+    eprint!("{}", printed.stderr);
+    print!("{}", printed.stdout);
+    if printed.success { ExitCode::SUCCESS } else { ExitCode::from(1) }
 }
 
 fn explain(parsed: &Parsed) -> ExitCode {
