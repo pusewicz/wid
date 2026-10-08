@@ -1,0 +1,9 @@
+# A macro call at package level in an imported package that fails to run
+# might have extended the types this package uses, so their missing methods
+# aren't reported here either.
+import "./shapes"
+
+def main
+  b = shapes.Ball.new
+  p b.ping
+end

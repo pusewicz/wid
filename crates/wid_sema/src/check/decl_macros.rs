@@ -206,9 +206,11 @@ impl<'a> Checker<'a> {
 
     /// Records that a macro call among declarations failed to expand or
     /// named no macro. What it would have generated is unknown, so names
-    /// and members missing because of it aren't reported: anywhere in the
-    /// package for a call at package level, and on the type (or the types
-    /// including the module, or extended) for a call in a body.
+    /// and members missing because of it aren't reported: for a call at
+    /// package level, names anywhere in the package and members of any type
+    /// (an `extend` it generated would apply program-wide), and for a call
+    /// in a body, members of the type (or the types including the module,
+    /// or extended).
     fn failed_among_declarations(&mut self, p: PendingMacro<'a>) {
         match p.owner {
             Some(owner) => self.macros.failed_owners.insert(owner),
@@ -217,10 +219,15 @@ impl<'a> Checker<'a> {
     }
 
     /// Whether a macro call failed among declarations that add members to
-    /// `ty` (see [`Checker::failed_among_declarations`]): in the body of its
-    /// struct or enum, of a module it includes, or of an `extend` of it. A
-    /// member missing on `ty` may be one the call would have generated.
+    /// `ty` (see [`Checker::failed_among_declarations`]): at package level
+    /// in any package, since it may have generated an `extend` of any type
+    /// and extensions apply program-wide; or in the body of its struct or
+    /// enum, of a module it includes, or of an `extend` of it. A member
+    /// missing on `ty` may be one the call would have generated.
     pub(super) fn members_incomplete(&mut self, ty: TyId) -> bool {
+        if !self.macros.failed_packages.is_empty() {
+            return true;
+        }
         if self.macros.failed_owners.is_empty() {
             return false;
         }

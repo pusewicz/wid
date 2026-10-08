@@ -14,6 +14,6 @@ end
 # point back here.
 macro def broken -> Code
   quote do
-    def broken -> Int = missing_helper()
+    def broken -> Int = "two"
   end
 end

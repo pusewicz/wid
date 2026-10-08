@@ -270,8 +270,11 @@ runs the stages; `wid_cli` is the `wid` binary.
     declarations that fails or names no macro runs
     `failed_among_declarations`: at package level the package joins
     `MacroState::failed_packages`, which `pkg_incomplete` treats like a
-    failed `cimport` merge (undefined names and types), and in a body
-    the owner joins `failed_owners`, so `members_incomplete` skips E0204
+    failed `cimport` merge (undefined names and types). While it isn't
+    empty, `members_incomplete` is true for every type, whichever package
+    looks the member up: the call may have generated an `extend` of any
+    type, and extensions apply program-wide (#29). In a body the owner
+    joins `failed_owners`, so `members_incomplete` skips E0204
     on its type (also through an included module or an `extend`) and
     `declared_by_failed_macro` skips E0201 for implicit-self calls and
     constants in its methods. An undefined macro among declarations is
@@ -531,7 +534,9 @@ runs the stages; `wid_cli` is the `wid` binary.
   uses of a field that E0913 rejected aren't reported missing, and a call
   in a method whose name is close to a macro's (E0201, whose help names the
   macro) or that stands alone with a symbol argument counts as a failed
-  expansion (#25).
+  expansion (#25); after a macro call at package level fails (a splice that
+  doesn't fit, or an error in the macro's own code), no missing member of
+  any type is reported, since it may have generated an `extend` (#29).
 - Test suite: `tests/run` (clang and gcc-16, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
   `tests/test` (`wid test` reports) and every `core/` package's `_test.wid`

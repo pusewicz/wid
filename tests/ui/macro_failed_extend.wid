@@ -1,0 +1,26 @@
+# A macro call at package level that fails to expand might have generated
+# an `extend` of any type, and extensions apply program-wide, so the
+# methods its uses call aren't reported as missing too.
+struct Ball
+  r: F32
+end
+
+macro def add_ping(t: Type) -> Code
+  body = quote do
+    x = 1
+  end
+  quote do
+    extend #{t}
+      #{body}
+      def ping -> Int = 1
+    end
+  end
+end
+
+add_ping Ball
+
+def main
+  b = Ball.new
+  p b.ping
+  p 3.pong
+end

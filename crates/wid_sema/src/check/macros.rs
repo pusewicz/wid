@@ -157,7 +157,9 @@ pub(crate) struct MacroState {
     /// Packages where a macro call at package level failed to expand or
     /// named no macro: a name missing there may be one it would have
     /// declared, so it isn't reported (like a failed `cimport` merge; see
-    /// [`Checker::pkg_incomplete`]).
+    /// [`Checker::pkg_incomplete`]). Nor is a missing member of any type
+    /// while this isn't empty, since the call may have generated an
+    /// `extend` (see [`Checker::members_incomplete`]).
     pub failed_packages: HashSet<PackageId>,
     /// Structs, enums, modules and `extend`s in whose body a macro call
     /// failed to expand or named no macro: a member missing on their types
@@ -483,7 +485,7 @@ impl<'a> Checker<'a> {
         if local && self.after_failed_expansion() {
             return true;
         }
-        if !member || self.macros.failed_owners.is_empty() {
+        if !member || (self.macros.failed_owners.is_empty() && self.macros.failed_packages.is_empty()) {
             return false;
         }
         let Some(frame) = self.body.frames.last() else { return false };

@@ -1,0 +1,13 @@
+error[E0911]: the macro `add_ping` splices a statement where a declaration goes
+  --> tests/ui/macro_failed_extend.wid:20:1
+   |
+20 | add_ping Ball
+   | ^^^^^^^^^^^^^ `add_ping` expands here
+  ::: tests/ui/macro_failed_extend.wid:14:7
+   |
+14 |       #{body}
+   |       ------- this splice is a statement
+help: only declarations go here: `def`, `struct`, constants and the like, or macro calls
+   = see `wid explain E0911`
+
+error: could not compile due to 1 error

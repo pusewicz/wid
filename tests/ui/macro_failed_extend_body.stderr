@@ -1,0 +1,8 @@
+error[E0204]: `Type` has no field or method `methods`
+ --> tests/ui/macro_failed_extend_body/shapes/shapes.wid:8:9
+  |
+8 |   n = t.methods.size
+  |         ^^^^^^^ not found on `Type`
+  = see `wid explain E0204`
+
+error: could not compile due to 1 error
