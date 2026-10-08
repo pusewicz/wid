@@ -966,6 +966,13 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   and only the second call appeared). `Checker::repeated_expansion`
   rewrites the labels in `splice_context`; the human renderer no longer
   lists a call that a secondary label already shows.
+- A negative argument for a generic struct's value parameter that is a
+  field's array length (`Grid(-1)` with `cells: [N]U8`) is E0301 at the
+  argument, with a label on the array and a note naming the field (#79;
+  it pointed at `[N]U8` with nothing at the call, plus E0203 on the
+  variable holding the value). `check_generic_args` reports it
+  (`sized_field`) and fails, so the instance is unknown; a value argument
+  that was reported (`Grid(1.5)`) fails it too.
 - A proc parameter whose name a macro splices (`->(#{v}: Int) -> Int {
   #{v} * 2 }`), in a method body or a generated `def`, is the caller's
   name, as a block parameter's is: the proc's body and code spliced from

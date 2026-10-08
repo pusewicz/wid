@@ -281,7 +281,28 @@ impl<'a> Checker<'a> {
             let at = spans.get(i).copied().unwrap_or(span);
             let kind = self.types.kind(arg).clone();
             match (&g.ty, kind) {
+                // A value argument that was reported: the instance is too.
+                (Some(_), TyKind::Unknown) => ok = false,
                 (_, TyKind::Unknown | TyKind::Param(_)) => {}
+                (Some(_), TyKind::ConstValue(v)) if v < 0 => {
+                    if let DeclKind::Struct(s) = d.kind
+                        && let Some((field, array)) = sized_field(&s.body, g.name.name)
+                    {
+                        ok = false;
+                        let (n, shown) = (g.name.as_str(), self.source_text(array));
+                        self.report(
+                            Diagnostic::error(codes::TYPE_MISMATCH, "array length cannot be negative")
+                                .primary(at, format!("`{n}` is {v} here"))
+                                .secondary(array, format!("`{n}` is the length of this array"))
+                                .note(format!(
+                                    "`{n}` sizes `{}`'s field `{}: {shown}`, so it can't be negative",
+                                    d.name,
+                                    field.as_str()
+                                ))
+                                .help(format!("pass a length of 0 or more for `{n}`")),
+                        );
+                    }
+                }
                 (None, TyKind::ConstValue(v)) => {
                     ok = false;
                     self.report(
@@ -900,6 +921,35 @@ impl VisitMut for ConstNames {
             && let [only] = segments.as_slice()
         {
             self.0.push(only.name);
+        }
+        walk_type(self, ty);
+    }
+}
+
+/// The first field of a struct's body whose type has an array of length
+/// `name` exactly (`[N]T`, also nested): the field's name and the array.
+fn sized_field(body: &[ast::Item], name: Name) -> Option<(Name, Span)> {
+    body.iter().find_map(|item| {
+        let ItemKind::Field(f) = &item.kind else { return None };
+        let mut find = FindLength { name, span: None };
+        find.visit_type(&mut f.ty.clone());
+        find.span.map(|s| (f.name.name, s))
+    })
+}
+
+/// Finds an array type whose length is the constant `name`.
+struct FindLength {
+    name: Name,
+    span: Option<Span>,
+}
+
+impl VisitMut for FindLength {
+    fn visit_type(&mut self, ty: &mut ast::TypeExpr) {
+        if let ast::TypeKind::Array(len, _) = &ty.kind
+            && matches!(len.kind, ast::ExprKind::Const(n) if n == self.name)
+            && self.span.is_none()
+        {
+            self.span = Some(ty.span);
         }
         walk_type(self, ty);
     }

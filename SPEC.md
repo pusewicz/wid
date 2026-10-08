@@ -229,7 +229,9 @@ end
   declaration) and takes any constant integer: a literal, a named
   constant (`Pool(Ball, MAX)`), constant arithmetic (`Pool(Ball, MAX * 2)`)
   or a `comptime` result; a name there is a constant unless it names a type.
-  Only generic structs take value parameters: a method's `xs: [$N]Int` is
+  A negative argument for a parameter that is a field's array length
+  (`cells: [N]U8`) is E0301 at the argument. Only generic structs take
+  value parameters: a method's `xs: [$N]Int` is
   E0105, and the method takes a slice, `xs: []Int`, with `xs.size` as its
   length, instead.
   - In the struct's fields and methods and in an `extend` of it, a value
