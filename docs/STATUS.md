@@ -1337,6 +1337,15 @@ the language server.
   resolved as a macro, and record the field in `rejected_fields`, so its
   uses (`b.pos`, `@pos`, `Ball.new(pos: …)`) aren't reported missing while
   other members of the struct still are.
+- `T.new(*xs)` is E0302 "Wid has no argument spreading", as a method
+  call's `*xs` is (#122); `struct_new` ignored the `*` and gave E0301 for
+  the collection as the first field's value. `Checker::spread_into_new`
+  notes that `T.new` takes a value for each field, and for an array,
+  slice or dynamic array offers the fix (to review) that passes its
+  elements to the fields left (`V.new(xs[0], xs[1])`). In both kinds of
+  call the collection is checked on its own and fills nothing, so no
+  E0301 for it and no "missing argument" follow (`match_args` counts it
+  like an unknown named argument).
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),

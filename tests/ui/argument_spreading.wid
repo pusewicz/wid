@@ -1,0 +1,20 @@
+# Wid has no argument spreading: `*xs` before an argument is one E0302,
+# in a method call and in `T.new`. The collection fills no parameter or
+# field, so nothing is reported missing or mistyped after it. For `T.new`
+# the fix passes the elements one by one, to the fields left.
+struct V
+  x: Int
+  y: Int
+  z: Int
+end
+
+def add(a: Int, b: Int) -> Int = a + b
+
+def main
+  xs = [1, 2]
+  v = V.new(*xs)
+  w = V.new(1, *xs)
+  ys: [dynamic]Int
+  u = V.new(*ys)
+  p v.x, w.y, u.z, add(*xs)
+end

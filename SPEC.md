@@ -86,7 +86,9 @@ end
   assignment like `cells[0] += 1`. Unused parameters are allowed.
 - **Calls.** Parentheses are optional for zero-argument calls and for the
   outermost call of a statement (`puts "hi"`). Any parameter can be passed by
-  name. Defaults are written `hp: Int = 100`. A field may be named by most
+  name. Defaults are written `hp: Int = 100`. There is no argument
+  spreading: `f(*xs)` and `T.new(*xs)` are E0302, and a method that takes
+  any number of values takes a slice. A field may be named by most
   keywords (`next: ^Node?`), and, as in Ruby, a keyword followed directly
   by `:` in an argument list names an argument: `Node.new(next: n)`.
 - **Symbols.** `:north` is a compile-time name. Where an enum is expected it
