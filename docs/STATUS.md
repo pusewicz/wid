@@ -216,13 +216,23 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
     `ast::TypeKind::Spliced(TyId)`, resolved by `resolve_type`, also inside
     `ExprKind::Type` where a value goes). A nested `quote` is left alone. A
     name from a `Symbol` gets the span of the matching symbol argument
-    (past its colon), or of the call. In an enum's body (`visit_item`), a
-    splice alone on a line of `Symbol`s or of code gives members, inserted
-    after the written members whose spans come before it (counted before
-    the walk splices their names): a code line that is a name alone or
-    `name = value` is a member (`enum_member_line`), and the others go
-    through `lines_to_items` (`enum_lines`). Splices that don't fit are
-    E0911 at the call, and the code is then not lowered.
+    (past its colon), or of the call. In an enum's body, a splice alone on
+    a line of `Symbol`s or of code gives members, inserted after the
+    written members whose spans come before it (`take_member_splices`
+    counts them before the walk splices their names, and
+    `insert_member_splices` inserts after it): a code line that is a name
+    alone or `name = value` is a member (`enum_member_line`), and the
+    others go through `lines_to_items` (`enum_lines`). Splices that don't fit are
+    E0911 at the call, and the code is then not lowered. A name from a
+    `Symbol` is checked for its place (`NamePlace`: `item_names`,
+    `expr_names` and `visit_stmt` resolve the names a declaration,
+    expression or statement declares or uses before the walk, and other
+    placeholders count as identifiers) against
+    `wid_syntax::lexer::name_shape`, the lexer's reading of the text;
+    `check_name` reports each bad name once per expansion
+    (`Expander::bad_names`), with a fix at the call for a symbol
+    argument. A spliced assignment target's name is checked
+    (`NamePlace::Target`) before `splice_target`'s rule.
   - Virtual files: `FileId::expansion(i)` (ids from `1 << 31`) is
     `MacroState::files[i]`, one per (expansion, template file); it records
     the template file, the expansion (call span, name as called, depth)
@@ -889,6 +899,14 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   at run time, E0906). Package operators skip macros, so a use is E0307
   like any missing operator. An operator's `overload` set can't list a
   macro either (E0915).
+- A name spliced from a `Symbol` must be one the lexer reads in its place
+  (#77; `"Odd-Name".to_sym` named a struct, `"x-y"` a field and `"end"` a
+  local): a capitalized identifier for a type or a constant, an identifier
+  for a method (maybe ending in `?` or `!`, or an operator), field,
+  parameter, variable or enum member, never a reserved word. Otherwise it
+  is E0911 at the call, naming the name, the place and its rule, with a
+  name that would fit (a fix at the call for a symbol argument). An empty
+  name is "an empty name" (it was E0203 on a variable named ``).
 - Code spliced alone on a line in a generated enum's body gives members:
   each line that is a name alone (`#{m}`) or `name = value`, in the place
   of the splice among the written members, so `[]Code` fragments build an

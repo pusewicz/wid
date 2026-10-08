@@ -1,0 +1,133 @@
+# A name a macro builds with `str.to_sym` may hold any text, so where a
+# splice puts it, it must be a name the lexer would read there: E0911 at
+# the call, once per name, saying what the place needs.
+
+macro def make_struct(s: String) -> Code
+  n = s.to_sym
+  quote do
+    struct #{n}
+      x: Int
+    end
+    def make -> #{n} = #{n}.new(x: 1)
+  end
+end
+
+make_struct "Odd-Name"
+make_struct "lower"
+
+macro def make_method(s: String) -> Code
+  n = s.to_sym
+  quote do
+    def #{n} -> Int = 1
+  end
+end
+
+make_method "a b"
+make_method "Upper"
+
+macro def make_field(s: String) -> Code
+  f = s.to_sym
+  quote do
+    struct W
+      #{f}: Int
+    end
+  end
+end
+
+make_field "x-y"
+
+macro def make_enum(s: String) -> Code
+  m = s.to_sym
+  quote do
+    enum Count
+      one
+      #{m}
+    end
+  end
+end
+
+make_enum "two words"
+
+# A member from a line of code, like one from a `Symbol`. A symbol argument
+# gets a fix at the call.
+macro def enum_of(*names: Symbol) -> Code
+  lines = [dynamic]Code.new
+  for n in names
+    lines << quote do
+      #{n}
+    end
+  end
+  quote do
+    enum Size
+      #{lines}
+    end
+  end
+end
+
+enum_of :small, :Big
+
+macro def make_constant(s: String) -> Code
+  n = s.to_sym
+  quote do
+    #{n} = 1
+  end
+end
+
+make_constant "A B"
+
+macro def make_param(s: String) -> Code
+  n = s.to_sym
+  quote do
+    def takes(#{n}: Int) -> Int = #{n}
+  end
+end
+
+make_param "p q"
+
+macro def local(s: String) -> Code
+  n = s.to_sym
+  quote do
+    #{n} = 1
+    #{n} + 1
+  end
+end
+
+macro def read_field(s: String) -> Code
+  f = s.to_sym
+  quote do
+    @#{f}
+  end
+end
+
+macro def call_method(target: Code, s: String) -> Code
+  n = s.to_sym
+  quote do
+    #{target}.#{n}
+  end
+end
+
+macro def typed_zero(s: String) -> Code
+  t = s.to_sym
+  quote do
+    zero: #{t} = {}
+    zero
+  end
+end
+
+macro def named_arg(s: String) -> Code
+  f = s.to_sym
+  quote do
+    Point.new(#{f}: 1)
+  end
+end
+
+struct Point
+  x: Int
+
+  def get -> Int = read_field("9lives")
+end
+
+def main
+  p local("end"), local("")
+  p call_method(1, "a.b"), typed_zero("int"), named_arg("x?")
+end

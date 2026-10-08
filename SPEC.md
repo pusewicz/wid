@@ -545,7 +545,14 @@ end
       and where a type goes, the type of that name.
       `:#{name}` inserts a symbol literal; its value must be a `Symbol`.
       In a list, a `[]Symbol` inserts one identifier (or, written
-      `:#{names}`, one symbol literal) per name.
+      `:#{names}`, one symbol literal) per name. A `Symbol` may hold any
+      text (`"a b".to_sym`), but a name spliced from one must be what the
+      lexer reads in its place (E0911): a type's or a constant's starts
+      with a capital letter; a method's, field's, parameter's,
+      variable's or enum member's with a lowercase letter or `_`; both go
+      on with letters, digits and `_`, a method's may end in `?` or `!`
+      or be an operator, and none is a reserved word. A symbol literal
+      (`:#{name}`) takes any `Symbol`.
     - `Type` inserts the type where a type goes, and the type as a value
       elsewhere, so `#{t}.new(…)`, `x.to(#{t})` and `size_of(#{t})` work.
     - Numbers, `Bool`s and strings insert literals; a negative number is

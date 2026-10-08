@@ -65,6 +65,62 @@ fn is_ident_char(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_' || b >= 0x80
 }
 
+/// The operators a method can be named after (`def +`, `def []=`), as the
+/// parser reads a `def`'s name.
+const OPERATOR_NAMES: [&str; 21] = [
+    "+", "-", "*", "/", "%", "**", "==", "!=", "<", "<=", ">", ">=", "<=>", "<<", ">>", "&", "|", "~", "!", "[]", "[]=",
+];
+
+/// What a name is when lexed on its own: how the lexer would read text that
+/// a macro computed (`str.to_sym`) and splices where a name goes, which
+/// never went through the lexer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NameShape {
+    /// An identifier that starts with a lowercase letter, `_` or a
+    /// non-ASCII character (`hp`, `_x`); `suffixed` when it ends in `?`
+    /// or `!` (`empty?`, `save!`), as only methods may.
+    Ident {
+        /// Ends in `?` or `!`.
+        suffixed: bool,
+    },
+    /// An identifier that starts with an uppercase letter (`Vec2`), as
+    /// types and constants are named.
+    Const,
+    /// A reserved word (`end`, `self`).
+    Keyword,
+    /// An operator a method can be named after (`+`, `<=>`, `[]=`).
+    Operator,
+    /// Text that isn't one name (`a b`, `x-y`, `2d`, or empty).
+    Invalid,
+}
+
+/// Classifies `text` as the lexer reads names: see [`NameShape`].
+pub fn name_shape(text: &str) -> NameShape {
+    if OPERATOR_NAMES.contains(&text) {
+        return NameShape::Operator;
+    }
+    let bytes = text.as_bytes();
+    let Some(&first) = bytes.first() else { return NameShape::Invalid };
+    if !is_ident_start(first) {
+        return NameShape::Invalid;
+    }
+    let upper = first.is_ascii_uppercase();
+    let (body, suffixed) = match bytes.split_last() {
+        Some((b'?' | b'!', rest)) if !upper && !rest.is_empty() => (rest, true),
+        _ => (bytes, false),
+    };
+    if !body.iter().all(|&b| is_ident_char(b)) {
+        return NameShape::Invalid;
+    }
+    if Keyword::from_ident(text).is_some() {
+        NameShape::Keyword
+    } else if upper {
+        NameShape::Const
+    } else {
+        NameShape::Ident { suffixed }
+    }
+}
+
 impl<'a> Lexer<'a> {
     fn peek(&self) -> u8 {
         self.src.get(self.pos).copied().unwrap_or(0)
@@ -774,6 +830,33 @@ mod tests {
 
     fn kinds(src: &str) -> Vec<TokenKind> {
         lex(FileId(0), src).tokens.iter().map(|t| t.kind).collect()
+    }
+
+    #[test]
+    fn name_shapes_match_the_lexer() {
+        use NameShape::*;
+        for (text, shape) in [
+            ("hp", Ident { suffixed: false }),
+            ("_x2", Ident { suffixed: false }),
+            ("empty?", Ident { suffixed: true }),
+            ("save!", Ident { suffixed: true }),
+            ("Vec2", Const),
+            ("end", Keyword),
+            ("self", Keyword),
+            ("<=>", Operator),
+            ("[]=", Operator),
+            ("", Invalid),
+            ("a b", Invalid),
+            ("x-y", Invalid),
+            ("2d", Invalid),
+            ("Odd?", Invalid),
+            ("?", Invalid),
+        ] {
+            assert_eq!(name_shape(text), shape, "{text:?}");
+        }
+        // A lone identifier lexes as one token of the matching kind.
+        assert_eq!(kinds("empty?"), vec![TokenKind::Ident, TokenKind::Newline, TokenKind::Eof]);
+        assert_eq!(kinds("Vec2"), vec![TokenKind::Const, TokenKind::Newline, TokenKind::Eof]);
     }
 
     #[test]
