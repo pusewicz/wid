@@ -1,0 +1,29 @@
+# A local whose value holds a parse error anywhere, even deep inside a call's
+# arguments or an array, is not reported as unused too: only the parse error is.
+def add(a: Int) -> Int = a
+
+def pair(a: Int) -> (Int, Int)
+  return a, a
+end
+
+def named
+  x = add(a:
+  p 1
+end
+
+def positional
+  x = add(1 + )
+  y: Int = add(a: 1 * )
+  z = [1, add(2 - ), 3]
+end
+
+def several
+  a, b = pair(1 * )
+  c, d = 1, add(2 - )
+  p c
+end
+
+def main
+  # Still reported: its value is fine.
+  w = add(1)
+end

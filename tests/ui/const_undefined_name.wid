@@ -1,0 +1,24 @@
+# A constant whose value names something undefined is E0201, as in a method,
+# with a did-you-mean when a similar name exists (not E0327).
+X = Foo
+
+LIMIT = 10
+Y = LIMT * 2
+Z = -Bar
+
+def width -> Int = 3
+
+# A method called without `comptime` is still E0327, with its fix.
+W = width
+
+# A constant whose value is another constant of a struct type evaluates.
+struct Vec2
+  x: F64
+end
+
+ORIGIN = Vec2.new(x: 0.0)
+START = ORIGIN
+
+def main
+  p START
+end

@@ -7,6 +7,7 @@ use wid_syntax::ast::{self, ExprKind as E};
 
 use super::Checker;
 use super::body::Dest;
+use super::runtime::holds_parse_error;
 use crate::ir::{self, ExprKind, LocalId, Stmt};
 use crate::types::{TyId, TyKind};
 
@@ -636,8 +637,18 @@ impl<'a> Checker<'a> {
             self.assign_unknown(targets);
             return;
         };
-        for (target, value) in targets.iter().zip(parts) {
+        for (i, (target, value)) in targets.iter().zip(parts).enumerate() {
+            let new = matches!(target.kind, E::Ident(n) if self.find_var_at(n, target.span).is_none());
             self.assign_to(target, value);
+            // A new name whose value failed to parse is poisoned (see `declare_var`).
+            let source = if values.len() == 1 { &values[0] } else { &values[i] };
+            if new
+                && holds_parse_error(source)
+                && let E::Ident(n) = target.kind
+                && let Some(var) = self.find_var_at(n, target.span)
+            {
+                var.allow_unused = true;
+            }
         }
     }
 

@@ -634,7 +634,22 @@ impl<'a> Checker<'a> {
         let folded = self.fold_const(&c.value, d.loc);
         let value = match folded {
             Some(v) => Some(v),
-            None => self.interpret_const(&c.value, declared, d.loc).map(ConstValue::Typed),
+            None if needs_interpreter(&c.value) => {
+                self.interpret_const(&c.value, declared, d.loc).map(ConstValue::Typed)
+            }
+            // Names, or arithmetic on them, that didn't fold: `X = Foo`
+            // with `Foo` undefined, `B = A` with `A` a struct constant, or
+            // `D: Dir = :north`. Checked as code, an undefined name is E0201
+            // with its did-you-mean, and the rest evaluates like `comptime`.
+            // A type alias (`Vec2 = [2]F32`) is resolved as a type instead.
+            None if self.diags.error_count() == errors_before
+                && !self.is_type_alias_value(&c.value, d.loc, 0)
+                && !super::runtime::holds_parse_error(&c.value) =>
+            {
+                let code = super::comptime::ComptimeCode::Expr(&c.value);
+                self.comptime_value(code, declared, d.loc, c.value.span, false).map(ConstValue::Typed)
+            }
+            None => None,
         };
         self.const_stack.pop();
         let untyped = match &value {
@@ -654,7 +669,11 @@ impl<'a> Checker<'a> {
                 {
                     self.report(
                         Diagnostic::error(codes::COMPTIME_ONLY, "constant value is not known at compile time")
-                            .primary(c.value.span, "constants must be literals or arithmetic on other constants"),
+                            .primary(c.value.span, "the compiler can't compute this value while compiling")
+                            .note(
+                                "a constant's value is computed at compile time: literals, other constants, \
+                                 struct literals, or a method call with `comptime`",
+                            ),
                     );
                 }
                 None

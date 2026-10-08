@@ -932,13 +932,15 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Inside a `quote`, the number of tokens of the name `n` tokens ahead
-    /// when it is glued together from text and splices, with no space
-    /// between them: `bump_#{name}`, `#{name}_count`, `@hp_#{n}` or
-    /// `:#{a}_b`. Ruby builds a name from a string that way, but a splice
-    /// inserts a whole name, so [`Parser::glued_name`] reports it.
+    /// The number of tokens of the name `n` tokens ahead when it is glued
+    /// together from text and splices, with no space between them:
+    /// `bump_#{name}`, `#{name}_count`, `@hp_#{n}` or `:#{a}_b`. Ruby
+    /// builds a name from a string that way, but a splice inserts a whole
+    /// name, so [`Parser::glued_name`] reports it. Outside a `quote` too,
+    /// where it is never a comment, but not inside a splice's expression,
+    /// where a splice is reported as nested.
     fn glued_len(&self, n: usize) -> Option<usize> {
-        if self.quotes.is_empty() {
+        if self.quotes.is_empty() && self.splice_depth > 0 {
             return None;
         }
         let mut i = n;
@@ -985,6 +987,9 @@ impl<'a> Parser<'a> {
         let sigil = matches!(first.kind, T::AtSplice | T::ColonSplice | T::IVar | T::Symbol);
         let name_span = Span::new(self.file, span.start + u32::from(sigil), span.end);
         let (help, edits) = self.glued_fix(len, name_span);
+        if self.quotes.is_empty() {
+            return Some(self.glued_name_outside_quote(span, name_span, help));
+        }
         let mut parts = Vec::new();
         while self.peek().span.start < span.end && !self.at(T::Eof) {
             let tok = self.peek();
@@ -1018,13 +1023,34 @@ impl<'a> Parser<'a> {
             list.len() as u32 - 1
         });
         self.report(
-            Diagnostic::error(codes::SPLICE_OUTSIDE_QUOTE, "a splice can't be part of a name")
+            Diagnostic::error(codes::MISPLACED_SPLICE, "a splice can't be part of a name")
                 .primary(span, "a splice inserts a whole name, not part of one")
                 .note("the text next to the splice is read as a separate name")
                 .suggest(help, edits, Applicability::MaybeIncorrect),
         );
         let name = index.map_or_else(|| Name::new("<error>"), splice_name);
         Some((Ident { name, span: name_span }, span))
+    }
+
+    /// [`Parser::glued_name`] outside a `quote`, where nothing is spliced:
+    /// skips the name at `span` (`name_span` without its `@` or `:`),
+    /// reports it as one E0111 and returns the name as written
+    /// (`bump_#{name}`), which no code can refer to, so a declaration of it
+    /// still parses and clashes with nothing. `help` builds the name in a
+    /// macro.
+    fn glued_name_outside_quote(&mut self, span: Span, name_span: Span, help: String) -> (Ident, Span) {
+        while self.peek().span.start < span.end && !self.at(T::Eof) {
+            self.bump();
+        }
+        let mut diag = Diagnostic::error(codes::MISPLACED_SPLICE, "`#{` starts a splice outside a `quote`")
+            .primary(span, "a splice only works inside `quote do … end`")
+            .note("inside one, a splice can't be part of a name either: it inserts a whole name")
+            .help(help);
+        if self.in_macro {
+            diag = diag.help("to build code in a macro, splice values into a `quote do … end` and return it");
+        }
+        self.report(diag);
+        (Ident { name: Name::new(self.text_of(name_span)), span: name_span }, span)
     }
 
     /// The help for the glued name of `len` tokens here, written
@@ -1215,10 +1241,17 @@ impl<'a> Parser<'a> {
     /// Whether the splice at the current `SpliceBegin`, outside any `quote`,
     /// reads as a comment written without a space after `#`: it starts a
     /// line, follows a complete expression, or ends a line after a `,`.
-    /// After `=`, `.` or `def` it is meant as code.
+    /// After `=`, `.` or `def` it is meant as code, and so is a splice
+    /// glued to a name (`bump_#{name}`, `#{name}_count`), which is part of
+    /// the name (see [`Parser::glued_len`]).
     fn stray_is_comment(&self) -> bool {
+        let prev = self.pos.checked_sub(1).map(|i| self.tokens[i]);
+        let after_name = prev.is_some_and(|t| matches!(t.kind, T::Ident | T::Const | T::IVar | T::Symbol));
+        if self.glued_len(0).is_some() || (after_name && !self.peek().space_before) {
+            return false;
+        }
         let ends_line = self.splice_len(0).is_some_and(|n| matches!(self.nth(n).kind, T::Newline | T::Eof));
-        match self.pos.checked_sub(1).map(|i| self.tokens[i].kind) {
+        match prev.map(|t| t.kind) {
             None | Some(T::Newline) => true,
             Some(T::Comma) => ends_line,
             Some(kind) => matches!(
@@ -1263,7 +1296,7 @@ impl<'a> Parser<'a> {
                 edits.push(Edit { span: end, replacement: String::new() });
             }
             self.report(
-                Diagnostic::error(codes::SPLICE_OUTSIDE_QUOTE, "a splice inside a splice")
+                Diagnostic::error(codes::MISPLACED_SPLICE, "a splice inside a splice")
                     .primary(span, "this is already macro code")
                     .note("the expression inside `#{…}` runs in the macro, so it uses values directly")
                     .suggest("remove the inner `#{` and `}`", edits, Applicability::MachineApplicable),
@@ -1276,7 +1309,7 @@ impl<'a> Parser<'a> {
             }
         }
         let after_hash = Span::new(self.file, begin.span.start + 1, begin.span.start + 1);
-        let mut diag = Diagnostic::error(codes::SPLICE_OUTSIDE_QUOTE, "`#{` starts a splice outside a `quote`")
+        let mut diag = Diagnostic::error(codes::MISPLACED_SPLICE, "`#{` starts a splice outside a `quote`")
             .primary(span, "a splice only works inside `quote do … end`")
             .note("outside a string, `#{` always starts a splice; a comment starts with `# `");
         diag = if comment || end.is_empty() {
@@ -1656,7 +1689,7 @@ impl<'a> Parser<'a> {
                 let default = if self.eat(T::Eq) { Some(self.parse_expr()) } else { None };
                 ItemKind::Field(Box::new(FieldDecl { name, ty, default, using: false }))
             }
-            T::SpliceBegin if self.quotes.is_empty() => {
+            T::SpliceBegin if self.quotes.is_empty() && self.glued_len(0).is_none() => {
                 // Most likely a comment written without a space after `#`.
                 self.stray_splice();
                 return None;
@@ -4187,6 +4220,9 @@ impl<'a> Parser<'a> {
                 if self.at(T::LParen) && !self.peek().space_before {
                     return self.parse_call_with_parens(Callee::Name(name), span);
                 }
+                if self.struct_literal_ahead() {
+                    return self.parse_struct_literal(simple(ExprKind::Const(name.name)));
+                }
                 simple(ExprKind::Const(name.name))
             }
             T::Ident => {
@@ -4454,11 +4490,121 @@ impl<'a> Parser<'a> {
     fn parse_call_with_parens(&mut self, callee: Callee, start: Span) -> Expr {
         let types = self.takes_type_args(&callee);
         let args = self.parse_args_in_parens(types);
+        // `Pool(Int, 4){a: 1}`: a generic struct's instance, like any
+        // constant, never takes a block.
+        let name = match &callee {
+            Callee::Name(name) | Callee::IVar(name) | Callee::Method { name, .. } => *name,
+        };
+        if is_constant_name(name.as_str()) && self.struct_literal_ahead() {
+            let call = Call { callee, args, block: None, parens: true };
+            let ty = Expr { kind: ExprKind::Call(Box::new(call)), span: start.to(self.prev_span()) };
+            return self.parse_struct_literal(ty);
+        }
         let block = self.parse_block_arg();
         Expr {
             kind: ExprKind::Call(Box::new(Call { callee, args, block, parens: true })),
             span: start.to(self.prev_span()),
         }
+    }
+
+    /// Whether a `{` written right after the token before (a constant, as
+    /// in `Foo{`) starts a struct literal: anything but a block's `|x|`.
+    fn struct_literal_ahead(&self) -> bool {
+        self.at(T::LBrace) && !self.peek().space_before && !matches!(self.nth(1).kind, T::Pipe | T::OrOr)
+    }
+
+    /// Parses `{…}` after the type `ty` (`Foo`, `geo.Vec2`,
+    /// `Pool(Int, 4)`): a struct literal, as Odin, Go, Rust and Zig write
+    /// it. Wid builds a struct with `new`, so this is one E0113, with a fix
+    /// that writes `Foo.new(a: 1)` for `Foo{a: 1}` (and `a: 1` for Odin's
+    /// `a = 1`). The braces are read as the arguments of that `new` call,
+    /// so the value has the struct's type and adds no more errors. Left
+    /// open at the end of its line, it is this error alone, and the fix
+    /// also closes the call.
+    fn parse_struct_literal(&mut self, ty: Expr) -> Expr {
+        let open = self.bump().span;
+        let saved = self.no_do;
+        self.no_do = false;
+        let list = List {
+            open,
+            close: T::RBrace,
+            closer: "}",
+            what: "`}` to close the struct literal",
+            item: "argument",
+            items: "arguments",
+            kind: Items::Args,
+        };
+        let errors = self.diags.len();
+        let mut edits = vec![Edit { span: open, replacement: ".new(".into() }];
+        let mut args = Vec::new();
+        // The list's own report that it was left open, which this error
+        // replaces: the diagnostics and last error position before it.
+        let mut left_open = None;
+        loop {
+            let before = (self.diags.len(), self.last_error_at);
+            if self.list_left_open(&list) {
+                left_open = Some(before);
+                break;
+            }
+            self.skip_newlines();
+            if self.at(T::RBrace) || self.at(T::Eof) {
+                break;
+            }
+            // Odin's `Foo{a = 1}` names a field with `=`.
+            if let Some(len) = self.name_len(0)
+                && self.nth(len).kind == T::Eq
+            {
+                let name = self.parse_name("a field name");
+                let eq = self.bump().span;
+                edits.push(Edit { span: name.span.shrink_to_end().to(eq), replacement: ":".into() });
+                args.push(Arg { name: Some(name), value: self.parse_expr(), splat: false });
+            } else {
+                args.push(self.parse_arg(false, Some(open)));
+            }
+            let before = (self.diags.len(), self.last_error_at);
+            match self.list_step(&list) {
+                ListStep::Item => {}
+                ListStep::Close => break,
+                ListStep::Open => {
+                    left_open = Some(before);
+                    break;
+                }
+            }
+        }
+        self.no_do = saved;
+        let fixable = match left_open {
+            Some((count, last_error_at)) => {
+                self.diags.truncate(count);
+                self.last_error_at = last_error_at;
+                // The line's last token, before the line end put back.
+                let last = self.tokens[..self.pos].iter().rev().find(|t| t.kind != T::Newline).map_or(open, |t| t.span);
+                edits.push(Edit { span: last.shrink_to_end(), replacement: ")".into() });
+                true
+            }
+            None if self.at(T::RBrace) => {
+                let close = self.bump().span;
+                edits.push(Edit { span: close, replacement: ")".into() });
+                true
+            }
+            None => {
+                self.expect(T::RBrace, list.what);
+                false
+            }
+        };
+        let text = self.text_of(ty.span).to_string();
+        let applicability =
+            if self.diags.len() > errors { Applicability::MaybeIncorrect } else { Applicability::MachineApplicable };
+        let mut diag = Diagnostic::error(codes::STRUCT_LITERAL, "Wid has no struct literal syntax")
+            .primary(ty.span.to(open), format!("structs are built with `new`: `{text}.new(…)`"))
+            .note("`new` takes the fields by name or in order; the ones not given get their default or zero");
+        if fixable {
+            diag = diag.suggest(format!("call `{text}.new` with the fields as arguments"), edits, applicability);
+        }
+        self.report(diag);
+        let new = Ident { name: Name::new("new"), span: open };
+        let span = ty.span.to(self.prev_span());
+        let callee = Callee::Method { recv: ty, name: new, safe: false };
+        Expr { kind: ExprKind::Call(Box::new(Call { callee, args, block: None, parens: true })), span }
     }
 
     fn parse_command_call(&mut self, callee: Callee, start: Span) -> Expr {
@@ -4632,6 +4778,11 @@ impl<'a> Parser<'a> {
                         let name_span = name.span;
                         expr =
                             self.parse_nested_command_call(Callee::Method { recv: expr, name, safe }, start, name_span);
+                    } else if is_constant_name(name.as_str()) && self.struct_literal_ahead() {
+                        // `geo.Vec2{x: 1}`: a constant never takes a block.
+                        let span = start.to(name.span);
+                        let ty = Expr { kind: ExprKind::Member { recv: Box::new(expr), name, safe }, span };
+                        expr = self.parse_struct_literal(ty);
                     } else if let Some(block) = self.parse_block_arg() {
                         let span = start.to(block.span);
                         expr = Expr {
@@ -4992,6 +5143,11 @@ fn is_assignable(expr: &Expr) -> bool {
 /// The reserved words that may name an enum member when they stand alone.
 fn is_keyword_member(kind: TokenKind) -> bool {
     matches!(kind, T::Kw(Keyword::Struct | Keyword::Enum | Keyword::Union))
+}
+
+/// Whether a name is a constant's, which starts with an uppercase letter.
+fn is_constant_name(name: &str) -> bool {
+    name.starts_with(|c: char| c.is_ascii_uppercase())
 }
 
 /// Whether an expression reads as the name of a type that a `?` could make
@@ -6203,5 +6359,50 @@ end
     fn missing_end_reports_opener() {
         let (_, diags) = parse_file(FileId(0), "def main\n  if x\n    puts 1\n  \nend\n");
         assert!(diags.iter().any(|d| d.code == codes::MISSING_END));
+    }
+
+    #[test]
+    fn names_glued_to_splices_outside_a_quote() {
+        // One E0111, never a comment, and the line is still the `def`.
+        let (file, diags) = parse_file(FileId(0), "def bump_#{name} = 1\ndef main\nend\n");
+        assert_eq!(diags.iter().map(|d| d.code.as_str()).collect::<Vec<_>>(), ["E0111"]);
+        assert!(diags.iter().flat_map(|d| &d.helps).all(|h| h.edits.is_empty() && !h.message.contains("comment")));
+        assert_eq!(file.items.len(), 2);
+        let ItemKind::Def(def) = &file.items[0].kind else { panic!("a def") };
+        assert_eq!(def.name.as_str(), "bump_#{name}");
+        assert!(matches!(def.body, FnBody::Expr(_)));
+        // A splice spaced from the text before it is still a comment.
+        let (messages, fixed) = fix_all("def main\n  x = 1 #{note}\n  #{TODO} later\n  p x\nend\n");
+        assert_eq!(messages.len(), 2);
+        assert_eq!(fixed, "def main\n  x = 1 # {note}\n  # {TODO} later\n  p x\nend\n");
+    }
+
+    #[test]
+    fn struct_literal_syntax_is_a_new_call() {
+        // One E0113 each, whose fix writes the `new` call the braces are
+        // read as.
+        let src = "W = Foo{a: 1}\ndef main\n  w = geo.Vec2{1, 2}\n  o = Foo{a = 1, b = 2}\n  \
+                   g = Pool(Int, 4){}\n  m = Foo{\n    a: 1,\n  }.a\nend\n";
+        let (messages, fixed) = fix_all(src);
+        assert_eq!(messages, ["Wid has no struct literal syntax"; 5]);
+        assert_eq!(
+            fixed,
+            "W = Foo.new(a: 1)\ndef main\n  w = geo.Vec2.new(1, 2)\n  o = Foo.new(a: 1, b: 2)\n  \
+             g = Pool(Int, 4).new()\n  m = Foo.new(\n    a: 1,\n  ).a\nend\n"
+        );
+        parse_ok(&fixed);
+        // `Foo{a: 1}` reads as `Foo.new(a: 1)`.
+        let (file, _) = parse_file(FileId(0), src);
+        let ItemKind::Const(c) = &file.items[0].kind else { panic!("a constant") };
+        let ExprKind::Call(call) = &c.value.kind else { panic!("a call") };
+        let Callee::Method { recv, name, .. } = &call.callee else { panic!("a method call") };
+        assert!(matches!(recv.kind, ExprKind::Const(_)) && name.as_str() == "new" && call.parens);
+        assert!(matches!(call.args.as_slice(), [Arg { name: Some(a), .. }] if a.as_str() == "a"));
+        // Left open before a declaration: the one error's fix also closes it.
+        let (messages, fixed) = fix_all("X = Foo{a: 1\ndef main\nend\n");
+        assert_eq!(messages, ["Wid has no struct literal syntax"]);
+        assert_eq!(fixed, "X = Foo.new(a: 1)\ndef main\nend\n");
+        // A block after a call stays one.
+        assert!(codes_of("def main\n  xs.each{ |x| p x }\n  Foo.bar{ p 1 }\nend\n").is_empty());
     }
 }

@@ -249,7 +249,10 @@ impl<'a> Checker<'a> {
     /// A variable of the unknown type is poisoned: its value or its type
     /// was an error (`x = )`, `t = [4]F32`, `y: Nope = 3`), already
     /// reported, or a value that never exists (a `Never` call), so it is
-    /// never reported as unused too.
+    /// never reported as unused too. A value of a known type can still hold
+    /// a parse error (`x = add(a:`): the code that declares the variable
+    /// checks [`holds_parse_error`](super::runtime::holds_parse_error) and
+    /// passes `allow_unused`.
     pub fn declare_var(&mut self, name: Name, ty: TyId, span: Span, allow_unused: bool) -> LocalId {
         let local = self.new_local(Some(name), ty);
         let mark = self.mark_at(span);

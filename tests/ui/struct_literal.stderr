@@ -1,0 +1,93 @@
+error[E0113]: Wid has no struct literal syntax
+  --> tests/ui/struct_literal/main.wid:16:5
+   |
+16 | W = Foo{a: 1}
+   |     ^^^^ structs are built with `new`: `Foo.new(…)`
+   = note: `new` takes the fields by name or in order; the ones not given get their default or zero
+help: call `Foo.new` with the fields as arguments
+   | W = Foo.new(a: 1)
+   = see `wid explain E0113`
+
+error[E0113]: Wid has no struct literal syntax
+  --> tests/ui/struct_literal/main.wid:19:7
+   |
+19 |   w = Foo{a: 1, b: 2}
+   |       ^^^^ structs are built with `new`: `Foo.new(…)`
+   = note: `new` takes the fields by name or in order; the ones not given get their default or zero
+help: call `Foo.new` with the fields as arguments
+   |   w = Foo.new(a: 1, b: 2)
+   = see `wid explain E0113`
+
+error[E0113]: Wid has no struct literal syntax
+  --> tests/ui/struct_literal/main.wid:20:7
+   |
+20 |   z = Foo{1, 2}
+   |       ^^^^ structs are built with `new`: `Foo.new(…)`
+   = note: `new` takes the fields by name or in order; the ones not given get their default or zero
+help: call `Foo.new` with the fields as arguments
+   |   z = Foo.new(1, 2)
+   = see `wid explain E0113`
+
+error[E0113]: Wid has no struct literal syntax
+  --> tests/ui/struct_literal/main.wid:21:7
+   |
+21 |   o = Foo{a = 1, b = 2}
+   |       ^^^^ structs are built with `new`: `Foo.new(…)`
+   = note: `new` takes the fields by name or in order; the ones not given get their default or zero
+help: call `Foo.new` with the fields as arguments
+   |   o = Foo.new(a: 1, b: 2)
+   = see `wid explain E0113`
+
+error[E0113]: Wid has no struct literal syntax
+  --> tests/ui/struct_literal/main.wid:22:7
+   |
+22 |   v = geo.Vec2{x: 1.0}
+   |       ^^^^^^^^^ structs are built with `new`: `geo.Vec2.new(…)`
+   = note: `new` takes the fields by name or in order; the ones not given get their default or zero
+help: call `geo.Vec2.new` with the fields as arguments
+   |   v = geo.Vec2.new(x: 1.0)
+   = see `wid explain E0113`
+
+error[E0113]: Wid has no struct literal syntax
+  --> tests/ui/struct_literal/main.wid:23:7
+   |
+23 |   g = Pool(Int, 2){}
+   |       ^^^^^^^^^^^^^ structs are built with `new`: `Pool(Int, 2).new(…)`
+   = note: `new` takes the fields by name or in order; the ones not given get their default or zero
+help: call `Pool(Int, 2).new` with the fields as arguments
+   |   g = Pool(Int, 2).new()
+   = see `wid explain E0113`
+
+error[E0113]: Wid has no struct literal syntax
+  --> tests/ui/struct_literal/main.wid:24:7
+   |
+24 |   m = Foo{
+   |       ^^^^ structs are built with `new`: `Foo.new(…)`
+   = note: `new` takes the fields by name or in order; the ones not given get their default or zero
+help: call `Foo.new` with the fields as arguments
+   |   m = Foo.new(
+...
+   |   )
+   = see `wid explain E0113`
+
+error[E0113]: Wid has no struct literal syntax
+  --> tests/ui/struct_literal/main.wid:28:26
+   |
+28 |   p W, w, z, o, v, g, m, Foo{a: 3}.a
+   |                          ^^^^ structs are built with `new`: `Foo.new(…)`
+   = note: `new` takes the fields by name or in order; the ones not given get their default or zero
+help: call `Foo.new` with the fields as arguments
+   |   p W, w, z, o, v, g, m, Foo.new(a: 3).a
+   = see `wid explain E0113`
+
+error[E0113]: Wid has no struct literal syntax
+  --> tests/ui/struct_literal/main.wid:30:7
+   |
+30 |   n = Foo{a: 1
+   |       ^^^^ structs are built with `new`: `Foo.new(…)`
+   = note: `new` takes the fields by name or in order; the ones not given get their default or zero
+help: call `Foo.new` with the fields as arguments
+   |   n = Foo.new(a: 1)
+   = see `wid explain E0113`
+
+error: could not compile due to 9 errors

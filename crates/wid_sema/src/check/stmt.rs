@@ -5,6 +5,7 @@ use wid_syntax::ast::{self, ExprKind as E, StmtKind as S};
 
 use super::Checker;
 use super::body::{Dest, Exit};
+use super::runtime::holds_parse_error;
 use crate::ir::{self, ExprKind, Stmt};
 use crate::types::TyKind;
 
@@ -183,11 +184,13 @@ impl<'a> Checker<'a> {
             Some(v) if names.len() == 1 => Some(self.expr_coerced(v, ty)),
             _ => None,
         };
+        // A value that failed to parse poisons the names (see `declare_var`).
+        let poisoned = value.is_some_and(holds_parse_error);
         for name in names {
             if self.check_redeclare(name) {
                 continue;
             }
-            let local = self.declare_var(name.name, ty, name.span, false);
+            let local = self.declare_var(name.name, ty, name.span, poisoned);
             if uninit {
                 self.emit(Stmt::LetUninit(local));
             } else {
@@ -273,7 +276,7 @@ impl<'a> Checker<'a> {
                     let v = self.expr(value, None);
                     let ty = self.value_type(v.ty, value.span);
                     let v = self.coerce(v, ty, value.span);
-                    let local = self.declare_var(name, ty, target.span, false);
+                    let local = self.declare_var(name, ty, target.span, holds_parse_error(value));
                     if matches!(value.kind, E::Call(_) | E::Member { .. }) && self.types.is_nilable(ty) {
                         let origin = self.source_text(value.span);
                         if let Some(var) = self.find_var_at(name, target.span) {

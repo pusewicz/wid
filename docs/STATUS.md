@@ -554,6 +554,17 @@ runs the stages; `wid_cli` is the `wid` binary.
   help. The parser reads the glued name as a splice of the
   `"bump_#{name}".to_sym` it meant, so the declaration parses and code
   using the generated name adds no errors.
+- Outside a `quote` too, a splice glued to a name (`def bump_#{name}`,
+  `#{prefix}_LIMIT = 3`, `hp_#{stat}: Int`) is one E0111 "`#{` starts a
+  splice outside a `quote`", noting that it can't be part of a name
+  either, with the help that builds the name in a macro (#61). It was
+  four errors, with a fix that read it as a comment (`def bump_# {name}`)
+  and lost `def main`. `glued_len` works outside a `quote` (not inside a
+  splice's expression), `stray_is_comment` never takes a splice glued to
+  a name for a comment, and the line is read as the declaration it was
+  written in, with the name as written, which no code can refer to. The
+  E0111 title is now "misplaced splice" (`codes::MISPLACED_SPLICE`), as it
+  also covers a splice inside a splice and one glued to a name.
 - Any type written where a `Type` is expected, or in `comptime` code, is a
   `Type` value: constructors (`name_of([]Int)`, `name_of(Int?)`,
   `name_of(^Node)`, `name_of((proc(Int) -> Int)?)`), generic instances and
@@ -669,6 +680,32 @@ runs the stages; `wid_cli` is the `wid` binary.
   expansion (#25); after a macro call at package level fails (a splice that
   doesn't fit, or an error in the macro's own code), no missing member of
   any type is reported, since it may have generated an `extend` (#29).
+- A local whose value holds a parse error anywhere (`x = add(a:`,
+  `z = [1, add(2 - )]`, either name of `a, b = pair(1 * )`) is not reported
+  as unused either, though the value's type is known (#58).
+  `holds_parse_error` walks the whole expression with the new read-only
+  `wid_syntax::visit::Visit` (generated with `VisitMut` from one macro), so
+  constants, array lengths and type arguments see errors at any depth too.
+- A constant's value that doesn't fold and needs no interpreter (a name, or
+  arithmetic on names) is checked as code instead of being E0327 "constant
+  value is not known at compile time" (#59): `X = Foo` with `Foo`
+  undefined is E0201 "undefined constant `Foo`" with its did-you-mean, as
+  in a method; `X = width` is E0327 with the `comptime` fix; and values
+  that failed before evaluate (`START = ORIGIN` for a struct constant,
+  `FACING: Dir = :north`, `X = 1 / 0` is E0901). The E0327 that remains
+  says the compiler can't compute the value, with a note on what a
+  constant's value may be.
+- Struct literal syntax from Odin, Go, Rust or Zig, a constant directly
+  followed by `{` (`Foo{a: 1}`, `Foo{1, 2}`, `geo.Vec2{x: 1.0}`,
+  `Pool(Int, 4){}`), is one new E0113 "Wid has no struct literal syntax"
+  at `Foo{`, with a machine-applicable fix that writes `Foo.new(a: 1)`
+  (Odin's `a = 1` becomes `a: 1`; braces over several lines become the
+  call's parentheses) (#60). It was E0323 and E0105 in a method, and E0105
+  alone at the top level. `Parser::parse_struct_literal` reads the braces as
+  the arguments of that `new` call, so the value has the struct's type and
+  adds no more errors; left open before the next line, it is this error
+  alone, whose fix also closes the call. A `{ |x|` after a constant is still
+  a block.
 - Errors in code a macro spliced in from its call site (a `Code` argument,
   a name from a `Symbol`) point at the splice in the `quote` and list the
   calls, in both renderers; a name the macro computed is named in the

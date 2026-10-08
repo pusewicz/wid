@@ -1,7 +1,8 @@
 # After an error, the rest of the line is skipped, and a bracket opened on
 # it goes on over the next lines, but not past a line that starts a
-# declaration: `X = Foo{` is one error, and `main` is still found.
-X = Foo{
+# declaration: `X = 2{` is one error, and `main` is still found. (`X = Foo{`
+# is a struct literal, see struct_literal/main.wid.)
+X = 2{
 def main
   p 1
 end
