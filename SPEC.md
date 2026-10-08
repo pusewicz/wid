@@ -823,7 +823,7 @@ end
   `-out:`, `-o:none|minimal|size|speed|aggressive`, `-debug`, `-vet`,
   `-define:NAME=val`, `-collection:name=path`, `-target:os_arch`, `-file`,
   `-sanitize:address`, `-filter:` (for `test`), `-json` and `-private` (for
-  `doc`) and `-json-errors`.
+  `doc`), `-in:` (for `query`) and `-json-errors`.
 - **Docs.** `wid doc [package] [symbol]` shows documentation made from doc
   comments: the `# ` comment lines directly above a declaration (above its
   attributes too), with no blank line between; an enum member's sit above
@@ -881,6 +881,63 @@ end
     `extend` or `using`; `via`, as written; `location`). `-json-errors`
     prints the diagnostics as JSON, on stderr. `wid query` reuses this
     shape.
+- **Query.** `wid query <query> [argument] [flags]` answers a question
+  about a package with JSON, for editors, scripts and LLMs.
+  - The engine is the `wid_query` crate, which `wid lsp` shares: a pure
+    library that takes a loaded and checked program (the checker's symbol
+    index, and where each declaration starts and ends) and returns plain
+    data. It never prints or exits. The driver loads and checks the package
+    with one function that a long-lived caller reruns when files change,
+    and the CLI prints the answer. A query never generates code or runs the
+    C compiler.
+  - The package is the one in `.`, or the one `-in:` names: a directory, a
+    `.wid` file with `-file`, or a collection path (`-in:core:fmt`).
+    `-collection:`, `-define:` and `-target:` work as for the other
+    commands.
+  - `outline` lists every declaration of the package in source order,
+    private ones too, marked `private: true`: a query tool sees everything.
+    Each item has `kind`, `name`, `path`, `package`, `signature`,
+    `attributes`, `private`, `summary` (the first paragraph of its doc),
+    `location` and `span`, and where they apply `static`, `c` and
+    `children`: a struct's fields, an enum's members, then the methods,
+    constants and overload sets written in a type, module or extension.
+  - `def <symbol>` gives the declaration a symbol path names, private ones
+    too. The path is `wid doc`'s (`Name`, `Type.member`, `alias.Name`,
+    `alias.Type.member`) and resolves the same way. Each result is a
+    `wid doc -json` item with its `span` added. An overload set gives the
+    set and then each of its members, an import name a `package` item (its
+    `signature` is the `import` or `cimport` that binds the name), and a
+    builtin type the methods that extensions add to it.
+  - `methods <Type>` lists every method and overload set callable on a
+    struct, enum, union or module, a type alias of one, or a builtin type,
+    private ones too. They are grouped by origin in lookup order (the type
+    itself, `include`, `extend`, `using`), and each group is
+    `{"origin": …, "methods": […]}`, with `origin` as `wid doc` writes it.
+    The builtin methods of builtin types are described here, not listed.
+  - `refs <symbol>` gives every use of a declaration, call sites included,
+    and `type <file:line:col>` the type and the declaration at a position.
+    Both read what the checker records as it resolves names inside bodies.
+  - stdout always holds one JSON document with `query` (`outline`, `def`,
+    `methods`), `symbol` (the argument, or `null`), `package` (`name`,
+    `path`, `doc`, or `null` when it can't be loaded) and `results`, which
+    is empty when the request fails. A `location` is where a declaration's
+    name is and a `span` the whole declaration, from its attributes (or
+    `private`) to its last token. Both have `file`, `line`, `column`,
+    `end_line` and `end_column`, 1-based with an exclusive end, as in
+    diagnostics. Both are `null` for C declarations and packages. Keys are
+    sorted, and lists keep source or lookup order, so the same program
+    always gives the same document.
+  - Diagnostics go to stderr as one JSON document, the one `-json-errors`
+    prints, whenever there are any. A package with errors is still
+    answered from what the checker collected, as with `wid doc`. An unknown
+    package, symbol or member is E0601, E0602 or E0603 as for `wid doc`,
+    pointing into the command line `wid query …`, with did-you-mean fixes.
+    A member named without its type gets one fix for each type that has
+    it, and `methods` of something that isn't a type (E0603) gets a fix
+    that asks for its `def`. The exit status is 1 when the request fails or
+    the package has errors. A malformed command line, like an unknown query
+    or a missing argument, is a usage error (status 2), as for every
+    command.
 
 ## Built for humans and LLMs
 
@@ -909,7 +966,7 @@ help: unwrap it and handle the nil case
   `wid explain <code>` gives the long-form explanation with examples.
 - `wid query` answers questions about a package in JSON: `outline`,
   `def <sym>`, `refs <sym>`, `type <file:line:col>` and `methods <Type>`. It
-  shares an engine with `wid lsp`.
+  shares an engine with `wid lsp` (see "Toolchain and CLI").
 - `wid fmt` is canonical and has no configuration. `p`/`inspect` works on every
   type, and the tracking allocator reports leaks.
 

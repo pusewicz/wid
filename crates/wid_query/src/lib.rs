@@ -390,7 +390,7 @@ private LIMIT = 3
         assert_eq!(one("Player").kind, "struct");
         assert_eq!(one("Player").doc.as_deref(), Some("The player.\n\nMore about the player."));
         assert_eq!(one("Player.greet").path, "Greeter.greet");
-        assert_eq!(one("Player.secret").private, true);
+        assert!(one("Player.secret").private);
         let hp = one("Player.hp");
         assert_eq!((hp.kind, hp.promoted_into.as_deref()), ("field", Some("Player")));
         assert_eq!(one("Dir.east").signature, "east = 4");

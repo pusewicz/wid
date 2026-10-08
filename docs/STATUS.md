@@ -7,7 +7,9 @@ compiler implements and what is next.
 
 `wid_syntax` (lex, parse) → `wid_sema` (resolve, check, lower to typed IR) →
 `wid_codegen_c` (IR → C23) → host C compiler. `wid_driver` loads packages and
-runs the stages; `wid_cli` is the `wid` binary.
+runs the stages; `wid_cli` is the `wid` binary. `wid_query` answers questions
+about a checked package (`wid query`, and the LSP later) without generating
+code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
 
 ## Conventions fixed so far
 
@@ -340,6 +342,33 @@ runs the stages; `wid_cli` is the `wid` binary.
   another command say so with `<!-- command: ARGS -->` and
   `<!-- fix-command: ARGS -->` (E0601–E0604), which both errdocs scripts
   follow.
+- The query engine (`crates/wid_query`, for `wid query` now and the LSP
+  later) depends on `wid_sema`, `wid_syntax` and `wid_diagnostics` only;
+  `wid_driver` depends on it, so the suite in `wid_driver` runs it and the
+  graph stays acyclic. `Analysis::check` (pure: a `ProgramInput` in, the
+  sources, sorted diagnostics, `Index` and `Extents` out) is what
+  `wid_driver::analyze` calls after `load_program`, as a library and
+  without codegen; `wid doc` loads through it too. `Extents` finds a
+  declaration's whole span (attributes and `private` to its last token)
+  by walking the parsed files for the smallest item around the name the
+  index holds, so the checker isn't touched: for generated code, the
+  `quote`'s item (the span keeps the expansion's file id) or, for a name
+  from a macro argument, the macro call; for an enum member, its name and
+  value. `wid_query::item` holds the model both commands print (`Item`,
+  formerly `doc::Entry`, built by `ItemBuilder`, formerly `PageBuilder`)
+  and `item_json`, whose `Style::Query` adds `span` and the ends of
+  locations; `wid_query::json` builds the query document. Queries return
+  `Failure` (malformed path, `PathError`, not a type), and
+  `wid_driver::cmdline` (shared by `doc` and `query`: the command line as
+  a source, `package_target`, `ErrorContext`) turns it into E0601–E0603,
+  worded per `Tool`. `Query::parse` gives usage errors, which the CLI
+  prints with status 2. Part 2 (`refs`, `type`) adds a per-span table of
+  resolutions and types that the checker records, kept in `Analysis` next
+  to the index.
+- `tests/query/NAME.args` cases run `wid query` from the repository root
+  (packages are `-in:tests/doc/shapes` and the like) against `NAME.stdout`
+  and `NAME.stderr`; a usage error expects the CLI's two lines on stderr.
+  `tests/query/cmerged` is a package with a `cimport` without `as:`.
 
 ## Done
 
@@ -788,7 +817,8 @@ runs the stages; `wid_cli` is the `wid` binary.
 - Test suite: `tests/run` (clang and gcc-16, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
   `tests/test` (`wid test` reports), `tests/doc` (`wid doc` pages and
-  errors) and every `core/` package's `_test.wid` files.
+  errors), `tests/query` (`wid query` documents and errors) and every
+  `core/` package's `_test.wid` files.
 - `wid doc [package] [symbol]` (SPEC "Toolchain and CLI"): package
   overviews (the package doc, then every public declaration by section with
   the first paragraph of its doc), and pages for types (fields, promoted
@@ -805,6 +835,22 @@ runs the stages; `wid_cli` is the `wid` binary.
   first, `-file` and `-private` fixes, and notes on how one argument was
   read. A package with errors is reported and still documented. Doxygen's
   `///<` and `/**<` markers no longer show in imported C docs.
+- `wid query`, part 1 (SPEC "Toolchain and CLI"): the `wid_query` engine
+  and `wid query outline`, `def <symbol>` and `methods <Type>`, with
+  `-in:` (a directory, a file with `-file`, or a collection path). Always
+  one JSON document on stdout (`query`, `symbol`, `package`, `results`),
+  in `wid doc -json`'s item shape plus `span` (the whole declaration) and
+  location ends; the outline nests fields, enum members and methods under
+  their type in `children` and includes private declarations. `def` of an
+  overload set gives the set and its members, of an import name a
+  `package` item. `methods` groups by origin. Diagnostics go to stderr as
+  JSON: E0601–E0603 with `wid doc`'s wording and fixes, one fix per type
+  for a member named without its type, E0603 with a `def` fix for
+  `methods` of a non-type; a package with errors is still answered.
+  Unknown queries, `refs`/`type` and missing arguments are usage errors.
+  `wid help query`. `wid doc`'s errors now prefer an exact member match
+  (`Player.heal` for `heal`) over a similar package-level name, and a
+  flag of another command says which command takes it.
 - Linux and CI (`.github/workflows/ci.yml`, cached with sccache and
   rust-cache): `cargo fmt --check`; clippy and the full `cargo test` on
   Ubuntu 26.04 (clang-22, gcc-15, libclang 22, SDL3) and macOS 26 (Apple
@@ -927,12 +973,25 @@ macro stack.
      and `private macro def`; definition-site resolution of the quote's own
      names; budgets (64 deep, 65,536 per build, E0903). The implementation
      notes are under "Expansion" above.
-2. **`wid query`** (`wid/query`). The introspection engine in SPEC "Built
-   for humans and LLMs": symbols, types, definitions, references and call
-   sites, as stable JSON. Factor it as a reusable engine, because the LSP
-   shares it, and keep the compiler stages pure so queries can rerun them.
-   Build on the symbol index (`wid_sema::index`, `check_program_indexed`)
-   and the JSON items of `wid doc` (SPEC "Toolchain and CLI").
+2. **`wid query`** (`wid/query`, two stacked PRs). The introspection
+   engine in SPEC "Built for humans and LLMs": symbols, types,
+   definitions, references and call sites, as stable JSON.
+   - Part 1 (**landed**; see "Done" and "Conventions fixed so far"): the
+     `wid_query` engine, `wid_driver::analyze`, and `outline`, `def` and
+     `methods`.
+   - Part 2 (next): `refs <symbol>` (every use, call sites included) and
+     `type <file:line:col>` (the type and the declaration at a position).
+     The checker records, as it resolves them, a per-span table: for every
+     name, path, member access, method call (`recv.m`, `@f`, `self.m`),
+     `T.new` and struct literal field, operator method, `include`, `extend`
+     target, `using` field type and type written anywhere (parameters,
+     returns, locals, casts, generic arguments), the `DeclId` (or field,
+     enum member, local) it resolves to; and for every expression and
+     binding its `TyId`. Overload resolution and macro expansions record
+     the chosen member and the call site. `check_program_indexed` returns
+     the table next to the `Index`, `Analysis` keeps it, and the two
+     queries are new `Query`/`Answer` variants; `Query::parse` lists
+     `refs` and `type` as planned (a usage error) until then.
 3. **`wid fmt`** (`wid/fmt`). A canonical formatter. It must be
    idempotent, and parse → format → parse must give the same AST for every
    file in `tests/`, `core/`, `vendor/` and `examples/`. It keeps comments
@@ -1027,6 +1086,14 @@ before anyone starts them.
   the documented package doesn't load are not listed. `cimport`
   declarations have no Wid location (their source is generated), and the C
   enum a constant came from isn't named.
+- `wid query`: `refs` and `type` are part 2 (see "Next"). It shares
+  `wid doc`'s limits on builtin types and patterns: `methods` lists only
+  what extensions add, and none for an alias of a builtin type
+  (`Vec2 = [2]F32`). A declaration a macro generates under a name from its
+  arguments (`counter :kills`) has the macro call as its `span`. A `using`
+  origin has no location. The fixes in its diagnostics edit the command
+  line as `wid query` rebuilds it (query, argument, `-in:`, `-file`), not
+  the order the flags were typed in.
 - `vendor:miniaudio` built with GCC on macOS has no CoreAudio backend: GCC
   can't parse the block syntax in Apple's headers (`miniaudio.c` sets
   `MA_NO_COREAUDIO` there).

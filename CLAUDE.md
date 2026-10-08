@@ -29,6 +29,12 @@ what is implemented, which conventions are fixed and what comes next.
 - `crates/wid_cimport`: libclang header import, a pure-data model of C
   declarations (libclang is loaded lazily); `wid_driver/src/cimport/` renders
   it as a Wid package and `wid_sema/src/check/cimport.rs` maps it to C
+- `crates/wid_query`: the query engine behind `wid query` (and the LSP): a
+  pure library over a checked program (`Analysis`: the symbol index and
+  declaration extents) that answers `outline`, `def` and `methods` as plain
+  data, and the item model and JSON that `wid doc` shares;
+  `wid_driver::analyze` loads and checks for it, `wid_driver::query` runs
+  the command
 - `crates/wid_lsp` (planned): LSP server, sharing the query engine with
   `wid query`
 - `runtime/wid_runtime.h`: the C23 runtime, embedded into the compiler
@@ -55,6 +61,9 @@ what is implemented, which conventions are fixed and what comes next.
   diagnostics in `NAME.stderr`
 - `tests/test/`: packages run with `wid test`, with the expected report in
   `NAME.stdout`
+- `tests/doc/`, `tests/query/`: `NAME.args` holding a `wid doc` or
+  `wid query` command line, with the expected `NAME.stdout` and
+  `NAME.stderr`; their directories are the packages they read
 - `tests/doc/`: `wid doc` runs, with the arguments in `NAME.args` and the
   expected `NAME.stdout` and `NAME.stderr`
 - `tests/vendor/`: programs using pkg-config libraries (raylib, SDL3), run
