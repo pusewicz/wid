@@ -1733,10 +1733,28 @@ impl<'a> Parser<'a> {
             T::Kw(K::Cimport) => self.parse_cimport(),
             T::Kw(K::Def) => ItemKind::Def(Box::new(self.parse_def(false))),
             T::Kw(K::Macro) => {
-                self.bump();
+                let kw = self.bump();
                 if !self.at_kw(K::Def) {
-                    self.error_expected("`def` after `macro`");
-                    return None;
+                    // `macro twice(e: Code)`: read as the `macro def` it
+                    // means, when a method's name follows.
+                    if !matches!(self.kind(), T::Ident | T::SpliceBegin) {
+                        self.error_expected("`def` after `macro`");
+                        return None;
+                    }
+                    let name = self.peek();
+                    self.report(
+                        Diagnostic::error(
+                            codes::UNEXPECTED_TOKEN,
+                            format!("expected `def` after `macro`, found {}", self.found()),
+                        )
+                        .primary(name.span, "expected `def`")
+                        .secondary(kw.span, "a macro is declared with `macro def`")
+                        .suggest(
+                            "add `def`",
+                            vec![Edit { span: name.span.shrink_to_start(), replacement: "def ".into() }],
+                            Applicability::MachineApplicable,
+                        ),
+                    );
                 }
                 ItemKind::Def(Box::new(self.parse_def(true)))
             }
@@ -2197,8 +2215,10 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Parses a method at its `def`, or, for a macro written without `def`
+    /// (reported), at its name, right after `macro`.
     fn parse_def(&mut self, is_macro: bool) -> FnDecl {
-        let def_tok = self.bump();
+        let def_tok = if self.at_kw(K::Def) { self.bump() } else { self.tokens[self.pos.saturating_sub(1)] };
         let mut is_static = false;
         if self.at_kw(K::SelfKw) && self.nth(1).kind == T::Dot {
             self.bump();
@@ -3536,14 +3556,50 @@ impl<'a> Parser<'a> {
             err = Some(e);
             self.expect(T::Pipe, "`|`");
         }
-        self.openers.push(Opener { keyword: "guard", span: kw.span });
-        let else_body = self.parse_block_body();
+        // The lexer drops the line end after the `|` of `|err|`.
+        let same_line = self.line_of(self.peek().span.start) == self.line_of(self.prev_span().start);
+        let else_body = if !same_line || matches!(self.kind(), T::Newline | T::Eof | T::Kw(K::End)) {
+            self.openers.push(Opener { keyword: "guard", span: kw.span });
+            let body = self.parse_block_body();
+            self.expect_end();
+            body
+        } else {
+            self.one_line_guard(kw.span)
+        };
         self.pop_scope();
-        self.expect_end();
         for n in &names {
             self.declare(n.name);
         }
         StmtKind::Guard { names, value, err, else_body }
+    }
+
+    /// The `else` branch of the `guard` at `kw` written on the guard's own
+    /// line (`guard x = v else return 0`), as a one-line form: one error,
+    /// whose fix moves it to a line of its own and closes it with `end`.
+    /// The branch is the statement there, with an `end` on the line if one
+    /// follows, so the lines after it are the method's again.
+    fn one_line_guard(&mut self, kw: Span) -> Vec<Stmt> {
+        let (gap, first, errors) = (self.prev_span().end, self.peek().span, self.diags.len());
+        let stmt = self.parse_stmt();
+        let last = self.prev_span();
+        let indent = " ".repeat(self.indent_of_line(self.line_of(kw.start)));
+        let mut edits =
+            vec![Edit { span: Span::new(self.file, gap, first.start), replacement: format!("\n{indent}  ") }];
+        if self.at_kw(K::End) && self.line_of(self.peek().span.start) == self.line_of(last.start) {
+            let end = self.bump().span;
+            edits.push(Edit { span: Span::new(self.file, last.end, end.start), replacement: format!("\n{indent}") });
+        } else {
+            edits.push(Edit { span: last.shrink_to_end(), replacement: format!("\n{indent}end") });
+        }
+        let applicability =
+            if self.diags.len() > errors { Applicability::MaybeIncorrect } else { Applicability::MachineApplicable };
+        self.report(
+            Diagnostic::error(codes::UNEXPECTED_TOKEN, "a `guard`'s `else` branch goes on the lines below it")
+                .primary(first.to(last), "this branch is on the `guard`'s line")
+                .note("the branch is a block: it starts on the next line, leaves the scope and ends with `end`")
+                .suggest("put the branch on its own line, and close it with `end`", edits, applicability),
+        );
+        vec![stmt]
     }
 
     fn parse_expr_or_assign(&mut self) -> StmtKind {
@@ -3994,6 +4050,8 @@ impl<'a> Parser<'a> {
             // Outside a `quote` a splice is a mistyped comment, not an argument.
             T::SpliceBegin | T::AtSplice | T::ColonSplice => self.splices_are_code(),
             T::LBracket | T::Minus | T::Star | T::Amp | T::Tilde | T::Caret => tight_next,
+            // A keyword that names an argument (`Node.new next: n`).
+            T::Kw(_) => tight_next && self.tokens.get(idx).is_some_and(|n| n.kind == T::Colon),
             _ => false,
         }
     }
@@ -4226,10 +4284,15 @@ impl<'a> Parser<'a> {
             }
             T::Kw(K::Quote) => {
                 self.bump();
-                if !self.eat_kw(K::Do) {
+                // `quote { … }`, as a block is written: reported once its
+                // `}` is found, and read as `quote do … end`.
+                let brace = self.at(T::LBrace).then(|| self.bump().span);
+                if brace.is_none() && !self.eat_kw(K::Do) {
                     self.error_expected("`do` after `quote`");
                 }
-                self.openers.push(Opener { keyword: "quote", span });
+                if brace.is_none() {
+                    self.openers.push(Opener { keyword: "quote", span });
+                }
                 // The quote's code runs where the macro is called: it has
                 // its own locals, splices and `yield`s.
                 self.quotes.push(Vec::new());
@@ -4243,7 +4306,10 @@ impl<'a> Parser<'a> {
                 self.splice_depth = splice_depth;
                 let splices = self.quotes.pop().unwrap_or_default();
                 self.quote_keywords.pop();
-                self.expect_end();
+                match brace {
+                    Some(open) => self.braced_quote(open),
+                    None => self.expect_end(),
+                }
                 Expr { kind: ExprKind::Quote(Box::new(QuoteExpr { body, splices })), span: span.to(self.prev_span()) }
             }
             T::SpliceBegin => {
@@ -4504,6 +4570,27 @@ impl<'a> Parser<'a> {
         true
     }
 
+    /// Reports a `quote` whose code is in braces (`quote { 1 }`, at `open`),
+    /// with the body parsed, and consumes its `}`. A `quote` takes its code
+    /// in `do … end`, which the fix writes.
+    fn braced_quote(&mut self, open: Span) {
+        let mut diag = Diagnostic::error(codes::UNEXPECTED_TOKEN, "expected `do` after `quote`, found `{`")
+            .primary(open, "a `quote` takes its code in `do … end`, not in braces")
+            .note("`quote` is a keyword, not a method that takes a block");
+        self.skip_newlines();
+        if self.at(T::RBrace) {
+            let close = self.bump().span;
+            diag = diag.suggest(
+                "write `do … end`",
+                vec![Edit { span: open, replacement: "do".into() }, Edit { span: close, replacement: "end".into() }],
+                Applicability::MachineApplicable,
+            );
+        } else {
+            diag = diag.help("write the code between `quote do` and `end`");
+        }
+        self.report(diag);
+    }
+
     /// Parses `(args)`. `types` is true for the builtins whose arguments are
     /// types (see [`Parser::parse_type_arg`]).
     fn parse_args_in_parens(&mut self, types: bool) -> Vec<Arg> {
@@ -4547,10 +4634,17 @@ impl<'a> Parser<'a> {
     /// with the statement.
     fn parse_arg(&mut self, types: bool, open: Option<Span>) -> Arg {
         let parens = open.is_some();
-        if let Some(len) = self.name_len(0)
+        if let Some(len) = self.name_len(0).or_else(|| self.keyword_label().then_some(1))
             && self.nth(len).kind == T::Colon
         {
-            let name = self.parse_name("an argument name");
+            let name = match self.kind() {
+                // `next: node`: a field may be named by a keyword.
+                T::Kw(k) => {
+                    let tok = self.bump();
+                    Ident { name: Name::new(k.as_str()), span: tok.span }
+                }
+                _ => self.parse_name("an argument name"),
+            };
             let colon = self.bump().span;
             // The value may go on the next line, indented deeper than the
             // call's own line. `add(a:` followed by a declaration, an
@@ -4693,6 +4787,13 @@ impl<'a> Parser<'a> {
             TypeKind::Proc { ret, c_abi, .. } => ret.is_some() || *c_abi,
             _ => false,
         }
+    }
+
+    /// Whether a keyword followed directly by `:` starts here (`next: n`),
+    /// which names an argument, as in Ruby: fields may be named by most
+    /// keywords.
+    fn keyword_label(&self) -> bool {
+        matches!(self.kind(), T::Kw(_)) && self.nth(1).kind == T::Colon && !self.nth(1).space_before
     }
 
     /// Whether `callee` is `size_of`, `align_of` or `type_info`, whose
@@ -6253,6 +6354,44 @@ end
     fn keywords_are_quoted_in_messages() {
         let (messages, _) = fix_all("def main\n  x = def\nend\n");
         assert_eq!(messages, ["expected an expression, found `def`"]);
+    }
+
+    #[test]
+    fn ruby_habits_are_one_error_each() {
+        // Each is one error whose fix writes the Wid form, and the file's
+        // `main` is still found.
+        for (src, fixed) in [
+            ("macro def m -> Code\n  quote { 1 }\nend\n", "macro def m -> Code\n  quote do 1 end\nend\n"),
+            (
+                "macro m(e: Code) -> Code\n  quote do\n    #{e}\n  end\nend\n",
+                "macro def m(e: Code) -> Code\n  quote do\n    #{e}\n  end\nend\n",
+            ),
+            (
+                "def f(v: Int?) -> Int\n  guard x = v else return 0\n  x\nend\n",
+                "def f(v: Int?) -> Int\n  guard x = v else\n    return 0\n  end\n  x\nend\n",
+            ),
+            (
+                "def f(v: Int?) -> Int\n  guard x = v else |e| return 0 end\n  x\nend\n",
+                "def f(v: Int?) -> Int\n  guard x = v else |e|\n    return 0\n  end\n  x\nend\n",
+            ),
+        ] {
+            let src = format!("{src}def main\nend\n");
+            let (messages, out) = fix_all(&src);
+            assert_eq!(messages.len(), 1, "{src:?}");
+            assert_eq!(out, format!("{fixed}def main\nend\n"), "{src:?}");
+            parse_ok(&out);
+            assert_eq!(parse_file(FileId(0), &src).0.items.len(), 2, "{src:?}");
+        }
+        // A keyword followed directly by `:` names an argument.
+        let file = parse_ok("def main\n  n = Node.new(v: 1, next: m)\n  o = Node.new next: m, if: 2\nend\n");
+        let ItemKind::Def(def) = &file.items[0].kind else { panic!("a def") };
+        let FnBody::Block(body) = &def.body else { panic!("a block body") };
+        for (stmt, names) in body.iter().zip([["v", "next"], ["next", "if"]]) {
+            let StmtKind::Assign { values, .. } = &stmt.kind else { panic!("an assignment") };
+            let ExprKind::Call(call) = &values[0].kind else { panic!("a call") };
+            let given: Vec<_> = call.args.iter().map(|a| a.name.map(|n| n.as_str())).collect();
+            assert_eq!(given, names.map(Some));
+        }
     }
 
     #[test]

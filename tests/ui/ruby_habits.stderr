@@ -1,0 +1,66 @@
+error[E0105]: expected `do` after `quote`, found `{`
+  --> tests/ui/ruby_habits.wid:11:9
+   |
+11 |   quote { 1 }
+   |         ^ a `quote` takes its code in `do … end`, not in braces
+   = note: `quote` is a keyword, not a method that takes a block
+help: write `do … end`
+   |   quote do 1 end
+   = see `wid explain E0105`
+
+error[E0105]: expected `def` after `macro`, found `twice`
+  --> tests/ui/ruby_habits.wid:15:7
+   |
+15 | macro twice(e: Code) -> Code
+   |       ^^^^^ expected `def`
+   | ----- a macro is declared with `macro def`
+help: add `def`
+   | macro def twice(e: Code) -> Code
+   = see `wid explain E0105`
+
+error[E0301]: expected `Code`, found `String`
+  --> tests/ui/ruby_habits.wid:23:3
+   |
+23 |   "#{e} * 3"
+   |   ^^^^^^^^^^ this has type `String`
+help: a macro builds code with `quote do … end`, not with a string; in a `quote`, `#{…}` splices a value in
+   |   quote do
+   |     #{e} * 3
+   |   end
+   = see `wid explain E0301`
+
+error[E0105]: a `guard`'s `else` branch goes on the lines below it
+  --> tests/ui/ruby_habits.wid:46:20
+   |
+46 |   guard x = v else return 0
+   |                    ^^^^^^^^ this branch is on the `guard`'s line
+   = note: the branch is a block: it starts on the next line, leaves the scope and ends with `end`
+help: put the branch on its own line, and close it with `end`
+   |   guard x = v else
+   |     return 0
+   |   end
+   = see `wid explain E0105`
+
+error[E0319]: the macro `timed` does not take a block
+  --> tests/ui/ruby_habits.wid:52:9
+   |
+52 |   timed do
+   |         ^^ this block is never used
+help: pass the code as an argument instead; a `Code` parameter receives it unevaluated
+   = see `wid explain E0319`
+
+error[E0323]: `Self` is a type, not a value
+  --> tests/ui/ruby_habits.wid:36:33
+   |
+36 |     def describe -> String = "#{Self}"
+   |                                 ^^^^ expected a value here
+  ::: tests/ui/ruby_habits.wid:41:3
+   |
+41 |   describe
+   |   -------- `describe` expands here
+   = note: `Self` names the type whose method this is
+help: for the type's name, use `type_info(Self).name`
+help: or compute the name in the macro, before the `quote` (`name = Self.name`), and splice it as a string: `#{name}`
+   = see `wid explain E0323`
+
+error: could not compile due to 6 errors

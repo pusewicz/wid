@@ -276,7 +276,28 @@ impl<'a> Checker<'a> {
             diag = conversion_help(diag, span, &text, &want_s);
             diag = diag.note("Wid never converts between numeric types implicitly");
         }
+        if matches!(self.types.kind(want), TyKind::Code) && matches!(self.types.kind(v.ty), TyKind::String) {
+            diag = self.string_as_code(diag, span);
+        }
         self.report(diag);
+    }
+
+    /// Advice for a string where a macro's `Code` goes, as Ruby builds code
+    /// for `eval`: a macro builds code with `quote do … end`. A string
+    /// literal on one line is written out as that `quote`, where its
+    /// interpolations become splices.
+    fn string_as_code(&self, diag: Diagnostic, span: Span) -> Diagnostic {
+        let help =
+            "a macro builds code with `quote do … end`, not with a string; in a `quote`, `#{…}` splices a value in";
+        let text = self.source_text(span);
+        match text.strip_prefix('"').and_then(|t| t.strip_suffix('"')) {
+            Some(code) if !code.trim().is_empty() && !code.contains(['"', '\\', '\n']) => {
+                let indent = self.indent_at(span);
+                let replacement = format!("quote do\n{indent}  {}\n{indent}end", code.trim());
+                diag.suggest_replace(help, span, replacement, Applicability::MaybeIncorrect)
+            }
+            _ => diag.help(help),
+        }
     }
 
     /// Returns the type a variable gets when initialized with a value of
@@ -817,6 +838,10 @@ impl<'a> Checker<'a> {
             );
             return ir::Expr::new(ExprKind::Zero, self.types.unknown());
         }
+        if name.as_str() == "Self" && self.frame().self_ty.is_some() {
+            self.self_as_value(span);
+            return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+        }
         let candidates = self
             .package_names(loc.pkg)
             .into_iter()
@@ -826,6 +851,22 @@ impl<'a> Checker<'a> {
             self.undefined(name, span, candidates, "constant");
         }
         ir::Expr::new(ExprKind::Zero, self.types.unknown())
+    }
+
+    /// Reports `Self` written where a value goes in a method, as in
+    /// `"#{Self}"`: it names a type. Its name is `type_info(Self).name`, or,
+    /// in code a macro generated, a string the macro computes.
+    fn self_as_value(&mut self, span: Span) {
+        let mut diag = Diagnostic::error(codes::NOT_A_VALUE, "`Self` is a type, not a value")
+            .primary(span, "expected a value here")
+            .note("`Self` names the type whose method this is")
+            .help("for the type's name, use `type_info(Self).name`");
+        if span.file.expansion_index().is_some() {
+            diag = diag.help(
+                "or compute the name in the macro, before the `quote` (`name = Self.name`), and splice it as a string: `#{name}`",
+            );
+        }
+        self.report(diag);
     }
 
     // ----- operators -----------------------------------------------------

@@ -69,7 +69,9 @@ end
   assignment like `cells[0] += 1`. Unused parameters are allowed.
 - **Calls.** Parentheses are optional for zero-argument calls and for the
   outermost call of a statement (`puts "hi"`). Any parameter can be passed by
-  name. Defaults are written `hp: Int = 100`.
+  name. Defaults are written `hp: Int = 100`. A field may be named by most
+  keywords (`next: ^Node?`), and, as in Ruby, a keyword followed directly
+  by `:` in an argument list names an argument: `Node.new(next: n)`.
 - **Symbols.** `:north` is a compile-time name. Where an enum is expected it
   selects a member, like Odin's `.North`; anywhere else it is a plain
   identifier (in macros and `cimport` options, for example).
@@ -414,9 +416,12 @@ end
   can be nil also works as the error value. `nil` means success.
 - `guard a, b = f() else |err| … end` binds the non-error values, or unwraps a
   `T?`, for the rest of the scope. The `else` branch must leave the scope with
-  `return`, `break`, `next` or `panic`. There are no shorthand propagation
-  operators such as `or_return` or `?`. `guard cond else … end` also works
-  with a plain `Bool` condition.
+  `return`, `break`, `next` or `panic`. Like any block, it starts on the line
+  after `else` (or `|err|`) and ends with `end`: a branch written on the
+  guard's own line (`guard x = v else return 0`) is E0105, whose fix moves it
+  to its own line. There are no shorthand propagation operators such as
+  `or_return` or `?`. `guard cond else … end` also works with a plain `Bool`
+  condition.
 - By convention a failing function returns `{}, err` if its type is
   `(T, Error)` and `nil` if its type is `T?`. Silently dropping an `Error` is a
   compile error; discard one explicitly with `_`.

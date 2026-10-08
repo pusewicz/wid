@@ -965,6 +965,23 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   attribute list and generic parameters; `overload #{name}` gets the fix
   `:#{name}` and reads as it, and `import #{path}` notes that generated
   code can't import.
+- Ruby habits are one error each, with a fix, and the rest of the file is
+  checked (#80): `quote { 1 }` is E0105 with the fix `quote do 1 end` and
+  reads as that `quote` (`Parser::braced_quote`; it lost `def main`);
+  `macro twice(…)` is E0105 with the fix `macro def twice`, parsed as if
+  `def` were there; a macro's string where `Code` is expected (E0301)
+  gets a help, with the string written out as a `quote` when it is a
+  literal (`Checker::string_as_code`); a block passed to a macro that
+  takes `Code` is E0319 alone (the `Code` argument isn't reported
+  missing); `guard x = v else return 0` is E0105 with the multi-line fix,
+  its branch read as the line's statement (`Parser::one_line_guard`; it
+  swallowed the method's `end`); a keyword followed directly by `:`
+  names an argument (`Node.new(v: 1, next: &n)`, also starting a call
+  without parentheses; `Parser::keyword_label`), since a field may be
+  named `next`; and `Self` where a value goes in a method (`"#{Self}"`)
+  is E0323 "`Self` is a type, not a value" with `type_info(Self).name`
+  and, in generated code, computing the name in the macro (it was
+  "undefined constant `Self`").
 - A C compiler without C23 (one that rejects `-std=c23`, like gcc 13 or
   clang 17, or lacks `<stdckdint.h>` or `#embed`) is E0702 "the C compiler
   `cc` doesn't support C23", with the first line of its `--version`, the

@@ -764,6 +764,12 @@ impl<'a> Checker<'a> {
                     .primary(b.span, "this block is never used")
                     .help("pass the code as an argument instead; a `Code` parameter receives it unevaluated"),
             );
+            // The block was meant as a `Code` argument, so that argument
+            // isn't reported missing too.
+            let sig = self.fn_sig(call.decl);
+            if sig.params.iter().any(|p| matches!(self.types.kind(self.types.base(p.ty)), TyKind::Code)) {
+                return None;
+            }
         }
         let mut code = CallCode::default();
         let values = self.macro_args(call, &mut code)?;
