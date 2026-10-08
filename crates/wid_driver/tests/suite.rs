@@ -32,6 +32,10 @@
 //!   list `-check` and `-json-errors`; then `NAME.stdout` holds what
 //!   `wid fmt` prints (a missing file expects nothing).
 //!
+//! A `-collection:name=path` flag names its directory relative to where the
+//! command runs: the directory of the `NAME.flags` file, `tests/doc/` or the
+//! repository root.
+//!
 //! Set `WID_BLESS=1` to rewrite expectations, `WID_TEST_FILTER=text` to run a
 //! subset, and `WID_TEST_CC=clang,gcc-16` to choose compilers.
 
@@ -194,10 +198,19 @@ fn compilers() -> Vec<String> {
     out
 }
 
+/// Adds a `-collection:name=path` flag's collection, with `path` relative to
+/// `base`. Returns whether `flag` is one.
+fn add_collection(opts: &mut Options, flag: &str, base: &Path) -> bool {
+    let Some(value) = flag.strip_prefix("-collection:") else { return false };
+    let (name, path) = value.split_once('=').expect("a `-collection:name=path` flag");
+    opts.collections.insert(name.to_string(), base.join(path));
+    true
+}
+
 /// Applies build flags listed in a `NAME.flags` file (`-debug`,
-/// `-no-bounds-check`, `-o:speed`, `-define:NAME=value`, `-target:os_arch`).
-/// Returns whether it lists `-json-errors`, which makes a ui case expect the
-/// JSON document `wid check -json-errors` prints.
+/// `-no-bounds-check`, `-o:speed`, `-define:NAME=value`, `-target:os_arch`,
+/// `-collection:name=path`). Returns whether it lists `-json-errors`, which
+/// makes a ui case expect the JSON document `wid check -json-errors` prints.
 fn apply_flags(opts: &mut Options, path: &Path) -> bool {
     let Ok(text) = std::fs::read_to_string(path) else { return false };
     let mut json = false;
@@ -206,6 +219,7 @@ fn apply_flags(opts: &mut Options, path: &Path) -> bool {
             "-debug" => opts.debug = true,
             "-no-bounds-check" => opts.bounds_checks = false,
             "-json-errors" => json = true,
+            other if add_collection(opts, other, path.parent().unwrap_or(Path::new("."))) => {}
             other => {
                 if let Some(level) = other.strip_prefix("-o:").and_then(wid_driver::OptLevel::parse) {
                     opts.opt = Some(level);
@@ -299,6 +313,7 @@ fn run_doc(args: &Path, root: &Path, bless: bool) -> Vec<String> {
             "-json-errors" => json_errors = true,
             "-private" => request.private = true,
             "-file" => opts.file_mode = true,
+            _ if add_collection(&mut opts, arg, &base) => {}
             _ if i == 0 && arg.starts_with("-in:") => request.dir = base.join(&arg[4..]),
             _ if arg.starts_with('-') => panic!("unknown flag `{arg}` in {}", args.display()),
             _ => request.args.push(arg.to_string()),
@@ -322,6 +337,7 @@ fn run_query(args: &Path, root: &Path, bless: bool) -> Vec<String> {
         match arg {
             "-file" => opts.file_mode = true,
             "-json-errors" => {}
+            _ if add_collection(&mut opts, arg, root) => {}
             _ if arg.starts_with("-in:") => package = Some(arg[4..].to_string()),
             _ if arg.starts_with('-') => panic!("unknown flag `{arg}` in {}", args.display()),
             _ => positional.push(arg.to_string()),

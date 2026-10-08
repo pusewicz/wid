@@ -1003,7 +1003,7 @@ end
   `test`, `doc`, `fmt`, `explain`, `cimport`, `query`, `lsp` and `version`. Flags:
   `-out:`, `-o:none|minimal|size|speed|aggressive`, `-debug`, `-vet`,
   `-define:NAME=val`, `-collection:name=path`, `-target:os_arch`, `-file`,
-  `-sanitize:address`, `-filter:` (for `test`), `-json` and `-private` (for
+  `-sanitize:address|undefined`, `-filter:` (for `test`), `-json` and `-private` (for
   `doc`), `-in:` (for `query`), `-check` (for `fmt`) and `-json-errors`.
   `check` generates no C, so it takes only the flags that change what is
   checked: `-file`, `-define:`, `-target:`, `-collection:` and
@@ -1012,10 +1012,21 @@ end
   `run` and `test`. `-o:` defaults to `minimal`. `-debug` builds with debug
   info, overflow checks and `#line` directives, at `-o:none` unless an
   `-o:` flag is given, so a debugger sees every variable and steps line by
-  line. Compile-time code runs with `-debug`'s checks whatever the flags. A flag another command takes is an error that names the
-  commands taking it (`wid explain -debug`: "`-debug` doesn't apply to
-  `wid explain`"), never silently ignored; like every usage error, it exits
-  with status 2.
+  line. Compile-time code runs with `-debug`'s checks whatever the flags.
+  `-sanitize:address` and `-sanitize:undefined` build with the C compiler's
+  AddressSanitizer and UndefinedBehaviorSanitizer; repeat the flag to turn
+  on both. Any other value, or a list like `address,undefined`, is a usage
+  error (E0710) that points into the command line, with the similar name
+  (or the flags split up) as the fix, and nothing is compiled. A flag
+  another command takes is an error that names the commands taking it
+  (`wid explain -debug`: "`-debug` doesn't apply to `wid explain`"), never
+  silently ignored; like every usage error, it exits with status 2.
+- `-collection:name=path` adds the collection `name:` for imports. A
+  package in one keeps its collection path wherever it is named, so
+  `wid query outline -in:mylib:geo -collection:mylib=libs` (or `wid doc`
+  of the package, or building it) shows it as `mylib:geo`, as
+  `wid doc core:fmt` shows `core:fmt`; a package outside every collection
+  is `.`. In nested collections, the innermost one names it.
 - Without `-file`, the target of `build`, `run`, `check` and `test` is a
   package directory. One that isn't is an error (E0206) that points into the
   command line: a missing directory, with a similar package directory next

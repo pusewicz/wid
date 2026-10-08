@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use wid_diagnostics::{Applicability, Diagnostic, Diagnostics, SourceMap, Span, codes, did_you_mean};
 use wid_driver::OptLevel;
 
 /// The subcommands.
@@ -316,6 +317,109 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
     Ok(parsed)
 }
 
+/// A malformed command line, which is a usage error (status 2).
+pub enum UsageError {
+    /// A message, like "unknown flag `-x`".
+    Message(String),
+    /// Errors about flag values, pointing into the command line, which
+    /// `sources` holds.
+    Values { sources: SourceMap, diags: Diagnostics },
+}
+
+/// Parses the command line, then checks the values of the flags that take
+/// one of a fixed set (`-sanitize:`), so a bad value is reported before
+/// anything runs and never reaches the C compiler.
+pub fn parse_command_line(argv: &[String]) -> Result<Parsed, UsageError> {
+    let parsed = parse(argv).map_err(UsageError::Message)?;
+    match sanitizer_errors(argv) {
+        Some((sources, diags)) => Err(UsageError::Values { sources, diags }),
+        None => Ok(parsed),
+    }
+}
+
+/// The sanitizers `-sanitize:` turns on, by the C compiler's
+/// `-fsanitize=` names.
+const SANITIZERS: &[(&str, &str)] = &[("address", "AddressSanitizer"), ("undefined", "UndefinedBehaviorSanitizer")];
+
+/// Short names people use for the sanitizers.
+const SANITIZER_ALIASES: &[(&str, &str)] = &[("asan", "address"), ("ubsan", "undefined"), ("ub", "undefined")];
+
+/// The errors (E0710) for the `-sanitize:` values of `wid ARGV` that aren't
+/// sanitizers, pointing into that command line; `None` when there are
+/// none.
+fn sanitizer_errors(argv: &[String]) -> Option<(SourceMap, Diagnostics)> {
+    const FLAG: &str = "-sanitize:";
+    let text = format!("wid {}", argv.join(" "));
+    let known = |name: &str| SANITIZERS.iter().any(|(n, _)| *n == name);
+    // Where each bad argument and its value start, and the value.
+    let mut bad = Vec::new();
+    let mut at = "wid ".len();
+    for arg in argv {
+        if arg == "--" {
+            break;
+        }
+        if let Some(value) = arg.strip_prefix(FLAG)
+            && !known(value)
+        {
+            bad.push((at as u32, (at + FLAG.len()) as u32, value.to_string()));
+        }
+        at += arg.len() + 1;
+    }
+    if bad.is_empty() {
+        return None;
+    }
+    let mut sources = SourceMap::new();
+    let file = sources.add(PathBuf::from("<command line>"), "command line".to_string(), text);
+    let described: Vec<String> = SANITIZERS.iter().map(|(n, long)| format!("`{n}` ({long})")).collect();
+    let supported = format!("Wid supports {}", wid_diagnostics::and_list(&described));
+    let mut diags = Diagnostics::new();
+    for (arg_start, start, value) in bad {
+        let span = Span::new(file, start, start + value.len() as u32);
+        let parts: Vec<&str> = value.split(',').collect();
+        let diag = if parts.len() > 1 && parts.iter().all(|p| known(p)) {
+            // `-sanitize:address,undefined`, as `-fsanitize=` takes it.
+            let whole = Span::new(file, arg_start, span.end);
+            let flags: Vec<String> = parts.iter().map(|p| format!("{FLAG}{p}")).collect();
+            Diagnostic::error(codes::UNKNOWN_SANITIZER, "`-sanitize:` takes one sanitizer, not a list")
+                .primary(whole, format!("{} sanitizers in one flag", parts.len()))
+                .note("each `-sanitize:` turns on one sanitizer; repeat the flag to combine them")
+                .suggest_replace(
+                    "give each sanitizer its own flag",
+                    whole,
+                    flags.join(" "),
+                    Applicability::MachineApplicable,
+                )
+        } else if value.is_empty() {
+            Diagnostic::error(codes::UNKNOWN_SANITIZER, "`-sanitize:` names no sanitizer")
+                .primary(span, "a sanitizer's name goes here")
+                .note(supported.clone())
+                .suggest_replace("turn on AddressSanitizer", span, "address", Applicability::MaybeIncorrect)
+        } else {
+            let diag = Diagnostic::error(codes::UNKNOWN_SANITIZER, format!("unknown sanitizer `{value}`"))
+                .primary(span, "not a sanitizer Wid supports")
+                .note(supported.clone());
+            let alias = SANITIZER_ALIASES.iter().find(|(a, _)| value.eq_ignore_ascii_case(a)).map(|(_, n)| *n);
+            match (alias, did_you_mean(&value, SANITIZERS.iter().map(|(n, _)| *n))) {
+                (Some(name), _) => {
+                    diag.suggest_replace(format!("Wid calls it `{name}`"), span, name, Applicability::MachineApplicable)
+                }
+                (None, Some(name)) => diag.suggest_replace(
+                    format!("a similar sanitizer exists: `{name}`"),
+                    span,
+                    name,
+                    Applicability::MaybeIncorrect,
+                ),
+                (None, None) => {
+                    let flags: Vec<String> = SANITIZERS.iter().map(|(n, _)| format!("`{FLAG}{n}`")).collect();
+                    diag.help(format!("name one of them: {}", flags.join(" or ")))
+                }
+            }
+        };
+        diags.push(diag);
+    }
+    Some((sources, diags))
+}
+
 /// The message for a flag `command` doesn't take. A double-dash flag
 /// (`--debug`) is offered its one-dash form only when the command takes it.
 fn unknown_flag(command: Command, name: &str) -> String {
@@ -495,7 +599,7 @@ const BUILD_FLAG_HELP: &str = "Flags:\n  \
     -target:<os_arch>      Compile for another target, like linux_amd64 (sets OS and ARCH)\n  \
     -collection:name=path  Add an import collection\n  \
     -no-bounds-check       Disable bounds checks\n  \
-    -sanitize:<name>       Enable a sanitizer, e.g. address\n  \
+    -sanitize:<name>       Build with a sanitizer: address or undefined (repeat for both)\n  \
     -json-errors           Print diagnostics (and test results) as JSON\n";
 
 /// The flags `wid check` takes.

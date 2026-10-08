@@ -1,0 +1,1 @@
+outline -in:mylib:geo -collection:mylib=tests/run/collections/libs

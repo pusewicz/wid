@@ -9,7 +9,7 @@ use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use wid_diagnostics::{Diagnostics, RenderOptions, SourceMap, render_all_with, render_json, to_json};
+use wid_diagnostics::{Diagnostics, RenderOptions, SourceMap, render, render_all_with, render_json, to_json};
 use wid_driver::Options;
 
 use args::{Command, Parsed};
@@ -17,10 +17,14 @@ use output::{err, out};
 
 fn main() -> ExitCode {
     let argv: Vec<String> = std::env::args().skip(1).collect();
-    let parsed = match args::parse(&argv) {
+    let parsed = match args::parse_command_line(&argv) {
         Ok(p) => p,
-        Err(message) => {
+        Err(args::UsageError::Message(message)) => {
             err(&format!("{}\nrun `wid help` for usage\n", error_line(&message)));
+            return ExitCode::from(2);
+        }
+        Err(args::UsageError::Values { sources, diags }) => {
+            usage_diagnostics(&argv, &sources, &diags);
             return ExitCode::from(2);
         }
     };
@@ -47,6 +51,24 @@ fn main() -> ExitCode {
 
 fn color_stderr() -> bool {
     std::io::stderr().is_terminal() && std::env::var_os("NO_COLOR").is_none()
+}
+
+/// Prints the errors about flag values in `wid ARGV`, which point into the
+/// command line: as JSON on stdout with `-json-errors`, as `report` does,
+/// and otherwise on stderr, followed by where to find the usage.
+fn usage_diagnostics(argv: &[String], sources: &SourceMap, diags: &Diagnostics) {
+    if argv.iter().take_while(|a| *a != "--").any(|a| a == "-json-errors") {
+        out(&format!("{}\n", render_json(diags, sources)));
+        return;
+    }
+    let mut text = String::new();
+    for diag in diags.iter() {
+        text.push_str(&render(diag, sources, RenderOptions { color: color_stderr() }));
+        text.push('\n');
+    }
+    let command = argv.first().map_or("", String::as_str);
+    let _ = writeln!(text, "run `wid help {command}` for usage");
+    err(&text);
 }
 
 fn error_line(message: &str) -> String {

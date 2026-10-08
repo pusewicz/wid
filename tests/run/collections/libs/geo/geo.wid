@@ -1,0 +1,13 @@
+# Plane geometry, imported as `mylib:geo` with `-collection:mylib=…`.
+
+# A point in the plane.
+struct Point
+  x: Int
+  y: Int
+
+  # The Manhattan distance to `other`.
+  def distance(other: Point) -> Int = (@x - other.x).abs + (@y - other.y).abs
+end
+
+# The point both coordinates start from.
+ORIGIN = Point.new(0, 0)

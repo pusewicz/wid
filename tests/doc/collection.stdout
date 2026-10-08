@@ -1,0 +1,19 @@
+package geo // import "mylib:geo"
+
+Plane geometry, imported as `mylib:geo` with `-collection:mylib=…`.
+
+CONSTANTS
+
+ORIGIN = Point.new(0, 0)
+    The point both coordinates start from.
+
+TYPES
+
+struct Point
+    A point in the plane.
+
+    x: Int
+    y: Int
+
+    def distance(other: Point) -> Int
+        The Manhattan distance to `other`.

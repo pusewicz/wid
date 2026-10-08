@@ -1313,6 +1313,27 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   given (`Options::opt` is an `Option`, `Options::opt_level` decides), so
   gdb sees `ctx` and steps by line. `wid_driver/tests/debug_builds.rs`
   checks the directives and, through a fake C compiler, the `-O` flag.
+- CLI flags (#142, SPEC "Toolchain and CLI"). `-sanitize:` takes `address`
+  and `undefined` (every run test runs clean under both with clang and
+  gcc-15, except that LeakSanitizer reports the map `macro_operands` never
+  frees, and UBSan with clang a call through a C function pointer of
+  another type in `cimport_basic`); any other value was passed to the C compiler, which failed with E0702 and
+  left its build directory behind. `args::parse_command_line` now checks
+  the values after `parse`, and each bad one is E0710 pointing into the
+  command line, a usage error (status 2) printed as diagnostics (JSON on
+  stdout with `-json-errors`) and `run \`wid help build\` for usage`: a
+  similar name or an alias (`asan`, `ubsan`) as the fix, a list
+  (`address,undefined`) split into one flag each, and an empty value. A
+  package inside a `-collection:` directory keeps its collection path
+  (`Loader::collection_path`, innermost collection first), so
+  `wid query -in:mylib:geo` and `wid doc mylib:geo` show `mylib:geo`
+  instead of `.`. The suite takes `-collection:name=path` in `NAME.flags`
+  and in `tests/doc` and `tests/query` args (`tests/run/collections`,
+  `tests/doc/collection`, `tests/query/collection_outline`), and
+  `wid_cli/tests/build_flags.rs` runs every `-o:` level, `-collection:`,
+  the E0710 errors, and `-sanitize:address` and `-sanitize:undefined` with
+  each compiler that can build and run a C program with them (skipping
+  the others).
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
@@ -1624,7 +1645,6 @@ only on `main` and can run in parallel with the macro stack.
    - SPEC's endless-`def` example (#137);
    - error values (#139);
    - library and runtime gaps (#140);
-   - CLI flags and tests (#142);
    - diagnostics without a fix (#145);
    - type display and wording (#146);
    - cimport diagnostics (#147).

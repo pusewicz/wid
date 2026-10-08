@@ -164,20 +164,26 @@ fn package_ident(name: &str) -> String {
 }
 
 impl Loader<'_> {
-    /// The import path of a directory inside the `core` or `vendor`
-    /// collection, like `core:strings`, so a collection package keeps its
-    /// identity when it is the package being built or tested.
+    /// The import path of a directory inside a collection, like
+    /// `core:strings`, or `mylib:geo` with `-collection:mylib=…`, so a
+    /// collection package keeps its identity when it is the package being
+    /// built, tested, documented or queried. In nested collections, the
+    /// innermost names it.
     fn collection_path(&self, dir: &Path) -> Option<String> {
         let canon = dir.canonicalize().ok()?;
-        for collection in ["core", "vendor"] {
-            let base = self.root.join(collection).canonicalize().ok()?;
-            if let Ok(rel) = canon.strip_prefix(&base)
-                && !rel.as_os_str().is_empty()
-            {
-                return Some(format!("{collection}:{}", rel.to_string_lossy().replace('\\', "/")));
-            }
-        }
-        None
+        let mut user: Vec<(&String, &PathBuf)> = self.opts.collections.iter().collect();
+        user.sort();
+        let bases = [("core", self.root.join("core")), ("vendor", self.root.join("vendor"))]
+            .into_iter()
+            .chain(user.into_iter().map(|(name, base)| (name.as_str(), base.clone())));
+        bases
+            .filter_map(|(name, base)| {
+                let rel = canon.strip_prefix(base.canonicalize().ok()?).ok()?;
+                let path = format!("{name}:{}", rel.to_string_lossy().replace('\\', "/"));
+                (!rel.as_os_str().is_empty()).then(|| (rel.components().count(), path))
+            })
+            .min_by_key(|(depth, _)| *depth)
+            .map(|(_, path)| path)
     }
 
     /// Adds the prelude's `OS` and `ARCH` constants for the target.

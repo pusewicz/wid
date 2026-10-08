@@ -127,6 +127,7 @@ codes! {
     OPAQUE_BY_VALUE = "E0707", "opaque type used by value";
     C_VARIADIC = "E0708", "C variadic arguments misused";
     CROSS_TARGET = "E0709", "cannot build for another target";
+    UNKNOWN_SANITIZER = "E0710", "unknown sanitizer";
 
     // Tests.
     TEST_SIGNATURE = "E0801", "test has the wrong signature";

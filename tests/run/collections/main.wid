@@ -1,0 +1,8 @@
+# Imports a package from a collection the command line defines
+# (`collections.flags`: `-collection:mylib=collections/libs`).
+import "mylib:geo"
+
+def main
+  p geo.ORIGIN
+  puts geo.Point.new(3, -4).distance(geo.ORIGIN)
+end
