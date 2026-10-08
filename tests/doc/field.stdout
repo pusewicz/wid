@@ -3,4 +3,4 @@ package shapes
 vel: Vec2 = [120.0, 80.0]
     Pixels per second.
 
-    field of struct Ball, defined at tests/doc/shapes/shapes.wid:95
+    field of struct Ball, defined at tests/doc/shapes/shapes.wid:100

@@ -108,6 +108,10 @@ macro def counter(name: Symbol) -> Code
 
 EXTENSIONS
 
+extend Shape
+    def label -> String
+        What the shape is called in messages.
+
 extend Player
     def boost
         Doubles the player's speed.

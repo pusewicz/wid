@@ -9,3 +9,8 @@ VARIANTS
 
 Ball
 geo.Rect
+
+METHODS FROM extend Shape (tests/doc/shapes/shapes.wid:42)
+
+def label -> String
+    What the shape is called in messages.

@@ -11,7 +11,7 @@
           "location": {
             "column": 9,
             "file": "tests/doc/shapes/shapes.wid",
-            "line": 64
+            "line": 69
           },
           "name": "base",
           "origin": {
@@ -35,7 +35,7 @@
           "location": {
             "column": 3,
             "file": "tests/doc/shapes/shapes.wid",
-            "line": 66
+            "line": 71
           },
           "name": "name",
           "origin": {
@@ -59,7 +59,7 @@
           "location": {
             "column": 3,
             "file": "tests/doc/shapes/shapes.wid",
-            "line": 45
+            "line": 50
           },
           "name": "hp",
           "origin": {
@@ -83,7 +83,7 @@
           "location": {
             "column": 3,
             "file": "tests/doc/shapes/shapes.wid",
-            "line": 46
+            "line": 51
           },
           "name": "pos",
           "origin": {
@@ -105,7 +105,7 @@
       "location": {
         "column": 8,
         "file": "tests/doc/shapes/shapes.wid",
-        "line": 63
+        "line": 68
       },
       "methods": [
         {
@@ -115,7 +115,7 @@
           "location": {
             "column": 7,
             "file": "tests/doc/shapes/shapes.wid",
-            "line": 73
+            "line": 78
           },
           "name": "heal",
           "origin": {
@@ -140,7 +140,7 @@
           "location": {
             "column": 12,
             "file": "tests/doc/shapes/shapes.wid",
-            "line": 78
+            "line": 83
           },
           "name": "create",
           "origin": {
@@ -165,7 +165,7 @@
           "location": {
             "column": 12,
             "file": "tests/doc/shapes/shapes.wid",
-            "line": 68
+            "line": 73
           },
           "name": "kills",
           "origin": {
@@ -190,7 +190,7 @@
           "location": {
             "column": 7,
             "file": "tests/doc/shapes/shapes.wid",
-            "line": 57
+            "line": 62
           },
           "name": "greet",
           "origin": {
@@ -198,7 +198,7 @@
             "location": {
               "column": 8,
               "file": "tests/doc/shapes/shapes.wid",
-              "line": 55
+              "line": 60
             },
             "via": "include Greeter"
           },
@@ -219,7 +219,7 @@
           "location": {
             "column": 7,
             "file": "tests/doc/shapes/shapes.wid",
-            "line": 87
+            "line": 92
           },
           "name": "boost",
           "origin": {
@@ -227,7 +227,7 @@
             "location": {
               "column": 8,
               "file": "tests/doc/shapes/shapes.wid",
-              "line": 85
+              "line": 90
             },
             "via": "extend Player"
           },
@@ -248,7 +248,7 @@
           "location": {
             "column": 7,
             "file": "tests/doc/shapes/shapes.wid",
-            "line": 49
+            "line": 54
           },
           "name": "move",
           "origin": {

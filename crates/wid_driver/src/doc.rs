@@ -122,6 +122,9 @@ pub struct Entry {
     pub c: Option<CDoc>,
     /// For a member listed on a type's page, where it comes from.
     pub origin: Option<OriginInfo>,
+    /// For a field asked for through a struct that `using` promotes it
+    /// into, that struct (`Player` for `Player.hp`).
+    pub promoted_into: Option<String>,
     /// A struct's fields, its own and promoted ones.
     pub fields: Vec<Entry>,
     /// An enum's members.
@@ -771,7 +774,18 @@ impl PageBuilder<'_> {
         let item = match target {
             Target::Package(p) => return self.package_page(*p),
             Target::Symbol(id) => self.full_entry(*id),
-            Target::Field { owner, index } => self.field_entry(*owner, *index, None),
+            Target::Field { owner, index, promoted } => {
+                let origin = promoted.as_ref().map(|(_, path)| OriginInfo {
+                    kind: "using",
+                    via: format!("using {path}: {}", self.index.symbol(*owner).name),
+                    location: None,
+                });
+                let mut e = self.field_entry(*owner, *index, origin);
+                if let Some((into, _)) = promoted {
+                    e.promoted_into = Some(self.index.path_of(*into));
+                }
+                e
+            }
             Target::EnumMember { owner, index } => self.member_entry(*owner, *index),
             Target::Builtin(name) => Entry {
                 methods: self.group_entries(&self.index.builtin_groups(name)),
@@ -807,6 +821,7 @@ impl PageBuilder<'_> {
             owner,
             c: s.c.clone(),
             origin: None,
+            promoted_into: None,
             fields: Vec::new(),
             members: Vec::new(),
             variants: Vec::new(),
@@ -843,8 +858,9 @@ impl PageBuilder<'_> {
         let s = self.index.symbol(id);
         let mut e = self.entry(id);
         match s.kind {
-            SymbolKind::Struct | SymbolKind::Enum | SymbolKind::Module => self.add_members(&mut e, id),
-            SymbolKind::Union => e.variants = s.links.iter().map(|l| l.text.clone()).collect(),
+            SymbolKind::Struct | SymbolKind::Enum | SymbolKind::Union | SymbolKind::Module => {
+                self.add_members(&mut e, id)
+            }
             SymbolKind::TypeAlias => {
                 e.aliases = s.links.first().map(|l| l.text.clone());
                 let target = self.index.alias_target(id);
@@ -991,6 +1007,7 @@ fn blank_entry(kind: &'static str, name: &str, path: &str, signature: &str) -> E
         owner: None,
         c: None,
         origin: None,
+        promoted_into: None,
         fields: Vec::new(),
         members: Vec::new(),
         variants: Vec::new(),
@@ -1172,7 +1189,10 @@ fn context_line(e: &Entry) -> String {
         ("method", Some((kind, owner))) => format!("method of {kind} {owner}"),
         ("constant", Some((kind, owner))) => format!("constant of {kind} {owner}"),
         ("overload", Some((kind, owner))) => format!("overload set of {kind} {owner}"),
-        ("field", Some((_, owner))) => format!("field of struct {owner}"),
+        ("field", Some((_, owner))) => match (&e.promoted_into, &e.origin) {
+            (Some(into), Some(origin)) => format!("field of struct {owner}, promoted into {into} by `{}`", origin.via),
+            _ => format!("field of struct {owner}"),
+        },
         ("enum_member", Some((_, owner))) => format!("member of enum {owner}"),
         ("overload", _) => "overload set".to_string(),
         (kind, _) => kind.replace('_', " "),
@@ -1235,6 +1255,9 @@ fn entry_json(e: &Entry) -> Value {
     if let Some(c) = &e.c {
         map.insert("c".into(), json!({"name": c.name, "header": c.header, "declared_at": c.declared_at}));
     }
+    if let Some(into) = &e.promoted_into {
+        map.insert("promoted_into".into(), json!(into));
+    }
     if let Some(o) = &e.origin {
         let via = if o.via.is_empty() { Value::Null } else { json!(o.via) };
         map.insert("origin".into(), json!({"kind": o.kind, "via": via, "location": location_json(&o.location)}));
@@ -1263,7 +1286,7 @@ fn entry_json(e: &Entry) -> Value {
         }
         _ => {}
     }
-    if matches!(e.kind, "struct" | "enum" | "module" | "extension" | "overload" | "builtin_type")
+    if matches!(e.kind, "struct" | "enum" | "union" | "module" | "extension" | "overload" | "builtin_type")
         || !e.methods.is_empty()
     {
         map.insert("methods".into(), json!(e.methods.iter().map(entry_json).collect::<Vec<_>>()));

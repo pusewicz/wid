@@ -3,9 +3,9 @@ error[E0604]: `secret_helper` is private
     |
   1 | wid doc shapes secret_helper
     |                ^^^^^^^^^^^^^ private declarations are left out of the documentation
-   ::: tests/doc/shapes/shapes.wid:145:13
+   ::: tests/doc/shapes/shapes.wid:150:13
     |
-145 | private def secret_helper -> Int = 1
+150 | private def secret_helper -> Int = 1
     |             ------------- declared `private` here, which hides it outside its package
     = note: `wid doc` documents what code outside can use; `-private` shows the rest too
 help: document private declarations too

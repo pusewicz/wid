@@ -3,7 +3,7 @@ package shapes
 struct Pool($T, $N: Int)
     A fixed-size pool of `N` items.
 
-    struct, defined at tests/doc/shapes/shapes.wid:100
+    struct, defined at tests/doc/shapes/shapes.wid:105
 
 FIELDS
 

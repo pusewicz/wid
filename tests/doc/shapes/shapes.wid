@@ -39,6 +39,11 @@ end
 # Something to draw.
 union Shape = Ball | geo.Rect
 
+extend Shape
+  # What the shape is called in messages.
+  def label -> String = "shape"
+end
+
 # Shared by everything that moves.
 struct Entity
   # Hit points; 0 is dead.

@@ -5,4 +5,4 @@ macro def counter(name: Symbol) -> Code
 
     Called in a struct body, like `counter :kills`.
 
-    macro, defined at tests/doc/shapes/shapes.wid:128
+    macro, defined at tests/doc/shapes/shapes.wid:133

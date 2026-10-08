@@ -5,4 +5,4 @@ def heal(amount: Int)
 
     Healing a dead player brings it back.
 
-    method of struct Player, defined at tests/doc/shapes/shapes.wid:73
+    method of struct Player, defined at tests/doc/shapes/shapes.wid:78

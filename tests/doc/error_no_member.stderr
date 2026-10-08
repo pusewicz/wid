@@ -3,9 +3,9 @@ error[E0603]: struct `Player` has no member `helth`
    |
  1 | wid doc shapes Player.helth
    |                       ^^^^^ not a field, member or method of struct `Player`
-  ::: tests/doc/shapes/shapes.wid:63:8
+  ::: tests/doc/shapes/shapes.wid:68:8
    |
-63 | struct Player
+68 | struct Player
    |        ------ struct `Player` is declared here
    = note: its members are `base`, `boost`, `create`, `greet`, `heal`, `hp`, `kills`, `move`, `name`, `pos`
    = see `wid explain E0603`

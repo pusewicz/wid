@@ -956,11 +956,11 @@ before anyone starts them.
   too). Expressions that hold statements (`if`, `case`, blocks,
   `comptime do`) print as `if … end` in declaration lines. Only named
   builtin types can be asked for (`String`, `Int`); extensions of patterns
-  (`[]$T`, `[2]F32`) show in the overview only. Extensions in packages the
-  documented package doesn't load are not listed, and a field promoted by
-  `using` is documented as its struct's (`Player.hp` shows `Entity`'s).
-  `cimport` declarations have no Wid location (their source is generated),
-  and the C enum a constant came from isn't named.
+  (`[]$T`, `[2]F32`) show in the overview only, and a type alias of a
+  builtin type (`Vec2 = [2]F32`) lists no methods. Extensions in packages
+  the documented package doesn't load are not listed. `cimport`
+  declarations have no Wid location (their source is generated), and the C
+  enum a constant came from isn't named.
 - `vendor:miniaudio` built with GCC on macOS has no CoreAudio backend: GCC
   can't parse the block syntax in Apple's headers (`miniaudio.c` sets
   `MA_NO_COREAUDIO` there).

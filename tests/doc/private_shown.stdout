@@ -3,4 +3,4 @@ package shapes
 private def secret
     Only the player's own methods call this.
 
-    method of struct Player, defined at tests/doc/shapes/shapes.wid:81
+    method of struct Player, defined at tests/doc/shapes/shapes.wid:86

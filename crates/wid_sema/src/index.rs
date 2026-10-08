@@ -263,6 +263,9 @@ pub enum Target {
         owner: SymbolId,
         /// The field, in the owner's [`Symbol::fields`].
         index: usize,
+        /// For a field promoted into another struct, that struct and the
+        /// `using` fields it goes through, joined with dots (`base`).
+        promoted: Option<(SymbolId, String)>,
     },
     /// A member of an enum.
     EnumMember {
@@ -505,7 +508,8 @@ impl Index {
             if let Some(f) =
                 self.fields_of(owner).into_iter().find(|f| self.symbol(f.owner).fields[f.index].name == name)
             {
-                return Ok(Target::Field { owner: f.owner, index: f.index });
+                let promoted = f.promoted_through.map(|path| (owner, path));
+                return Ok(Target::Field { owner: f.owner, index: f.index, promoted });
             }
         }
         let groups = match (owner, target) {

@@ -3,7 +3,7 @@ package shapes
 struct Ball
     A bouncing ball.
 
-    struct, defined at tests/doc/shapes/shapes.wid:92
+    struct, defined at tests/doc/shapes/shapes.wid:97
 
 FIELDS
 
