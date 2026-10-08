@@ -49,7 +49,9 @@
 //! `ir::Program::expansions`, which registers it in the source map, so a
 //! diagnostic about generated code points into the `quote` and lists the
 //! calls that led there, and `#line` directives and panic locations name the
-//! macro's file.
+//! macro's file. Code spliced in from the call site keeps its own spans; the
+//! expander records each such [`Splice`], so a diagnostic in that code also
+//! points at the splice and lists the calls ([`Checker::splice_context`]).
 //!
 //! # Names and hygiene
 //!
@@ -122,6 +124,22 @@ pub(crate) struct VirtualFile {
     pub loc: DeclLoc,
 }
 
+/// Code that an expansion spliced in from outside it: a `Code` argument's
+/// code, or a name from a `Symbol`. It keeps its own span, so an error in it
+/// points there; [`Checker::splice_context`] adds where it landed.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Splice {
+    /// The spliced code: at the call site, or for a name from a computed
+    /// `Symbol` (`computed`), the call.
+    pub code: Span,
+    /// The splice in the `quote`, in the expansion's virtual file.
+    pub site: Span,
+    /// The name, for a name.
+    pub name: Option<Name>,
+    /// Whether the name is one the macro computed, whose span is the call's.
+    pub computed: bool,
+}
+
 /// The checker's macro state.
 #[derive(Default)]
 pub(crate) struct MacroState {
@@ -170,6 +188,9 @@ pub(crate) struct MacroState {
     /// rejected, by struct: their uses aren't reported missing (see
     /// [`Checker::field_rejected`]).
     pub rejected_fields: HashSet<(DeclId, Name)>,
+    /// The code every expansion spliced in from outside it, by the file of
+    /// its span.
+    pub splices: HashMap<FileId, Vec<Splice>>,
 }
 
 /// A call of a macro.
@@ -204,6 +225,79 @@ impl<'a> Checker<'a> {
     /// The virtual file an id names, if it names one.
     pub fn virtual_file(&self, file: FileId) -> Option<&VirtualFile> {
         self.macros.files.get(file.expansion_index()? as usize)
+    }
+
+    /// Gives a diagnostic about code that an expansion spliced in from
+    /// outside it (see [`Splice`]) the context of an error in generated
+    /// code: a label on the splice in the `quote`, behind which the
+    /// renderers list the macro calls ([`Diagnostic::splice`]). A name the
+    /// macro computed has the call's span, so the primary label there says
+    /// which name it is (`` `label`, spliced by `wrap`, has type … `` for a
+    /// label about "this"), and an edit there, which would replace the call,
+    /// is dropped.
+    pub(super) fn splice_context(&self, mut diag: Diagnostic) -> Diagnostic {
+        if diag.labels.iter().any(|l| l.splice) {
+            return diag;
+        }
+        let Some(primary) = diag.primary_span() else { return diag };
+        let Some(splices) = self.macros.splices.get(&primary.file) else { return diag };
+        let within =
+            |inner: Span, outer: Span| inner.file == outer.file && outer.start <= inner.start && inner.end <= outer.end;
+        let holds = |s: &&Splice| if s.computed { s.code == primary } else { within(primary, s.code) };
+        // The innermost spliced code holding the primary span.
+        let Some(len) = splices.iter().filter(holds).map(|s| s.code.len()).min() else { return diag };
+        let found: Vec<&Splice> = splices.iter().filter(holds).filter(|s| s.code.len() == len).collect();
+        // Code spliced more than once, or names a macro computed (which all
+        // have the call's span): the name the message mentions, else the
+        // splice in the statement or method being checked, else the latest,
+        // if they are the same name. Computed names come first.
+        let line = self.macros.line;
+        let item = self.body.frames.last().and_then(|f| f.decl).map(|d| self.decls[d.0 as usize].item.span);
+        let pick = |computed: bool| {
+            let tier: Vec<&Splice> = found.iter().copied().filter(|s| s.computed == computed).collect();
+            let named =
+                tier.iter().find(|s| computed && s.name.is_some_and(|n| diag.message.contains(&format!("`{n}`"))));
+            named
+                .or_else(|| tier.iter().find(|s| within(s.site, line)))
+                .or_else(|| item.and_then(|item| tier.iter().find(|s| within(s.site, item))))
+                .or_else(|| {
+                    let last = tier.iter().max_by_key(|s| s.site.file)?;
+                    tier.iter().all(|s| s.name == last.name).then_some(last)
+                })
+                .map(|s| **s)
+        };
+        let picked = pick(true).or_else(|| pick(false));
+        if found.iter().any(|s| s.computed) {
+            for help in &mut diag.helps {
+                help.edits.retain(|e| e.span != primary);
+            }
+        }
+        let Some(splice) = picked else { return diag };
+        let Some(v) = self.virtual_file(splice.site.file) else { return diag };
+        let by = &self.macros.expansions[v.expansion as usize].name;
+        if splice.computed
+            && let Some(name) = splice.name
+        {
+            for label in diag.labels.iter_mut().filter(|l| l.primary && l.span == primary) {
+                label.message = match label.message.strip_prefix("this ") {
+                    Some(rest) if ["has ", "is ", "returns "].iter().any(|verb| rest.starts_with(verb)) => {
+                        format!("`{name}`, spliced by `{by}`, {rest}")
+                    }
+                    _ => format!("`{name}`, spliced by `{by}`: {}", label.message),
+                };
+            }
+        }
+        match diag.labels.iter_mut().find(|l| l.span == splice.site) {
+            Some(label) => label.splice = true,
+            None => {
+                let message = match splice.name {
+                    Some(name) => format!("`{name}` is spliced here by `{by}`"),
+                    None => format!("spliced here by `{by}`"),
+                };
+                diag = diag.splice(splice.site, message);
+            }
+        }
+        diag
     }
 
     /// Records where each file's names resolve, for virtual files made from
@@ -798,15 +892,22 @@ impl<'a> Checker<'a> {
             file_ids,
             file_locs,
             errors: Vec::new(),
+            splices: Vec::new(),
         };
-        let stmts = ex.code(result);
-        let errors = ex.errors;
+        let stmts = ex.code(result, None);
+        let (errors, splices) = (ex.errors, ex.splices);
         self.register_virtual_files(first_file);
         let failed = !errors.is_empty();
         for diag in errors {
             self.report(diag);
         }
-        (!failed).then_some(stmts)
+        if failed {
+            return None;
+        }
+        for splice in splices {
+            self.macros.splices.entry(splice.code.file).or_default().push(splice);
+        }
+        Some(stmts)
     }
 
     /// Lowers generated statements where the call was: each in place, the
@@ -868,14 +969,21 @@ struct Expander<'x> {
     file_ids: &'x mut HashMap<(u32, FileId), u32>,
     file_locs: &'x HashMap<FileId, DeclLoc>,
     errors: Vec<Diagnostic>,
+    /// The code spliced in from outside the expansion so far.
+    splices: Vec<Splice>,
 }
 
 impl Expander<'_> {
-    /// The statements a `Code` value stands for.
-    fn code(&mut self, value: u64) -> Vec<ast::Stmt> {
+    /// The statements a `Code` value stands for, spliced at `at` (`None`
+    /// for the code the macro returned).
+    fn code(&mut self, value: u64, at: Option<Span>) -> Vec<ast::Stmt> {
         let Some(index) = value.checked_sub(1).map(|i| i as usize) else { return Vec::new() };
         let args = self.args;
         if let Some(stmts) = args.get(index) {
+            if let Some(site) = at {
+                let spliced = stmts.iter().map(|s| Splice { code: s.span, site, name: None, computed: false });
+                self.splices.extend(spliced);
+            }
             return stmts.clone();
         }
         let fragments = self.fragments;
@@ -974,26 +1082,33 @@ impl Splicer<'_, '_> {
         );
     }
 
-    /// Where a name spliced from a `Symbol` is: in the symbol argument that
-    /// named it, or the call.
-    fn name_span(&self, name: Name) -> Span {
-        match self.ex.symbols.iter().find(|(n, _)| *n == name) {
+    /// Where a name spliced from a `Symbol` at `at` is: in the symbol
+    /// argument that named it, or the call.
+    fn name_span(&mut self, name: Name, at: Span) -> Span {
+        let (span, computed) = match self.ex.symbols.iter().find(|(n, _)| *n == name) {
             Some((_, s)) => {
                 let len = name.as_str().len() as u32;
-                if s.len() > len { Span { start: s.end - len, ..*s } } else { *s }
+                (if s.len() > len { Span { start: s.end - len, ..*s } } else { *s }, false)
             }
-            None => self.ex.call,
-        }
+            None => (self.ex.call, true),
+        };
+        self.ex.splices.push(Splice { code: span, site: at, name: Some(name), computed });
+        span
     }
 
-    /// Where a symbol literal spliced from a `Symbol` is.
-    fn literal_span(&self, name: Name) -> Span {
-        self.ex.symbols.iter().find(|(n, _)| *n == name).map_or(self.ex.call, |(_, s)| *s)
+    /// Where a symbol literal spliced from a `Symbol` at `at` is.
+    fn literal_span(&mut self, name: Name, at: Span) -> Span {
+        let (span, computed) = match self.ex.symbols.iter().find(|(n, _)| *n == name) {
+            Some((_, s)) => (*s, false),
+            None => (self.ex.call, true),
+        };
+        self.ex.splices.push(Splice { code: span, site: at, name: Some(name), computed });
+        span
     }
 
     /// The code of a `Code` value as one expression.
     fn code_expr(&mut self, code: u64, at: Span, place: &str) -> Option<ast::Expr> {
-        let stmts = self.ex.code(code);
+        let stmts = self.ex.code(code, Some(at));
         if let Some(e) = single_expr(&stmts) {
             return Some(e.clone());
         }
@@ -1017,7 +1132,7 @@ impl Splicer<'_, '_> {
         let Some(value) = self.value(i) else { return error };
         let kind = match value {
             SpliceValue::Code(c) => return self.code_expr(c, at, "an expression").unwrap_or(error),
-            SpliceValue::Symbol(n) => return name_expr(n, self.name_span(n)),
+            SpliceValue::Symbol(n) => return name_expr(n, self.name_span(n, at)),
             SpliceValue::Type(t) => E::Type(Box::new(ast::TypeExpr { kind: TypeKind::Spliced(t.0), span: at })),
             SpliceValue::Int(v) => {
                 let int = E::Int(v.unsigned_abs());
@@ -1067,7 +1182,7 @@ impl Splicer<'_, '_> {
         match value {
             SpliceValue::Symbol(n) => return Some(n),
             SpliceValue::Code(c) => {
-                let stmts = self.ex.code(c);
+                let stmts = self.ex.code(c, None);
                 if let Some(ast::Expr { kind: E::Ident(n) | E::Const(n), .. }) = single_expr(&stmts) {
                     return Some(*n);
                 }
@@ -1091,11 +1206,11 @@ impl Splicer<'_, '_> {
         match &value {
             SpliceValue::Type(t) => return ast::TypeExpr { kind: TypeKind::Spliced(t.0), span: at },
             SpliceValue::Symbol(n) => {
-                let segment = Ident { name: *n, span: self.name_span(*n) };
+                let segment = Ident { name: *n, span: self.name_span(*n, at) };
                 return ast::TypeExpr { kind: TypeKind::Path { segments: vec![segment], args: Vec::new() }, span: at };
             }
             SpliceValue::Code(c) => {
-                let stmts = self.ex.code(*c);
+                let stmts = self.ex.code(*c, Some(at));
                 if let Some(e) = single_expr(&stmts)
                     && is_type_like(e)
                 {
@@ -1126,8 +1241,8 @@ impl Splicer<'_, '_> {
                 names
                     .into_iter()
                     .map(|n| match literal {
-                        true => ast::Expr { kind: E::Symbol(n), span: self.literal_span(n) },
-                        false => name_expr(n, self.name_span(n)),
+                        true => ast::Expr { kind: E::Symbol(n), span: self.literal_span(n, e.span) },
+                        false => name_expr(n, self.name_span(n, e.span)),
                     })
                     .collect(),
             ),
@@ -1205,14 +1320,15 @@ impl VisitMut for Splicer<'_, '_> {
             if let StmtKind::Expr(ast::Expr { kind: E::Splice(i), .. }) = &stmt.kind
                 && stmt.attrs.is_empty()
             {
+                let at = stmt.span;
                 match self.value(*i) {
                     Some(SpliceValue::Code(c)) => {
-                        stmts.extend(self.ex.code(c));
+                        stmts.extend(self.ex.code(c, Some(at)));
                         continue;
                     }
                     Some(SpliceValue::Codes(codes)) => {
                         for c in codes {
-                            stmts.extend(self.ex.code(c));
+                            stmts.extend(self.ex.code(c, Some(at)));
                         }
                         continue;
                     }
@@ -1229,12 +1345,12 @@ impl VisitMut for Splicer<'_, '_> {
             if let ItemKind::Splice(i) = item.kind {
                 match self.value(i) {
                     Some(SpliceValue::Code(c)) => {
-                        let stmts = self.ex.code(c);
+                        let stmts = self.ex.code(c, Some(item.span));
                         self.push_items(stmts, item.span, items);
                     }
                     Some(SpliceValue::Codes(codes)) => {
                         for c in codes {
-                            let stmts = self.ex.code(c);
+                            let stmts = self.ex.code(c, Some(item.span));
                             self.push_items(stmts, item.span, items);
                         }
                     }
@@ -1274,7 +1390,7 @@ impl VisitMut for Splicer<'_, '_> {
                     }
                 };
                 for n in names {
-                    let span = self.name_span(n);
+                    let span = self.name_span(n, it.span);
                     e.members.push(ast::EnumMember { name: Ident { name: n, span }, value: None });
                 }
             }
@@ -1295,7 +1411,7 @@ impl VisitMut for Splicer<'_, '_> {
                 if matches!(e.kind, E::Symbol(_)) {
                     match value {
                         SpliceValue::Symbol(name) => {
-                            *e = ast::Expr { kind: E::Symbol(name), span: self.literal_span(name) }
+                            *e = ast::Expr { kind: E::Symbol(name), span: self.literal_span(name, span) }
                         }
                         other => {
                             let found = describe(&other);
@@ -1312,7 +1428,7 @@ impl VisitMut for Splicer<'_, '_> {
                 }
                 match (self.name_for(i, span), &e.kind) {
                     (Some(name), E::IVar(_)) => e.kind = E::IVar(name),
-                    (Some(name), _) => *e = name_expr(name, self.name_span(name)),
+                    (Some(name), _) => *e = name_expr(name, self.name_span(name, span)),
                     (None, _) => e.kind = E::Error,
                 }
             }
@@ -1352,7 +1468,7 @@ impl VisitMut for Splicer<'_, '_> {
         if let Some(i) = ident.splice_index()
             && let Some(name) = self.name_for(i, ident.span)
         {
-            *ident = Ident { name, span: self.name_span(name) };
+            *ident = Ident { name, span: self.name_span(name, ident.span) };
         }
     }
 

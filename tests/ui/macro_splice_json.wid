@@ -1,0 +1,13 @@
+# The JSON output of an error in code spliced in from a call site lists the
+# call in `expansions`, and the splice among the labels.
+macro def wrap(e: Code) -> Code
+  quote do
+    def wrapped -> Int = #{e}
+  end
+end
+
+wrap "hi"
+
+def main
+  p wrapped
+end

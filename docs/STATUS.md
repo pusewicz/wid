@@ -203,7 +203,25 @@ runs the stages; `wid_cli` is the `wid` binary.
     `SourceMap::file` resolves an expansion id to the template's real file,
     so `#line`, panic locations and every renderer work unchanged, and
     `expansion_chain` gives the calls behind a span, which both renderers
-    print (`expansions` in JSON).
+    print (`expansions` in JSON) for `Diagnostic::chain_span`: the first
+    label marked `Label::splice` (`Diagnostic::splice`), else the primary
+    span.
+  - Spliced code keeps its spans, so its errors would show no expansion.
+    `Expander` records a `Splice` (code span, the splice's virtual span,
+    the name for a name, and whether the name was computed and so has the
+    call's span) for each `Code` argument it inserts (`code(value, at)`)
+    and each name (`name_span`, `literal_span`), committed to
+    `MacroState::splices` (by file) when the build succeeds.
+    `Checker::report` runs `splice_context`: for a primary span inside
+    spliced code (equal to it, for a computed name), the innermost splice
+    gets a splice label (`` `label` is spliced here by `wrap` ``), so the
+    chain is listed. Of code spliced more than once and of names computed
+    for one call (which share the call's span), it picks the name the
+    message mentions, else the splice in the statement (`MacroState::line`)
+    or method being checked, else the latest when they agree; otherwise
+    nothing is added. For a computed name the primary label at the call
+    names it (`` `label`, spliced by `wrap`, has type … ``) and edits at
+    the call are dropped (#30).
   - Sites and hygiene: `Frame::site` is the virtual file of the code being
     lowered, set by `expr` and `lower_stmt` from each node's span
     (`enter_site`/`leave_site`). `loc()` is the site's `DeclLoc`, else the
@@ -542,6 +560,10 @@ runs the stages; `wid_cli` is the `wid` binary.
   expansion (#25); after a macro call at package level fails (a splice that
   doesn't fit, or an error in the macro's own code), no missing member of
   any type is reported, since it may have generated an `extend` (#29).
+- Errors in code a macro spliced in from its call site (a `Code` argument,
+  a name from a `Symbol`) point at the splice in the `quote` and list the
+  calls, in both renderers; a name the macro computed is named in the
+  label at the call instead of the call getting a type (#30).
 - Test suite: `tests/run` (clang and gcc-16, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
   `tests/test` (`wid test` reports) and every `core/` package's `_test.wid`

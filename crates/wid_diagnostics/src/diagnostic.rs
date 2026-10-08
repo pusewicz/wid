@@ -31,6 +31,11 @@ pub struct Label {
     pub message: String,
     /// Primary labels mark the problem itself; secondary labels add context.
     pub primary: bool,
+    /// Whether this secondary label marks where code that a macro call
+    /// spliced in from its call site landed in the code the call generated:
+    /// the renderers list the macro calls behind it (see
+    /// [`Diagnostic::chain_span`]).
+    pub splice: bool,
 }
 
 /// How safely a suggested fix can be applied by a tool.
@@ -112,13 +117,13 @@ impl Diagnostic {
 
     /// Adds the primary label.
     pub fn primary(mut self, span: Span, message: impl Into<String>) -> Self {
-        self.labels.push(Label { span, message: message.into(), primary: true });
+        self.labels.push(Label { span, message: message.into(), primary: true, splice: false });
         self
     }
 
     /// Adds a secondary label.
     pub fn secondary(mut self, span: Span, message: impl Into<String>) -> Self {
-        self.labels.push(Label { span, message: message.into(), primary: false });
+        self.labels.push(Label { span, message: message.into(), primary: false, splice: false });
         self
     }
 
@@ -155,9 +160,24 @@ impl Diagnostic {
         self.suggest(message, vec![Edit { span, replacement: replacement.into() }], applicability)
     }
 
+    /// Adds a secondary label at `span`, where the code the problem is in,
+    /// which a macro call spliced in from its call site, landed in the code
+    /// the call generated.
+    pub fn splice(mut self, span: Span, message: impl Into<String>) -> Self {
+        self.labels.push(Label { span, message: message.into(), primary: false, splice: true });
+        self
+    }
+
     /// Returns the span of the first primary label, if any.
     pub fn primary_span(&self) -> Option<Span> {
         self.labels.iter().find(|l| l.primary).or(self.labels.first()).map(|l| l.span)
+    }
+
+    /// The span whose macro calls the renderers list
+    /// ([`crate::SourceMap::expansion_chain`]): where spliced code landed
+    /// ([`Diagnostic::splice`]), else the primary span.
+    pub fn chain_span(&self) -> Option<Span> {
+        self.labels.iter().find(|l| l.splice).map(|l| l.span).or_else(|| self.primary_span())
     }
 }
 

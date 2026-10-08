@@ -1,0 +1,92 @@
+error[E0301]: expected `Int`, found `String`
+  --> tests/ui/macro_splice_errors.wid:44:6
+   |
+44 | wrap "hi"
+   |      ^^^^ this has type `String`
+  ::: tests/ui/macro_splice_errors.wid:5:26
+   |
+ 5 |     def wrapped -> Int = #{e}
+   |                          ---- spliced here by `wrap`
+  ::: tests/ui/macro_splice_errors.wid:44:1
+   |
+44 | wrap "hi"
+   | --------- `wrap` expands here
+   = see `wid explain E0301`
+
+error[E0301]: expected `Int`, found `String`
+  --> tests/ui/macro_splice_errors.wid:45:12
+   |
+45 | wrap_name :label
+   |            ^^^^^ this has type `String`
+  ::: tests/ui/macro_splice_errors.wid:18:31
+   |
+18 |     def wrapped_name -> Int = #{name}
+   |                               ------- `label` is spliced here by `wrap_name`
+  ::: tests/ui/macro_splice_errors.wid:45:1
+   |
+45 | wrap_name :label
+   | ---------------- `wrap_name` expands here
+   = see `wid explain E0301`
+
+error[E0301]: expected `Int`, found `String`
+  --> tests/ui/macro_splice_errors.wid:46:1
+   |
+46 | wrap_computed "label"
+   | ^^^^^^^^^^^^^^^^^^^^^ `label`, spliced by `wrap_computed`, has type `String`
+  ::: tests/ui/macro_splice_errors.wid:27:35
+   |
+27 |     def wrapped_computed -> Int = #{sym}
+   |                                   ------ `label` is spliced here by `wrap_computed`
+  ::: tests/ui/macro_splice_errors.wid:46:1
+   |
+46 | wrap_computed "label"
+   | --------------------- `wrap_computed` expands here
+   = see `wid explain E0301`
+
+error[E0301]: expected `Int`, found `String`
+  --> tests/ui/macro_splice_errors.wid:47:1
+   |
+47 | pair "label", "labl"
+   | ^^^^^^^^^^^^^^^^^^^^ `label`, spliced by `pair`, has type `String`
+  ::: tests/ui/macro_splice_errors.wid:37:24
+   |
+37 |     def first -> Int = #{x}
+   |                        ---- `label` is spliced here by `pair`
+  ::: tests/ui/macro_splice_errors.wid:47:1
+   |
+47 | pair "label", "labl"
+   | -------------------- `pair` expands here
+   = see `wid explain E0301`
+
+error[E0201]: undefined name `labl`
+  --> tests/ui/macro_splice_errors.wid:47:1
+   |
+47 | pair "label", "labl"
+   | ^^^^^^^^^^^^^^^^^^^^ `labl`, spliced by `pair`: not found in this scope
+  ::: tests/ui/macro_splice_errors.wid:38:25
+   |
+38 |     def second -> Int = #{y}
+   |                         ---- `labl` is spliced here by `pair`
+  ::: tests/ui/macro_splice_errors.wid:47:1
+   |
+47 | pair "label", "labl"
+   | -------------------- `pair` expands here
+help: a similar name exists: `label`
+   = see `wid explain E0201`
+
+error[E0301]: expected `Int`, found `String`
+  --> tests/ui/macro_splice_errors.wid:51:12
+   |
+51 |   p as_int("hi")
+   |            ^^^^ this has type `String`
+  ::: tests/ui/macro_splice_errors.wid:11:14
+   |
+11 |     n: Int = #{e}
+   |              ---- spliced here by `as_int`
+  ::: tests/ui/macro_splice_errors.wid:51:5
+   |
+51 |   p as_int("hi")
+   |     ------------ `as_int` expands here
+   = see `wid explain E0301`
+
+error: could not compile due to 6 errors

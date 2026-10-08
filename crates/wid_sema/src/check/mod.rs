@@ -372,7 +372,7 @@ pub fn check_program(input: &ProgramInput) -> (ir::Program, Diagnostics) {
 
 impl<'a> Checker<'a> {
     pub fn report(&mut self, diag: Diagnostic) {
-        let mut diag = diag;
+        let mut diag = self.splice_context(diag);
         let within = |p: Span, outer: Span| p.file == outer.file && p.start >= outer.start && p.end <= outer.end;
         if diag.severity == wid_diagnostics::Severity::Error
             && let Some((name, site, _, macro_self)) = self.instance_stack.first().cloned()

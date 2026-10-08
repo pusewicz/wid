@@ -1,0 +1,55 @@
+# An error in code that a macro call spliced in from its call site points at
+# that code, at the splice in the `quote` where it landed, and at the call.
+macro def wrap(e: Code) -> Code
+  quote do
+    def wrapped -> Int = #{e}
+  end
+end
+
+macro def as_int(e: Code) -> Code
+  quote do
+    n: Int = #{e}
+    n
+  end
+end
+
+macro def wrap_name(name: Symbol) -> Code
+  quote do
+    def wrapped_name -> Int = #{name}
+  end
+end
+
+# A name the macro computes has the call's position, and the error says
+# which name it is.
+macro def wrap_computed(name: String) -> Code
+  sym = name.to_sym
+  quote do
+    def wrapped_computed -> Int = #{sym}
+  end
+end
+
+# Names one call computes are told apart, and a fix that would replace the
+# call isn't offered.
+macro def pair(a: String, b: String) -> Code
+  x = a.to_sym
+  y = b.to_sym
+  quote do
+    def first -> Int = #{x}
+    def second -> Int = #{y}
+  end
+end
+
+def label -> String = "hi"
+
+wrap "hi"
+wrap_name :label
+wrap_computed "label"
+pair "label", "labl"
+
+def main
+  p wrapped
+  p as_int("hi")
+  p wrapped_name
+  p wrapped_computed
+  p first + second
+end

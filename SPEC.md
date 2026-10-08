@@ -594,7 +594,10 @@ end
     (`` `m` expands here ``, with nested calls of a macro from one place
     counted), and each JSON diagnostic has an `expansions` list (the
     `macro` name and the call's position). Code spliced from the call site
-    keeps its own position. Panic locations and `-debug` `#line`
+    keeps its own position, and an error in it also points at the splice
+    in the `quote` where it landed and at the calls behind that. A name the
+    macro computed (`str.to_sym`) has the call's position, and the error
+    says which name it is. Panic locations and `-debug` `#line`
     directives in generated code name the `quote`'s file and line. A macro
     that fails while it runs is E0901, at the call.
   - **Budgets:** each macro run has the `comptime` limits. Expansions may
