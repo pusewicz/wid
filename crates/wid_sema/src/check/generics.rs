@@ -3,13 +3,16 @@
 //! existing types.
 //!
 //! Generic code follows template semantics: signatures are resolved once with
-//! `TyKind::Param` placeholders, and bodies are checked per instantiation.
+//! `TyKind::Param` placeholders, and bodies are checked per instantiation. A
+//! signature whose types read a value parameter (`[N]T`, `Pool(T, N + 1)`)
+//! is resolved again for each instance, with the value bound to `N`.
 
 use std::rc::Rc;
 
 use wid_diagnostics::{Diagnostic, Span, codes};
 use wid_syntax::Name;
 use wid_syntax::ast::{self, ItemKind};
+use wid_syntax::visit::{VisitMut, walk_expr, walk_type};
 
 use super::ty::TyCtx;
 use super::{Checker, DeclId, DeclKind, FnSig, ParamSig, mangle_ident};
@@ -335,6 +338,19 @@ impl<'a> Checker<'a> {
         };
         let param = generics.get(index)?;
         let want = param.ty.as_ref()?;
+        // A parameter declared with another type than `Int` is reported at
+        // the declaration; its arguments aren't checked against that type.
+        if !self.value_param_is_int(decl, param) {
+            return Some(self.types.unknown());
+        }
+        // A generic parameter that is still a placeholder, like `N` in
+        // `other: Pool(T, N)` while a signature is resolved for every instance.
+        if let ast::ExprKind::Const(n) = e.kind
+            && let Some(t) = lookup(subst, n)
+            && matches!(self.types.kind(t), TyKind::Param(_))
+        {
+            return Some(t);
+        }
         // A macro's own code names constants where the macro is.
         let loc = self.virtual_file(e.span.file).map_or(loc, |v| v.loc);
         if let ast::ExprKind::Ident(var_name) = e.kind
@@ -366,6 +382,12 @@ impl<'a> Checker<'a> {
                 return Some(self.types.unknown());
             }
             ValueArg::Value => {}
+        }
+        // `N + 1` in a signature resolved with placeholders: each instance
+        // resolves it with its own `N`.
+        if self.reads_placeholder(e, subst) {
+            self.value_deferrals += 1;
+            return Some(self.types.unknown());
         }
         let errors = self.diags.error_count();
         let value = self.eval_const_in(e, loc, subst);
@@ -407,6 +429,85 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// Checks that a value parameter of a generic struct or union is
+    /// declared `$N: Int`, reporting another type at the declaration: a value
+    /// parameter is a constant integer. Returns true for type parameters.
+    pub fn value_param_is_int(&mut self, decl: DeclId, param: &ast::GenericParam) -> bool {
+        let Some(t) = &param.ty else { return true };
+        let ctx = TyCtx { loc: self.decls[decl.0 as usize].loc, self_ty: None, subst: Default::default() };
+        let ty = self.resolve_type(t, &ctx);
+        if ty == self.types.int() {
+            return true;
+        }
+        if !matches!(self.types.kind(ty), TyKind::Unknown) {
+            let name = param.name.as_str();
+            let shown = self.source_text(t.span);
+            self.report(
+                Diagnostic::error(codes::GENERIC_ARGS, format!("value parameter `{name}` must be an `Int`"))
+                    .primary(t.span, format!("`{name}` is declared `{shown}`"))
+                    .note(format!(
+                        "a value parameter is a constant integer, like the `64` in `Pool(Ball, 64)`: `{name}` can be an array length (`[{name}]T`) or a count"
+                    ))
+                    .suggest_replace("declare it `Int`", t.span, "Int", wid_diagnostics::Applicability::MachineApplicable),
+            );
+        }
+        false
+    }
+
+    /// Reports a type parameter, like `T` in a method of `Box(Int)`, used
+    /// as a value (`def f -> Int = T`), where it is bound to `ty`. Where an
+    /// integer is expected, the fix takes the type's size.
+    pub(super) fn type_param_as_value(&mut self, name: Name, ty: TyId, span: Span, expected: Option<TyId>) {
+        let shown = self.types.display(ty);
+        let mut diag = Diagnostic::error(codes::NOT_A_VALUE, format!("`{name}` is a type, not a value"))
+            .primary(span, "expected a value here");
+        let decl = self.body.frames.last().and_then(|f| f.decl);
+        if let Some(at) = decl.and_then(|d| self.generic_param_span(d, name)) {
+            diag = diag.secondary(at, format!("`{name}` is a type parameter, `{shown}` here"));
+        }
+        let help = format!(
+            "`size_of({name})` and `type_info({name})` are values about a type; a `Type` parameter, like `t: Type`, takes the type itself"
+        );
+        diag = match expected {
+            Some(t) if self.types.is_int(t) => diag
+                .suggest_replace(
+                    format!("for the size of `{name}` in bytes, write `size_of({name})`"),
+                    span,
+                    format!("size_of({name})"),
+                    wid_diagnostics::Applicability::MaybeIncorrect,
+                )
+                .note(help),
+            _ => diag.help(help),
+        };
+        self.report(diag);
+    }
+
+    /// Where generic parameter `name` of a declaration is introduced: in
+    /// the header of its struct or `extend`, or in one of its parameters.
+    fn generic_param_span(&self, decl: DeclId, name: Name) -> Option<Span> {
+        let d = &self.decls[decl.0 as usize];
+        let mut types: Vec<&ast::TypeExpr> = Vec::new();
+        if let Some(owner) = d.owner {
+            match self.decls[owner.0 as usize].kind {
+                DeclKind::Struct(s) => {
+                    if let Some(g) = s.generics.iter().find(|g| g.name.name == name) {
+                        return Some(g.span);
+                    }
+                }
+                DeclKind::Extend(e) => types.extend(&e.targets),
+                _ => {}
+            }
+        }
+        if let DeclKind::Fn(f) = d.kind {
+            types.extend(f.params.iter().map(|p| &p.ty));
+        }
+        types.into_iter().find_map(|t| {
+            let mut find = FindParam { name, span: None };
+            find.visit_type(&mut t.clone());
+            find.span
+        })
+    }
+
     /// Whether a value parameter's argument is a value, or names a type or
     /// generic parameter, or an undefined constant.
     fn value_arg_kind(&mut self, e: &ast::Expr, loc: super::DeclLoc, subst: &[(Name, TyId)]) -> ValueArg {
@@ -415,7 +516,13 @@ impl<'a> Checker<'a> {
             E::Type(_) => return ValueArg::Type,
             E::Paren(inner) => return self.value_arg_kind(inner, loc, subst),
             E::Const(n) => {
-                if lookup(subst, *n).is_some() || n.as_str() == "Self" {
+                // A value parameter bound in an instance, like `N` in
+                // `Pool(T, N)` in a method of `Pool(Int, 4)`, is a value.
+                if let Some(t) = lookup(subst, *n) {
+                    let value = matches!(self.types.kind(t), TyKind::ConstValue(_));
+                    return if value { ValueArg::Value } else { ValueArg::Type };
+                }
+                if n.as_str() == "Self" {
                     return ValueArg::Type;
                 }
                 match self.lookup_pkg(loc.pkg, *n).or_else(|| self.lookup_prelude(*n)) {
@@ -454,6 +561,39 @@ impl<'a> Checker<'a> {
             DeclKind::Fn(_) => ValueArg::Value,
             _ => ValueArg::Type,
         }
+    }
+
+    /// Whether a constant expression names a generic parameter that `subst`
+    /// binds to its placeholder, like `N` in `N + 1` while a signature or a
+    /// struct's fields are resolved once for every instance: its value is
+    /// only known per instance.
+    pub(super) fn reads_placeholder(&self, e: &ast::Expr, subst: &[(Name, TyId)]) -> bool {
+        if !subst.iter().any(|(_, t)| matches!(self.types.kind(*t), TyKind::Param(_))) {
+            return false;
+        }
+        let mut names = ConstNames(Vec::new());
+        names.visit_expr(&mut e.clone());
+        names.0.iter().any(|n| lookup(subst, *n).is_some_and(|t| matches!(self.types.kind(t), TyKind::Param(_))))
+    }
+
+    /// Whether a method belongs to an `extend` of a generic struct with a
+    /// value parameter, like `extend Pool($T, $M)`: the template can't tell
+    /// `M` from a type parameter, so each instance resolves the signature
+    /// again, with `M` bound to its value.
+    pub(super) fn extends_value_params(&mut self, decl: DeclId) -> bool {
+        let Some(owner) = self.decls[decl.0 as usize].owner else { return false };
+        if !matches!(self.decls[owner.0 as usize].kind, DeclKind::Extend(_)) {
+            return false;
+        }
+        self.extend_targets(owner).into_iter().any(|t| {
+            let decl = match self.types.kind(t) {
+                TyKind::Struct(id) => self.struct_decls.get(id).copied(),
+                _ => None,
+            };
+            decl.is_some_and(|d| {
+                matches!(self.decls[d.0 as usize].kind, DeclKind::Struct(s) if s.generics.iter().any(|g| g.ty.is_some()))
+            })
+        })
     }
 
     /// Returns the instance of a generic struct for `args`, creating it and
@@ -499,6 +639,9 @@ impl<'a> Checker<'a> {
         let subst: Subst = Rc::new(subst);
         self.struct_args.insert(sid, subst.clone());
         let ctx = TyCtx { loc: d.loc, self_ty: Some(ty), subst };
+        // Each instance resolves its own fields, so a `[N]T` field left for
+        // the instances doesn't make the type that names this one wait too.
+        let deferrals = self.value_deferrals;
         let mut fields: Vec<FieldInfo> = Vec::new();
         for item in &s.body {
             let ItemKind::Field(f) = &item.kind else { continue };
@@ -531,6 +674,7 @@ impl<'a> Checker<'a> {
                 c_name: None,
             });
         }
+        self.value_deferrals = deferrals;
         let parts: Vec<(u64, u64)> = fields.iter().map(|f| self.types.layout(f.ty)).collect();
         for (f, off) in fields.iter_mut().zip(offsets(&parts)) {
             f.offset = off;
@@ -558,6 +702,22 @@ impl<'a> Checker<'a> {
         if subst.is_empty() {
             return template;
         }
+        if template.per_instance {
+            // `[N]T` or `Pool(T, N + 1)` reads the value bound to `N`, which
+            // the template only has a placeholder for.
+            let mut bindings = self.template_subst(decl).as_ref().clone();
+            for (name, ty) in bindings.iter_mut() {
+                if let Some(bound) = lookup(subst, *name) {
+                    *ty = bound;
+                }
+            }
+            for &(name, ty) in subst {
+                if lookup(&bindings, name).is_none() {
+                    bindings.push((name, ty));
+                }
+            }
+            return self.resolve_sig(decl, Rc::new(bindings));
+        }
         let params = template
             .params
             .iter()
@@ -569,7 +729,7 @@ impl<'a> Checker<'a> {
             params: b.params.iter().map(|p| self.subst_type(*p, subst)).collect(),
             ret: self.subst_type(b.ret, subst),
         });
-        FnSig { params, ret, receiver, block, c_variadic: template.c_variadic }
+        FnSig { params, ret, receiver, block, c_variadic: template.c_variadic, per_instance: false }
     }
 
     /// Returns the function id of an instance, queuing it for lowering.
@@ -703,6 +863,46 @@ enum ValueArg {
     Type,
     /// A name nothing declares.
     Undefined(Name),
+}
+
+/// Collects the constant names an expression reads: `N` in `N + 1`, and
+/// one-segment type names, like `T` in `comptime size_of(T)`.
+struct ConstNames(Vec<Name>);
+
+impl VisitMut for ConstNames {
+    fn visit_expr(&mut self, expr: &mut ast::Expr) {
+        if let ast::ExprKind::Const(n) = expr.kind {
+            self.0.push(n);
+        }
+        walk_expr(self, expr);
+    }
+
+    fn visit_type(&mut self, ty: &mut ast::TypeExpr) {
+        if let ast::TypeKind::Path { segments, .. } = &ty.kind
+            && let [only] = segments.as_slice()
+        {
+            self.0.push(only.name);
+        }
+        walk_type(self, ty);
+    }
+}
+
+/// Finds where a type introduces generic parameter `$name`.
+struct FindParam {
+    name: Name,
+    span: Option<Span>,
+}
+
+impl VisitMut for FindParam {
+    fn visit_type(&mut self, ty: &mut ast::TypeExpr) {
+        if let ast::TypeKind::Param(n) = &ty.kind
+            && n.name == self.name
+            && self.span.is_none()
+        {
+            self.span = Some(ty.span);
+        }
+        walk_type(self, ty);
+    }
 }
 
 /// Collects `$T` names mentioned in a type expression.

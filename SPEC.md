@@ -185,21 +185,29 @@ end
   `geo.Pool(Ball, 64)` from another package. An instance is a type like any
   other: `Pool(Ball, 64).new`, `.size` and `def self.` methods work on it,
   while `Pool.new` without arguments is an error. A value
-  parameter like `$N: Int` takes any constant integer: a literal, a named
+  parameter is declared `$N: Int` (any other type is an error at the
+  declaration) and takes any constant integer: a literal, a named
   constant (`Pool(Ball, MAX)`), constant arithmetic (`Pool(Ball, MAX * 2)`)
   or a `comptime` result; a name there is a constant unless it names a type.
   Only generic structs take value parameters: a method's `xs: [$N]Int` is
   E0105, and the method takes a slice, `xs: []Int`, with `xs.size` as its
   length, instead.
-  - In the struct's methods and in an `extend` of it, a value parameter is
-    a constant of the instance: in `Pool(Ball, 64)`, `N` is `64` wherever
-    a constant integer fits (`def cap -> Int = N`, `buf: [N + 1]U8`,
-    `comptime N * 2`, `Pool(T, N * 2).new`, `N.times`). Like a constant
-    declared without a type (`MAX = 64`), it takes its type from where it
-    is used and is an `Int` otherwise. It can't be assigned. Methods of an
-    included module don't see the struct's generic parameters.
+  - In the struct's fields and methods and in an `extend` of it, a value
+    parameter is a constant of the instance: in `Pool(Ball, 64)`, `N` is
+    `64` wherever a constant integer fits (`def cap -> Int = N`,
+    `buf: [N + 1]U8`, `comptime N * 2`, `Pool(T, N * 2).new`, `N.times`),
+    in method signatures too (`def all -> [N]T`,
+    `def bigger -> Pool(T, N + 1)`), where it hides a package constant of
+    the same name. Like a constant declared without a type (`MAX = 64`), it
+    takes its type from where it is used and is an `Int` otherwise. It
+    can't be assigned, and it is not a type (`x: N` is an error). Methods of
+    an included module don't see the struct's generic parameters.
   - Type arguments are inferred from the arguments. A `[N]T` or `[dynamic]T`
     argument matches a `[]$T` parameter.
+  - A type parameter is a type, not a value: in generic code, `T` alone
+    where a value is expected is an error, even when a package constant is
+    named `T`. `size_of(T)` and `type_info(T)` are values about it, and a
+    `t: Type` parameter takes it.
   - Generic code is checked once per set of type arguments, like a template:
     using `<` on a `T` is fine as long as every `T` it is used with has `<`.
     Generic methods that are never called are not checked.

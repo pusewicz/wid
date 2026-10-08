@@ -620,7 +620,10 @@ impl<'a> Checker<'a> {
             subst.clone(),
         );
         self.union_insts.insert(key, ty);
+        // Each instance resolves its own variants (see `struct_instance`).
+        let deferrals = self.value_deferrals;
         self.fill_union(decl, ty, subst);
+        self.value_deferrals = deferrals;
         ty
     }
 

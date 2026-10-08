@@ -1,0 +1,20 @@
+# A value parameter is a constant integer, declared `$N: Int`. Another type
+# is reported once, at the declaration, however the struct is used.
+struct Flags($N: Bool)
+  bits: Int
+end
+
+struct Small($T, $N: U8)
+  items: [N]T
+end
+
+struct Unused($N: String)
+  count: Int
+end
+
+def main
+  f: Flags(2) = {}
+  g: Flags(true) = {}
+  s: Small(Int, 3) = {}
+  p f.bits, g.bits, s.items.size
+end

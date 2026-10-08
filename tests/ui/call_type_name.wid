@@ -1,0 +1,18 @@
+# A struct, enum or union named like a method call: the fix builds a value.
+struct Point
+  x: Int
+end
+
+struct Local($T)
+  value: T
+end
+
+union Either = Int | F32
+
+def main
+  a = Point(1)
+  b = Local(Int)
+  c = Local()
+  d = Either()
+  p a, b, c, d
+end

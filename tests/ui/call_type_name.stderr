@@ -1,0 +1,34 @@
+error[E0305]: `Point` is a struct, not a method
+  --> tests/ui/call_type_name.wid:13:7
+   |
+13 |   a = Point(1)
+   |       ^^^^^ cannot be called
+help: build a value with `new`
+   |   a = Point.new(1)
+   = see `wid explain E0305`
+
+error[E0305]: `Local` is a struct, not a method
+  --> tests/ui/call_type_name.wid:14:7
+   |
+14 |   b = Local(Int)
+   |       ^^^^^ cannot be called
+help: `Local(Int)` is a type: build a value of it with `new`
+   |   b = Local(Int).new
+   = see `wid explain E0305`
+
+error[E0305]: `Local` is a struct, not a method
+  --> tests/ui/call_type_name.wid:15:7
+   |
+15 |   c = Local()
+   |       ^^^^^ cannot be called
+help: build a value with `Local(T).new`
+   = see `wid explain E0305`
+
+error[E0305]: `Either` is a union, not a method
+  --> tests/ui/call_type_name.wid:16:7
+   |
+16 |   d = Either()
+   |       ^^^^^^ cannot be called
+   = see `wid explain E0305`
+
+error: could not compile due to 4 errors

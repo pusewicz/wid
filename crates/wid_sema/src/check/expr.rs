@@ -620,6 +620,11 @@ impl<'a> Checker<'a> {
         {
             return v;
         }
+        // A type parameter, like `T` in a method of `Box(Int)`.
+        if let Some(t) = self.body.frames.last().and_then(|f| super::generics::lookup(&f.subst, name)) {
+            self.type_param_as_value(name, t, span, expected);
+            return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+        }
         if let Some(self_ty) = self.frame().self_ty
             && let Some(decl) = self.find_method(self_ty, name)
             && let DeclKind::Const(_) = self.decls[decl.0 as usize].kind
@@ -1316,7 +1321,23 @@ impl<'a> Checker<'a> {
                     let mut diag =
                         Diagnostic::error(codes::NOT_CALLABLE, format!("`{}` is {what}, not a method", name.as_str()))
                             .primary(name.span, "cannot be called");
-                    if matches!(self.decls[decl.0 as usize].kind, DeclKind::Struct(_)) {
+                    if let DeclKind::Struct(s) = self.decls[decl.0 as usize].kind
+                        && !s.generics.is_empty()
+                    {
+                        // `Local(Int)` names an instance of a generic struct.
+                        let text = self.source_text(span);
+                        let shape: Vec<&str> = s.generics.iter().map(|g| g.name.as_str()).collect();
+                        diag = if call.args.is_empty() || block.is_some() {
+                            diag.help(format!("build a value with `{}({}).new`", name.as_str(), shape.join(", ")))
+                        } else {
+                            diag.suggest_replace(
+                                format!("`{text}` is a type: build a value of it with `new`"),
+                                span,
+                                format!("{text}.new"),
+                                Applicability::MachineApplicable,
+                            )
+                        };
+                    } else if matches!(self.decls[decl.0 as usize].kind, DeclKind::Struct(_)) {
                         diag = diag.suggest_replace(
                             "build a value with `new`",
                             name.span,
@@ -1446,8 +1467,14 @@ impl<'a> Checker<'a> {
         for (i, param) in sig.params.iter().enumerate() {
             let value = match &ordered[i] {
                 ArgSource::Given(e) => {
+                    // `xs: [N]T` needs the value bound to `N` so far.
+                    let pattern = if sig.per_instance {
+                        self.fn_sig_inst(decl, &bindings).params.get(i).map_or(param.ty, |p| p.ty)
+                    } else {
+                        param.ty
+                    };
                     let expected = if generic {
-                        let t = self.subst_type(param.ty, &bindings);
+                        let t = self.subst_type(pattern, &bindings);
                         if self.has_params(t) { None } else { Some(t) }
                     } else {
                         Some(param.ty)
@@ -1459,8 +1486,8 @@ impl<'a> Checker<'a> {
                             let v = self.expr(e, None);
                             let vt = self.value_type(v.ty, e.span);
                             let v = ir::Expr::new(v.kind, vt);
-                            if !self.unify(param.ty, v.ty, &mut bindings) {
-                                let want = self.types.display(param.ty);
+                            if !self.unify(pattern, v.ty, &mut bindings) {
+                                let want = self.types.display(pattern);
                                 let found = self.types.display(v.ty);
                                 self.report(
                                     Diagnostic::error(

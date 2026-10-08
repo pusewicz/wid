@@ -1,0 +1,31 @@
+error[E0315]: value parameter `N` must be an `Int`
+ --> tests/ui/value_param_type.wid:3:18
+  |
+3 | struct Flags($N: Bool)
+  |                  ^^^^ `N` is declared `Bool`
+  = note: a value parameter is a constant integer, like the `64` in `Pool(Ball, 64)`: `N` can be an array length (`[N]T`) or a count
+help: declare it `Int`
+  | struct Flags($N: Int)
+  = see `wid explain E0315`
+
+error[E0315]: value parameter `N` must be an `Int`
+ --> tests/ui/value_param_type.wid:7:22
+  |
+7 | struct Small($T, $N: U8)
+  |                      ^^ `N` is declared `U8`
+  = note: a value parameter is a constant integer, like the `64` in `Pool(Ball, 64)`: `N` can be an array length (`[N]T`) or a count
+help: declare it `Int`
+  | struct Small($T, $N: Int)
+  = see `wid explain E0315`
+
+error[E0315]: value parameter `N` must be an `Int`
+  --> tests/ui/value_param_type.wid:11:19
+   |
+11 | struct Unused($N: String)
+   |                   ^^^^^^ `N` is declared `String`
+   = note: a value parameter is a constant integer, like the `64` in `Pool(Ball, 64)`: `N` can be an array length (`[N]T`) or a count
+help: declare it `Int`
+   | struct Unused($N: Int)
+   = see `wid explain E0315`
+
+error: could not compile due to 3 errors

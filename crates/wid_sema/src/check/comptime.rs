@@ -96,7 +96,13 @@ impl<'a> Checker<'a> {
             return None;
         }
         let errors_before = self.diags.error_count();
-        let (subst, self_ty) = self.body.frames.last().map(|f| (f.subst.clone(), f.self_ty)).unwrap_or_default();
+        // In a type, like `[comptime N * 2]T` in a signature or a field, the
+        // type's context binds `N`, not the code being lowered.
+        let scope = self.type_scope.take();
+        let (subst, self_ty) = match &scope {
+            Some((subst, self_ty)) => (subst.clone(), *self_ty),
+            None => self.body.frames.last().map(|f| (f.subst.clone(), f.self_ty)).unwrap_or_default(),
+        };
         let visible: Vec<Name> =
             self.body.frames.iter().flat_map(|f| f.scopes.iter().flat_map(|s| s.vars.iter().map(|v| v.name))).collect();
         let no_bounds = std::mem::replace(&mut self.no_bounds_check, false);
@@ -169,6 +175,7 @@ impl<'a> Checker<'a> {
         };
         self.comptime_depth -= 1;
         self.no_bounds_check = no_bounds;
+        self.type_scope = scope;
         value
     }
 

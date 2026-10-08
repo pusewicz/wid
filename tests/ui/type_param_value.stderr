@@ -1,0 +1,62 @@
+error[E0323]: `T` is a type, not a value
+  --> tests/ui/type_param_value.wid:6:22
+   |
+ 3 | struct Slot($T)
+   |             -- `T` is a type parameter, `Int` here
+...
+ 6 |   def width -> Int = T
+   |                      ^ expected a value here
+...
+18 |   p s.width, s.kind, s.label
+   |     ------- `Slot(Int)#width[Int]` is checked for these types because of this call
+   = note: `size_of(T)` and `type_info(T)` are values about a type; a `Type` parameter, like `t: Type`, takes the type itself
+   = note: the error is inside the generic method `Slot(Int)#width[Int]`
+help: for the size of `T` in bytes, write `size_of(T)`
+   |   def width -> Int = size_of(T)
+   = see `wid explain E0323`
+
+error[E0323]: `T` is a type, not a value
+  --> tests/ui/type_param_value.wid:7:24
+   |
+ 3 | struct Slot($T)
+   |             -- `T` is a type parameter, `Int` here
+...
+ 7 |   def kind -> String = T
+   |                        ^ expected a value here
+...
+18 |   p s.width, s.kind, s.label
+   |              ------ `Slot(Int)#kind[Int]` is checked for these types because of this call
+   = note: the error is inside the generic method `Slot(Int)#kind[Int]`
+help: `size_of(T)` and `type_info(T)` are values about a type; a `Type` parameter, like `t: Type`, takes the type itself
+   = see `wid explain E0323`
+
+error[E0323]: `E` is a type, not a value
+  --> tests/ui/type_param_value.wid:10:35
+   |
+10 | def first_size(xs: []$E) -> Int = E
+   |                                   ^ expected a value here
+   |                      -- `E` is a type parameter, `Int` here
+...
+19 |   p first_size([1, 2])
+   |     ------------------ `first_size[Int]` is checked for these types because of this call
+   = note: `size_of(E)` and `type_info(E)` are values about a type; a `Type` parameter, like `t: Type`, takes the type itself
+   = note: the error is inside the generic method `first_size[Int]`
+help: for the size of `E` in bytes, write `size_of(E)`
+   | def first_size(xs: []$E) -> Int = size_of(E)
+   = see `wid explain E0323`
+
+error[E0323]: `U` is a type, not a value
+  --> tests/ui/type_param_value.wid:13:25
+   |
+12 | extend Slot($U)
+   |             -- `U` is a type parameter, `Int` here
+13 |   def label -> String = U
+   |                         ^ expected a value here
+...
+18 |   p s.width, s.kind, s.label
+   |                      ------- `Slot(Int)#label[Int]` is checked for these types because of this call
+   = note: the error is inside the generic method `Slot(Int)#label[Int]`
+help: `size_of(U)` and `type_info(U)` are values about a type; a `Type` parameter, like `t: Type`, takes the type itself
+   = see `wid explain E0323`
+
+error: could not compile due to 4 errors

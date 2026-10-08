@@ -1,0 +1,54 @@
+# A generic struct's value parameter in a method's signature is the
+# instance's: `N` in `Pool(Int, 2)` is `2` in parameter and return types,
+# even where a package constant has the same name.
+N = 10
+
+struct Pool($T, $N: Int)
+  items: [N]T
+  spare: [N + 1]T
+  twice: [comptime N * 2]T
+
+  def all -> [N]T = @items
+  def bigger -> Pool(T, N + 1) = {}
+  def put(xs: [N]T)
+    @items = xs
+  end
+  def pair(xs: [N]$U, last: U) -> [N + 1]U
+    out: [N + 1]U = {}
+    for x, i in xs
+      out[i] = x
+    end
+    out[N] = last
+    out
+  end
+  def grid -> matrix[N, N]F32 = {}
+  def doubled -> [comptime N * 2]T = {}
+  def self.make -> Pool(T, N * 2) = {}
+  def same?(other: Pool(T, N)) -> Bool = other.items.size == N
+  def fill(xs: [N]T = {}) -> Int = xs.size
+  def grown -> Int = bigger.items.size
+  def with_all(&blk: block([N]T) -> Int) -> Int = yield @items
+  def sizer -> proc([N]T) -> Int = ->(xs: [N]T) -> Int { xs.size }
+end
+
+extend Pool($T, $M)
+  def head -> [M - 1]T = {}
+end
+
+def main
+  x: Pool(Int, 2) = {}
+  p x.bigger.items.size, x.bigger.bigger.items.size
+  x.put([5, 6])
+  p x.all
+  p x.pair([1, 2], 3)
+  p x.grid.row(0).size, x.doubled.size
+  p Pool(U8, 3).make.items.size
+  p x.same?(x), x.fill, x.fill([7, 8]), x.grown
+  p x.with_all { |xs| xs.size }
+  p x.sizer.call([1, 2])
+  p x.head.size
+  p x.spare.size, x.twice.size
+
+  y = Pool(F32, 5).new
+  p y.all.size, y.bigger.items.size, y.head.size
+end

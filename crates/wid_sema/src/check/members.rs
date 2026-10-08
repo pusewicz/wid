@@ -223,6 +223,36 @@ impl<'a> Checker<'a> {
         true
     }
 
+    /// Reports `geo.Missing`, a name the package `geo` doesn't declare, with
+    /// the closest of its public names.
+    fn no_package_member(&mut self, pkg: PackageId, pkg_span: Span, name: Ident) {
+        let alias = self.source_text(pkg_span);
+        let mut candidates: Vec<&'static str> = self.pkg_scopes[pkg.0 as usize]
+            .iter()
+            .filter(|(_, d)| !self.decls[d.0 as usize].private)
+            .map(|(n, _)| n.as_str())
+            .collect();
+        // Among equally close names, `geo.bxx` prefers `box` to `Box`.
+        let upper = name.as_str().starts_with(char::is_uppercase);
+        candidates.sort_unstable_by_key(|c| (c.starts_with(char::is_uppercase) != upper, *c));
+        let mut diag =
+            Diagnostic::error(codes::UNDEFINED_NAME, format!("`{alias}` has no member `{name}`", name = name.as_str()))
+                .primary(name.span, format!("not declared in `{alias}`"));
+        if let Some(best) = did_you_mean(name.as_str(), candidates.iter().copied()) {
+            diag = diag.suggest_replace(
+                format!("a similar name exists: `{alias}.{best}`"),
+                name.span,
+                best,
+                Applicability::MaybeIncorrect,
+            );
+        } else if !candidates.is_empty() && candidates.len() <= 12 {
+            candidates.sort_unstable();
+            let names: Vec<String> = candidates.iter().map(|c| format!("`{c}`")).collect();
+            diag = diag.note(format!("`{alias}` declares {}", names.join(", ")));
+        }
+        self.report(diag);
+    }
+
     /// Lowers `recv.name` or `recv.name(args)`.
     #[expect(clippy::too_many_arguments, reason = "mirrors the parts of a call expression")]
     pub fn member_call(
@@ -265,9 +295,7 @@ impl<'a> Checker<'a> {
             if self.pkg_incomplete(pkg) || self.report_not_imported(pkg, name.name, name.span) {
                 return ir::Expr::new(ExprKind::Zero, self.types.unknown());
             }
-            let candidates = self.package_names(pkg);
-            let pkg_name = self.input.packages[pkg.0 as usize].name.clone();
-            self.undefined(name.name, name.span, candidates, &format!("member of `{pkg_name}`"));
+            self.no_package_member(pkg, pkg_span, name);
             return ir::Expr::new(ExprKind::Zero, self.types.unknown());
         };
         self.check_visible(decl, name.span);
