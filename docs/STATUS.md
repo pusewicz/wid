@@ -621,6 +621,13 @@ runs the stages; `wid_cli` is the `wid` binary.
   (#44); a promoted field read that way was E0305 with a help about
   arguments. `Checker::self_member` searches like `self.name`, so methods,
   implicit-self calls and promoted proc fields work as before.
+- A field of `self` called like a method (`hp()`), its own or promoted, is
+  E0201 with the same note and a fix that writes `@hp` in one step; a field
+  holding a proc gets `@on_hit.call(…)`, and arguments or a block get a
+  help instead (#48). A bare name close to a field's suggests `@hp`
+  (`Checker::self_field_names`, which reaches promoted fields too). A name
+  that several `using` fields promote, written bare, called or as `@id`, is
+  E0204 alone, with a fix that writes `@body.id` rather than `body.id`.
 - A C compiler without C23 (one that rejects `-std=c23`, like gcc 13 or
   clang 17, or lacks `<stdckdint.h>` or `#embed`) is E0702 "the C compiler
   `cc` doesn't support C23", with the first line of its `--version`, the

@@ -1,0 +1,44 @@
+error[E0201]: undefined name `helth`
+  --> tests/ui/field_typo.wid:9:21
+   |
+ 9 |   def heal -> Int = helth + 1
+   |                     ^^^^^ not found in this scope
+help: a similar name exists: `@health`
+   |   def heal -> Int = @health + 1
+   = see `wid explain E0201`
+
+error[E0201]: undefined name `mnaa`
+  --> tests/ui/field_typo.wid:10:21
+   |
+10 |   def cast -> Int = mnaa - 1
+   |                     ^^^^ not found in this scope
+help: a similar name exists: `@mana`
+   |   def cast -> Int = @mana - 1
+   = see `wid explain E0201`
+
+error[E0201]: undefined name `volum`
+  --> tests/ui/field_typo.wid:11:35
+   |
+11 |   def shout(volume: Int) -> Int = volum + healht
+   |                                   ^^^^^ not found in this scope
+help: a similar name exists: `volume`
+   |   def shout(volume: Int) -> Int = volume + healht
+   = see `wid explain E0201`
+
+error[E0201]: undefined name `healht`
+  --> tests/ui/field_typo.wid:11:43
+   |
+11 |   def shout(volume: Int) -> Int = volum + healht
+   |                                           ^^^^^^ not found in this scope
+help: a similar name exists: `@health`
+   |   def shout(volume: Int) -> Int = volum + @health
+   = see `wid explain E0201`
+
+error[E0201]: undefined name `helth`
+  --> tests/ui/field_typo.wid:12:26
+   |
+12 |   def self.make -> Int = helth
+   |                          ^^^^^ not found in this scope
+   = see `wid explain E0201`
+
+error: could not compile due to 5 errors

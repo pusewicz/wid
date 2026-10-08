@@ -92,7 +92,14 @@ impl<'a> Checker<'a> {
         match self.field_index(base.ty, name) {
             Some((index, ty)) => ir::Expr::new(ExprKind::Field { base: Box::new(base), index }, ty),
             None => {
-                if self.using_lookup(base.ty, name, span).is_some() {
+                let hits = self.using_hits(base.ty, name);
+                if let [(_, _, first), _, ..] = hits[..] {
+                    let at = format!("@{first}.{name}");
+                    let fix = super::overloads::UsingFix { like: at.clone(), span, replacement: at };
+                    self.ambiguous_using(base.ty, name, span, &hits, fix);
+                    return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+                }
+                if !hits.is_empty() {
                     let mut inner = base;
                     while self.field_index(inner.ty, name).is_none()
                         && let Some((index, using_ty)) = self.using_lookup(inner.ty, name, span)

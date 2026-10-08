@@ -1,0 +1,40 @@
+error[E0201]: undefined method `hp`
+  --> tests/ui/field_call.wid:11:23
+   |
+11 |   def health -> Int = hp()
+   |                       ^^ not found in this scope
+   = note: `hp` is a field of `Player`; a bare name in a method is a variable or a method call, never a field
+help: read the field with `@hp`, which means `self.hp`
+   |   def health -> Int = @hp
+   = see `wid explain E0201`
+
+error[E0201]: undefined method `mp`
+  --> tests/ui/field_call.wid:12:21
+   |
+12 |   def mana -> Int = mp()
+   |                     ^^ not found in this scope
+   = note: `mp` is a field of `Stats`, promoted into `Player` by `using`; a bare name in a method is a variable or a method call, never a field
+help: read the field with `@mp`, which means `self.mp`
+   |   def mana -> Int = @mp
+   = see `wid explain E0201`
+
+error[E0201]: undefined method `on_hit`
+  --> tests/ui/field_call.wid:13:20
+   |
+13 |   def hit -> Int = on_hit(3)
+   |                    ^^^^^^ not found in this scope
+   = note: `on_hit` is a field of `Player`; a bare name in a method is a variable or a method call, never a field
+help: call the proc the field holds with `@on_hit.call`
+   |   def hit -> Int = @on_hit.call(3)
+   = see `wid explain E0201`
+
+error[E0201]: undefined method `hp`
+  --> tests/ui/field_call.wid:14:23
+   |
+14 |   def scaled -> Int = hp(2)
+   |                       ^^ not found in this scope
+   = note: `hp` is a field of `Player`; a bare name in a method is a variable or a method call, never a field
+help: read the field with `@hp`, which means `self.hp`, without arguments or a block
+   = see `wid explain E0201`
+
+error: could not compile due to 4 errors

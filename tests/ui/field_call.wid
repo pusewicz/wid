@@ -1,0 +1,24 @@
+struct Stats
+  mp: Int = 5
+  on_tick: proc() -> Int
+end
+
+struct Player
+  using stats: Stats
+  hp: Int = 100
+  on_hit: proc(n: Int) -> Int
+
+  def health -> Int = hp()
+  def mana -> Int = mp()
+  def hit -> Int = on_hit(3)
+  def scaled -> Int = hp(2)
+  def tick -> Int = on_tick()
+end
+
+def zero -> Int = 0
+def twice(n: Int) -> Int = n * 2
+
+def main
+  pl = Player.new(Stats.new(on_tick: method(:zero)), on_hit: method(:twice))
+  p pl.health + pl.mana + pl.hit + pl.scaled + pl.tick
+end

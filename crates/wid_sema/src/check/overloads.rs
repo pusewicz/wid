@@ -25,6 +25,14 @@ enum Fit {
 /// instantiated signature and number of exact parameter matches.
 type Scored = (DeclId, Vec<(Name, TyId)>, FnSig, usize);
 
+/// The fix for an ambiguous `using` member: write `replacement` over
+/// `span`, shown in the help as `like`.
+pub struct UsingFix {
+    pub like: String,
+    pub span: Span,
+    pub replacement: String,
+}
+
 impl Checker<'_> {
     /// The functions an overload set names, resolved in its scope. Problems
     /// with the set are reported once, the first time it is resolved.
@@ -511,7 +519,18 @@ impl Checker<'_> {
     /// struct, one of its methods, or something it promotes in turn. Returns
     /// the index and type of the `using` field to go through.
     pub fn using_lookup(&mut self, ty: TyId, name: Name, span: Span) -> Option<(u32, TyId)> {
-        let TyKind::Struct(id) = *self.types.kind(ty) else { return None };
+        let hits = self.using_hits(ty, name);
+        if let [(_, _, first), _, ..] = hits[..] {
+            let fix = UsingFix { like: format!(".{first}.{name}"), span, replacement: format!("{first}.{name}") };
+            self.ambiguous_using(ty, name, span, &hits, fix);
+        }
+        hits.first().map(|(i, t, _)| (*i, *t))
+    }
+
+    /// The `using` fields of `ty` that provide `name`, in declaration order:
+    /// the index, type and name of each.
+    pub fn using_hits(&mut self, ty: TyId, name: Name) -> Vec<(u32, TyId, Name)> {
+        let TyKind::Struct(id) = *self.types.kind(ty) else { return Vec::new() };
         let info = self.types.struct_info(id).clone();
         let mut hits = Vec::new();
         for (i, f) in info.fields.iter().enumerate() {
@@ -523,22 +542,26 @@ impl Checker<'_> {
                 hits.push((i as u32, f.ty, f.name));
             }
         }
-        if hits.len() > 1 {
-            let names: Vec<String> = hits.iter().map(|(_, _, n)| format!("`{n}`")).collect();
-            let shown = self.types.display(ty);
-            self.report(
-                Diagnostic::error(codes::NO_SUCH_MEMBER, format!("`{name}` is ambiguous in `{shown}`"))
-                    .primary(span, format!("both {} provide `{name}`", names.join(" and ")))
-                    .note("`using` promotes the members of several fields here, and more than one has this name")
-                    .suggest_replace(
-                        format!("name the field to read it through, like `.{}.{name}`", hits[0].2),
-                        span,
-                        format!("{}.{name}", hits[0].2),
-                        Applicability::MaybeIncorrect,
-                    ),
-            );
-        }
-        hits.first().map(|(i, t, _)| (*i, *t))
+        hits
+    }
+
+    /// Reports `name` written at `span` when several `using` fields of `ty`
+    /// provide it (`hits`, at least two), with `fix` reaching it through the
+    /// first.
+    pub fn ambiguous_using(&mut self, ty: TyId, name: Name, span: Span, hits: &[(u32, TyId, Name)], fix: UsingFix) {
+        let names: Vec<String> = hits.iter().map(|(_, _, n)| format!("`{n}`")).collect();
+        let shown = self.types.display(ty);
+        self.report(
+            Diagnostic::error(codes::NO_SUCH_MEMBER, format!("`{name}` is ambiguous in `{shown}`"))
+                .primary(span, format!("both {} provide `{name}`", names.join(" and ")))
+                .note("`using` promotes the members of several fields here, and more than one has this name")
+                .suggest_replace(
+                    format!("name the field to read it through, like `{}`", fix.like),
+                    fix.span,
+                    fix.replacement,
+                    Applicability::MaybeIncorrect,
+                ),
+        );
     }
 
     /// Returns true when a value of type `ty` (or the struct it points to)
