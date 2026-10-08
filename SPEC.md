@@ -217,12 +217,17 @@ end
   panics with "integer overflow in unary `-`" or "integer overflow in
   `**`". Only signed integers and floats have unary `-`. Division and
   remainder by zero always panic, `MIN / -1` is `MIN` and `MIN % -1` is 0,
-  and `%` truncates toward zero. A shift by the type's width or more shifts
-  every bit out: the result is 0, or -1 for `>>` of a negative value. A
-  negative shift amount is an error when it is a constant (E0311, whose fix
-  shifts the other way: `x >> 1` for `x << -1`) and panics in `-debug`
-  builds and at compile time. Otherwise the amount is read as unsigned, so a
-  negative one is past the width and shifts every bit out.
+  and `%` truncates toward zero. Element-wise operations on fixed arrays and
+  matrices, and the `*` and `+` of a matrix product, follow the same rules
+  for each element: they wrap in release builds and panic in `-debug`
+  builds and at compile time with the same message ("integer overflow in
+  `+`", "… in unary `-`", "division by zero"), at the operation's location.
+  A shift by the type's width or more shifts every bit out: the result is
+  0, or -1 for `>>` of a negative value. A negative shift amount is an
+  error when it is a constant (E0311, whose fix shifts the other way:
+  `x >> 1` for `x << -1`) and panics in `-debug` builds and at compile
+  time. Otherwise the amount is read as unsigned, so a negative one is past
+  the width and shifts every bit out.
 - **`Never`** is the return type of methods that never return, like
   `os.exit`. Their body must end in `panic`, an endless loop or another
   `-> Never` call, and a call to one ends the code path, so it satisfies
@@ -465,6 +470,11 @@ end
   `(T, Error)` and `nil` if its type is `T?`. Silently dropping an `Error` is a
   compile error; discard one explicitly with `_`.
 - Use `assert` and `panic` for bugs and `unreachable` for impossible paths.
+  Every panic, the program's own or a failed check (bounds, nil, overflow,
+  division by zero), prints `panic: message` and the location on stderr
+  and ends the program with status 101; a `-debug` build aborts instead,
+  so a debugger stops at the panic (`wid run` then exits with 134, 128
+  plus `SIGABRT`).
 
 ## Memory
 

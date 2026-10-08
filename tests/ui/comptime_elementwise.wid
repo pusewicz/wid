@@ -1,0 +1,30 @@
+# Compile-time code runs with the checks of a `-debug` build, element-wise
+# too: integer `+`, `-`, `*` and unary `-` on arrays and matrices that
+# overflow fail at the operation, and so does division by zero. The results
+# that fit (`FITS_*`) are no errors.
+Bytes = [2]I8
+Grid = matrix[2, 2]I8
+
+def add(a: Bytes, b: Bytes) -> Bytes = a + b
+def neg(a: Bytes) -> Bytes = -a
+def scale(m: Grid, k: I8) -> Grid = m * k
+def product(a: Grid, b: Grid) -> Grid = a * b
+def quotient(a: Bytes, b: Bytes) -> Bytes = a % b
+
+MAX: Bytes = [127, 0]
+MIN: Bytes = [-128, 0]
+ONE: Bytes = [1, 1]
+EIGHTS: Grid = [8, 0, 0, 8]
+
+ADD = comptime add(MAX, ONE)
+NEG = comptime neg(MIN)
+SCALE = comptime scale(EIGHTS, 16)
+PRODUCT = comptime product(product(EIGHTS, EIGHTS), EIGHTS)
+QUOTIENT = comptime quotient(ONE, MIN)
+FITS_ADD = comptime add(MIN, ONE)
+FITS_NEG = comptime neg(MAX)
+FITS_PRODUCT = comptime product(EIGHTS, EIGHTS)
+
+def main
+  p FITS_ADD, FITS_NEG, FITS_PRODUCT
+end

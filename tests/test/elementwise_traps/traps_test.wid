@@ -1,0 +1,111 @@
+import "core:testing"
+
+@[test]
+def add(t: ^testing.T)
+  v: Bytes = [126, -128]
+  w: Bytes = [1, 0]
+  t.expect_eq(v + w, [127, -128])
+  p v + [2, 0]
+end
+
+@[test]
+def sub(t: ^testing.T)
+  v: Bytes = [-127, 127]
+  t.expect_eq(v - 1, [-128, 126])
+  p v - 2
+end
+
+@[test]
+def mul(t: ^testing.T)
+  v: Bytes = [64, -64]
+  t.expect_eq(v * [1, 2], [64, -128])
+  p v * 2
+end
+
+@[test]
+def neg(t: ^testing.T)
+  v: Bytes = [-127, 127]
+  t.expect_eq(-v, [127, -127])
+  v[0] -= 1
+  p(-v)
+end
+
+@[test]
+def add_assign(t: ^testing.T)
+  v: Bytes = [100, 0]
+  v += [27, 0]
+  t.expect_eq(v, [127, 0])
+  v += [1, 0]
+end
+
+@[test]
+def unsigned(t: ^testing.T)
+  v: [3]U8 = [255, 1, 0]
+  t.expect_eq(v - [0, 1, 0], [255, 0, 0])
+  p v - [0, 0, 1]
+end
+
+@[test]
+def wide(t: ^testing.T)
+  v: [2]Int = [9223372036854775806, 0]
+  t.expect_eq(v + [1, 0], [9223372036854775807, 0])
+  p v + [2, 0]
+end
+
+@[test]
+def matrix_add(t: ^testing.T)
+  m: Grid = [100, 0, 0, -100]
+  t.expect_eq(m + m - m, m)
+  p m + m
+end
+
+@[test]
+def matrix_scale(t: ^testing.T)
+  m: Grid = [1, 2, 3, 64]
+  t.expect_eq(m * 1, m)
+  p m * 2
+end
+
+@[test]
+def matrix_neg(t: ^testing.T)
+  m: Grid = [1, 2, 3, 127]
+  t.expect_eq(-(-m), m)
+  m[1, 1] = -128
+  p(-m)
+end
+
+@[test]
+def matrix_product(t: ^testing.T)
+  m: Grid = [8, 0, 0, 8]
+  t.expect_eq(m * m, [64, 0, 0, 64])
+  p m * m * m
+end
+
+@[test]
+def matrix_vector(t: ^testing.T)
+  m: Grid = [100, 100, 0, 1]
+  v: Bytes = [1, 0]
+  t.expect_eq(m * v, [100, 0])
+  p m * [1, 1]
+end
+
+@[test]
+def div_by_zero(t: ^testing.T)
+  v: Bytes = [-128, 6]
+  t.expect_eq(v / [-1, 3], [-128, 2])
+  p v / [1, 0]
+end
+
+@[test]
+def rem_by_zero(t: ^testing.T)
+  v: Bytes = [-128, 7]
+  t.expect_eq(v % [-1, 4], [0, 3])
+  p v % 0
+end
+
+@[test]
+def matrix_div_by_zero(t: ^testing.T)
+  m: Grid = [4, 8, 12, 16]
+  t.expect_eq(m / 4, [1, 2, 3, 4])
+  p m / 0
+end

@@ -1,0 +1,56 @@
+error[E0901]: `comptime` code failed: integer overflow in `+`
+  --> tests/ui/comptime_elementwise.wid:8:40
+   |
+ 8 | def add(a: Bytes, b: Bytes) -> Bytes = a + b
+   |                                        ^^^^^ failed here
+...
+19 | ADD = comptime add(MAX, ONE)
+   |       ---------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in unary `-`
+  --> tests/ui/comptime_elementwise.wid:9:30
+   |
+ 9 | def neg(a: Bytes) -> Bytes = -a
+   |                              ^^ failed here
+...
+20 | NEG = comptime neg(MIN)
+   |       ----------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in `*`
+  --> tests/ui/comptime_elementwise.wid:10:37
+   |
+10 | def scale(m: Grid, k: I8) -> Grid = m * k
+   |                                     ^^^^^ failed here
+...
+21 | SCALE = comptime scale(EIGHTS, 16)
+   |         -------------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: integer overflow in `*`
+  --> tests/ui/comptime_elementwise.wid:11:41
+   |
+11 | def product(a: Grid, b: Grid) -> Grid = a * b
+   |                                         ^^^^^ failed here
+...
+22 | PRODUCT = comptime product(product(EIGHTS, EIGHTS), EIGHTS)
+   |           ------------------------------------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: division by zero
+  --> tests/ui/comptime_elementwise.wid:12:45
+   |
+12 | def quotient(a: Bytes, b: Bytes) -> Bytes = a % b
+   |                                             ^^^^^ failed here
+...
+23 | QUOTIENT = comptime quotient(ONE, MIN)
+   |            --------------------------- while running this at compile time
+   = note: compile-time code runs with the checks of a `-debug` build: bounds, nil and overflow
+   = see `wid explain E0901`
+
+error: could not compile due to 5 errors

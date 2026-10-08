@@ -1,0 +1,7 @@
+# Element-wise division and remainder by zero panic in every build, at the
+# operation, and exit with 101 as every panic of a release build does.
+def main
+  v: [3]I32 = [7, 8, 9]
+  p v % [2, 3, 4]
+  p v % [2, 0, 4]
+end

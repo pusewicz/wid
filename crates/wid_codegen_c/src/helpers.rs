@@ -270,58 +270,104 @@ impl Gen<'_> {
     }
 }
 
+/// The C name of an integer operation's runtime helper: `wid_add_i8`.
+fn int_op(types: &wid_sema::types::TypeTable, op: &str, elem: TyId) -> String {
+    format!("wid_{op}_{}", crate::types::int_suffix_of(types, elem))
+}
+
 impl Gen<'_> {
-    /// Returns the name of an element-wise operator helper for numeric arrays,
-    /// where either side may be a scalar.
+    /// Whether `elem`, an element type of a numeric array or matrix, is an
+    /// integer type.
+    fn int_elem(&self, elem: TyId) -> bool {
+        matches!(self.p.types.kind(self.p.types.base(elem)), TyKind::Int(_))
+    }
+
+    /// The element type and count of a numeric array or matrix type.
+    fn shape(&self, ty: TyId) -> Option<(TyId, u64)> {
+        match self.p.types.kind(self.p.types.base(ty)) {
+            TyKind::Array(e, n) => Some((*e, *n)),
+            TyKind::Matrix(e, rows, cols) => Some((*e, u64::from(rows * cols))),
+            _ => None,
+        }
+    }
+
     /// Emits (once) a helper for a matrix-matrix, matrix-vector or
-    /// vector-matrix product. Matrices are column-major: element (row, col)
-    /// lives at `data[col * rows + row]`.
-    pub(crate) fn matrix_product_helper(&mut self, l: TyId, r: TyId, result: TyId) -> String {
+    /// vector-matrix product, and returns its name and whether it takes the
+    /// operation's location after its operands: in `-debug` builds an
+    /// integer product traps overflow in its `*` and `+`, as the scalar
+    /// operations do. Matrices are column-major: element (row, col) lives at
+    /// `data[col * rows + row]`.
+    pub(crate) fn matrix_product_helper(&mut self, l: TyId, r: TyId, result: TyId) -> (String, bool) {
         let lt = self.c_type(l);
         let rt = self.c_type(r);
         let res = self.c_type(result);
         let name = format!("wid_matmul_{}_{}", lt.replace([' ', '*'], "_"), rt.replace([' ', '*'], "_"));
+        let (lk, rk) = (self.p.types.kind(self.p.types.base(l)).clone(), self.p.types.kind(self.p.types.base(r)).clone());
+        let elem = match (&lk, &rk) {
+            (TyKind::Matrix(e, ..), _) | (_, TyKind::Matrix(e, ..)) => *e,
+            _ => unreachable!("matrix_product_helper needs a matrix operand"),
+        };
+        let checked = self.p.checks.overflow && self.int_elem(elem);
         if !self.vector_helpers.insert(name.clone()) {
-            return name;
+            return (name, checked);
         }
-        let (elem, body) = match (self.p.types.kind(l).clone(), self.p.types.kind(r).clone()) {
-            (TyKind::Matrix(e, rows, k), TyKind::Matrix(_, _, cols)) => (
-                e,
+        // `s += x * y`, element by element.
+        let types = &self.p.types;
+        let mac = |x: &str, y: &str| {
+            if checked {
+                let (add, mul) = (int_op(types, "add", elem), int_op(types, "mul", elem));
+                format!("s = {add}(s, {mul}({x}, {y}, loc), loc);")
+            } else {
+                format!("s += {x} * {y};")
+            }
+        };
+        let body = match (lk, rk) {
+            (TyKind::Matrix(_, rows, k), TyKind::Matrix(_, _, cols)) => {
+                let step = mac(&format!("a.data[k * {rows} + row]"), &format!("b.data[col * {k} + k]"));
                 format!(
-                    "    for (wid_Int col = 0; col < {cols}; col++) {{\n        for (wid_Int row = 0; row < {rows}; row++) {{\n            ELEM s = 0;\n            for (wid_Int k = 0; k < {k}; k++) s += a.data[k * {rows} + row] * b.data[col * {k} + k];\n            r.data[col * {rows} + row] = s;\n        }}\n    }}\n"
-                ),
-            ),
-            (TyKind::Matrix(e, rows, cols), _) => (
-                e,
+                    "    for (wid_Int col = 0; col < {cols}; col++) {{\n        for (wid_Int row = 0; row < {rows}; row++) {{\n            ELEM s = 0;\n            for (wid_Int k = 0; k < {k}; k++) {step}\n            r.data[col * {rows} + row] = s;\n        }}\n    }}\n"
+                )
+            }
+            (TyKind::Matrix(_, rows, cols), _) => {
+                let step = mac(&format!("a.data[k * {rows} + row]"), "b.data[k]");
                 format!(
-                    "    for (wid_Int row = 0; row < {rows}; row++) {{\n        ELEM s = 0;\n        for (wid_Int k = 0; k < {cols}; k++) s += a.data[k * {rows} + row] * b.data[k];\n        r.data[row] = s;\n    }}\n"
-                ),
-            ),
-            (_, TyKind::Matrix(e, rows, cols)) => (
-                e,
+                    "    for (wid_Int row = 0; row < {rows}; row++) {{\n        ELEM s = 0;\n        for (wid_Int k = 0; k < {cols}; k++) {step}\n        r.data[row] = s;\n    }}\n"
+                )
+            }
+            (_, TyKind::Matrix(_, rows, cols)) => {
+                let step = mac("a.data[k]", &format!("b.data[col * {rows} + k]"));
                 format!(
-                    "    for (wid_Int col = 0; col < {cols}; col++) {{\n        ELEM s = 0;\n        for (wid_Int k = 0; k < {rows}; k++) s += a.data[k] * b.data[col * {rows} + k];\n        r.data[col] = s;\n    }}\n"
-                ),
-            ),
+                    "    for (wid_Int col = 0; col < {cols}; col++) {{\n        ELEM s = 0;\n        for (wid_Int k = 0; k < {rows}; k++) {step}\n        r.data[col] = s;\n    }}\n"
+                )
+            }
             _ => unreachable!("matrix_product_helper needs a matrix operand"),
         };
         let et = self.c_type(elem);
         let body = body.replace("ELEM", &et);
-        let _ = writeln!(self.helper_protos, "static {res} {name}({lt} a, {rt} b);");
+        let params = if checked { format!("{lt} a, {rt} b, wid_Location loc") } else { format!("{lt} a, {rt} b") };
+        let _ = writeln!(self.helper_protos, "static {res} {name}({params});");
         let _ = writeln!(
             self.helper_bodies,
-            "[[maybe_unused]] static {res} {name}({lt} a, {rt} b) {{\n    {res} r = {{}};\n{body}    return r;\n}}\n"
+            "[[maybe_unused]] static {res} {name}({params}) {{\n    {res} r = {{}};\n{body}    return r;\n}}\n"
         );
-        name
+        (name, checked)
     }
 
-    pub(crate) fn vector_helper(&mut self, op: wid_sema::ir::BinaryOp, l: TyId, r: TyId, result: TyId) -> String {
+    /// Emits (once) the helper for an element-wise operator on numeric
+    /// arrays or matrices, where either side may be a scalar, and returns
+    /// its name and whether it takes the operation's location after its
+    /// operands. Integer elements follow the scalar rules: division and
+    /// remainder by zero panic, and `-debug` builds trap overflow in `+`,
+    /// `-` and `*`; release builds wrap.
+    pub(crate) fn vector_helper(
+        &mut self,
+        op: wid_sema::ir::BinaryOp,
+        l: TyId,
+        r: TyId,
+        result: TyId,
+    ) -> (String, bool) {
         use wid_sema::ir::BinaryOp as B;
-        let (elem, n) = match (self.p.types.kind(l).clone(), self.p.types.kind(r).clone()) {
-            (TyKind::Array(e, n), _) | (_, TyKind::Array(e, n)) => (e, n),
-            (TyKind::Matrix(e, rows, cols), _) | (_, TyKind::Matrix(e, rows, cols)) => (e, u64::from(rows * cols)),
-            _ => (l, 1),
-        };
+        let (elem, n) = self.shape(l).or_else(|| self.shape(r)).unwrap_or((l, 1));
         let (sym, key) = match op {
             B::Add => ("+", "vadd"),
             B::Sub => ("-", "vsub"),
@@ -332,31 +378,66 @@ impl Gen<'_> {
             B::BitOr => ("|", "vor"),
             _ => ("^", "vxor"),
         };
+        let int = self.int_elem(elem);
+        let checked = int && (matches!(op, B::Div | B::Rem) || self.p.checks.overflow && matches!(op, B::Add | B::Sub | B::Mul));
         let lt = self.c_type(l);
         let rt = self.c_type(r);
         let res = self.c_type(result);
         let name = format!("wid_{key}_{}_{}", lt.replace([' ', '*'], "_"), rt.replace([' ', '*'], "_"));
         if !self.vector_helpers.insert(name.clone()) {
-            return name;
+            return (name, checked);
         }
-        let la = if matches!(self.p.types.kind(l), TyKind::Array(..) | TyKind::Matrix(..)) { "a.data[i]" } else { "a" };
-        let ra = if matches!(self.p.types.kind(r), TyKind::Array(..) | TyKind::Matrix(..)) { "b.data[i]" } else { "b" };
-        let is_float = matches!(self.p.types.kind(self.p.types.base(elem)), TyKind::Float(_));
+        let la = if self.shape(l).is_some() { "a.data[i]" } else { "a" };
+        let ra = if self.shape(r).is_some() { "b.data[i]" } else { "b" };
         let et = self.c_type(elem);
-        let body_op = if is_float && op == B::Rem {
+        let body_op = if checked {
+            let f = match op {
+                B::Add => "add",
+                B::Sub => "sub",
+                B::Mul => "mul",
+                B::Div => "div",
+                _ => "rem",
+            };
+            format!("{}({la}, {ra}, loc)", int_op(&self.p.types, f, elem))
+        } else if !int && op == B::Rem {
             format!("({et})fmod({la}, {ra})")
-        } else if !is_float && matches!(op, B::Div | B::Rem) {
-            let s = crate::types::int_suffix_of(&self.p.types, elem);
-            let f = if op == B::Div { "div" } else { "rem" };
-            format!("wid_{f}_{s}({la}, {ra}, (wid_Location){{}})")
         } else {
             format!("({et})({la} {sym} {ra})")
         };
-        let _ = writeln!(self.helper_protos, "static {res} {name}({lt} a, {rt} b);");
+        let params = if checked { format!("{lt} a, {rt} b, wid_Location loc") } else { format!("{lt} a, {rt} b") };
+        let _ = writeln!(self.helper_protos, "static {res} {name}({params});");
         let _ = writeln!(
             self.helper_bodies,
-            "[[maybe_unused]] static {res} {name}({lt} a, {rt} b) {{\n    {res} r;\n    for (wid_Int i = 0; i < {n}; i++) r.data[i] = {body_op};\n    return r;\n}}\n"
+            "[[maybe_unused]] static {res} {name}({params}) {{\n    {res} r;\n    for (wid_Int i = 0; i < {n}; i++) r.data[i] = {body_op};\n    return r;\n}}\n"
         );
-        name
+        (name, checked)
+    }
+
+    /// Emits (once) the helper for unary `-` on a numeric array or matrix,
+    /// and returns its name and whether it takes the operation's location
+    /// after its operand: in `-debug` builds a signed integer element traps
+    /// `-MIN`, as the scalar negation does.
+    pub(crate) fn vector_neg_helper(&mut self, ty: TyId) -> (String, bool) {
+        let (elem, n) = self.shape(ty).unwrap_or((ty, 1));
+        let signed = matches!(self.p.types.kind(self.p.types.base(elem)), TyKind::Int(i) if i.signed());
+        let checked = self.p.checks.overflow && signed;
+        let t = self.c_type(ty);
+        let name = format!("wid_vneg_{}", t.replace([' ', '*'], "_"));
+        if !self.vector_helpers.insert(name.clone()) {
+            return (name, checked);
+        }
+        let et = self.c_type(elem);
+        let (params, body_op) = if checked {
+            (format!("{t} a, wid_Location loc"), format!("{}(a.data[i], loc)", int_op(&self.p.types, "neg", elem)))
+        } else {
+            // Narrow integers promote to `int`; cast back, so `-MIN` wraps.
+            (format!("{t} a"), format!("({et})(-a.data[i])"))
+        };
+        let _ = writeln!(self.helper_protos, "static {t} {name}({params});");
+        let _ = writeln!(
+            self.helper_bodies,
+            "[[maybe_unused]] static {t} {name}({params}) {{\n    {t} r;\n    for (wid_Int i = 0; i < {n}; i++) r.data[i] = {body_op};\n    return r;\n}}\n"
+        );
+        (name, checked)
     }
 }

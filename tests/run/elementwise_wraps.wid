@@ -1,0 +1,16 @@
+# Without `-debug`, element-wise integer arithmetic on arrays and matrices
+# wraps, as the scalar operations do (`tests/run/overflow_wraps`), and
+# negating a float array keeps the sign of zero.
+def main
+  v: [2]I8 = [127, -128]
+  w: [2]I8 = [1, 1]
+  p v + w, v - w, v * 2, -v
+  u: [2]U8 = [255, 0]
+  p u + 1, u - 1
+  m: matrix[2, 2]I8 = [100, 0, 0, -128]
+  p m + m, -m, m * m
+  big: [2]Int = [9223372036854775807, 0]
+  p big + 1
+  f: [3]F64 = [0.0, -0.0, 1.5]
+  p(-f)
+end

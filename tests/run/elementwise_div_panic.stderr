@@ -1,0 +1,2 @@
+panic: division by zero
+  at tests/run/elementwise_div_panic.wid:6:5 in `main`

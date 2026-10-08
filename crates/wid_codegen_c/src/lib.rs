@@ -523,6 +523,17 @@ impl<'p> Gen<'p> {
             ExprKind::Unary { op, expr, span } => {
                 let v = self.expr(expr);
                 match op {
+                    // Element-wise, on a numeric array or matrix.
+                    ir::UnaryOp::Neg
+                        if matches!(self.p.types.kind(self.p.types.base(e.ty)), TyKind::Array(..) | TyKind::Matrix(..)) =>
+                    {
+                        let (name, checked) = self.vector_neg_helper(e.ty);
+                        if checked {
+                            format!("{name}({}, {})", strip_parens(&v), self.location(*span))
+                        } else {
+                            format!("{name}({})", strip_parens(&v))
+                        }
+                    }
                     // Only signed integers negate; `-MIN` overflows.
                     ir::UnaryOp::Neg
                         if self.p.checks.overflow
@@ -739,13 +750,21 @@ impl<'p> Gen<'p> {
         let r = self.expr(rhs);
         let shaped = |t: TyId| matches!(self.p.types.kind(t), TyKind::Array(..) | TyKind::Matrix(..));
         let is_matrix = |t: TyId| matches!(self.p.types.kind(t), TyKind::Matrix(..));
+        // A helper that can panic takes the operation's location.
+        let call = |name: String, checked: bool, loc: String| {
+            if checked {
+                format!("{name}({}, {}, {loc})", strip_parens(&l), strip_parens(&r))
+            } else {
+                format!("{name}({}, {})", strip_parens(&l), strip_parens(&r))
+            }
+        };
         if op == B::Mul && shaped(lhs.ty) && shaped(rhs.ty) && (is_matrix(lhs.ty) || is_matrix(rhs.ty)) {
-            let name = self.matrix_product_helper(lhs.ty, rhs.ty, ty);
-            return format!("{name}({}, {})", strip_parens(&l), strip_parens(&r));
+            let (name, checked) = self.matrix_product_helper(lhs.ty, rhs.ty, ty);
+            return call(name, checked, self.location(span));
         }
         if (shaped(lhs.ty) || shaped(rhs.ty)) && !matches!(op, B::Eq | B::Ne) {
-            let name = self.vector_helper(op, lhs.ty, rhs.ty, ty);
-            return format!("{name}({}, {})", strip_parens(&l), strip_parens(&r));
+            let (name, checked) = self.vector_helper(op, lhs.ty, rhs.ty, ty);
+            return call(name, checked, self.location(span));
         }
         if op == B::Cmp {
             return format!("((wid_Int)(({l}) > ({r})) - (wid_Int)(({l}) < ({r})))");

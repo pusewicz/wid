@@ -1036,15 +1036,11 @@ impl<'a> Checker<'a> {
                     let recv = self.address_of(v);
                     return self.call_fn(decl, Some(recv), &[], None, operand.span, span);
                 }
-                if op == ast::UnOp::Neg
-                    && let Some(elem) = self.numeric_array_elem(v.ty)
-                {
+                // Element-wise on a numeric array or matrix: a negation, not
+                // `0 - v`, so `-MIN` traps as itself and `-0.0` stays.
+                if op == ast::UnOp::Neg && self.numeric_array_elem(v.ty).is_some() {
                     let ty = v.ty;
-                    let zero = ir::Expr::new(ExprKind::Zero, elem);
-                    return ir::Expr::new(
-                        ExprKind::Binary { op: ir::BinaryOp::Sub, lhs: Box::new(zero), rhs: Box::new(v), span },
-                        ty,
-                    );
+                    return ir::Expr::new(ExprKind::Unary { op: ir::UnaryOp::Neg, expr: Box::new(v), span }, ty);
                 }
                 let ok = if op == ast::UnOp::Neg {
                     self.types.is_numeric(v.ty) && !self.is_unsigned(v.ty)

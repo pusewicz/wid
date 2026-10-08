@@ -1,0 +1,9 @@
+# A `-debug` build traps an element-wise overflow at the operation, with the
+# scalar message, and stops as every `-debug` panic does (`abort`, so a
+# debugger stops there).
+def main
+  m: matrix[2, 2]I16 = [1, 2, 3, 4]
+  p(-m)
+  m[0, 1] = -32768
+  p(-m)
+end

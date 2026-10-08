@@ -1,0 +1,170 @@
+running 15 tests
+test add ... PANICKED
+test sub ... PANICKED
+test mul ... PANICKED
+test neg ... PANICKED
+test add_assign ... PANICKED
+test unsigned ... PANICKED
+test wide ... PANICKED
+test matrix_add ... PANICKED
+test matrix_scale ... PANICKED
+test matrix_neg ... PANICKED
+test matrix_product ... PANICKED
+test matrix_vector ... PANICKED
+test div_by_zero ... PANICKED
+test rem_by_zero ... PANICKED
+test matrix_div_by_zero ... PANICKED
+
+failures:
+
+error[E0802]: test `add` panicked: integer overflow in `+`
+ --> tests/test/elementwise_traps/traps_test.wid:8:5
+  |
+4 | def add(t: ^testing.T)
+  |     --- in this test
+...
+8 |   p v + [2, 0]
+  |     ^^^^^^^^^^ panicked here
+  = see `wid explain E0802`
+
+error[E0802]: test `sub` panicked: integer overflow in `-`
+  --> tests/test/elementwise_traps/traps_test.wid:15:5
+   |
+12 | def sub(t: ^testing.T)
+   |     --- in this test
+...
+15 |   p v - 2
+   |     ^^^^^ panicked here
+   = see `wid explain E0802`
+
+error[E0802]: test `mul` panicked: integer overflow in `*`
+  --> tests/test/elementwise_traps/traps_test.wid:22:5
+   |
+19 | def mul(t: ^testing.T)
+   |     --- in this test
+...
+22 |   p v * 2
+   |     ^^^^^ panicked here
+   = see `wid explain E0802`
+
+error[E0802]: test `neg` panicked: integer overflow in unary `-`
+  --> tests/test/elementwise_traps/traps_test.wid:30:5
+   |
+26 | def neg(t: ^testing.T)
+   |     --- in this test
+...
+30 |   p(-v)
+   |     ^^^ panicked here
+   = see `wid explain E0802`
+
+error[E0802]: test `add_assign` panicked: integer overflow in `+`
+  --> tests/test/elementwise_traps/traps_test.wid:38:3
+   |
+34 | def add_assign(t: ^testing.T)
+   |     ---------- in this test
+...
+38 |   v += [1, 0]
+   |   ^^^^^^^^^^^ panicked here
+   = see `wid explain E0802`
+
+error[E0802]: test `unsigned` panicked: integer overflow in `-`
+  --> tests/test/elementwise_traps/traps_test.wid:45:5
+   |
+42 | def unsigned(t: ^testing.T)
+   |     -------- in this test
+...
+45 |   p v - [0, 0, 1]
+   |     ^^^^^^^^^^^^^ panicked here
+   = see `wid explain E0802`
+
+error[E0802]: test `wide` panicked: integer overflow in `+`
+  --> tests/test/elementwise_traps/traps_test.wid:52:5
+   |
+49 | def wide(t: ^testing.T)
+   |     ---- in this test
+...
+52 |   p v + [2, 0]
+   |     ^^^^^^^^^^ panicked here
+   = see `wid explain E0802`
+
+error[E0802]: test `matrix_add` panicked: integer overflow in `+`
+  --> tests/test/elementwise_traps/traps_test.wid:58:15
+   |
+56 | def matrix_add(t: ^testing.T)
+   |     ---------- in this test
+...
+58 |   t.expect_eq(m + m - m, m)
+   |               ^^^^^^^^^^^^^ panicked here
+   = see `wid explain E0802`
+
+error[E0802]: test `matrix_scale` panicked: integer overflow in `*`
+  --> tests/test/elementwise_traps/traps_test.wid:66:5
+   |
+63 | def matrix_scale(t: ^testing.T)
+   |     ------------ in this test
+...
+66 |   p m * 2
+   |     ^^^^^ panicked here
+   = see `wid explain E0802`
+
+error[E0802]: test `matrix_neg` panicked: integer overflow in unary `-`
+  --> tests/test/elementwise_traps/traps_test.wid:74:5
+   |
+70 | def matrix_neg(t: ^testing.T)
+   |     ---------- in this test
+...
+74 |   p(-m)
+   |     ^^^ panicked here
+   = see `wid explain E0802`
+
+error[E0802]: test `matrix_product` panicked: integer overflow in `*`
+  --> tests/test/elementwise_traps/traps_test.wid:81:5
+   |
+78 | def matrix_product(t: ^testing.T)
+   |     -------------- in this test
+...
+81 |   p m * m * m
+   |     ^^^^^^^^^ panicked here
+   = see `wid explain E0802`
+
+error[E0802]: test `matrix_vector` panicked: integer overflow in `+`
+  --> tests/test/elementwise_traps/traps_test.wid:89:5
+   |
+85 | def matrix_vector(t: ^testing.T)
+   |     ------------- in this test
+...
+89 |   p m * [1, 1]
+   |     ^^^^^^^^^^ panicked here
+   = see `wid explain E0802`
+
+error[E0802]: test `div_by_zero` panicked: division by zero
+  --> tests/test/elementwise_traps/traps_test.wid:96:5
+   |
+93 | def div_by_zero(t: ^testing.T)
+   |     ----------- in this test
+...
+96 |   p v / [1, 0]
+   |     ^^^^^^^^^^ panicked here
+   = see `wid explain E0802`
+
+error[E0802]: test `rem_by_zero` panicked: division by zero
+   --> tests/test/elementwise_traps/traps_test.wid:103:5
+    |
+100 | def rem_by_zero(t: ^testing.T)
+    |     ----------- in this test
+...
+103 |   p v % 0
+    |     ^^^^^ panicked here
+    = see `wid explain E0802`
+
+error[E0802]: test `matrix_div_by_zero` panicked: division by zero
+   --> tests/test/elementwise_traps/traps_test.wid:110:5
+    |
+107 | def matrix_div_by_zero(t: ^testing.T)
+    |     ------------------ in this test
+...
+110 |   p m / 0
+    |     ^^^^^ panicked here
+    = see `wid explain E0802`
+
+test result: FAILED. 0 passed; 15 failed; 0 filtered out

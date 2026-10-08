@@ -1334,6 +1334,24 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   the E0710 errors, and `-sanitize:address` and `-sanitize:undefined` with
   each compiler that can build and run a C program with them (skipping
   the others).
+- Element-wise integer operations follow the scalar rules (#149, SPEC
+  "Types"): `-debug` builds and compile-time code trap overflow in `+`,
+  `-`, `*` and unary `-` on fixed arrays and matrices, and in a matrix
+  product's `*` and `+`, with the scalar messages; release builds wrap.
+  The codegen helpers (`vector_helper`, `matrix_product_helper` and the
+  new `vector_neg_helper`) call `wid_add_*`, `wid_sub_*`, `wid_mul_*` and
+  `wid_neg_*` and take the operation's location after their operands
+  when they can panic; division and remainder by zero passed an empty
+  `wid_Location`, so the panic had no `at file:line:col` (and `wid test`
+  pointed at the whole test). The interpreter's `elementwise` and
+  `matrix_product` go through `scalar_op`. Array negation is now an IR
+  `Unary` rather than `0 - v`, so `-[0.0]` is `[-0.0]` and the message is
+  "… in unary `-`"; an unsigned element wraps, as before. The exit status
+  never differed from a scalar panic's: every `-debug` panic aborts (134
+  under `wid run`, -1 in the suite) and every release one exits with
+  101, now written into SPEC "Errors". `tests/test/elementwise_traps`,
+  `tests/run/elementwise_wraps`, `elementwise_overflow_panic`,
+  `elementwise_div_panic` and `tests/ui/comptime_elementwise` cover them.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),

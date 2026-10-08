@@ -1,0 +1,2 @@
+panic: integer overflow in unary `-`
+  at tests/run/elementwise_overflow_panic.wid:8:5 in `main`

@@ -631,20 +631,23 @@ impl<'c> Interp<'c> {
             ExprKind::Builtin { op, args, span } => self.builtin(*op, args, *span, e.ty),
             ExprKind::Unary { op, expr, span } => {
                 let v = self.eval(expr)?;
+                // Element-wise on a numeric array or matrix.
+                if *op == UnaryOp::Neg
+                    && let Some((elem, n)) = self.shape(expr.ty)
+                {
+                    let es = self.size(elem);
+                    let mut out = Vec::with_capacity(v.len());
+                    for i in 0..n {
+                        let x = self.decode(elem, &slice(&v, i * es, es));
+                        out.extend(self.negate(elem, x, *span)?);
+                    }
+                    // `[0]T` takes an element's space it doesn't use.
+                    out.resize(v.len(), 0);
+                    return Ok(out);
+                }
                 Ok(match (op, self.decode(expr.ty, &v)) {
                     (UnaryOp::Not, _) => vec![u8::from(!Self::truthy(&v))],
-                    (UnaryOp::Neg, Num::F(f)) => self.encode(e.ty, Num::F(-f)),
-                    (UnaryOp::Neg, Num::I(i)) => {
-                        // As in a `-debug` build: `-MIN` overflows.
-                        let (lo, hi) = match self.scalar(e.ty) {
-                            Scalar::Int(it) => it.range(),
-                            _ => IntTy::I64.range(),
-                        };
-                        match i.checked_neg() {
-                            Some(n) if n >= lo && n <= hi => self.encode(e.ty, Num::I(n)),
-                            _ => return Err(self.fail_check(*span, "integer overflow in unary `-`")),
-                        }
-                    }
+                    (UnaryOp::Neg, x) => self.negate(e.ty, x, *span)?,
                     (UnaryOp::BitNot, n) => self.encode(e.ty, Num::I(!as_int(n))),
                 })
             }
@@ -943,7 +946,7 @@ impl<'c> Interp<'c> {
         let shaped = |t: TyId| matches!(self.p.types.kind(t), TyKind::Array(..) | TyKind::Matrix(..));
         let is_matrix = |t: TyId| matches!(self.p.types.kind(t), TyKind::Matrix(..));
         if op == B::Mul && shaped(lhs.ty) && shaped(rhs.ty) && (is_matrix(lhs.ty) || is_matrix(rhs.ty)) {
-            return self.matrix_product(lhs.ty, &l, rhs.ty, &r, ty);
+            return self.matrix_product(lhs.ty, &l, rhs.ty, &r, ty, span);
         }
         if (shaped(lhs.ty) || shaped(rhs.ty)) && !matches!(op, B::Eq | B::Ne) {
             return self.elementwise(op, lhs.ty, &l, rhs.ty, &r, ty, span);
@@ -1093,43 +1096,59 @@ impl<'c> Interp<'c> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn elementwise(&self, op: BinaryOp, lt: TyId, l: &[u8], rt: TyId, r: &[u8], ty: TyId, span: Span) -> R<Vec<u8>> {
-        let elem_of = |t: TyId| match self.p.types.kind(t) {
+    /// The element type and count of a numeric array or matrix type.
+    fn shape(&self, ty: TyId) -> Option<(TyId, u64)> {
+        match self.kind(ty) {
             TyKind::Array(e, n) => Some((*e, *n)),
             TyKind::Matrix(e, rows, cols) => Some((*e, u64::from(*rows) * u64::from(*cols))),
             _ => None,
+        }
+    }
+
+    /// `-x` for a value of the numeric type `ty`. As in a `-debug` build,
+    /// `-MIN` of a signed type overflows; an unsigned element of an array,
+    /// which only arrays negate, wraps.
+    fn negate(&self, ty: TyId, x: Num, span: Span) -> R<Vec<u8>> {
+        let i = match x {
+            Num::F(f) => return Ok(self.encode(ty, Num::F(-f))),
+            Num::I(i) => i,
         };
-        let (elem, n) = elem_of(lt).or_else(|| elem_of(rt)).unwrap_or((lt, 1));
+        let it = match self.scalar(ty) {
+            Scalar::Int(it) => it,
+            _ => IntTy::I64,
+        };
+        if !it.signed() {
+            return Ok(self.encode(ty, Num::I(i.wrapping_neg())));
+        }
+        let (lo, hi) = it.range();
+        match i.checked_neg() {
+            Some(n) if n >= lo && n <= hi => Ok(self.encode(ty, Num::I(n))),
+            _ => Err(self.fail_check(span, "integer overflow in unary `-`")),
+        }
+    }
+
+    /// An element-wise operation on numeric arrays or matrices, either of
+    /// them possibly a scalar: each element follows the scalar rules, so an
+    /// integer `+`, `-` or `*` that overflows fails as in a `-debug` build.
+    #[allow(clippy::too_many_arguments)]
+    fn elementwise(&self, op: BinaryOp, lt: TyId, l: &[u8], rt: TyId, r: &[u8], ty: TyId, span: Span) -> R<Vec<u8>> {
+        let (elem, n) = self.shape(lt).or_else(|| self.shape(rt)).unwrap_or((lt, 1));
         let es = self.size(elem);
         let mut out = Vec::with_capacity(self.size(ty) as usize);
         for i in 0..n {
-            let a = if elem_of(lt).is_some() { slice(l, i * es, es) } else { l.to_vec() };
-            let b = if elem_of(rt).is_some() { slice(r, i * es, es) } else { r.to_vec() };
+            let a = if self.shape(lt).is_some() { slice(l, i * es, es) } else { l.to_vec() };
+            let b = if self.shape(rt).is_some() { slice(r, i * es, es) } else { r.to_vec() };
             let (x, y) = (self.decode(elem, &a), self.decode(elem, &b));
-            let v = match (op, self.scalar(elem)) {
-                (BinaryOp::Div | BinaryOp::Rem, Scalar::Int(_)) => self.scalar_op(op, elem, x, y, elem, span)?,
-                (_, Scalar::Int(_)) => {
-                    let (x, y) = (as_int(x), as_int(y));
-                    let v = match op {
-                        BinaryOp::Add => x.wrapping_add(y),
-                        BinaryOp::Sub => x.wrapping_sub(y),
-                        BinaryOp::Mul => x.wrapping_mul(y),
-                        BinaryOp::BitAnd => x & y,
-                        BinaryOp::BitOr => x | y,
-                        _ => x ^ y,
-                    };
-                    self.encode(elem, Num::I(v))
-                }
-                _ => self.scalar_op(op, elem, x, y, elem, span)?,
-            };
-            out.extend_from_slice(&v);
+            out.extend_from_slice(&self.scalar_op(op, elem, x, y, elem, span)?);
         }
         Ok(out)
     }
 
-    fn matrix_product(&self, lt: TyId, l: &[u8], rt: TyId, r: &[u8], ty: TyId) -> R<Vec<u8>> {
-        let dims = |t: TyId| match self.p.types.kind(t) {
+    /// A matrix product; an integer one fails as in a `-debug` build when a
+    /// `*` or `+` of it overflows.
+    #[allow(clippy::too_many_arguments)]
+    fn matrix_product(&self, lt: TyId, l: &[u8], rt: TyId, r: &[u8], ty: TyId, span: Span) -> R<Vec<u8>> {
+        let dims = |t: TyId| match self.kind(t) {
             TyKind::Matrix(e, rows, cols) => (*e, u64::from(*rows), u64::from(*cols)),
             TyKind::Array(e, n) => (*e, *n, 1),
             _ => (t, 1, 1),
@@ -1137,6 +1156,9 @@ impl<'c> Interp<'c> {
         let (elem, lr, lc) = dims(lt);
         let (_, _, rc) = dims(rt);
         let es = self.size(elem);
+        let int = |op: BinaryOp, x: Num, y: Num| -> R<Num> {
+            Ok(self.decode(elem, &self.scalar_op(op, elem, x, y, elem, span)?))
+        };
         let mut out = vec![0u8; self.size(ty) as usize];
         for col in 0..rc {
             for row in 0..lr {
@@ -1147,14 +1169,14 @@ impl<'c> Interp<'c> {
                     let b = self.decode(elem, &slice(r, (col * lc + k) * es, es));
                     let prod = match (a, b) {
                         (Num::F(x), Num::F(y)) => Num::F(x * y),
-                        (x, y) => Num::I(as_int(x).wrapping_mul(as_int(y))),
+                        (x, y) => int(BinaryOp::Mul, x, y)?,
                     };
                     acc = if first {
                         prod
                     } else {
                         match (acc, prod) {
                             (Num::F(x), Num::F(y)) => Num::F(x + y),
-                            (x, y) => Num::I(as_int(x).wrapping_add(as_int(y))),
+                            (x, y) => int(BinaryOp::Add, x, y)?,
                         }
                     };
                     first = false;

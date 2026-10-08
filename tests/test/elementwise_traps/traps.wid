@@ -1,0 +1,7 @@
+# Built with `-debug` (`tests/test/elementwise_traps.flags`): each test in
+# `traps_test.wid` checks an element-wise operation on integer arrays or
+# matrices that fits, then panics on one that overflows (or divides by
+# zero), at the operation, as the scalar operation would.
+
+Bytes = [2]I8
+Grid = matrix[2, 2]I8
