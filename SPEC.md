@@ -938,7 +938,10 @@ end
   globals are read by name in C (`@[extern("RED")] RED: Color = ---`). A macro
   that names a function (`#define GetMouseRay GetScreenToWorldRay`) is a
   function. Function-like macros, mutable globals and bit-fields are not
-  imported, and using one is an error (E0705) that explains why.
+  imported, and using one is an error (E0705) that explains why, whether
+  the use writes its C name or any name the rules above give it as a
+  function, type or constant (`lib.counter`, `lib.Counter` or
+  `lib.COUNTER` for `extern int lib_counter;` with `strip_prefix: "lib_"`).
 - **Calls.** String literals convert to `CString`; a runtime `String` needs
   `.to_cstr`. A C function ending in `...` takes numbers, pointers, C strings
   and C structs there; untyped literals become `C.int` and `C.double`, as in C.

@@ -127,6 +127,11 @@ pub struct CSkipped {
     pub c_name: String,
     /// The name it would have had in Wid.
     pub wid_name: String,
+    /// The other names a use may spell it with: what the naming rules for
+    /// functions, types and constants make of the C name (`counter`,
+    /// `Counter` and `COUNTER` for `lib_counter`), so that each one is
+    /// explained, not just `wid_name`.
+    pub spellings: Vec<String>,
     /// Why it was skipped, as a sentence fragment: "is a function-like macro".
     pub reason: String,
     /// Where C declares it, as `file:line`.

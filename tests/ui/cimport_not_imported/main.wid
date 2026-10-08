@@ -1,0 +1,11 @@
+# A declaration `cimport` left out is explained under every name the
+# naming rules give it, not just one.
+cimport "lib.h", as: :lib, strip_prefix: "lib_"
+
+def main
+  p lib.counter
+  p lib.COUNTER
+  lib.counter = 3
+  total: lib.Counter
+  p lib.square(2), lib.SQUARE(2)
+end

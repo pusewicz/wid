@@ -176,6 +176,7 @@ impl Renderer<'_> {
                 self.skipped.push(CSkipped {
                     c_name: c_name.clone(),
                     wid_name: wid.clone(),
+                    spellings: Vec::new(),
                     reason: format!("has the same Wid name as {}", wid_diagnostics::and_list(&quoted)),
                     location: location.clone(),
                     collides_with: others,
@@ -209,11 +210,22 @@ impl Renderer<'_> {
         self.out.push_str("import \"core:c\", as: :C\n");
     }
 
-    /// Records a declaration that is not imported.
+    /// Records a declaration that is not imported, under its Wid name and
+    /// the names the rules for the other kinds of declaration give it, so
+    /// that `lib.counter` explains a skipped `lib_counter` as well as
+    /// `lib.COUNTER` does.
     fn skip(&mut self, c_name: &str, wid_name: &str, reason: String, item: &Item) {
+        let mut spellings = Vec::new();
+        for kind in [NameKind::Function, NameKind::Type, NameKind::Constant] {
+            let spelling = self.wid_name(c_name, kind);
+            if spelling != wid_name && !spellings.contains(&spelling) {
+                spellings.push(spelling);
+            }
+        }
         self.skipped.push(CSkipped {
             c_name: c_name.to_string(),
             wid_name: wid_name.to_string(),
+            spellings,
             reason,
             location: location_text(&item.location),
             collides_with: Vec::new(),
@@ -264,10 +276,6 @@ impl Renderer<'_> {
                 }
                 MacroKind::FunctionLike { .. } => {
                     self.skip(&m.name, &name, "is a function-like macro".to_string(), item);
-                    let constant = self.wid_name(&m.name, NameKind::Constant);
-                    if constant != name {
-                        self.skip(&m.name, &constant, "is a function-like macro".to_string(), item);
-                    }
                 }
             },
         }

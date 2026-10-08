@@ -1444,6 +1444,12 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   saying Wid has no package-level variables (for a constant at package
   level), with fixes that write a value (`…`) or, for a typed constant,
   `{}`. `@[extern]` constants keep `= ---`.
+- A C declaration `cimport` left out is E0705 under every name the naming
+  rules give it (#147, SPEC "C and C++ interop"): `CSkipped::spellings`
+  holds its function, type and constant spellings, so `lib.counter`,
+  `lib.Counter` and `lib.COUNTER` all explain a skipped `lib_counter`
+  (before, only the constant spelling did and `lib.counter` was a bare
+  E0201). A declaration's own Wid or C name wins over another's spelling.
 
 ## Next
 

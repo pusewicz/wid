@@ -1,0 +1,55 @@
+error[E0705]: `lib_counter` from `lib.h` was not imported
+ --> tests/ui/cimport_not_imported/main.wid:6:9
+  |
+6 |   p lib.counter
+  |         ^^^^^^^ `lib_counter` is a mutable global variable; read or write it through a C function
+  = note: C declares it at lib.h:6
+help: add C functions that read and write the variable to a `.c` file of the package, and declare them with `@[extern]`
+  = see `wid explain E0705`
+
+error[E0705]: `lib_counter` from `lib.h` was not imported
+ --> tests/ui/cimport_not_imported/main.wid:7:9
+  |
+7 |   p lib.COUNTER
+  |         ^^^^^^^ `lib_counter` is a mutable global variable; read or write it through a C function
+  = note: C declares it at lib.h:6
+help: add C functions that read and write the variable to a `.c` file of the package, and declare them with `@[extern]`
+  = see `wid explain E0705`
+
+error[E0705]: `lib_counter` from `lib.h` was not imported
+ --> tests/ui/cimport_not_imported/main.wid:8:7
+  |
+8 |   lib.counter = 3
+  |       ^^^^^^^ `lib_counter` is a mutable global variable; read or write it through a C function
+  = note: C declares it at lib.h:6
+help: add C functions that read and write the variable to a `.c` file of the package, and declare them with `@[extern]`
+  = see `wid explain E0705`
+
+error[E0705]: `lib_counter` from `lib.h` was not imported
+ --> tests/ui/cimport_not_imported/main.wid:9:14
+  |
+9 |   total: lib.Counter
+  |              ^^^^^^^ `lib_counter` is a mutable global variable; read or write it through a C function
+  = note: C declares it at lib.h:6
+help: add C functions that read and write the variable to a `.c` file of the package, and declare them with `@[extern]`
+  = see `wid explain E0705`
+
+error[E0705]: `LIB_SQUARE` from `lib.h` was not imported
+  --> tests/ui/cimport_not_imported/main.wid:10:9
+   |
+10 |   p lib.square(2), lib.SQUARE(2)
+   |         ^^^^^^ `LIB_SQUARE` is a function-like macro
+   = note: C declares it at lib.h:4
+help: write a small C function in a `.c` file of the package that calls the macro, and declare it with `@[extern]`
+   = see `wid explain E0705`
+
+error[E0705]: `LIB_SQUARE` from `lib.h` was not imported
+  --> tests/ui/cimport_not_imported/main.wid:10:24
+   |
+10 |   p lib.square(2), lib.SQUARE(2)
+   |                        ^^^^^^ `LIB_SQUARE` is a function-like macro
+   = note: C declares it at lib.h:4
+help: write a small C function in a `.c` file of the package that calls the macro, and declare it with `@[extern]`
+   = see `wid explain E0705`
+
+error: could not compile due to 6 errors
