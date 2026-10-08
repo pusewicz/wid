@@ -578,10 +578,13 @@ impl<'a> Checker<'a> {
         }
         let saved = std::mem::take(&mut self.body);
         let saved_macro = std::mem::replace(&mut self.macros.in_macro, f.is_macro);
+        // A `?` method that doesn't return `Bool` was reported (E0330): its
+        // body is checked without the type it should have had.
+        let ret = if self.misdeclared_predicate(decl) { self.types.unknown() } else { sig.ret };
         self.body.frames.push(Frame {
             loc: d.loc,
             scopes: Vec::new(),
-            ret: sig.ret,
+            ret,
             self_ty: owner_ty,
             self_local: None,
             fn_name: display,
@@ -605,7 +608,6 @@ impl<'a> Checker<'a> {
             let local = self.declare_param(p.name, p.ty, p.span);
             func.params.push(local);
         }
-        let ret = sig.ret;
         let wants_value = !matches!(self.types.kind(ret), TyKind::Void | TyKind::Never);
         match &f.body {
             ast::FnBody::Block(stmts) => {
@@ -626,6 +628,9 @@ impl<'a> Checker<'a> {
                 } else if wants_value
                     && !self.current_block_diverges()
                     && !matches!(stmts.last(), Some(ast::Stmt { kind: ast::StmtKind::Error, .. }))
+                    // A return type that was an error (E0314, E0330) says
+                    // nothing about a value.
+                    && !matches!(self.types.kind(ret), TyKind::Unknown)
                 {
                     let ret_name = self.types.display(ret);
                     let span = match stmts.last() {
@@ -788,13 +793,92 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// Whether `decl` is a method whose name ends in `?` but whose return
+    /// type isn't `Bool` (E0330, see [`Checker::check_predicate_return`]).
+    pub(super) fn misdeclared_predicate(&mut self, decl: DeclId) -> bool {
+        let DeclKind::Fn(f) = self.decls[decl.0 as usize].kind else { return false };
+        if f.is_macro || !f.name.as_str().ends_with('?') {
+            return false;
+        }
+        let ret = self.fn_sig(decl).ret;
+        !matches!(self.types.kind(ret), TyKind::Bool | TyKind::Unknown)
+    }
+
+    /// Reports a method whose name ends in `?` that doesn't return `Bool`
+    /// (E0330): the name asks a yes-or-no question. The rule is about the
+    /// declaration, so it is checked once for each, generic or not. A
+    /// macro returns `Code`, so its name can't end in `?`.
+    pub(super) fn check_predicate_return(&mut self, decl: DeclId) {
+        let DeclKind::Fn(f) = self.decls[decl.0 as usize].kind else { return };
+        let name = f.name.as_str();
+        let Some(bare) = name.strip_suffix('?') else { return };
+        let note = "a name ending in `?` asks a yes-or-no question, so callers expect a `Bool`";
+        let drop = |diag: Diagnostic| {
+            diag.suggest(
+                format!("or, if it isn't a yes-or-no question, drop the `?` and call it `{bare}`"),
+                vec![Edit { span: f.name.span, replacement: bare.to_string() }],
+                Applicability::MaybeIncorrect,
+            )
+        };
+        if f.is_macro {
+            let diag = Diagnostic::error(
+                codes::PREDICATE_RETURN,
+                format!("`{name}` is a macro, so it returns `Code`, but a name ending in `?` promises a `Bool`"),
+            )
+            .primary(f.name.span, "a macro's name can't end in `?`")
+            .note(note)
+            .help("for a yes-or-no question, write a method that returns `Bool` (it may call the macro)");
+            self.report(drop(diag));
+            return;
+        }
+        let ret = self.fn_sig(decl).ret;
+        if matches!(self.types.kind(ret), TyKind::Bool | TyKind::Unknown) {
+            return;
+        }
+        // The fix is exact when the body already gives a `Bool`.
+        let fits =
+            if body_gives_bool(&f.body) { Applicability::MachineApplicable } else { Applicability::MaybeIncorrect };
+        let diag = match &f.ret {
+            Some(t) => {
+                let shown = self.types.display(ret);
+                Diagnostic::error(
+                    codes::PREDICATE_RETURN,
+                    format!("`{name}` returns `{shown}`, but a method whose name ends in `?` must return `Bool`"),
+                )
+                .primary(t.span, "this should be `Bool`")
+                .note(note)
+                .suggest(
+                    "return a `Bool`",
+                    vec![Edit { span: t.span, replacement: "Bool".into() }],
+                    fits,
+                )
+            }
+            None => Diagnostic::error(
+                codes::PREDICATE_RETURN,
+                format!("`{name}` has no return type, but a method whose name ends in `?` must return `Bool`"),
+            )
+            .primary(f.name.span, "the `?` promises a `Bool`")
+            .note(note)
+            .suggest(
+                "declare that it returns a `Bool`",
+                vec![Edit { span: f.sig_span.shrink_to_end(), replacement: " -> Bool".into() }],
+                fits,
+            ),
+        };
+        self.report(drop(diag));
+    }
+
     /// Whether a call of `func`, an instance of `decl`, has a value of an
-    /// unknown type rather than none: `decl` is an endless `def` without a
-    /// return type whose body failed to parse or check, like one that
-    /// throws its value away (E0310, `def sep = "/"`), so what it was meant
-    /// to return is unknown and the call is poisoned. A queued `func` is
-    /// lowered now to find out.
+    /// unknown type rather than the type it declares: `decl` is a `?`
+    /// method that doesn't return `Bool` (E0330), or an endless `def`
+    /// without a return type whose body failed to parse or check, like one
+    /// that throws its value away (E0310, `def sep = "/"`). What either was
+    /// meant to return is unknown, so the call is poisoned. A queued `func`
+    /// is lowered now to find out.
     pub(super) fn poisoned_call(&mut self, decl: DeclId, func: ir::FnId) -> bool {
+        if self.misdeclared_predicate(decl) {
+            return true;
+        }
         let DeclKind::Fn(f) = self.decls[decl.0 as usize].kind else { return false };
         let ast::FnBody::Expr(body) = &f.body else { return false };
         if f.ret.is_some() || f.is_macro {
@@ -814,6 +898,58 @@ impl<'a> Checker<'a> {
         if !value.is_pure() {
             self.emit(Stmt::Expr(value));
         }
+    }
+}
+
+/// Whether a method's body visibly gives a `Bool`: its value, and the
+/// value of each `return` in it, is `true` or `false`, a comparison, `!`,
+/// `&&` or `||` of such values, or a call of a `?` method. It decides
+/// whether declaring `-> Bool` is a fix that can be applied as it is.
+fn body_gives_bool(body: &ast::FnBody) -> bool {
+    use wid_syntax::visit::shared::{Visit, walk_expr, walk_stmt};
+    /// Clears its flag at a `return` without a `Bool` value, outside procs.
+    struct Returns(bool);
+    impl Visit for Returns {
+        fn visit_stmt(&mut self, stmt: &ast::Stmt) {
+            if let ast::StmtKind::Return(values) = &stmt.kind
+                && !matches!(values.as_slice(), [v] if gives_bool(v))
+            {
+                self.0 = false;
+            }
+            walk_stmt(self, stmt);
+        }
+        fn visit_expr(&mut self, e: &ast::Expr) {
+            if !matches!(e.kind, ast::ExprKind::Lambda(_)) {
+                walk_expr(self, e);
+            }
+        }
+    }
+    match body {
+        ast::FnBody::Expr(e) => gives_bool(e),
+        ast::FnBody::Block(stmts) => {
+            let last = matches!(stmts.last(), Some(ast::Stmt { kind: ast::StmtKind::Expr(e), .. }) if gives_bool(e));
+            let mut returns = Returns(true);
+            stmts.iter().for_each(|s| returns.visit_stmt(s));
+            last && returns.0
+        }
+    }
+}
+
+/// Whether an expression visibly gives a `Bool` (see [`body_gives_bool`]).
+fn gives_bool(e: &ast::Expr) -> bool {
+    use ast::ExprKind as E;
+    match &e.kind {
+        E::True | E::False | E::Unary { op: ast::UnOp::Not, .. } => true,
+        E::Paren(inner) => gives_bool(inner),
+        E::Binary { op: ast::BinOp::And | ast::BinOp::Or, lhs, rhs } => gives_bool(lhs) && gives_bool(rhs),
+        E::Binary { op, .. } => op.is_comparison(),
+        E::Ident(name) => name.as_str().ends_with('?'),
+        E::Member { name, .. } => name.as_str().ends_with('?'),
+        E::Call(call) => match &call.callee {
+            ast::Callee::Name(name) | ast::Callee::Method { name, .. } => name.as_str().ends_with('?'),
+            ast::Callee::IVar(_) => false,
+        },
+        _ => false,
     }
 }
 

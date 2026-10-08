@@ -1,0 +1,57 @@
+# A method whose name ends in `?` must return `Bool` (E0330, #136): at
+# the package level, in a type, a module or an `extend`, generic or not.
+# The fix returns a `Bool`, exactly when the body already gives one, or
+# drops the `?`. A macro returns `Code`, so its name can't end in `?`.
+# Calls of such a method report nothing more.
+
+def ok? -> Int = 1
+def ready? = true
+def empty?(xs: []Int)
+  xs.size == 0
+end
+def same?(a: $T, b: T) -> T = a
+def found? -> Bool = true
+
+# Bodies are checked without a return type to match: no "must return".
+def done?(n: Int)
+  if n > 0
+    puts "x"
+  end
+end
+
+def scan?(n: Int)
+  while n > 0
+    n -= 1
+  end
+end
+
+struct Ship
+  hp: Int
+
+  def alive? -> Int = @hp
+  def self.default? -> Int = 1
+end
+
+module Named
+  def named? -> String = "x"
+end
+
+extend Int
+  def big? -> Int = self
+end
+
+macro def debug? -> Code
+  quote do
+    false
+  end
+end
+
+def main
+  if ok?
+    puts "ok"
+  end
+  x = ready?
+  s = Ship.new(1)
+  p x, s.alive? && found?, Ship.default?, 3.big?, empty?([1]), same?(1, 2), debug?
+  p done?(1), scan?(2)
+end

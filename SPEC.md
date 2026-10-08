@@ -51,8 +51,15 @@ end
 - Wid keeps Ruby's surface: `def … end`, endless `def f = expr`,
   `if/unless/elsif`, postfix `if`/`unless`, `while/until/loop`, `case/when`,
   implicit return, `#{}` interpolation, ranges `0..n`/`0...n`, `# ` comments
-  and no semicolons (outside a string, `#{` starts a macro splice). `?`
-  methods must return `Bool`. Source files use the `.wid` extension.
+  and no semicolons (outside a string, `#{` starts a macro splice). Source
+  files use the `.wid` extension.
+- **`?` methods return `Bool`:** a name ending in `?` asks a yes-or-no
+  question, so a method named so declares `-> Bool` (E0330, at the return
+  type, or at the name when there is none): at package level, in a type
+  (`def self.` too), a module or an `extend`, generic or not. A `macro def`
+  always returns `Code`, so its name can't end in `?` (E0330); a method
+  that returns `Bool` can call it. Calls of a method that breaks the rule
+  report nothing more. `!` methods have no such rule.
 - **Return types are explicit,** as in Odin, so every caller knows a
   method's type without reading its body. An endless `def` declares one
   like any other (`def sep -> String = "/"`); without `-> T` it returns
@@ -602,9 +609,9 @@ end
       takes `flags :READ, :WRITE, :EXEC` and can generate a constant for
       each name. It can't have a default. Only macros take one; other
       methods take a `[]T` and an array literal (E0112).
-    - A macro always returns `Code` and says so (`-> Code`, E0310). It
-      takes no `$T` parameters (E0315, take a `Type`) and no block (E0319,
-      take a `Code`).
+    - A macro always returns `Code` and says so (`-> Code`, E0310), so
+      its name can't end in `?` (E0330). It takes no `$T` parameters
+      (E0315, take a `Type`) and no block (E0319, take a `Code`).
   - **`Code` and `Symbol`** values exist only while compiling, like `Type`;
     a method the program runs can't use them (E0906). A macro body can keep
     them in variables and collections (`[dynamic]Code`, `[]Symbol`),

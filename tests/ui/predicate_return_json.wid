@@ -1,0 +1,19 @@
+# E0330's fix that returns a `Bool` is machine-applicable only when the
+# body already gives one: its value and every `return`'s (#136).
+
+def on? -> Int = true
+def ready? = 1
+
+def has?(xs: []Int)
+  return false if xs.empty?
+  xs[0] > 1 && !xs.empty?
+end
+
+def big?(n: Int) -> Int
+  return 1 if n > 9
+  n > 3
+end
+
+def main
+  p on?, ready?, has?([1]), big?(2)
+end

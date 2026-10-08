@@ -1491,6 +1491,19 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   an endless def without a return type whose body failed (E0310 or any
   other error; `poisoned_call`, which lowers a still-queued callee first
   with `lower_queued`) has the unknown type, so it adds no E0323.
+- `?` methods return `Bool` (#136, SPEC "Syntax"): E0330
+  (`check_predicate_return` in `check/body.rs`, run from
+  `check_all_roots` once per declaration, generic and module methods
+  included) at the return type, or at the name without one, with fixes
+  that return a `Bool` (machine-applicable when `body_gives_bool` sees a
+  `Bool` value and `Bool` returns) or drop the `?`. A `macro def` returns
+  `Code`, so its name can't end in `?` (decided; E0330 too). Such a
+  method's body is checked against no return type, and its calls are
+  poisoned (`poisoned_call`), so neither adds an error; E0330 replaces
+  E0310 for an endless `?` def without a type. A method whose return type
+  is an error (E0314, E0330) no longer adds E0324 "must return
+  `{unknown}`", nor E0323 for a loop that ends it. `core` had no
+  violations.
 
 ## Next
 
@@ -1638,7 +1651,6 @@ only on `main` and can run in parallel with the macro stack.
    - debug builds: `#line` and `-debug` at `-O0` (#141);
    - three cascades, including spurious E0203 when a package fails to load
      (#138);
-   - `?` methods return `Bool` (#136);
    - error values (#139);
    - library and runtime gaps (#140);
    - CLI flags and tests (#142);
@@ -1661,6 +1673,9 @@ before anyone starts them.
 
 ## Known gaps
 
+- E0330 covers methods and macros named with `?`, not `overload` sets: in
+  `overload :within?, :within_int, :within_f32` the members may return any
+  type, so `within?(3)` can give an `Int`.
 - An untyped array literal does not take its type from the other operand of
   a binary operator or from an overload set's parameters (`xf * [1.0, 0.0]`
   needs a typed `Vec2`); `[1.0, 1.0] * m` likewise needs a typed vector.

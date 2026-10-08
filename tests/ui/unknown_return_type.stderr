@@ -1,0 +1,15 @@
+error[E0314]: unknown type `Nope`
+ --> tests/ui/unknown_return_type.wid:4:22
+  |
+4 | def first(n: Int) -> Nope
+  |                      ^^^^ no type with this name is in scope
+  = see `wid explain E0314`
+
+error[E0314]: unknown type `Vec3`
+  --> tests/ui/unknown_return_type.wid:10:22
+   |
+10 | def count(n: Int) -> Vec3
+   |                      ^^^^ no type with this name is in scope
+   = see `wid explain E0314`
+
+error: could not compile due to 2 errors

@@ -1,0 +1,19 @@
+# A return type that is an error (E0314) says nothing about the value, so
+# a body that ends without one, or in a loop, reports nothing more.
+
+def first(n: Int) -> Nope
+  if n > 0
+    puts "x"
+  end
+end
+
+def count(n: Int) -> Vec3
+  while n > 0
+    n -= 1
+  end
+end
+
+def main
+  first(1)
+  count(2)
+end

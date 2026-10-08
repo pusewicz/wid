@@ -124,6 +124,13 @@ impl<'a> Checker<'a> {
                     let wrapped = ast::Stmt { kind: S::Expr((**inner).clone()), span: stmt.span, attrs: Vec::new() };
                     self.lower_tail(&wrapped, dest);
                 }
+                // A method whose return type was an error (E0314, E0330)
+                // wants no particular value, so its loop is a statement.
+                E::While { .. } | E::Loop(_) | E::For(_)
+                    if matches!(dest, Dest::Return) && matches!(self.types.kind(self.frame().ret), TyKind::Unknown) =>
+                {
+                    self.lower_stmt(stmt);
+                }
                 E::While { .. } | E::Loop(_) | E::For(_) => {
                     let value = self.loop_value(e, true);
                     self.deliver(value, dest, e.span);

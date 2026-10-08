@@ -1,0 +1,246 @@
+{
+  "diagnostics": [
+    {
+      "code": "E0330",
+      "column": 12,
+      "expansions": [],
+      "explain": "wid explain E0330",
+      "file": "tests/ui/predicate_return_json.wid",
+      "helps": [
+        {
+          "applicability": "machine_applicable",
+          "edits": [
+            {
+              "column": 12,
+              "end": 152,
+              "end_column": 15,
+              "end_line": 4,
+              "file": "tests/ui/predicate_return_json.wid",
+              "line": 4,
+              "replacement": "Bool",
+              "start": 149
+            }
+          ],
+          "message": "return a `Bool`"
+        },
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [
+            {
+              "column": 5,
+              "end": 145,
+              "end_column": 8,
+              "end_line": 4,
+              "file": "tests/ui/predicate_return_json.wid",
+              "line": 4,
+              "replacement": "on",
+              "start": 142
+            }
+          ],
+          "message": "or, if it isn't a yes-or-no question, drop the `?` and call it `on`"
+        }
+      ],
+      "labels": [
+        {
+          "column": 12,
+          "end": 152,
+          "end_column": 15,
+          "end_line": 4,
+          "file": "tests/ui/predicate_return_json.wid",
+          "line": 4,
+          "message": "this should be `Bool`",
+          "primary": true,
+          "start": 149
+        }
+      ],
+      "line": 4,
+      "message": "`on?` returns `Int`, but a method whose name ends in `?` must return `Bool`",
+      "notes": [
+        "a name ending in `?` asks a yes-or-no question, so callers expect a `Bool`"
+      ],
+      "severity": "error"
+    },
+    {
+      "code": "E0330",
+      "column": 5,
+      "expansions": [],
+      "explain": "wid explain E0330",
+      "file": "tests/ui/predicate_return_json.wid",
+      "helps": [
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [
+            {
+              "column": 11,
+              "end": 170,
+              "end_column": 11,
+              "end_line": 5,
+              "file": "tests/ui/predicate_return_json.wid",
+              "line": 5,
+              "replacement": " -> Bool",
+              "start": 170
+            }
+          ],
+          "message": "declare that it returns a `Bool`"
+        },
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [
+            {
+              "column": 5,
+              "end": 170,
+              "end_column": 11,
+              "end_line": 5,
+              "file": "tests/ui/predicate_return_json.wid",
+              "line": 5,
+              "replacement": "ready",
+              "start": 164
+            }
+          ],
+          "message": "or, if it isn't a yes-or-no question, drop the `?` and call it `ready`"
+        }
+      ],
+      "labels": [
+        {
+          "column": 5,
+          "end": 170,
+          "end_column": 11,
+          "end_line": 5,
+          "file": "tests/ui/predicate_return_json.wid",
+          "line": 5,
+          "message": "the `?` promises a `Bool`",
+          "primary": true,
+          "start": 164
+        }
+      ],
+      "line": 5,
+      "message": "`ready?` has no return type, but a method whose name ends in `?` must return `Bool`",
+      "notes": [
+        "a name ending in `?` asks a yes-or-no question, so callers expect a `Bool`"
+      ],
+      "severity": "error"
+    },
+    {
+      "code": "E0330",
+      "column": 5,
+      "expansions": [],
+      "explain": "wid explain E0330",
+      "file": "tests/ui/predicate_return_json.wid",
+      "helps": [
+        {
+          "applicability": "machine_applicable",
+          "edits": [
+            {
+              "column": 20,
+              "end": 195,
+              "end_column": 20,
+              "end_line": 7,
+              "file": "tests/ui/predicate_return_json.wid",
+              "line": 7,
+              "replacement": " -> Bool",
+              "start": 195
+            }
+          ],
+          "message": "declare that it returns a `Bool`"
+        },
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [
+            {
+              "column": 5,
+              "end": 184,
+              "end_column": 9,
+              "end_line": 7,
+              "file": "tests/ui/predicate_return_json.wid",
+              "line": 7,
+              "replacement": "has",
+              "start": 180
+            }
+          ],
+          "message": "or, if it isn't a yes-or-no question, drop the `?` and call it `has`"
+        }
+      ],
+      "labels": [
+        {
+          "column": 5,
+          "end": 184,
+          "end_column": 9,
+          "end_line": 7,
+          "file": "tests/ui/predicate_return_json.wid",
+          "line": 7,
+          "message": "the `?` promises a `Bool`",
+          "primary": true,
+          "start": 180
+        }
+      ],
+      "line": 7,
+      "message": "`has?` has no return type, but a method whose name ends in `?` must return `Bool`",
+      "notes": [
+        "a name ending in `?` asks a yes-or-no question, so callers expect a `Bool`"
+      ],
+      "severity": "error"
+    },
+    {
+      "code": "E0330",
+      "column": 21,
+      "expansions": [],
+      "explain": "wid explain E0330",
+      "file": "tests/ui/predicate_return_json.wid",
+      "helps": [
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [
+            {
+              "column": 21,
+              "end": 278,
+              "end_column": 24,
+              "end_line": 12,
+              "file": "tests/ui/predicate_return_json.wid",
+              "line": 12,
+              "replacement": "Bool",
+              "start": 275
+            }
+          ],
+          "message": "return a `Bool`"
+        },
+        {
+          "applicability": "maybe_incorrect",
+          "edits": [
+            {
+              "column": 5,
+              "end": 263,
+              "end_column": 9,
+              "end_line": 12,
+              "file": "tests/ui/predicate_return_json.wid",
+              "line": 12,
+              "replacement": "big",
+              "start": 259
+            }
+          ],
+          "message": "or, if it isn't a yes-or-no question, drop the `?` and call it `big`"
+        }
+      ],
+      "labels": [
+        {
+          "column": 21,
+          "end": 278,
+          "end_column": 24,
+          "end_line": 12,
+          "file": "tests/ui/predicate_return_json.wid",
+          "line": 12,
+          "message": "this should be `Bool`",
+          "primary": true,
+          "start": 275
+        }
+      ],
+      "line": 12,
+      "message": "`big?` returns `Int`, but a method whose name ends in `?` must return `Bool`",
+      "notes": [
+        "a name ending in `?` asks a yes-or-no question, so callers expect a `Bool`"
+      ],
+      "severity": "error"
+    }
+  ],
+  "errors": 4,
+  "warnings": 0
+}
