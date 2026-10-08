@@ -713,7 +713,8 @@ impl<'a> Checker<'a> {
             }
             variants.push(vt);
         }
-        let mut payload = (0u64, 1u64);
+        // A union without variants gets a `char` in C, like an empty struct.
+        let mut payload = (1u64, 1u64);
         for v in &variants {
             let (s, a) = self.types.layout(*v);
             payload = (payload.0.max(s), payload.1.max(a));
@@ -796,7 +797,7 @@ impl<'a> Checker<'a> {
     /// (E0329).
     pub(super) fn report_long_array(&mut self, elem: TyId, len: i128, span: Span, within: Option<TyId>) {
         let shown = format!("[{len}]{}", self.types.display(elem));
-        let size = len.unsigned_abs().saturating_mul(self.types.c_layout(elem).0.max(1));
+        let size = len.unsigned_abs().saturating_mul(self.types.wide_layout(elem).0.max(1));
         self.too_large_error(format!("`{shown}` would take {size} bytes"), Some(elem), span, within);
     }
 
@@ -840,7 +841,7 @@ impl<'a> Checker<'a> {
         let limit = u128::from(MAX_TYPE_SIZE);
         let mut reported = false;
         loop {
-            let parts: Vec<(u128, u64)> = fields.iter().map(|f| self.types.c_layout(f.ty)).collect();
+            let parts: Vec<(u128, u64)> = fields.iter().map(|f| self.types.wide_layout(f.ty)).collect();
             let size_of = |n: usize| aggregate_wide(parts[..n].iter().copied()).0;
             if size_of(parts.len()) <= limit {
                 return;
@@ -868,7 +869,7 @@ impl<'a> Checker<'a> {
     /// Whether a union variant is too large for a union, with its tag: if
     /// so, reports it (E0329) at `span`, where the variant is written.
     fn variant_too_large(&mut self, union_name: &str, variant: TyId, span: Span) -> bool {
-        let size = aggregate_wide([(4, 4), self.types.c_layout(variant)]).0;
+        let size = aggregate_wide([(4, 4), self.types.wide_layout(variant)]).0;
         if size <= u128::from(MAX_TYPE_SIZE) {
             return false;
         }

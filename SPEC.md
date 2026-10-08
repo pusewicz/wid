@@ -172,6 +172,13 @@ end
   type, the field or union variant that takes its struct or union over the
   limit, an array literal, or a call of a generic method whose instance
   would return one.
+- **Layout** is the generated C's: `size_of`, `align_of`, field offsets,
+  `T.size` and `T.fields` at compile time and `type_info` at run time all
+  report the layout the program uses. C has no empty types, so a struct
+  without fields takes 1 byte, `[0]T` takes the space of one element
+  (`size_of([0]Int)` is 8) while its length stays 0 for everything else,
+  and a union without variants is laid out as its C counterpart, a tag and
+  one byte.
 - **Distinct types** are declared as constants, `Meters = distinct F64`, and
   each declaration is a new type with the base type's representation and
   operators. Untyped literals convert to it; typed values convert with `.to`

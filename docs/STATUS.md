@@ -1037,12 +1037,11 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   layout panicked on overflow (`[1 << 61]I64`), and types that fit in a
   `u64` but not in C failed in the C compiler as E0702. Layout arithmetic
   saturates (`TypeTable::wide_layout` works in `u128`), and
-  `TypeTable::oversize` measures a type as the generated C lays it out
-  (`c_layout`: an empty struct takes a byte there). The checker reports
-  array, optional and tuple types as they are resolved (an array of a
-  struct still being resolved, behind a pointer, once it is), the field or
-  union variant that takes its type over (it becomes unknown), array
-  literals, and generic calls whose instance would return one.
+  `TypeTable::oversize` measures a type's layout, which is C's (#100). The
+  checker reports array, optional and tuple types as they are resolved (an
+  array of a struct still being resolved, behind a pointer, once it is), the
+  field or union variant that takes its type over (it becomes unknown),
+  array literals, and generic calls whose instance would return one.
 - A splice used as an assignment target (`=`, `+=`, `||=`, `a, #{n} = …`)
   that gives something that can't be assigned to (a number, string, `Bool`
   or `Type`, a capitalized `Symbol`, or `Code` that is a call or a literal)
@@ -1102,6 +1101,17 @@ code; `wid_driver::analyze` loads and checks for it and for `wid doc`.
   folds to 0 so nothing reports it again; one that fits in them is
   checked where the value gets its type (`Checker::shift_overflows`).
   `a >> b` by 128 or more folds to 0 or -1.
+- Types that would be empty are laid out as the generated C lays them out
+  (#100): a struct without fields takes a byte (the emitter's `char
+  unused_`), `[0]T` one element (`data[1]`; its length stays 0) and a union
+  without variants a byte after its tag. `size_of`, `align_of`, field
+  offsets and compile-time `type_info` said 0 bytes where the run-time
+  tables, which C computes, said 1 or 8, and code that allocated by
+  `size_of(Pair)` got too few bytes. `TypeTable::layout` itself matches C
+  now (`aggregate_wide` gives an empty aggregate a byte), so the separate
+  `c_layout` measure is gone; the interpreter compares `[0]T` arrays by
+  their length, as the C does. `tests/run/zero_size_layout` prints the
+  layouts next to the run-time tables.
 - Test suite: `tests/run` (clang and gcc-16, or gcc-15 when gcc-16 is
   missing, strict flags), `tests/ui`
   (human output, or the JSON document with `-json-errors` in `NAME.flags`),
