@@ -1,0 +1,25 @@
+# Without `-debug`, integer arithmetic wraps: `-MIN` and `MIN.abs` are
+# `MIN`, and `**` keeps the low bits of the result.
+def main
+  a: I8 = -128
+  b: I16 = -32768
+  c: I32 = -2147483648
+  d: Int = -9223372036854775807 - 1
+  puts(-a)
+  puts(-b)
+  puts(-c)
+  puts(-d)
+  puts a.abs
+  puts b.abs
+  puts c.abs
+  puts d.abs
+  x: I8 = 3
+  y: U8 = 2
+  z: U64 = 3
+  w = 3
+  puts x ** 5
+  puts y ** 8
+  puts z ** 50
+  puts w ** 50
+  puts d + d
+end

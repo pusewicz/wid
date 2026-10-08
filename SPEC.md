@@ -211,15 +211,18 @@ end
   pointer to `RawPtr` or `RawPtr?`.
 - **`[^]T` arithmetic:** `p + n` and `p - n` move by whole elements, and
   `p - q` counts the elements between two of them.
-- **Integer operations** wrap on overflow; `-debug` builds panic on `+`, `-`
-  and `*` that overflow. Division and remainder by zero always panic,
-  `MIN / -1` is `MIN` and `MIN % -1` is 0, and `%` truncates toward zero.
-  A shift by the type's width or more shifts every bit out: the result is 0,
-  or -1 for `>>` of a negative value. A negative shift amount is an error
-  when it is a constant (E0311, whose fix shifts the other way: `x >> 1`
-  for `x << -1`) and panics in `-debug` builds and at compile time.
-  Otherwise the amount is read as unsigned, so a negative one is past the
-  width and shifts every bit out.
+- **Integer operations** wrap on overflow; `-debug` builds panic on `+`,
+  `-`, `*`, `**` and unary `-` that overflow, as compile-time code does:
+  `-x` or `x.abs` of a signed type's minimum, or `3 ** 50` in `Int`,
+  panics with "integer overflow in unary `-`" or "integer overflow in
+  `**`". Only signed integers and floats have unary `-`. Division and
+  remainder by zero always panic, `MIN / -1` is `MIN` and `MIN % -1` is 0,
+  and `%` truncates toward zero. A shift by the type's width or more shifts
+  every bit out: the result is 0, or -1 for `>>` of a negative value. A
+  negative shift amount is an error when it is a constant (E0311, whose fix
+  shifts the other way: `x >> 1` for `x << -1`) and panics in `-debug`
+  builds and at compile time. Otherwise the amount is read as unsigned, so a
+  negative one is past the width and shifts every bit out.
 - **`Never`** is the return type of methods that never return, like
   `os.exit`. Their body must end in `panic`, an endless loop or another
   `-> Never` call, and a call to one ends the code path, so it satisfies

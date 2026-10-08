@@ -9,7 +9,8 @@
 //!   imports) is checked and its rendered diagnostics must match
 //!   `NAME.stderr`; with `-json-errors` in `NAME.flags`, the JSON document
 //!   `wid check -json-errors` prints must.
-//! - `tests/test/NAME/` is run with `wid test`; the report must match
+//! - `tests/test/NAME/` is run with `wid test`, built with the flags in
+//!   `tests/test/NAME.flags` when it exists; the report must match
 //!   `tests/test/NAME.stdout`.
 //! - Every `core/` package with `_test.wid` files is run with `wid test`, and
 //!   all of its tests must pass.
@@ -412,6 +413,7 @@ fn run_case(case: &Case, root: &Path, ccs: &[String], bless: bool) -> Vec<String
                 opts.wid_root = Some(root.to_path_buf());
                 opts.cc = Some(cc.clone());
                 opts.strict_c = true;
+                let _ = apply_flags(&mut opts, &target.with_extension("flags"));
                 let run = wid_driver::test(&opts, None);
                 if run.checked.diags.has_errors() {
                     let rendered = render_all(&run.checked.diags, &run.checked.sources, RenderOptions { color: false });

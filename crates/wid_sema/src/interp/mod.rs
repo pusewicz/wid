@@ -629,12 +629,22 @@ impl<'c> Interp<'c> {
                 self.call_ptr(fp, values, *span)
             }
             ExprKind::Builtin { op, args, span } => self.builtin(*op, args, *span, e.ty),
-            ExprKind::Unary { op, expr } => {
+            ExprKind::Unary { op, expr, span } => {
                 let v = self.eval(expr)?;
                 Ok(match (op, self.decode(expr.ty, &v)) {
                     (UnaryOp::Not, _) => vec![u8::from(!Self::truthy(&v))],
                     (UnaryOp::Neg, Num::F(f)) => self.encode(e.ty, Num::F(-f)),
-                    (UnaryOp::Neg, Num::I(i)) => self.encode(e.ty, Num::I(i.wrapping_neg())),
+                    (UnaryOp::Neg, Num::I(i)) => {
+                        // As in a `-debug` build: `-MIN` overflows.
+                        let (lo, hi) = match self.scalar(e.ty) {
+                            Scalar::Int(it) => it.range(),
+                            _ => IntTy::I64.range(),
+                        };
+                        match i.checked_neg() {
+                            Some(n) if n >= lo && n <= hi => self.encode(e.ty, Num::I(n)),
+                            _ => return Err(self.fail_check(*span, "integer overflow in unary `-`")),
+                        }
+                    }
                     (UnaryOp::BitNot, n) => self.encode(e.ty, Num::I(!as_int(n))),
                 })
             }
@@ -1057,15 +1067,21 @@ impl<'c> Interp<'c> {
                         if y < 0 {
                             return Err(self.fail_at(span, "negative exponent in integer `**`"));
                         }
+                        // As `wid_pow_checked_*` does in a `-debug` build: the
+                        // base is squared only while bits of the exponent
+                        // remain, so a square overflows only when the result does.
+                        let fits = |v: Option<i128>| v.filter(|v| *v >= lo && *v <= hi);
+                        let overflow = || self.fail_check(span, "integer overflow in `**`");
                         let mut result: i128 = 1;
                         let (mut base, mut exp) = (x, y);
-                        let wrap = |v: i128| int_from(&int_bytes(v, it.size()), it.size(), it.signed());
                         while exp > 0 {
                             if exp & 1 == 1 {
-                                result = wrap(result.wrapping_mul(base));
+                                result = fits(result.checked_mul(base)).ok_or_else(overflow)?;
                             }
-                            base = wrap(base.wrapping_mul(base));
                             exp >>= 1;
+                            if exp > 0 {
+                                base = fits(base.checked_mul(base)).ok_or_else(overflow)?;
+                            }
                         }
                         Ok(self.encode(ty, Num::I(result)))
                     }

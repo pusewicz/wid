@@ -1,0 +1,2 @@
+panic: integer overflow in `**`
+  at tests/run/pow_overflow_panic.wid:41:8 in `main`

@@ -1063,7 +1063,7 @@ impl<'a> Checker<'a> {
                 }
                 let ty = v.ty;
                 let op = if op == ast::UnOp::Neg { ir::UnaryOp::Neg } else { ir::UnaryOp::BitNot };
-                ir::Expr::new(ExprKind::Unary { op, expr: Box::new(v) }, ty)
+                ir::Expr::new(ExprKind::Unary { op, expr: Box::new(v), span }, ty)
             }
         }
     }

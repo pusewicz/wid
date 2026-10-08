@@ -828,7 +828,7 @@ impl<'a> Checker<'a> {
         if let ExprKind::Bool(b) = v.kind {
             return ir::Expr::new(ExprKind::Bool(!b), ty);
         }
-        ir::Expr::new(ExprKind::Unary { op: ir::UnaryOp::Not, expr: Box::new(v) }, ty)
+        ir::Expr::new(ExprKind::Unary { op: ir::UnaryOp::Not, expr: Box::new(v), span: Span::default() }, ty)
     }
 
     /// Lowers `case`/`when` into a chain of branches delivering to `dest`.

@@ -412,9 +412,12 @@ pub enum ExprKind {
         args: Vec<Expr>,
         span: Span,
     },
+    /// `span` is the whole operation, where a `-debug` build reports an
+    /// overflowing negation.
     Unary {
         op: UnaryOp,
         expr: Box<Expr>,
+        span: Span,
     },
     Binary {
         op: BinaryOp,

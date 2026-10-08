@@ -1,0 +1,2 @@
+panic: integer overflow in unary `-`
+  at tests/run/neg_overflow_panic.wid:24:8 in `main`

@@ -22,7 +22,8 @@ end
 
 # Methods for signed integers.
 extend Int, I8, I16, I32, I64
-  # Returns the absolute value.
+  # Returns the absolute value. The minimum's doesn't fit, so its `abs`
+  # panics in `-debug` builds and is the minimum itself otherwise.
   def abs -> Self = self < 0 ? -self : self
 
   # Returns true for even numbers.
