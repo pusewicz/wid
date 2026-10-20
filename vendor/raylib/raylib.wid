@@ -14,3 +14,79 @@
 # swizzles work on them directly.
 cimport "raylib.h", pkg_config: "raylib",
   types: {Vector2: [2]F32, Vector3: [3]F32, Vector4: [4]F32}
+
+# Each `begin_…`/`end_…` pair also has a method that takes a block: it calls
+# `begin_…`, runs the block and then `end_…`, which runs however the block
+# leaves (`break`, `next` or `return` too). Its name drops `begin_`:
+#
+#   rl.drawing do
+#     rl.clear_background(rl.BLACK)
+#     rl.mode_2d(camera) { draw_world }
+#   end
+#
+# The block is inlined, so it allocates nothing and sees the caller's locals.
+
+# Draws to the window: `begin_drawing`, the block, then `end_drawing`, which
+# swaps the buffers.
+def drawing(&blk: block)
+  begin_drawing
+  defer end_drawing
+  yield
+end
+
+# Draws through a 2D camera: `begin_mode2_d(camera)`, the block, then
+# `end_mode2_d`.
+def mode_2d(camera: Camera2D, &blk: block)
+  begin_mode2_d(camera)
+  defer end_mode2_d
+  yield
+end
+
+# Draws through a 3D camera: `begin_mode3_d(camera)`, the block, then
+# `end_mode3_d`.
+def mode_3d(camera: Camera3D, &blk: block)
+  begin_mode3_d(camera)
+  defer end_mode3_d
+  yield
+end
+
+# Draws to a render texture: `begin_texture_mode(target)`, the block, then
+# `end_texture_mode`.
+def texture_mode(target: RenderTexture2D, &blk: block)
+  begin_texture_mode(target)
+  defer end_texture_mode
+  yield
+end
+
+# Draws with a custom shader: `begin_shader_mode(shader)`, the block, then
+# `end_shader_mode`.
+def shader_mode(shader: Shader, &blk: block)
+  begin_shader_mode(shader)
+  defer end_shader_mode
+  yield
+end
+
+# Draws with a blending mode (`rl.BLEND_ADDITIVE`, …):
+# `begin_blend_mode(mode)`, the block, then `end_blend_mode`.
+def blend_mode(mode: C.int, &blk: block)
+  begin_blend_mode(mode)
+  defer end_blend_mode
+  yield
+end
+
+# Draws only inside a rectangle of the screen:
+# `begin_scissor_mode(x, y, width, height)`, the block, then
+# `end_scissor_mode`.
+def scissor_mode(x: C.int, y: C.int, width: C.int, height: C.int, &blk: block)
+  begin_scissor_mode(x, y, width, height)
+  defer end_scissor_mode
+  yield
+end
+
+# Draws in stereo for the VR simulator: `begin_vr_stereo_mode(config)`, the
+# block, then `end_vr_stereo_mode`.
+def vr_stereo_mode(config: VrStereoConfig, &blk: block)
+  begin_vr_stereo_mode(config)
+  defer end_vr_stereo_mode
+  yield
+end

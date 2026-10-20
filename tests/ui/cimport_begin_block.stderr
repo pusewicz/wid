@@ -1,0 +1,36 @@
+error[E0319]: `begin_frame` does not take a block
+  --> tests/ui/cimport_begin_block/main.wid:16:19
+   |
+16 |   gfx.begin_frame do
+   |                   ^^ this block is never called
+help: `frame` takes a block: call it instead
+   |   gfx.frame do
+   = see `wid explain E0319`
+
+error[E0319]: `begin_layer` does not take a block
+  --> tests/ui/cimport_begin_block/main.wid:19:22
+   |
+19 |   gfx.begin_layer(1) { puts "layer" }
+   |                      ^^^^^^^^^^^^^^^^ this block is never called
+help: methods receive blocks by declaring `&blk: block(…)` and calling `yield`
+   = see `wid explain E0319`
+
+error[E0319]: `begin_layer2_d` does not take a block
+  --> tests/ui/cimport_begin_block/main.wid:20:25
+   |
+20 |   gfx.begin_layer2_d(1) { puts "layer 2d" }
+   |                         ^^^^^^^^^^^^^^^^^^^ this block is never called
+help: `layer_2d` takes a block: call it instead
+   |   gfx.layer_2d(1) { puts "layer 2d" }
+   = see `wid explain E0319`
+
+error[E0319]: `begin_scene` does not take a block
+  --> tests/ui/cimport_begin_block/main.wid:21:15
+   |
+21 |   begin_scene { puts "scene" }
+   |               ^^^^^^^^^^^^^^^^ this block is never called
+help: `scene` takes a block: call it instead
+   |   scene { puts "scene" }
+   = see `wid explain E0319`
+
+error: could not compile due to 4 errors

@@ -613,6 +613,9 @@ the language server.
 - `cimport` without `as:` merges into the package namespace (binding
   packages); `vendor:raylib` and `vendor:sdl3` (pkg-config), vendored
   `vendor:stb/{image,image_write,truetype,rect_pack}` and `vendor:miniaudio`.
+  `vendor:raylib` adds a block method for each `begin_…`/`end_…` pair
+  (`rl.drawing`, `rl.mode_2d(camera)`, `rl.texture_mode(target)`, …), whose
+  `defer` ends the mode however the block leaves.
   The SPEC's Taste sample builds verbatim as `examples/taste`.
 - `.to([^]T)` on arrays, slices and dynamic arrays; any pointer converts to
   `RawPtr?`; `Context` and the other predeclared library types can be

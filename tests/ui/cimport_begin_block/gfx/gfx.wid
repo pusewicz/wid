@@ -1,0 +1,18 @@
+# A binding package in the shape of `vendor:raylib`: C's `begin_…`/`end_…`
+# pairs, and a Wid method that takes a block for one of them.
+cimport "gfx.h"
+
+def frame(&blk: block)
+  begin_frame
+  defer end_frame
+  yield
+end
+
+# `begin_layer2_d` is spelled as `cimport` spells raylib's `BeginMode2D`.
+# Underscores don't count when the fix looks for the block method, so it
+# finds `layer_2d`.
+def layer_2d(depth: C.int, &blk: block)
+  begin_layer2_d(depth)
+  defer end_layer2_d
+  yield
+end
