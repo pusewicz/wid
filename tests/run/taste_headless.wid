@@ -24,6 +24,6 @@ def main
     end
     puts
     frames += 1
-    free_all(context.temp_allocator)
+    context.temp_allocator.free_all
   end
 end

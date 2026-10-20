@@ -1,0 +1,14 @@
+# Methods for `Allocator`.
+extend Allocator
+  # Releases everything the allocator has handed out, at once: it resets an
+  # arena and the temporary allocator, and does nothing for an allocator that
+  # can't (the heap) or for a zero `Allocator`. Reset the temporary allocator
+  # once per frame with `context.temp_allocator.free_all`.
+  def free_all(loc: Location = caller_location)
+    runtime_free_all(self, loc)
+  end
+end
+
+@[extern("wid_free_all")]
+private def runtime_free_all(allocator: Allocator, loc: Location)
+end

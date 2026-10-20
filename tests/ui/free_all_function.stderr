@@ -1,0 +1,47 @@
+error[E0201]: `free_all` is a method of `Allocator`
+ --> tests/ui/free_all_function.wid:6:3
+  |
+6 |   free_all(context.temp_allocator)
+  |   ^^^^^^^^ not a function
+  = note: an allocator resets itself, like `context.temp_allocator.free_all`
+help: call it on the allocator
+  |   context.temp_allocator.free_all
+  = see `wid explain E0201`
+
+error[E0201]: `free_all` is a method of `Allocator`
+  --> tests/ui/free_all_function.wid:9:3
+   |
+ 9 |   free_all arena.allocator
+   |   ^^^^^^^^ not a function
+   = note: an allocator resets itself, like `context.temp_allocator.free_all`
+help: call it on the allocator
+   |   arena.allocator.free_all
+   = see `wid explain E0201`
+
+error[E0201]: `free_all` is a method of `Allocator`
+  --> tests/ui/free_all_function.wid:10:3
+   |
+10 |   free_all(true ? context.temp_allocator : arena.allocator)
+   |   ^^^^^^^^ not a function
+   = note: an allocator resets itself, like `context.temp_allocator.free_all`
+help: call it on the allocator
+   |   (true ? context.temp_allocator : arena.allocator).free_all
+   = see `wid explain E0201`
+
+error[E0201]: `free_all` is a method of `Allocator`
+  --> tests/ui/free_all_function.wid:11:3
+   |
+11 |   free_all(context.temp_allocator, undefined_thing)
+   |   ^^^^^^^^ not a function
+   = note: an allocator resets itself, like `context.temp_allocator.free_all`
+help: call it on the allocator to reset: `allocator.free_all`
+   = see `wid explain E0201`
+
+error[E0201]: undefined name `undefined_thing`
+  --> tests/ui/free_all_function.wid:11:36
+   |
+11 |   free_all(context.temp_allocator, undefined_thing)
+   |                                    ^^^^^^^^^^^^^^^ not found in this scope
+   = see `wid explain E0201`
+
+error: could not compile due to 5 errors
