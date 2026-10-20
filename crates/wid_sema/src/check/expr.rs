@@ -1765,6 +1765,38 @@ impl<'a> Checker<'a> {
         );
     }
 
+    /// For a package-level `begin_x` that takes no block, the package's `x`
+    /// that does, as `vendor:raylib` pairs `begin_drawing` with `drawing`.
+    /// Underscores don't count, so `begin_mode2_d` finds `mode_2d`. A merged
+    /// `cimport`'s functions are looked up in the packages that merge it,
+    /// where such helpers are written.
+    fn block_sibling(&self, decl: super::DeclId) -> Option<Name> {
+        let d = &self.decls[decl.0 as usize];
+        let rest = d.name.as_str().strip_prefix("begin_").filter(|r| !r.is_empty())?;
+        if d.owner.is_some() {
+            return None;
+        }
+        let bare = |s: &str| s.replace('_', "");
+        let want = bare(rest);
+        let takes_block = |id: super::DeclId| {
+            let sd = &self.decls[id.0 as usize];
+            !sd.private && sd.owner.is_none() && matches!(sd.kind, DeclKind::Fn(f) if f.block.is_some())
+        };
+        let hosts = self.merged_cimports.iter().filter(|(_, cs)| cs.contains(&d.loc.pkg)).map(|(h, _)| *h);
+        std::iter::once(d.loc.pkg).chain(hosts).find_map(|pkg| {
+            let exact = Name::new(rest);
+            if self.lookup_pkg(pkg, exact).is_some_and(takes_block) {
+                return Some(exact);
+            }
+            let scope = &self.pkg_scopes[pkg.0 as usize];
+            scope
+                .iter()
+                .filter(|(n, id)| bare(n.as_str()) == want && takes_block(**id))
+                .map(|(n, _)| *n)
+                .min_by_key(|n| n.as_str())
+        })
+    }
+
     /// Calls a function declaration; `receiver` is the `^Self` pointer for
     /// instance methods.
     pub fn call_fn(
@@ -1837,7 +1869,18 @@ impl<'a> Checker<'a> {
             // A method that yields without declaring its block was reported
             // there (E0320); the block passed here is what it meant to take.
             (None, Some(_)) if matches!(self.decls[decl.0 as usize].kind, DeclKind::Fn(f) if f.yields) => {}
-            (None, Some(b)) => self.reject_block(b, &format!("`{fname}` does not take a block")),
+            (None, Some(b)) => match self.block_sibling(decl) {
+                Some(sibling) => self.report(
+                    Diagnostic::error(codes::BLOCK_MISMATCH, format!("`{fname}` does not take a block"))
+                        .primary(b.span, "this block is never called")
+                        .suggest(
+                            format!("`{sibling}` takes a block: call it instead"),
+                            vec![wid_diagnostics::Edit { span: name_span, replacement: sibling.to_string() }],
+                            Applicability::MaybeIncorrect,
+                        ),
+                ),
+                None => self.reject_block(b, &format!("`{fname}` does not take a block")),
+            },
             (None, None) => {}
         }
         let generic = !self.generic_names(decl).is_empty();

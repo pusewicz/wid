@@ -23,12 +23,12 @@ def main
 
   until rl.window_should_close
     balls.each { |&b| b.update(rl.get_frame_time) }
-    rl.begin_drawing
-    rl.clear_background(rl.BLACK)
-    for b in balls
-      rl.draw_circle_v(b.pos, b.radius, rl.RED)
+    rl.drawing do
+      rl.clear_background(rl.BLACK)
+      for b in balls
+        rl.draw_circle_v(b.pos, b.radius, rl.RED)
+      end
     end
-    rl.end_drawing
     free_all(context.temp_allocator)
   end
 end

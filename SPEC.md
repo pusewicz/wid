@@ -35,12 +35,12 @@ def main
 
   until rl.window_should_close
     balls.each { |&b| b.update(rl.get_frame_time) }
-    rl.begin_drawing
-    rl.clear_background(rl.BLACK)
-    for b in balls
-      rl.draw_circle_v(b.pos, b.radius, rl.RED)
+    rl.drawing do
+      rl.clear_background(rl.BLACK)
+      for b in balls
+        rl.draw_circle_v(b.pos, b.radius, rl.RED)
+      end
     end
-    rl.end_drawing
     free_all(context.temp_allocator)
   end
 end
@@ -951,9 +951,10 @@ end
   importers reach them like any other declaration. That is how a binding
   package is written: `vendor/raylib/raylib.wid` is one `cimport` without
   `as:`, so `import "vendor:raylib", as: :rl` gives `rl.init_window` and
-  `rl.Color`, and Wid helpers can sit next to it. A name the package declares
-  itself, or that two such `cimport`s add, is an error (E0202) that suggests
-  `names:`. `cimport` also brings `C`
+  `rl.Color`, and Wid helpers can sit next to it (its `rl.drawing do … end`
+  calls `begin_drawing`, the block, then `end_drawing`). A name the package
+  declares itself, or that two such `cimport`s add, is an error (E0202) that
+  suggests `names:`. `cimport` also brings `C`
   into scope, which holds `C.int`, `C.size_t` and the other C types, sized for
   the target (`long` is 64 bits on 64-bit Unix). Without `cimport`, write
   `import "core:c", as: :C` for the same names.

@@ -1,0 +1,23 @@
+# A block passed to `begin_x`, which takes none, is E0319 with a fix that
+# calls `x` when the package has an `x` that takes a block, as
+# `vendor:raylib` has `drawing` for `begin_drawing`. Without one (`layer`
+# here), the error keeps its general help.
+import "./gfx"
+
+def begin_scene
+end
+
+def scene(&blk: block)
+  begin_scene
+  yield
+end
+
+def main
+  gfx.begin_frame do
+    puts "frame"
+  end
+  gfx.begin_layer(1) { puts "layer" }
+  gfx.begin_layer2_d(1) { puts "layer 2d" }
+  begin_scene { puts "scene" }
+  gfx.frame { puts "ok" }
+end
