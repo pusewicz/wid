@@ -58,7 +58,7 @@ error[E0304]: cannot infer the type of an empty array
    |
 35 |   puts first([])
    |              ^^ no elements to infer from
-help: give it a type, like `xs: [0]Int = []`, or use `[dynamic]Int.new`
+help: give it a type, like `xs: [0]Int = []`, or use `DynamicArray(Int).new`
    = see `wid explain E0304`
 
 error[E0306]: `!` needs a `Bool`, found `Int`
