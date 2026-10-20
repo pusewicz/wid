@@ -120,6 +120,9 @@ pub struct Global {
     /// Holds compile-time-only data (like reflection results), so it is
     /// never emitted.
     pub comptime_only: bool,
+    /// The Wid name of a value the runtime sets when the program starts,
+    /// like `ARGV`, which compile-time code can't read.
+    pub runtime_name: Option<String>,
 }
 
 /// A file whose bytes a global holds.
@@ -302,8 +305,6 @@ pub enum Builtin {
     /// `free(x)`: `(value, allocator)` for pointers, slices and strings, or
     /// `(^container)` for dynamic arrays and maps.
     Free,
-    /// `free_all(allocator)`.
-    FreeAll,
     /// Copies a string into a NUL-terminated C string: `(string, allocator)`.
     ToCString,
     /// Byte-wise string comparison: `(a, b)` returning a negative, zero or

@@ -29,6 +29,6 @@ def main
       rl.draw_circle_v(b.pos, b.radius, rl.RED)
     end
     rl.end_drawing
-    free_all(context.temp_allocator)
+    context.temp_allocator.free_all
   end
 end

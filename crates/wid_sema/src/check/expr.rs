@@ -36,7 +36,6 @@ pub(super) const BUILTINS: &[&str] = &[
     "unreachable",
     "alloc",
     "free",
-    "free_all",
     "size_of",
     "align_of",
     "context",
@@ -1748,6 +1747,9 @@ impl<'a> Checker<'a> {
                     self.report(diag);
                     return ir::Expr::new(ExprKind::Zero, self.types.unknown());
                 }
+                if name.as_str() == "free_all" {
+                    return self.free_all_call(name.span, &call.args, span);
+                }
                 if BUILTINS.contains(&name.as_str()) {
                     if let Some(b) = block {
                         self.reject_block(b, &format!("`{}` does not take a block", name.as_str()));
@@ -2293,7 +2295,6 @@ impl<'a> Checker<'a> {
             "embed" => self.builtin_embed(args, span),
             "config" => self.builtin_config(args, span, expected),
             "free" => self.builtin_free(args, span),
-            "free_all" => self.builtin_free_all(args, span),
             "size_of" => self.builtin_size(args, span, false),
             "type_info" => self.builtin_type_info(args, span),
             "align_of" => self.builtin_size(args, span, true),

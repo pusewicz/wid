@@ -1,0 +1,5 @@
+# With no arguments, `ARGV` is empty.
+def main
+  puts ARGV.size
+  puts ARGV.empty?
+end

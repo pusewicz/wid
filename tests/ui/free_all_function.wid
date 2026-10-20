@@ -1,0 +1,15 @@
+import "core:mem"
+
+# `free_all` is a method of `Allocator`; calling it like a function gets
+# the fix that rewrites it to a method call.
+def main
+  free_all(context.temp_allocator)
+  arena = mem.Arena.create
+  defer arena.destroy
+  free_all arena.allocator
+  free_all(true ? context.temp_allocator : arena.allocator)
+  free_all(context.temp_allocator, undefined_thing)
+  # The method form is fine.
+  context.temp_allocator.free_all
+  arena.allocator.free_all
+end

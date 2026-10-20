@@ -24,6 +24,25 @@ def arena_hands_out_zeroed_aligned_memory(t: ^testing.T)
 end
 
 @[test]
+def allocator_free_all_resets_the_arena_behind_it(t: ^testing.T)
+  arena = Arena.create(block_size: 128)
+  defer arena.destroy
+  a = arena.allocator
+  first = alloc(Pair, allocator: a)
+  first.a = 1
+  t.expect(arena.used > 0)
+  a.free_all
+  t.expect_eq(arena.used, 0)
+  second = alloc(Pair, allocator: arena.allocator)
+  second.b = 2
+  t.expect(arena.used > 0)
+  arena.allocator.free_all
+  t.expect_eq(arena.used, 0)
+  # A zero allocator has nothing to reset.
+  Allocator.new.free_all
+end
+
+@[test]
 def arena_grows_the_newest_block_in_place(t: ^testing.T)
   arena = Arena.create
   defer arena.destroy

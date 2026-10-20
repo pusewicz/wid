@@ -4,7 +4,7 @@
 # `delete_prefix`, `each_line`, …) never allocate. Methods that build new text
 # or slices take `allocator:`, which defaults to `context.temp_allocator`, the
 # same allocator string interpolation uses: the result lives until the next
-# `free_all(context.temp_allocator)`. Pass another allocator to keep it.
+# `context.temp_allocator.free_all`. Pass another allocator to keep it.
 
 import "core:mem"
 

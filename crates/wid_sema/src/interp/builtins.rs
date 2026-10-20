@@ -110,13 +110,6 @@ impl<'c> Interp<'c> {
                 Ok(pair(p, n as u64))
             }
             B::Free => self.free_builtin(args, span),
-            B::FreeAll => {
-                let a = self.eval(arg(0))?;
-                if Self::ptr(&a) != 0 {
-                    self.allocator_call(&a, MODE_FREE_ALL, 0, 0, 0, 0, span)?;
-                }
-                Ok(Vec::new())
-            }
             B::ToCString => {
                 let s = self.eval(arg(0))?;
                 let a = self.eval(arg(1))?;
@@ -676,6 +669,13 @@ impl<'c> Interp<'c> {
                     std::cmp::Ordering::Greater => 1,
                 };
                 Ok(c.to_le_bytes().to_vec())
+            }
+            "wid_free_all" => {
+                let a = get(0).to_vec();
+                if Self::ptr(&a) != 0 {
+                    self.allocator_call(&a, MODE_FREE_ALL, 0, 0, 0, 0, site)?;
+                }
+                Ok(Vec::new())
             }
             "wid_heap_allocator" => Ok(pair(HEAP_PROC, 0)),
             "wid_temp_allocator" => Ok(pair(TEMP_PROC, 0)),

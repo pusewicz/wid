@@ -1,0 +1,7 @@
+# The command-line arguments after the program name, as in Ruby: running
+# `prog -v input.txt` gives `["-v", "input.txt"]`. The strings point into the
+# process's own argument memory; reading them allocates nothing. `os.args`
+# keeps the program name first. Only a running program has arguments, so
+# compile-time code and constants can't read `ARGV`.
+@[extern("wid_argv")]
+ARGV: []String = ---

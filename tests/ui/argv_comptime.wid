@@ -1,0 +1,24 @@
+# `ARGV` only exists when the program runs, so constants, `comptime` code
+# and macros can't read it.
+COUNT = ARGV.size
+
+def first -> String = ARGV[0]
+
+FIRST = comptime first
+
+macro def arg_count -> Code
+  n = ARGV.size
+  quote do
+    #{n}
+  end
+end
+
+def main
+  n = comptime ARGV.size
+  comptime if ARGV.size > 1
+    puts "many"
+  end
+  puts n + arg_count
+  puts COUNT
+  puts FIRST
+end
