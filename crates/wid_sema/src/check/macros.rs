@@ -1074,7 +1074,7 @@ impl<'a> Checker<'a> {
         .secondary(param.span, format!("`{}` is a `Symbol` parameter", param.name))
         .note("a `Symbol` parameter receives a name written as a symbol literal, like `:hp`, not the value of an expression");
         let name = match &e.kind {
-            E::Ident(n) | E::Const(n) => Some(n.as_str().to_string()),
+            E::Ident(n) | E::Const(n) | E::Selector(n) => Some(n.as_str().to_string()),
             E::Str(parts) => match parts.as_slice() {
                 [ast::StrPart::Text(t)] if is_identifier(t) => Some(t.clone()),
                 _ => None,
@@ -1933,6 +1933,7 @@ fn code_shape(e: &ast::Expr) -> &'static str {
         E::True | E::False => "code that is a `Bool` literal",
         E::Nil => "code that is `nil`",
         E::Symbol(_) => "code that is a symbol literal",
+        E::Selector(_) => "code that is an enum member",
         E::Call(_) => "code that is a call",
         E::Member { .. } => "code that is a `&.` field read",
         E::Unary { .. } | E::Binary { .. } => "code that is an operation",
@@ -2453,13 +2454,14 @@ impl Splicer<'_, '_> {
     /// elements a `[]Code` or `[]Symbol` value gives; `None` for any other
     /// expression.
     fn list_for(&mut self, e: &ast::Expr) -> Option<Vec<ast::Expr>> {
-        let (i, literal) = match e.kind {
-            E::Splice(i) => (i, false),
-            E::Symbol(n) => (splice_index(n)?, true),
+        let (i, literal, selector) = match e.kind {
+            E::Splice(i) => (i, false, false),
+            E::Symbol(n) => (splice_index(n)?, true, false),
+            E::Selector(n) => (splice_index(n)?, false, true),
             _ => return None,
         };
         match self.value(i)? {
-            SpliceValue::Codes(codes) if !literal => {
+            SpliceValue::Codes(codes) if !literal && !selector => {
                 Some(codes.into_iter().filter_map(|c| self.code_expr(c, e.span, "a list element")).collect())
             }
             SpliceValue::Symbols(names) => Some(
@@ -2467,6 +2469,10 @@ impl Splicer<'_, '_> {
                     .into_iter()
                     .map(|n| match literal {
                         true => ast::Expr { kind: E::Symbol(n), span: self.literal_span(n, e.span) },
+                        false if selector && !self.check_name(n, e.span, NamePlace::Member) => {
+                            ast::Expr { kind: E::Error, span: e.span }
+                        }
+                        false if selector => ast::Expr { kind: E::Selector(n), span: self.name_span(n, e.span) },
                         false if !self.check_name(n, e.span, NamePlace::Expr) => {
                             ast::Expr { kind: E::Error, span: e.span }
                         }
@@ -2810,6 +2816,14 @@ impl VisitMut for Splicer<'_, '_> {
             E::Splice(i) => *e = self.expr_for(i, span),
             // A `quote` in generated code has splices of its own.
             E::Quote(_) => {}
+            // `.#{name}`: the member the name names, of the enum expected.
+            E::Selector(n) if splice_index(n).is_some() => {
+                let i = splice_index(n).unwrap_or_default();
+                *e = match self.name_for(i, span, NamePlace::Member) {
+                    Some(name) => ast::Expr { kind: E::Selector(name), span: self.name_span(name, span) },
+                    None => ast::Expr { kind: E::Error, span },
+                };
+            }
             E::IVar(n) | E::Symbol(n) | E::Ident(n) | E::Const(n) if splice_index(n).is_some() => {
                 let i = splice_index(n).unwrap_or_default();
                 let Some(value) = self.value(i) else { return };

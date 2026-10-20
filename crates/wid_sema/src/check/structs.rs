@@ -368,7 +368,7 @@ impl<'a> Checker<'a> {
                 codes::ENUM_MEMBER_MACRO,
                 format!("`{text}` names a macro, but alone on a line in an enum it declares a member"),
             )
-            .primary(member.name.span, format!("this declares the member `:{text}` of `{enum_name}`"))
+            .primary(member.name.span, format!("this declares the member `.{text}` of `{enum_name}`"))
             .secondary(macro_span, format!("`{text}` is a macro"))
             .note("in an `enum` body a name alone on a line is a member, so a macro without arguments is called with `()` there")
             .suggest(
@@ -395,11 +395,14 @@ impl<'a> Checker<'a> {
         // An enum without members was reported where it is declared.
         if !names.is_empty() {
             diag =
-                diag.note(format!("members: {}", names.iter().map(|n| format!(":{n}")).collect::<Vec<_>>().join(", ")));
+                diag.note(format!("members: {}", names.iter().map(|n| format!(".{n}")).collect::<Vec<_>>().join(", ")));
         }
         if let Some(best) = did_you_mean(name.as_str(), names.iter().copied()) {
             let text = self.source_text(span);
-            let replacement = if text.starts_with(':') { format!(":{best}") } else { best.to_string() };
+            let replacement = match text.chars().next() {
+                Some(c @ (':' | '.')) => format!("{c}{best}"),
+                _ => best.to_string(),
+            };
             diag = diag.suggest_replace(
                 format!("did you mean `{best}`?"),
                 span,

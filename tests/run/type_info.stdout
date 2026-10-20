@@ -61,19 +61,19 @@ Spot: struct, size 12, align 4
   z: F32 @8
 -- enums and unions
 Dir: enum, size 1, align 1, elem U8
-  :north = 1
-  :east = 2
-  :south = 10
-  :west = 11
+  .north = 1
+  .east = 2
+  .south = 10
+  .west = 11
 Mood: enum, size 8, align 8, elem Int
-  :calm = 0
-  :angry = 1
+  .calm = 0
+  .angry = 1
 Mask: enum, size 8, align 8, elem U64
-  :none = 0
-  :all = -1
+  .none = 0
+  .all = -1
 Error: enum, size 4, align 4, elem U32
-  :not_found = 1
-  :too_big = 2
+  .not_found = 1
+  .too_big = 2
 Shape: union, size 12, align 4
   | Circle (struct)
   | Rect (struct)
@@ -87,8 +87,8 @@ Vec3: struct, size 12, align 4
   1: Error @8
 F32: float, size 4, align 4
 Error: enum, size 4, align 4, elem U32
-  :not_found = 1
-  :too_big = 2
+  .not_found = 1
+  .too_big = 2
 Int
 count_calls ran 0 times
 -- identity

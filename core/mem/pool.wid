@@ -69,7 +69,7 @@ struct Pool
     block = @blocks
     while block != nil
       prev = link_of(block)
-      @backing.proc(@backing.data, :free, 0, 0, block, block_bytes, loc)
+      @backing.proc(@backing.data, .free, 0, 0, block, block_bytes, loc)
       block = prev
     end
     @blocks = nil
@@ -79,7 +79,7 @@ struct Pool
   private def block_bytes -> Int = POOL_HEADER + @chunk_size * @chunks_per_block
 
   private def grow(loc: Location)
-    block = @backing.proc(@backing.data, :alloc, block_bytes, 16, nil, 0, loc)
+    block = @backing.proc(@backing.data, .alloc, block_bytes, 16, nil, 0, loc)
     return if block == nil
     set_link(block, @blocks)
     @blocks = block
@@ -119,14 +119,14 @@ private def pool_proc(data: RawPtr, mode: AllocMode, size: Int, align: Int, old:
     return nil
   end
   case mode
-  when :alloc then pool.get(size, loc)
-  when :free
+  when .alloc then pool.get(size, loc)
+  when .free
     pool.put(old) if old != nil
     nil
-  when :free_all
+  when .free_all
     pool.free_all
     nil
-  when :resize
+  when .resize
     return pool.get(size, loc) if old == nil
     if size > pool.chunk_size
       panic "this pool hands out #{pool.chunk_size}-byte chunks and cannot grow a block to #{size} bytes"

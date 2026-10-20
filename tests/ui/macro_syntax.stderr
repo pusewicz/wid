@@ -1,7 +1,7 @@
 error[E0911]: the macro `record` splices the name `hp` where a struct's name goes
-  --> tests/ui/macro_syntax/main.wid:55:3
+  --> tests/ui/macro_syntax/main.wid:56:3
    |
-55 |   record :hp, Int, 100
+56 |   record :hp, Int, 100
    |   ^^^^^^^^^^^^^^^^^^^^ `record` expands here
   ::: tests/ui/macro_syntax/main.wid:12:12
    |
@@ -13,9 +13,9 @@ help: pass a name that follows this rule, like `:Hp`
    = see `wid explain E0911`
 
 error[E0911]: the macro `record` splices a `[]Symbol` where a declaration goes
-  --> tests/ui/macro_syntax/main.wid:55:3
+  --> tests/ui/macro_syntax/main.wid:56:3
    |
-55 |   record :hp, Int, 100
+56 |   record :hp, Int, 100
    |   ^^^^^^^^^^^^^^^^^^^^ `record` expands here
   ::: tests/ui/macro_syntax/main.wid:14:7
    |

@@ -13,7 +13,7 @@ def main
     6
   end
   # An `elsif` chain without a final `else`.
-  c = comptime if OS == :freestanding
+  c = comptime if OS == .freestanding
     7
   elsif !FAST
     8

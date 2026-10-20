@@ -26,8 +26,8 @@ Grace
 [button] bumped to 3
 [button] bumped to 4
 8
-:south
-:north
+.south
+.north
 <5>
 <x>
 Vec2(x: 2.0, y: 6.0)

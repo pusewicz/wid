@@ -79,7 +79,7 @@ def show(t: ^TypeInfo)
     puts "  #{f.name}: #{f.type.name} @#{f.offset}"
   end
   for m in t.members
-    puts "  :#{m.name} = #{m.value}"
+    puts "  .#{m.name} = #{m.value}"
   end
   for v in t.variants
     puts "  | #{v.name} (#{v.kind})"
@@ -87,8 +87,8 @@ def show(t: ^TypeInfo)
 end
 
 def check(path: String) -> (Int, Error)
-  return 0, :not_found if path.empty?
-  return 0, :too_big if path.size > 8
+  return 0, .not_found if path.empty?
+  return 0, .too_big if path.size > 8
   return path.size, nil
 end
 

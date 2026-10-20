@@ -57,11 +57,11 @@ macro def zeroed(*names: Symbol) -> Code
   end
 end
 
-# Numbers, strings and `Bool`s splice as literals; `:#{name}` makes a
-# symbol literal from a `Symbol` (here one made from a string).
+# Numbers, strings and `Bool`s splice as literals; `.#{name}` names the
+# enum member a `Symbol` names (here one made from a string).
 macro def literals(name: String) -> Code
   quote do
-    d: Dir = :#{name.to_sym}
+    d: Dir = .#{name.to_sym}
     p #{42}, #{-7}, #{2.5}, #{true}, #{"text"}, d
   end
 end

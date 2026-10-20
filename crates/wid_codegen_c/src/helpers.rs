@@ -91,7 +91,7 @@ impl Gen<'_> {
                 body.push_str("    switch ((int64_t)v) {\n");
                 for (n, val) in &info.members {
                     let plain = lit(n.as_str());
-                    let sym = lit(&format!(":{n}"));
+                    let sym = lit(&format!(".{n}"));
                     let _ = writeln!(body, "    case {val}: wid_w_cstr(w, inspect ? {sym} : {plain}); return;");
                 }
                 body.push_str("    default: break;\n    }\n");
@@ -166,7 +166,7 @@ impl Gen<'_> {
                 body.push_str("    switch (v) {\n    case 0: wid_w_cstr(w, \"nil\"); return;\n");
                 for (i, n) in self.p.errors.iter().enumerate() {
                     let plain = lit(n.as_str());
-                    let sym = lit(&format!(":{n}"));
+                    let sym = lit(&format!(".{n}"));
                     let _ = writeln!(body, "    case {}: wid_w_cstr(w, inspect ? {sym} : {plain}); return;", i + 1);
                 }
                 body.push_str(

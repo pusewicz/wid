@@ -7,7 +7,7 @@ end
 def resize_stale -> Int
   a = context.allocator
   x = alloc(Int)
-  _ = a.proc(a.data, :resize, 16, 8, x.to(RawPtr), 4, caller_location)
+  _ = a.proc(a.data, .resize, 16, 8, x.to(RawPtr), 4, caller_location)
   1
 end
 

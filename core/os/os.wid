@@ -89,14 +89,14 @@ end
 private def os_error(kind: I32) -> Error
   case kind
   when 0 then nil
-  when 1 then :not_found
-  when 2 then :permission_denied
-  when 3 then :already_exists
-  when 4 then :is_directory
-  when 5 then :not_directory
-  when 6 then :no_space
-  when 7 then :invalid_argument
-  else :io_error
+  when 1 then .not_found
+  when 2 then .permission_denied
+  when 3 then .already_exists
+  when 4 then .is_directory
+  when 5 then .not_directory
+  when 6 then .no_space
+  when 7 then .invalid_argument
+  else .io_error
   end
 end
 

@@ -175,7 +175,8 @@ enum Role {
     /// A binary operator, an assignment, a default's or a constant's `=`,
     /// a return type's `->`, a union's `|`.
     BinOp,
-    /// A prefix operator: unary `-`, `!`, `~`, `&x`, `*xs`, `&blk`, `^T`.
+    /// A prefix operator: unary `-`, `!`, `~`, `&x`, `*xs`, `&blk`, `^T`,
+    /// and the `.` of an enum member, `.north`.
     Prefix,
     /// The `^` of a dereference, `p^`.
     Postfix,
@@ -648,6 +649,8 @@ impl Visit for Collector<'_, '_> {
             }
             ExprKind::Unary { .. } => self.set(first, &[T::Minus, T::Bang, T::Tilde], Role::Prefix),
             ExprKind::AddrOf(_) => self.set(first, &[T::Amp], Role::Prefix),
+            // `.north` spaces like an operand, not like a member access.
+            ExprKind::Selector(_) => self.set(first, &[T::Dot], Role::Prefix),
             ExprKind::Deref(_) => self.set(self.toks.ending_at(e.span.end), &[T::Caret], Role::Postfix),
             ExprKind::Ternary { cond, else_, .. } => {
                 self.set(self.toks.after(cond.span.end), &[T::Question], Role::TernaryQ);
@@ -1372,7 +1375,8 @@ impl<'t, 's> Layout<'t, 's> {
         if rb == Role::BlockClose {
             return Space::One;
         }
-        if matches!(ka, Some(T::Dot | T::SafeNav)) || matches!(kb, Some(T::Dot | T::SafeNav)) {
+        let selector = rb == Role::Prefix && kb == Some(T::Dot);
+        if matches!(ka, Some(T::Dot | T::SafeNav)) || (matches!(kb, Some(T::Dot | T::SafeNav)) && !selector) {
             return Space::None;
         }
         if ra == Role::PipeOpen || rb == Role::PipeClose {

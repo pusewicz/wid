@@ -40,6 +40,10 @@ struct Lexer<'a> {
     out: Lexed,
     interps: Vec<Interp>,
     space_before: bool,
+    /// The index in `out.tokens` of the current statement's first token.
+    stmt_start: usize,
+    /// The indentation of the line the current statement starts on.
+    stmt_indent: usize,
 }
 
 /// Lexes `text`, which belongs to `file`.
@@ -52,6 +56,8 @@ pub fn lex(file: FileId, text: &str) -> Lexed {
         out: Lexed::default(),
         interps: Vec::new(),
         space_before: true,
+        stmt_start: 0,
+        stmt_indent: 0,
     };
     lexer.run();
     lexer.out
@@ -145,6 +151,10 @@ impl<'a> Lexer<'a> {
                 return;
             }
         }
+        if kind != TokenKind::Newline && self.out.tokens.last().is_none_or(|t| t.kind == TokenKind::Newline) {
+            self.stmt_start = self.out.tokens.len();
+            self.stmt_indent = self.indent_of_line(start);
+        }
         let space_before = self.space_before;
         self.out.tokens.push(Token { kind, span: self.span(start, end), space_before });
         self.space_before = false;
@@ -175,8 +185,18 @@ impl<'a> Lexer<'a> {
         self.out.tokens.push(Token { kind: TokenKind::Eof, span: self.span(end, end), space_before: true });
     }
 
-    /// Returns true when the next non-blank line starts with `.method` or
-    /// `&.`, which continues the previous expression.
+    /// The indentation of the line that holds the byte at `at`: its
+    /// leading spaces and tabs.
+    fn indent_of_line(&self, at: usize) -> usize {
+        let start = self.src[..at].iter().rposition(|b| *b == b'\n').map_or(0, |i| i + 1);
+        self.src[start..].iter().take_while(|b| matches!(b, b' ' | b'\t')).count()
+    }
+
+    /// Returns true when the next non-blank line continues the current
+    /// statement: it starts with `&.`, or with `.` and is indented deeper
+    /// than the statement's first line, which doesn't open a block (see
+    /// [`Lexer::opens_block`]). Any other line starting with `.` starts a
+    /// statement of its own, such as the enum member `.north`.
     fn next_line_continues(&self) -> bool {
         let mut i = self.pos;
         loop {
@@ -192,7 +212,35 @@ impl<'a> Lexer<'a> {
             break;
         }
         let at = |n: usize| self.src.get(i + n).copied().unwrap_or(0);
-        (at(0) == b'.' && at(1) != b'.') || (at(0) == b'&' && at(1) == b'.')
+        if at(0) == b'&' && at(1) == b'.' {
+            return true;
+        }
+        at(0) == b'.' && at(1) != b'.' && self.indent_of_line(i) > self.stmt_indent && !self.opens_block()
+    }
+
+    /// Whether the statement lexed so far opens a block whose body starts
+    /// on the next line: it ends with a keyword that isn't a value (`do`,
+    /// `then`, `else`), or it is a `def`, `when`, `elsif`, `case` or `for`
+    /// line, or has an `if`, `unless`, `while` or `until` that starts an
+    /// expression rather than following one as a modifier.
+    fn opens_block(&self) -> bool {
+        use TokenKind as T;
+        let toks = &self.out.tokens[self.stmt_start.min(self.out.tokens.len())..];
+        let is_name = |i: usize| i > 0 && matches!(toks[i - 1].kind, T::Dot | T::SafeNav);
+        if let Some(i) = toks.len().checked_sub(1)
+            && let T::Kw(k) = toks[i].kind
+            && !matches!(k, Keyword::SelfKw | Keyword::Nil | Keyword::True | Keyword::False | Keyword::End)
+            && !is_name(i)
+        {
+            return true;
+        }
+        toks.iter().enumerate().any(|(i, t)| match t.kind {
+            T::Kw(Keyword::Def | Keyword::When | Keyword::Elsif | Keyword::Case | Keyword::For) => !is_name(i),
+            T::Kw(Keyword::If | Keyword::Unless | Keyword::While | Keyword::Until) => {
+                !is_name(i) && (i == 0 || !toks[i - 1].kind.ends_value())
+            }
+            _ => false,
+        })
     }
 
     fn lex_one(&mut self) {
@@ -408,7 +456,7 @@ impl<'a> Lexer<'a> {
             diag = if is_name {
                 diag.suggest_replace("remove the quotes", span, format!(":{content}"), Applicability::MachineApplicable)
             } else {
-                diag.note("a symbol is a name, like `:north`")
+                diag.note("a symbol is a name, like `:hp`")
                     .help(format!("for arbitrary text, use a string: \"{content}\""))
             };
             self.error(diag);
@@ -927,7 +975,10 @@ mod tests {
         );
         // A line that starts with a splice is code, not a comment, so the
         // `.c` line continues it rather than the line before.
-        assert_eq!(kinds("a\n#{b}\n.c"), vec![Ident, Newline, SpliceBegin, Ident, SpliceEnd, Dot, Ident, Newline, Eof]);
+        assert_eq!(
+            kinds("a\n#{b}\n  .c"),
+            vec![Ident, Newline, SpliceBegin, Ident, SpliceEnd, Dot, Ident, Newline, Eof]
+        );
     }
 
     #[test]
@@ -1000,5 +1051,31 @@ mod tests {
         use TokenKind::*;
         assert_eq!(kinds("a +\n b"), vec![Ident, Plus, Ident, Newline, Eof]);
         assert_eq!(kinds("a\n  .b"), vec![Ident, Dot, Ident, Newline, Eof]);
+        assert_eq!(kinds("a\n  # note\n  .b"), vec![Ident, Dot, Ident, Newline, Eof]);
+        assert_eq!(kinds("  a\n    .b\n    .c"), vec![Ident, Dot, Ident, Dot, Ident, Newline, Eof]);
+        // `&.` always continues.
+        assert_eq!(kinds("a\n&.b"), vec![Ident, SafeNav, Ident, Newline, Eof]);
+    }
+
+    #[test]
+    fn dot_line_that_starts_a_statement() {
+        use Keyword::*;
+        use TokenKind::*;
+        // Not indented deeper than the statement: an enum member.
+        assert_eq!(kinds("a\n.b"), vec![Ident, Newline, Dot, Ident, Newline, Eof]);
+        assert_eq!(
+            kinds("  x = a +\n    b\n  .c"),
+            vec![Ident, Eq, Ident, Plus, Ident, Newline, Dot, Ident, Newline, Eof]
+        );
+        // After a line that opens a block.
+        assert_eq!(kinds("when .a\n  .b"), vec![Kw(When), Dot, Ident, Newline, Dot, Ident, Newline, Eof]);
+        assert_eq!(kinds("def f -> D\n  .b"), vec![Kw(Def), Ident, Arrow, Const, Newline, Dot, Ident, Newline, Eof]);
+        assert_eq!(kinds("x = if c\n  .b"), vec![Ident, Eq, Kw(If), Ident, Newline, Dot, Ident, Newline, Eof]);
+        assert_eq!(kinds("else\n  .b"), vec![Kw(Else), Newline, Dot, Ident, Newline, Eof]);
+        assert_eq!(kinds("f do\n  .b"), vec![Ident, Kw(Do), Newline, Dot, Ident, Newline, Eof]);
+        // A modifier `if` follows a value and opens nothing; a keyword after
+        // `.` is a name.
+        assert_eq!(kinds("x = y if c\n  .b"), vec![Ident, Eq, Ident, Kw(If), Ident, Dot, Ident, Newline, Eof]);
+        assert_eq!(kinds("K.struct\n  .b"), vec![Const, Dot, Kw(Struct), Dot, Ident, Newline, Eof]);
     }
 }

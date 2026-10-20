@@ -61,9 +61,9 @@ scaled_enum :Level, 10, :low, :high
 mixed_enum :Side, :up
 
 def main
-  c: Color = :green
+  c: Color = .green
   p c, c.to_i, Color.blue.to_i
-  l: Level = :high
+  l: Level = .high
   p l, l.to_i, l.twice, Level.none.to_i, Level.top.to_i
   for s in [Side.start, Side.left, Side.right, Side.middle, Side.up, Side.finish]
     p s, s.to_i

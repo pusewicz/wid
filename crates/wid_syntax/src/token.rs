@@ -357,6 +357,29 @@ impl TokenKind {
         }
     }
 
+    /// Returns true when this token can end a value, so that a keyword
+    /// after it, like the `if` of `x = y if ok`, is a modifier.
+    pub fn ends_value(self) -> bool {
+        use TokenKind::*;
+        matches!(
+            self,
+            Int | Float
+                | Str(_)
+                | StrEnd
+                | Symbol
+                | Ident
+                | Const
+                | IVar
+                | TypeParam
+                | RParen
+                | RBracket
+                | RBrace
+                | SpliceEnd
+                | Question
+                | Kw(Keyword::SelfKw | Keyword::Nil | Keyword::True | Keyword::False | Keyword::End)
+        )
+    }
+
     /// Returns true when a newline directly after this token continues the
     /// expression instead of ending the statement.
     pub fn continues_line(self) -> bool {

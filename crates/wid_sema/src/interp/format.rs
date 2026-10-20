@@ -81,7 +81,7 @@ impl Interp<'_> {
                 match info.members.iter().find(|(_, val)| *val == n) {
                     Some((name, _)) => {
                         if inspect {
-                            out.push(b':');
+                            out.push(b'.');
                         }
                         out.extend_from_slice(name.as_str().as_bytes());
                     }
@@ -192,7 +192,7 @@ impl Interp<'_> {
                     out.extend_from_slice(b"nil");
                 } else if let Some(name) = self.p.errors.get(n as usize - 1) {
                     if inspect {
-                        out.push(b':');
+                        out.push(b'.');
                     }
                     out.extend_from_slice(name.as_str().as_bytes());
                 } else {

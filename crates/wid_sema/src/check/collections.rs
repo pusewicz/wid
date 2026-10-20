@@ -94,8 +94,14 @@ impl<'a> Checker<'a> {
                 };
                 let v = self.expr(first, None);
                 let elem = self.value_type(v.ty, first.span);
+                let unknown = matches!(self.types.kind(elem), TyKind::Unknown);
                 let mut values = vec![v];
                 for e in &elems[1..] {
+                    // `[.north, .south]`: the first was reported, and an
+                    // enum member names nothing more without its enum.
+                    if unknown && matches!(e.kind, ast::ExprKind::Selector(_)) {
+                        continue;
+                    }
                     self.begin_block();
                     let x = self.expr_coerced(e, elem);
                     let stmts = self.end_block().stmts;
@@ -106,6 +112,9 @@ impl<'a> Checker<'a> {
                         self.emit(s);
                     }
                     values.push(x);
+                }
+                if unknown {
+                    return ir::Expr::new(ExprKind::Zero, elem);
                 }
                 let ty = self.types.intern(TyKind::Array(elem, elems.len() as u64));
                 if self.report_too_large(ty, span, None) {

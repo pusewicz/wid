@@ -86,14 +86,24 @@ end
   assignment like `cells[0] += 1`. Unused parameters are allowed.
 - **Calls.** Parentheses are optional for zero-argument calls and for the
   outermost call of a statement (`puts "hi"`). Any parameter can be passed by
-  name. Defaults are written `hp: Int = 100`. There is no argument
-  spreading: `f(*xs)` and `T.new(*xs)` are E0302, and a method that takes
-  any number of values takes a slice. A field may be named by most
+  name. A `.` written after a space and directly before a name starts an
+  argument unless the name before it is a local, as Ruby reads `foo -1`:
+  `go .north` passes an enum member to `go`, while for a local `x`,
+  `x .north` reads `x.north`. Defaults are written `hp: Int = 100`. There
+  is no argument spreading: `f(*xs)` and `T.new(*xs)` are E0302, and a
+  method that takes any number of values takes a slice. A field may be named by most
   keywords (`next: ^Node?`), and, as in Ruby, a keyword followed directly
   by `:` in an argument list names an argument: `Node.new(next: n)`.
-- **Symbols.** `:north` is a compile-time name. Where an enum is expected it
-  selects a member, like Odin's `.North`; anywhere else it is a plain
-  identifier (in macros and `cimport` options, for example).
+- **Enum members and symbols.** `.north` names a member of the enum
+  expected where it is written, like Odin's `.North` and Swift's `.north`:
+  in a typed declaration, an argument, a comparison (`d == .north`), a
+  `when`, a return, an element or a default, and as an `Error`
+  (`return {}, .not_found`). Where no enum is expected it names nothing
+  (E0304); `Dir.north` names the enum too. `:hp` is a symbol, a
+  compile-time name that macros take and splice and that
+  `method(:on_hit)`, `config(:name, …)` and `cimport` options read. A
+  symbol is never an enum member (E0331, whose fix writes `.north`), and a
+  run-time value can't hold one (E0331).
 - **Attributes.** Written `@[export("on_audio"), c]`. Methods take `c`,
   `export`, `extern`, `no_bounds_check` and `test`; statements take
   `no_bounds_check`. C declarations take `extern`: a struct defined by C
@@ -127,7 +137,7 @@ end
   - `{…}` literals must be empty.
   - Enum members are lowercase. Inside an `enum`, `struct`, `enum` or
     `union` standing alone (followed by a newline, `,` or `= value`) names a
-    member, as in the prelude's `TypeKind`; `TypeKind.struct` and `:struct`
+    member, as in the prelude's `TypeKind`; `TypeKind.struct` and `.struct`
     select it.
   - `map`, `proc`, `block`, `distinct`, `matrix` and `dynamic` are keywords only
     where a type is expected.
@@ -138,7 +148,16 @@ end
     with `(` and something only a type starts with (`proc`, `distinct`,
     `^`, `[]`, `@[`, …) is a type, and is reported as one when malformed.
   - A line that ends with an operator or `,`, or a next line that starts with
-    `.method`, continues the statement. A declaration or an `end` starting
+    `&.`, continues the statement. So does a next line that starts with
+    `.method` and is indented deeper than the statement's first line, unless
+    that line opens a block: a `def`, `if`, `unless`, `elsif`, `while`,
+    `until`, `case`, `when` or `for` line (not a modifier `if` after a
+    value), or one ending in a keyword such as `do`, `then` or `else`.
+    Otherwise a line that starts with `.name` is a statement of its own, an
+    enum member: `when .north` followed by `.south` gives `.south`. One that
+    starts with `.name(…)`, or `.name` with a block or arguments, is a call
+    with no receiver (E0105, whose fix indents it to continue the line
+    above). A declaration or an `end` starting
     the next line never does: `X = 1 +` followed by `def main` is missing
     its operand. After an operator, nor does a line indented no deeper
     than the statement's first line that starts like a statement: a call
@@ -224,10 +243,10 @@ end
   in either direction (`f.to(Meters)`, `m.to(F64)`), never implicitly.
 - **Optionals:** `T?`, whose empty value is `nil`. A `T` converts to `T?`
   implicitly; the reverse needs an unwrap. An untyped literal where a `T?`
-  is expected (a number, string, symbol or array literal, in a declaration,
+  is expected (a number, string, enum member or array literal, in a declaration,
   a field, an argument, a return or an element) converts to `T` and then
   to `T?`: `x: F32? = 1.0`, `v: Vec2? = [1.0, 2.0]`,
-  `w: [2]F32? = [1.0, nil]`, `d: Dir? = :north`. Pointers can't be nil
+  `w: [2]F32? = [1.0, nil]`, `d: Dir? = .north`. Pointers can't be nil
   unless written `^T?` (the `?` after `^T` or `[^]T` makes the pointer
   nil-able; `^(T?)` points at an optional). Use `x || default` to unwrap with a fallback, `x&.f` to
   chain, `if v = maybe … end` to bind, and `while v = maybe … end` to loop
@@ -460,7 +479,8 @@ end
   arguments after `--`.
 - `enum Dir : U8 … end` declares an enum (backed by `Int` when no type is
   given). Members count up from 0 unless written `name = value`; `Dir.north`
-  and `:north` both name one, and `.to_i` gives its value. `union Shape =
+  and `.north` (where a `Dir` is expected) both name one, and `.to_i` gives
+  its value. `puts` writes a member as `north` and `p` as `.north`. `union Shape =
   Circle | Rect` declares a tagged union, matched with
   `case s when Circle then s.radius`. `s` is narrowed in each branch.
 - `case` over an enum or union must handle every member unless it has an
@@ -496,7 +516,7 @@ def load_level(path: String) -> (Level, Error)
   end
 
   guard spawn = data.find_spawn else   # Vec2?
-    return {}, :no_spawn
+    return {}, .no_spawn
   end
 
   lives = data.parse_int("lives") || 3
@@ -506,8 +526,8 @@ end
 
 - Wid has no exceptions. A fallible function returns multiple values, with the
   error last.
-- `Error` is a built-in enum made of every error symbol the program uses, like
-  Zig's `anyerror`: writing `:name` where an `Error` is expected (returning it,
+- `Error` is a built-in enum made of every error member the program uses, like
+  Zig's `anyerror`: writing `.name` where an `Error` is expected (returning it,
   comparing with it, matching it in `case`) adds it to the set. A union that
   can be nil also works as the error value. `nil` means success.
 - `guard a, b = f() else |err| … end` binds the non-error values, or unwraps a
@@ -562,7 +582,7 @@ SIN = comptime build_table(256)       # [256]F32, computed while compiling
 LEVEL = config(:level, 1)             # -define:level=3
 FONT = embed("assets/font.ttf")       # []U8, through C23 #embed
 
-comptime if OS == :windows
+comptime if OS == .windows
   def path_sep -> String = "\\"
 else
   def path_sep -> String = "/"
@@ -584,7 +604,7 @@ end
   point. Struct literals, `T.size`, other constants of any type, enum
   members, indexing other constants and the like evaluate too
   (`ORIGIN = Vec2.new(x: 0.0, y: 0.0)`, `START = ORIGIN`,
-  `FACING: Dir = :north`). Calling a method needs `comptime`, so every place
+  `FACING: Dir = .north`). Calling a method needs `comptime`, so every place
   where code runs at compile time says so (E0327 suggests adding it). A
   macro expands without it, and one without arguments may omit `()` there
   as anywhere (`X = five`, `[five]Int`, an enum member's `a = five`). The
@@ -623,8 +643,8 @@ end
   `else`, like `if`, even when a branch is chosen: on another target none
   may be (E0324).
 - `OS` and `ARCH` hold the target, as members of the prelude enums `Os`
-  (`:darwin`, `:linux`, `:windows`, `:freebsd`, …) and `Arch` (`:arm64`,
-  `:amd64`, `:wasm32`, …). `-target:os_arch` sets them (default: the host).
+  (`.darwin`, `.linux`, `.windows`, `.freebsd`, …) and `Arch` (`.arm64`,
+  `.amd64`, `.wasm32`, …). `-target:os_arch` sets them (default: the host).
   `wid check -target:linux_amd64` checks another target's code; building for
   another target isn't supported yet (E0709).
 - `config(:name, default)` reads `-define:name=value`, parsed as the default's
@@ -653,8 +673,7 @@ end
     a method the program runs can't use them (E0906). A macro body can keep
     them in variables and collections (`[dynamic]Code`, `[]Symbol`),
     compare symbols with `==`, and convert with `sym.to_s` and
-    `str.to_sym`. In compile-time code a symbol literal where no enum is
-    expected is a `Symbol`. A zero `Code` (`{}`) is no code.
+    `str.to_sym`. In compile-time code a symbol literal is a `Symbol`. A zero `Code` (`{}`) is no code.
   - **Quotes:** the code in a `quote` may be statements or declarations
     (`def`, `struct`, constants, `using` fields, other macro calls, …);
     which it must be depends on where the macro is called. A line
@@ -699,8 +718,10 @@ end
       is E0109, whose fix adds the parentheses). Among declarations,
       `#{name}(args)` and `#{name} args` are macro calls.
       `:#{name}` inserts a symbol literal; its value must be a `Symbol`.
-      In a list, a `[]Symbol` inserts one identifier (or, written
-      `:#{names}`, one symbol literal) per name. A `Symbol` may hold any
+      `.#{name}` inserts the enum member it names, of the enum expected
+      where the code lands. In a list, a `[]Symbol` inserts one identifier
+      (or, written `:#{names}`, one symbol literal, and written
+      `.#{names}`, one enum member) per name. A `Symbol` may hold any
       text (`"a b".to_sym`), but a name spliced from one must be what the
       lexer reads in its place (E0911): a type's or a constant's starts
       with a capital letter; a method's, field's, parameter's,
@@ -903,11 +924,11 @@ end
   same pointer, so `type_info(a) == type_info(b)` compares types. The
   prelude declares the records:
   - `TypeInfo` has `name` (as Wid displays the type: `"[]Vec2"`,
-    `"Pool(Ball, 64)"`), `kind` (a `TypeKind`: `:int`, `:uint`, `:float`,
-    `:bool`, `:rune`, `:string`, `:cstring`, `:rawptr`, `:typeid`, `:any`,
-    `:pointer`, `:multi_pointer`, `:array`, `:slice`, `:dynamic_array`,
-    `:map`, `:matrix`, `:optional`, `:proc`, `:struct`, `:enum` or
-    `:union`), `size`, `align`, `elem`, `key`, `count`, `columns`, `fields`,
+    `"Pool(Ball, 64)"`), `kind` (a `TypeKind`: `.int`, `.uint`, `.float`,
+    `.bool`, `.rune`, `.string`, `.cstring`, `.rawptr`, `.typeid`, `.any`,
+    `.pointer`, `.multi_pointer`, `.array`, `.slice`, `.dynamic_array`,
+    `.map`, `.matrix`, `.optional`, `.proc`, `.struct`, `.enum` or
+    `.union`), `size`, `align`, `elem`, `key`, `count`, `columns`, `fields`,
     `members` and `variants`.
   - `elem` is the pointee, element, map value, optional payload (`^T` for
     `^T?`), enum backing type or proc return type, and `nil` when there is
@@ -1448,7 +1469,7 @@ error[E0207]: `spawn` may be nil here
    |                ^^^^^ `data.find_spawn` returns `Vec2?`
 help: unwrap it and handle the nil case
    |   guard spawn = data.find_spawn else
-   |     return {}, :no_spawn
+   |     return {}, .no_spawn
    |   end
    = see `wid explain E0207`
 ```

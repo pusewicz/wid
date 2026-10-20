@@ -1099,7 +1099,7 @@ impl<'a> Checker<'a> {
             for w in &case.whens {
                 for p in &w.patterns {
                     let name = match &p.kind {
-                        E::Symbol(n) => Some(*n),
+                        E::Symbol(n) | E::Selector(n) => Some(*n),
                         E::Member { name, .. } => Some(name.name),
                         _ => None,
                     };
@@ -1109,7 +1109,7 @@ impl<'a> Checker<'a> {
                 }
             }
             let missing: Vec<String> =
-                info.members.iter().filter(|(n, _)| !covered.contains(n)).map(|(n, _)| format!(":{n}")).collect();
+                info.members.iter().filter(|(n, _)| !covered.contains(n)).map(|(n, _)| format!(".{n}")).collect();
             if !missing.is_empty() {
                 self.report(
                     Diagnostic::error(codes::NON_EXHAUSTIVE, format!("`case` does not handle {}", missing.join(", ")))

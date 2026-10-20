@@ -171,6 +171,24 @@ the language server.
 - In an `enum` body, `struct`, `enum` or `union` followed by a newline, `=` or
   `,` is a member (`is_keyword_member` in the parser), for `TypeKind`. Vim
   matches them as `widEnumMember`, which opens no block.
+- An enum member is `.name` (`ExprKind::Selector`, parsed by
+  `Parser::parse_selector` at a `.` where an expression starts), resolved
+  against the expected type by `Checker::selector` (an enum, or `Error`
+  for an error tag); with none it is E0304. A symbol (`ExprKind::Symbol`)
+  where an enum is expected is E0331 with the `.` fix (no fix when a macro
+  spliced it, `spliced_by`) and lowers as the member, so nothing cascades.
+  The lexer decides line continuation: a line starting with `.` continues
+  only when indented deeper than the statement's first line
+  (`Lexer::stmt_indent`) and the statement doesn't open a block
+  (`Lexer::opens_block`); `&.` lines always continue. A `.name(…)`, block
+  or argument at a line start that didn't continue is E0105
+  (`unattached_call`), parsed as a call on an error receiver. In a call
+  without parentheses, `.` with a space before and none after is an
+  argument (`can_start_command_arg`) unless it starts a line. `.#{name}`
+  splices a `Symbol` (or `[.#{names}]` a `[]Symbol`) as members
+  (`NamePlace::Member`). The formatter gives the selector's `.` the
+  `Prefix` role, so it spaces like an operand; Vim highlights it as
+  `widEnumSelector` when it follows no value mid-line.
 - Macro expansion (`check/macros.rs`, whose module docs describe the core):
   - A call resolves like any call; `call`, `ident` and `package_member`
     hand a macro to `Checker::call_macro` with the expected type, and
@@ -530,7 +548,7 @@ the language server.
   `print`, `p`, `panic`, `assert`.
 - Structs (fields, defaults, `T.new`, `@field`, `self`, methods, `def self.`,
   implicit-self calls, operator methods, memberwise `==`, printing), recursive
-  struct detection, enums (backing types, explicit values, symbols, methods,
+  struct detection, enums (backing types, explicit values, `.name` members, methods,
   printing, `to_i`, `to(T)`), `case`/`when` with values, ranges and enum
   exhaustiveness.
 - Optionals (`T?`, `nil`, wrapping, `||` defaults, `&.`, `nil?`, `if v = …`),
@@ -880,7 +898,7 @@ the language server.
   undefined is E0201 "undefined constant `Foo`" with its did-you-mean, as
   in a method; `X = width` is E0327 with the `comptime` fix; and values
   that failed before evaluate (`START = ORIGIN` for a struct constant,
-  `FACING: Dir = :north`, `X = 1 / 0` is E0901). The E0327 that remains
+  `FACING: Dir = .north`, `X = 1 / 0` is E0901). The E0327 that remains
   says the compiler can't compute the value, with a note on what a
   constant's value may be.
 - Struct literal syntax from Odin, Go, Rust or Zig, a constant directly
@@ -1648,6 +1666,14 @@ the language server.
   `leave_lowering` now sets `comptime_depth` aside too, so a method lowered
   for compile-time code (`lower_needed`) is lowered as it would be anywhere.
   A run test's `NAME.args` passes command-line arguments, one per line.
+- Enum members are written `.name`, as in Odin and Swift (`d: Dir = .north`,
+  `when .north then .south`, `go .east`, `return {}, .not_found`, `.#{name}`
+  in a `quote`); `:name` is only a symbol now, and one where an enum member
+  goes is E0331 with a machine-applicable fix. A line that starts with `.`
+  continues the one above only when indented deeper and not after a block
+  header, so `.south` alone on a line in a `when` body is a value. `p`
+  writes members (and `Error`s) as `.north`, in C and in the interpreter.
+  `core`, the tests and the docs use the new form.
 
 ## Next
 

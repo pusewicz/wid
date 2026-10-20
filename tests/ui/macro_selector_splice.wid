@@ -1,0 +1,25 @@
+# `.#{name}` in a `quote` names the enum member a `Symbol` names. Another
+# value, or a name an enum member can't have, is E0911 at the call.
+enum Dir
+  north
+end
+
+macro def by_number(n: Int) -> Code
+  quote do
+    .#{n}
+  end
+end
+
+macro def by_name(name: String) -> Code
+  sym = name.to_sym
+  quote do
+    .#{sym}
+  end
+end
+
+def main
+  a: Dir = by_number(3)
+  b: Dir = by_name("North")
+  c: Dir = by_name("north")
+  p a, b, c
+end

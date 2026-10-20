@@ -52,7 +52,7 @@ def main
   m = Mage.new(mana: 2)
   puts m.get_mana + m.total
   puts Witch.new.fireball
-  c: Color = :red
+  c: Color = .red
   puts c.describe
   puts Color.random
   puts 3.double

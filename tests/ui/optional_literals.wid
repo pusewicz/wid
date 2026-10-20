@@ -24,6 +24,6 @@ def main
   v: Vec2? = [1.0, 2.0, 3.0]
   w: [2]F32? = [1.0, "s"]
   b = Body.new(pos: [1.0, true])
-  d: Dir? = :west
+  d: Dir? = .west
   p y, v, w, b, d, first([1.0, 2.0]), spawn, LIMIT
 end
