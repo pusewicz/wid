@@ -1626,6 +1626,19 @@ the language server.
   is an error (E0314, E0330) no longer adds E0324 "must return
   `{unknown}`", nor E0323 for a loop that ends it. `core` had no
   violations.
+- `ARGV` (SPEC "Data and behavior"): the prelude's `@[extern("wid_argv")] ARGV:
+  []String = ---` (`core/builtin/process.wid`), which the runtime sets in
+  `wid_runtime_init` to `os.args` without the program name, as a
+  `wid_RawSlice`. An `@[extern]` constant with a `wid_` symbol is a
+  runtime value: a slice one is read through `CConv::Mapped("wid_RawSlice")`
+  (the program's typed slice struct comes after the runtime header), read
+  in place, `(*(T *)&name)`, so a method call can take its address. Reading one while compiling is E0916: at the name, from
+  `extern_const`, when `comptime_depth > 0` (a constant's value or
+  `comptime`), else from the interpreter (`ir::Global::runtime_name`,
+  `FailKind::Runtime`) for a method or macro that compile-time code runs.
+  `leave_lowering` now sets `comptime_depth` aside too, so a method lowered
+  for compile-time code (`lower_needed`) is lowered as it would be anywhere.
+  A run test's `NAME.args` passes command-line arguments, one per line.
 
 ## Next
 

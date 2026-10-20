@@ -50,6 +50,8 @@ pub(crate) enum FailKind {
     Limit,
     /// The code called a C function.
     Foreign,
+    /// The code read a value the runtime sets when the program starts.
+    Runtime,
 }
 
 /// A failure of compile-time code, with the calls that led to it.
@@ -842,6 +844,12 @@ impl<'c> Interp<'c> {
             return Ok(a);
         }
         let global = &self.p.globals[g.0 as usize];
+        if let Some(name) = &global.runtime_name {
+            let mut f = self.fail(format!("reads `{name}`, which only exists when the program runs"));
+            f.kind = FailKind::Runtime;
+            f.help = Some(format!("read `{name}` only in code that runs with the program, not while compiling"));
+            return Err(f);
+        }
         if global.foreign {
             let mut f =
                 self.fail(format!("reads the C value `{}`, which only exists when the program runs", global.c_name));

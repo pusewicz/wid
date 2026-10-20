@@ -1,0 +1,19 @@
+# `ARGV` holds the command-line arguments after the program name, as in
+# Ruby, and every package sees it without an import; `os.args` keeps the
+# program name first.
+import "core:os"
+
+def main
+  puts ARGV.size
+  ARGV.each_with_index do |arg, i|
+    puts "#{i}: #{arg}"
+  end
+  puts ARGV.include?("-v")
+  puts os.args.size == ARGV.size + 1
+  puts os.args[1] == ARGV[0]
+  # Like Ruby's `ARGV`, its elements can be replaced. It views the same
+  # strings as `os.args`, after the program name.
+  ARGV[0] = "--verbose"
+  puts ARGV[0]
+  puts os.args[1]
+end

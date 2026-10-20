@@ -434,6 +434,14 @@ impl<'p> Gen<'p> {
                 let global = &self.p.globals[g.0 as usize];
                 let name = global.c_name.clone();
                 match global.c_conv.clone() {
+                    // A runtime value, like `ARGV`'s `wid_argv`, is a C object:
+                    // viewed in place rather than copied, a method call can take
+                    // its address. The helper asserts the layouts match.
+                    Some(wid_sema::types::CConv::Mapped(c)) if global.runtime_name.is_some() => {
+                        self.mapped_helper(&c, e.ty, false);
+                        let wid = self.c_type(e.ty);
+                        format!("(*({wid} *)&{name})")
+                    }
                     Some(conv) => self.conv_from_c(&conv, &name, e.ty),
                     None => name,
                 }

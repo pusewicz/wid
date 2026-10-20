@@ -3,6 +3,8 @@
 //! - `tests/run/NAME.wid` (or a directory `tests/run/NAME/`) is built and run.
 //!   Its stdout must match `NAME.stdout`. When `NAME.stderr` exists, stderr
 //!   must match it too, and `NAME.exitcode` holds a non-zero exit status.
+//!   `NAME.args`, when it exists, holds the program's command-line
+//!   arguments, one per line.
 //!   Every program is compiled with clang and, when available, gcc, using
 //!   `-std=c23 -Wall -Wextra -Wpedantic -Werror`.
 //! - `tests/ui/NAME.wid` (or a directory package `tests/ui/NAME/`, for
@@ -450,7 +452,11 @@ fn run_case(case: &Case, root: &Path, ccs: &[String], bless: bool) -> Vec<String
                     failures.push(format!("[{cc}] build failed:\n{}", normalize(&rendered, root)));
                     continue;
                 }
-                let output = Command::new(&exe).current_dir(root).output().expect("run test program");
+                let args_path = PathBuf::from(format!("{}.args", expect_base.display()));
+                let args: Vec<String> = std::fs::read_to_string(&args_path)
+                    .map(|text| text.lines().map(str::to_string).collect())
+                    .unwrap_or_default();
+                let output = Command::new(&exe).args(&args).current_dir(root).output().expect("run test program");
                 let _ = std::fs::remove_file(&exe);
                 let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
                 let stderr = normalize(&String::from_utf8_lossy(&output.stderr), root);

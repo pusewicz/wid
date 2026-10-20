@@ -120,6 +120,9 @@ pub struct Global {
     /// Holds compile-time-only data (like reflection results), so it is
     /// never emitted.
     pub comptime_only: bool,
+    /// The Wid name of a value the runtime sets when the program starts,
+    /// like `ARGV`, which compile-time code can't read.
+    pub runtime_name: Option<String>,
 }
 
 /// A file whose bytes a global holds.
