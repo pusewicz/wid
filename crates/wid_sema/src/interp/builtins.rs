@@ -502,6 +502,25 @@ impl<'c> Interp<'c> {
         Ok(r)
     }
 
+    /// Fails when a free or resize of the heap block at `addr` names a size
+    /// other than the block's, as the `-debug` tracking allocator does.
+    fn check_block_size(&self, addr: Addr, size: i64, what: &str, span: Span) -> R<()> {
+        match self.mem.block_size(addr) {
+            Some(n) if n as i64 != size => {
+                let mut f = self.fail_at(span, format!("{what} of {size} bytes, but the block is {n} bytes"));
+                f.help = Some(if what == "free" {
+                    "free exactly what `alloc` returned; a part of a slice, or a pointer cast to another type, has a \
+                     different size"
+                        .into()
+                } else {
+                    "pass the block's current size: the size it was allocated or last resized to".into()
+                });
+                Err(f)
+            }
+            _ => Ok(()),
+        }
+    }
+
     /// Runs one of the interpreter's own procedures: the compile-time heap and
     /// temporary allocators, and the logger.
     pub(super) fn native_proc(&mut self, fp: Addr, args: Vec<Vec<u8>>, span: Span) -> R<Vec<u8>> {
@@ -534,6 +553,9 @@ impl<'c> Interp<'c> {
             MODE_ALLOC => fresh(self, size, align)?,
             MODE_FREE => {
                 if old != 0 {
+                    if !temp {
+                        self.check_block_size(old, old_size, "free", span)?;
+                    }
                     self.mem.free(old).map_err(|e| self.mem_fail(e, span))?;
                     self.temp_blocks.retain(|b| *b != old);
                 }
@@ -548,6 +570,9 @@ impl<'c> Interp<'c> {
                 0
             }
             _ => {
+                if old != 0 && !temp {
+                    self.check_block_size(old, old_size, "resize", span)?;
+                }
                 let p = fresh(self, size, align)?;
                 if old != 0 {
                     let n = old_size.min(size).max(0) as u64;

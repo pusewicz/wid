@@ -1335,6 +1335,16 @@ static wid_TrackedBlock_ wid_track_take_(wid_Tracker_ *t, void *ptr, wid_Locatio
     wid_panicf(loc, "%s of a pointer this allocator did not hand out (freed twice, or with the wrong allocator)", what);
 }
 
+/* Panics when a free or resize names a size other than the block's: the size
+ * is part of the allocator protocol, and an allocator may rely on it. */
+static void wid_track_check_size_(wid_TrackedBlock_ block, wid_Int size, wid_Location loc, const char *what,
+                                  const char *help) {
+    if (block.size == size) return;
+    wid_panicf(loc, "%s of %lld bytes, but the block is %lld bytes\n  %lld bytes allocated at %s:%d:%d\n  help: %s", what,
+               (long long)size, (long long)block.size, (long long)block.size, block.loc.file ? block.loc.file : "?",
+               (int)block.loc.line, (int)block.loc.column, help);
+}
+
 static void wid_track_forget_(wid_Tracker_ *t, wid_TrackedBlock_ block, wid_Location loc) {
     t->freed[t->freed_next] = block;
     t->freed_at[t->freed_next] = loc;
@@ -1351,13 +1361,22 @@ static void *wid_tracker_proc_(void *data, wid_AllocMode mode, wid_Int size, wid
         if (p) wid_track_put_(t, (wid_TrackedBlock_){p, size, loc});
         return p;
     }
-    case WID_FREE:
+    case WID_FREE: {
         if (!old) return nullptr;
-        wid_track_forget_(t, wid_track_take_(t, old, loc, "free"), loc);
+        wid_TrackedBlock_ block = wid_track_take_(t, old, loc, "free");
+        wid_track_check_size_(block, old_size, loc, "free",
+                              "free exactly what `alloc` returned; a part of a slice, or a pointer cast to another "
+                              "type, has a different size");
+        wid_track_forget_(t, block, loc);
         return b.proc(b.data, mode, size, align, old, old_size, loc);
+    }
     case WID_RESIZE: {
         wid_TrackedBlock_ previous = {};
-        if (old) previous = wid_track_take_(t, old, loc, "resize");
+        if (old) {
+            previous = wid_track_take_(t, old, loc, "resize");
+            wid_track_check_size_(previous, old_size, loc, "resize",
+                                  "pass the block's current size: the size it was allocated or last resized to");
+        }
         void *p = b.proc(b.data, mode, size, align, old, old_size, loc);
         if (p) {
             wid_track_put_(t, (wid_TrackedBlock_){p, size, old ? previous.loc : loc});

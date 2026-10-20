@@ -2,7 +2,8 @@
 
 # A tracking allocator: wraps another allocator and records every live block
 # together with the place that allocated it. Freeing a block twice, or with
-# the wrong allocator, panics with both locations. `-debug` builds run the
+# the wrong allocator, panics with both locations; so does freeing or
+# resizing it with a size other than its own. `-debug` builds run the
 # whole program on one, and `wid test` runs each test on a fresh one.
 struct Tracker
   # The runtime's tracker, which holds the tables; nil once destroyed.

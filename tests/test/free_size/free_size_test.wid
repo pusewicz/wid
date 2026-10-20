@@ -1,0 +1,20 @@
+import "core:testing"
+
+@[test]
+def frees_part_of_a_slice(t: ^testing.T)
+  xs = alloc([]Int, 10)
+  free(xs[0..3])
+end
+
+@[test]
+def resizes_with_a_stale_size(t: ^testing.T)
+  a = context.allocator
+  x = alloc(Int)
+  _ = a.proc(a.data, :resize, 16, 8, x.to(RawPtr), 4, caller_location)
+end
+
+@[test]
+def frees_the_whole_slice(t: ^testing.T)
+  xs = alloc([]Int, 10)
+  free(xs)
+end

@@ -1,0 +1,32 @@
+running 3 tests
+test frees_part_of_a_slice ... PANICKED
+test resizes_with_a_stale_size ... PANICKED
+test frees_the_whole_slice ... ok
+
+failures:
+
+error[E0802]: test `frees_part_of_a_slice` panicked: free of 32 bytes, but the block is 80 bytes
+ --> tests/test/free_size/free_size_test.wid:6:3
+  |
+4 | def frees_part_of_a_slice(t: ^testing.T)
+  |     --------------------- in this test
+...
+6 |   free(xs[0..3])
+  |   ^^^^^^^^^^^^^^ panicked here
+  = note: 80 bytes allocated at tests/test/free_size/free_size_test.wid:5:8
+help: free exactly what `alloc` returned; a part of a slice, or a pointer cast to another type, has a different size
+  = see `wid explain E0802`
+
+error[E0802]: test `resizes_with_a_stale_size` panicked: resize of 4 bytes, but the block is 8 bytes
+  --> tests/test/free_size/free_size_test.wid:13:55
+   |
+10 | def resizes_with_a_stale_size(t: ^testing.T)
+   |     ------------------------- in this test
+...
+13 |   _ = a.proc(a.data, :resize, 16, 8, x.to(RawPtr), 4, caller_location)
+   |                                                       ^^^^^^^^^^^^^^^^ panicked here
+   = note: 8 bytes allocated at tests/test/free_size/free_size_test.wid:12:7
+help: pass the block's current size: the size it was allocated or last resized to
+   = see `wid explain E0802`
+
+test result: FAILED. 1 passed; 2 failed; 0 filtered out
