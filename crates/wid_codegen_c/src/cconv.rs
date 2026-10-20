@@ -98,7 +98,7 @@ impl Gen<'_> {
 
     /// Emits (once) the function that copies between the C type `c` and the
     /// Wid type `ty` that `types:` maps it to, and returns its name.
-    fn mapped_helper(&mut self, c: &str, ty: TyId, to_c: bool) -> String {
+    pub(crate) fn mapped_helper(&mut self, c: &str, ty: TyId, to_c: bool) -> String {
         let wid = self.c_type(ty);
         let tag: String = c.chars().map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' }).collect();
         let wid_tag: String = wid.chars().map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' }).collect();

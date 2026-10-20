@@ -438,6 +438,13 @@ end
   `odd?`, `times` and `upto`. Inside a method, `self` is the receiver itself (passed by
   pointer, so changes are visible to the caller), and a bare method name calls
   it on `self`.
+- `ARGV`, a prelude constant, holds the command-line arguments after the
+  program name, as in Ruby: `prog -v a.txt` gives `["-v", "a.txt"]`.
+  `os.args` is the whole list, program name first. `ARGV` is a `[]String`
+  view of the same strings, so reading it never allocates, and its elements
+  can be replaced. The program sets it when it starts, so a constant's value,
+  `comptime` code and macros can't read it (E0916). `wid run` passes the
+  arguments after `--`.
 - `enum Dir : U8 … end` declares an enum (backed by `Int` when no type is
   given). Members count up from 0 unless written `name = value`; `Dir.north`
   and `:north` both name one, and `.to_i` gives its value. `union Shape =
@@ -523,7 +530,7 @@ end
   `s.upcase`, `fmt.int`, …) take `allocator:`, which defaults to
   `context.temp_allocator` like interpolation does; pass another allocator to
   keep the result. Functions that read data (`os.read_file`, `os.read_line`)
-  default to `context.allocator`. Views (`s.strip`, `os.args`) never allocate.
+  default to `context.allocator`. Views (`s.strip`, `os.args`, `ARGV`) never allocate.
 - Checks are on by default: bounds, nil, and integer overflow (in `-debug`).
   Turn them off for a whole build (`-no-bounds-check`), or for one method or
   statement (`@[no_bounds_check]`). The attribute is lexical: it covers the

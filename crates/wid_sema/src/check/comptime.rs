@@ -31,6 +31,7 @@ struct LoweringState {
     capturable: Vec<Name>,
     const_init: Option<Span>,
     in_macro: bool,
+    comptime_depth: u32,
 }
 
 /// The code a `comptime` evaluation runs.
@@ -269,6 +270,7 @@ impl<'a> Checker<'a> {
             capturable: std::mem::take(&mut self.capturable),
             const_init: self.const_init.take(),
             in_macro: std::mem::take(&mut self.macros.in_macro),
+            comptime_depth: std::mem::take(&mut self.comptime_depth),
         }
     }
 
@@ -279,6 +281,7 @@ impl<'a> Checker<'a> {
         self.capturable = saved.capturable;
         self.const_init = saved.const_init;
         self.macros.in_macro = saved.in_macro;
+        self.comptime_depth = saved.comptime_depth;
     }
 
     /// Runs a lowered compile-time function in the interpreter. A macro's
@@ -400,6 +403,7 @@ impl<'a> Checker<'a> {
             c_conv: None,
             embed: None,
             comptime_only: false,
+            runtime_name: None,
         });
         ir::Expr::new(ExprKind::ConstGlobal(id), ty)
     }
@@ -412,6 +416,7 @@ impl<'a> Checker<'a> {
             FailKind::Error => (codes::COMPTIME_FAILED, format!("{what} failed: {}", f.message)),
             FailKind::Limit => (codes::COMPTIME_LIMIT, format!("{what} stopped: {}", f.message)),
             FailKind::Foreign => (codes::COMPTIME_FOREIGN, format!("{what} can't call C: it {}", f.message)),
+            FailKind::Runtime => (codes::RUNTIME_VALUE, format!("{what} {}", f.message)),
         };
         let at = if f.span == Span::default() { span } else { f.span };
         let mut diag = Diagnostic::error(code, title).primary(at, "failed here");
@@ -651,6 +656,7 @@ impl<'a> Checker<'a> {
                     c_conv: None,
                     embed: Some(ir::Embedded { path: full.clone(), bytes: bytes.into() }),
                     comptime_only: false,
+                    runtime_name: None,
                 });
                 self.embeds.insert(full, id);
                 id
@@ -881,6 +887,7 @@ impl<'a> Checker<'a> {
             c_conv: None,
             embed: None,
             comptime_only: true,
+            runtime_name: None,
         });
         let int = self.types.int();
         ir::Expr::new(

@@ -1,0 +1,50 @@
+error[E0916]: `ARGV` only exists when the program runs
+ --> tests/ui/argv_comptime.wid:3:9
+  |
+3 | COUNT = ARGV.size
+  |         ^^^^ a constant's value is computed while compiling
+  = note: the program sets `ARGV` when it starts, after compiling is over
+help: read `ARGV` in a method, which runs with the program: replace the constant with one, like `def arg_count -> Int = ARGV.size`
+  = see `wid explain E0916`
+
+error[E0916]: `comptime` code reads `ARGV`, which only exists when the program runs
+ --> tests/ui/argv_comptime.wid:5:5
+  |
+5 | def first -> String = ARGV[0]
+  |     ^^^^^ failed here
+...
+7 | FIRST = comptime first
+  |         -------------- while running this at compile time
+help: read `ARGV` only in code that runs with the program, not while compiling
+  = see `wid explain E0916`
+
+error[E0916]: the macro `arg_count` reads `ARGV`, which only exists when the program runs
+  --> tests/ui/argv_comptime.wid:10:3
+   |
+10 |   n = ARGV.size
+   |   ^^^^^^^^^^^^^ failed here
+...
+21 |   puts n + arg_count
+   |            --------- while `arg_count` ran for this call
+help: read `ARGV` only in code that runs with the program, not while compiling
+   = see `wid explain E0916`
+
+error[E0916]: `ARGV` only exists when the program runs
+  --> tests/ui/argv_comptime.wid:17:16
+   |
+17 |   n = comptime ARGV.size
+   |                ^^^^ `comptime` code runs while compiling
+   = note: the program sets `ARGV` when it starts, after compiling is over
+help: remove `comptime` so the code reads `ARGV` when the program runs
+   = see `wid explain E0916`
+
+error[E0916]: `ARGV` only exists when the program runs
+  --> tests/ui/argv_comptime.wid:18:15
+   |
+18 |   comptime if ARGV.size > 1
+   |               ^^^^ `comptime` code runs while compiling
+   = note: the program sets `ARGV` when it starts, after compiling is over
+help: remove `comptime` so the code reads `ARGV` when the program runs
+   = see `wid explain E0916`
+
+error: could not compile due to 5 errors

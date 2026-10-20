@@ -205,17 +205,30 @@ impl<'a> Checker<'a> {
             }
             None => self.types.unknown(),
         };
-        if let Some(&id) = self.extern_globals.get(&decl) {
-            return ir::Expr::new(ExprKind::Global(id), ty);
-        }
         let symbol = d
             .item
             .attr("extern")
             .and_then(|a| a.args.first())
             .and_then(super::attrs::string_literal)
             .map_or_else(|| d.name.as_str().to_string(), str::to_string);
+        // The runtime declares every `wid_` symbol and sets it when the
+        // program starts, like `ARGV`'s `wid_argv`.
+        let runtime = symbol.starts_with("wid_");
+        if runtime && self.comptime_depth > 0 {
+            self.runtime_value_in_comptime(d.name, span);
+            return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+        }
+        if let Some(&id) = self.extern_globals.get(&decl) {
+            return ir::Expr::new(ExprKind::Global(id), ty);
+        }
         let slot = self.c_binding(d.loc.pkg).and_then(|b| b.values.get(d.name.as_str())).cloned();
-        let c_conv = slot.and_then(|s| self.slot_conv(d.loc.pkg, &s));
+        let mut c_conv = slot.and_then(|s| self.slot_conv(d.loc.pkg, &s));
+        // The runtime holds a slice it shares with Wid, like `ARGV`'s
+        // `wid_argv`, as the type-erased `wid_RawSlice`: the program's typed
+        // slice struct isn't declared yet where the runtime header is.
+        if c_conv.is_none() && runtime && matches!(self.types.kind(ty), TyKind::Slice(_)) {
+            c_conv = Some(CConv::Mapped("wid_RawSlice".into()));
+        }
         let id = GlobalId(self.globals.len() as u32);
         self.globals.push(ir::Global {
             c_name: symbol,
@@ -226,10 +239,33 @@ impl<'a> Checker<'a> {
             c_conv,
             embed: None,
             comptime_only: false,
+            runtime_name: runtime.then(|| d.name.as_str().to_string()),
         });
         self.extern_globals.insert(decl, id);
-        let _ = span;
         ir::Expr::new(ExprKind::Global(id), ty)
+    }
+
+    /// Reports a value the runtime sets when the program starts, like
+    /// `ARGV`, read by a constant's initializer or `comptime` code (E0916).
+    fn runtime_value_in_comptime(&mut self, name: Name, span: Span) {
+        let (label, help) = match self.const_init {
+            Some(_) => (
+                "a constant's value is computed while compiling",
+                format!(
+                    "read `{name}` in a method, which runs with the program: replace the constant with one, like `def arg_count -> Int = {name}.size`"
+                ),
+            ),
+            None => (
+                "`comptime` code runs while compiling",
+                format!("remove `comptime` so the code reads `{name}` when the program runs"),
+            ),
+        };
+        self.report(
+            Diagnostic::error(codes::RUNTIME_VALUE, format!("`{name}` only exists when the program runs"))
+                .primary(span, label)
+                .note(format!("the program sets `{name}` when it starts, after compiling is over"))
+                .help(help),
+        );
     }
 
     /// Whether a declaration is an `@[extern]` constant.

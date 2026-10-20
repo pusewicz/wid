@@ -150,6 +150,8 @@ wid_Context wid_default_context(void);
 wid_String wid_arg(wid_Int i);
 /** Returns the number of command-line arguments. */
 wid_Int wid_arg_count(void);
+/** `ARGV`: the command-line arguments after the program name, as `[]String`. */
+extern wid_RawSlice wid_argv;
 
 /* ----- panics ------------------------------------------------------------- */
 
@@ -514,6 +516,8 @@ static char **wid_argv_;
 
 static wid_String *wid_os_args_;
 
+wid_RawSlice wid_argv;
+
 #ifdef WID_DEBUG
 static void *wid_debug_tracker_;
 #endif
@@ -527,6 +531,8 @@ void wid_runtime_init(int argc, char **argv) {
         exit(101);
     }
     for (int i = 0; i < argc; i++) wid_os_args_[i] = wid_string_from_cstring(argv[i]);
+    // `ARGV` leaves out the program name, as in Ruby.
+    wid_argv = (wid_RawSlice){wid_os_args_ + (argc > 0 ? 1 : 0), argc > 0 ? argc - 1 : 0};
     static char buffer[1 << 16];
     setvbuf(stdout, buffer, _IOFBF, sizeof buffer);
 }

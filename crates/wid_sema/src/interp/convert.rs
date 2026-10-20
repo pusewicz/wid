@@ -242,6 +242,7 @@ impl Conv<'_> {
                     c_conv: None,
                     embed: None,
                     comptime_only: false,
+                    runtime_name: None,
                 });
                 let int = self.types.int();
                 ir::Expr::new(
