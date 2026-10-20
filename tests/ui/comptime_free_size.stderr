@@ -1,0 +1,23 @@
+error[E0901]: `comptime` code failed: free of 32 bytes, but the block is 80 bytes
+  --> tests/ui/comptime_free_size.wid:3:3
+   |
+ 3 |   free(xs[0..3])
+   |   ^^^^^^^^^^^^^^ failed here
+...
+20 | PREFIX = comptime free_prefix
+   |          -------------------- while running this at compile time
+help: free exactly what `alloc` returned; a part of a slice, or a pointer cast to another type, has a different size
+   = see `wid explain E0901`
+
+error[E0901]: `comptime` code failed: resize of 4 bytes, but the block is 8 bytes
+  --> tests/ui/comptime_free_size.wid:10:7
+   |
+10 |   _ = a.proc(a.data, :resize, 16, 8, x.to(RawPtr), 4, caller_location)
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ failed here
+...
+21 | STALE = comptime resize_stale
+   |         --------------------- while running this at compile time
+help: pass the block's current size: the size it was allocated or last resized to
+   = see `wid explain E0901`
+
+error: could not compile due to 2 errors

@@ -82,6 +82,14 @@ impl Memory {
         Ok(((region as u64) << SHIFT) | start)
     }
 
+    /// The size of the live heap block at `addr`, if there is one.
+    pub fn block_size(&self, addr: Addr) -> Option<u64> {
+        if addr >> SHIFT != Region::Heap as u64 {
+            return None;
+        }
+        self.blocks.get(&(addr & OFFSET_MASK)).copied()
+    }
+
     /// Releases a heap block, returning its size.
     pub fn free(&mut self, addr: Addr) -> Result<u64, MemError> {
         if addr >> SHIFT != Region::Heap as u64 {

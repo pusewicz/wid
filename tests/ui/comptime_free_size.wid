@@ -1,0 +1,26 @@
+def free_prefix -> Int
+  xs = alloc([]Int, 10)
+  free(xs[0..3])
+  1
+end
+
+def resize_stale -> Int
+  a = context.allocator
+  x = alloc(Int)
+  _ = a.proc(a.data, :resize, 16, 8, x.to(RawPtr), 4, caller_location)
+  1
+end
+
+def free_whole -> Int
+  xs = alloc([]Int, 10)
+  free(xs)
+  1
+end
+
+PREFIX = comptime free_prefix
+STALE = comptime resize_stale
+WHOLE = comptime free_whole
+
+def main
+  puts PREFIX + STALE + WHOLE
+end

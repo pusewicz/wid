@@ -530,6 +530,9 @@ end
   `compare`. In `-debug` builds the heap is wrapped in a tracking allocator
   that reports leaks with their allocation sites when `main` returns, and a
   double free (or a free with the wrong allocator) panics with both sites.
+  So does a free or resize whose size isn't the block's: free exactly what
+  `alloc` returned, since `free(xs[0..3])` hands the allocator 3 elements of
+  a larger block. The compile-time heap checks the same.
 - Functions in `core` that build new strings or slices (`s.split`,
   `s.upcase`, `fmt.int`, …) take `allocator:`, which defaults to
   `context.temp_allocator` like interpolation does; pass another allocator to

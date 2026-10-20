@@ -600,7 +600,8 @@ the language server.
   stdin lines, `exit`), `core:math` (constants, libm overloads for `F32`/`F64`,
   `lerp`/`remap`/`smoothstep`, `Vec2`/`Vec3` extensions, `Rect`), `core:c`
   (C type names, limits) and `core:testing`. `-debug` builds track the heap
-  and report leaks at exit.
+  and report leaks at exit; the tracker (and the compile-time heap) panics
+  when a free or resize passes a size other than the block's.
 - `wid test` (`-filter:`, `-json-errors`), with per-test processes, leak
   checks and failures as E0802 diagnostics.
 - `cimport` through libclang (`crates/wid_cimport`): functions, structs and

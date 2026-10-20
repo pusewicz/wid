@@ -250,8 +250,11 @@ fn panic_diagnostic(stderr: &str, name: &str, test_span: Span, sources: &SourceM
         Some(span) => diag.primary(span, "panicked here").secondary(test_span, "in this test"),
         None => diag.primary(test_span, "this test panicked"),
     };
-    for line in lines {
-        diag = diag.note(line.trim().to_string());
+    for line in lines.map(str::trim) {
+        diag = match line.strip_prefix("help: ") {
+            Some(help) => diag.help(help.to_string()),
+            None => diag.note(line.to_string()),
+        };
     }
     diag
 }
