@@ -5833,7 +5833,7 @@ def main
   rl.init_window(800, 450, "bounce")
   defer rl.close_window
 
-  balls = [dynamic]Ball.new
+  balls = DynamicArray(Ball).new
   defer free(balls)
   balls << Ball.new(pos: [400.0, 225.0])
 

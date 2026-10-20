@@ -545,6 +545,14 @@ the language server.
   `has_key?`, `delete`), iteration (`for x`, `for &x`, `for x, i`,
   `for k, v in m`, runes in strings), bounds checks and
   `@[no_bounds_check]`.
+- `DynamicArray(T)` and `Map(K, V)` name `[dynamic]T` and `map[K]V`
+  (`check::ty::CONTAINER_NAMES`, resolved in `resolve_path_type` for types
+  and in `generic_instance` for `DynamicArray(Ball).new`). They are
+  shadowable predeclared names, like `Context`. The spec's examples, `core`
+  and the error docs construct containers with them; `[dynamic]T.new` still
+  works, and diagnostics display the Odin spelling. A missing, extra or
+  value argument is E0315; `DynamicArray(Int)` as a value is E0305 with the
+  `.new` fix; a misspelled call suggests the name.
 - Strings: interpolation, `to_s`, `inspect`, byte indexing and slicing,
   comparisons, `include?`, `index`, `starts_with?`, `ends_with?`, `to_cstr`.
 - Memory: `alloc(T)`, `alloc([]T, n)`, `free`, `free_all`, `size_of`,

@@ -571,6 +571,7 @@ impl<'a> Checker<'a> {
                 let ast::Callee::Name(n) = &call.callee else { return ValueArg::Value };
                 match self.lookup_pkg(loc.pkg, n.name).or_else(|| self.lookup_prelude(n.name)) {
                     Some(decl) => decl,
+                    None if self.container_name(loc.pkg, n.name).is_some() => return ValueArg::Type,
                     None => return ValueArg::Value,
                 }
             }

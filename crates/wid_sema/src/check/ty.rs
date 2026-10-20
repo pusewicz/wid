@@ -6,6 +6,7 @@ use wid_syntax::ast::{self, TypeKind as T};
 
 use super::items::ConstValue;
 use super::{Checker, DeclKind, DeclLoc};
+use crate::PackageId;
 use crate::types::{FloatTy, IntTy, TyId, TyKind};
 
 /// The context a type expression is resolved in.
@@ -48,13 +49,20 @@ pub(crate) const PRIMITIVE_NAMES: &[&str] = &[
     "Type",
     "Code",
     "Symbol",
+    "DynamicArray",
+    "Map",
 ];
+
+/// The builtin generic names for container constructors, with their
+/// parameters: `DynamicArray(T)` is `[dynamic]T` and `Map(K, V)` is
+/// `map[K]V`, so the type is closed before a `.new` is called on it.
+pub(crate) const CONTAINER_NAMES: &[(&str, &[&str])] = &[("DynamicArray", &["T"]), ("Map", &["K", "V"])];
 
 /// Builtin types a package may declare its own type under: library types
 /// that are predeclared, as opposed to the language's own types. Inside such
 /// a package the name means the package's type.
 pub(crate) const SHADOWABLE_NAMES: &[&str] =
-    &["Context", "Allocator", "AllocMode", "Location", "Logger", "Type", "Code", "Symbol"];
+    &["Context", "Allocator", "AllocMode", "Location", "Logger", "Type", "Code", "Symbol", "DynamicArray", "Map"];
 
 /// Whether a package-level declaration can't use `name`, because it is one
 /// of the language's builtin types (`Int`, `String`, `Bool`, …).
@@ -153,6 +161,77 @@ impl<'a> Checker<'a> {
             _ => return None,
         };
         Some(self.types.intern(kind))
+    }
+
+    /// The builtin container `name` names in `pkg` (`DynamicArray` or
+    /// `Map`), with its parameters, unless the package or the prelude
+    /// declares its own type under that name.
+    pub(super) fn container_name(&self, pkg: PackageId, name: Name) -> Option<(&'static str, &'static [&'static str])> {
+        let found = CONTAINER_NAMES.iter().find(|(n, _)| *n == name.as_str())?;
+        (self.lookup_pkg(pkg, name).is_none() && self.lookup_prelude(name).is_none()).then_some(*found)
+    }
+
+    /// Reports a builtin container written without its arguments, like
+    /// `DynamicArray.new`.
+    pub(super) fn container_needs_args(&mut self, (name, params): (&'static str, &'static [&'static str]), span: Span) {
+        self.report(
+            Diagnostic::error(codes::GENERIC_ARGS, format!("`{name}` needs type arguments"))
+                .primary(span, format!("write it like `{name}({})`", params.join(", ")))
+                .note(container_note(name)),
+        );
+    }
+
+    /// The type `DynamicArray(T)` or `Map(K, V)` stands for, given its
+    /// resolved arguments, after checking their number and kind.
+    pub(super) fn container_type(
+        &mut self,
+        (name, params): (&'static str, &'static [&'static str]),
+        args: &[TyId],
+        spans: &[Span],
+        span: Span,
+    ) -> TyId {
+        if args.len() != params.len() {
+            let (want, given) = (params.len(), args.len());
+            self.report(
+                Diagnostic::error(
+                    codes::GENERIC_ARGS,
+                    format!(
+                        "`{name}` takes {want} type argument{}, but {given} {} given",
+                        if want == 1 { "" } else { "s" },
+                        if given == 1 { "was" } else { "were" }
+                    ),
+                )
+                .primary(span, format!("write it like `{name}({})`", params.join(", ")))
+                .note(container_note(name)),
+            );
+            return self.types.unknown();
+        }
+        let mut ok = true;
+        for (i, (&arg, param)) in args.iter().zip(params.iter()).enumerate() {
+            match self.types.kind(arg) {
+                TyKind::Unknown => ok = false,
+                TyKind::ConstValue(v) => {
+                    let v = *v;
+                    ok = false;
+                    self.report(
+                        Diagnostic::error(
+                            codes::GENERIC_ARGS,
+                            format!("`{name}` takes a type for `{param}`, but `{v}` is a value"),
+                        )
+                        .primary(spans.get(i).copied().unwrap_or(span), "expected a type like `F32` or `Vec2`")
+                        .note(container_note(name)),
+                    );
+                }
+                _ => {}
+            }
+        }
+        if !ok {
+            return self.types.unknown();
+        }
+        match name {
+            "DynamicArray" => self.types.intern(TyKind::Dynamic(args[0])),
+            _ => self.types.intern(TyKind::Map(args[0], args[1])),
+        }
     }
 
     /// Resolves a type expression, reporting errors and returning the
@@ -548,6 +627,32 @@ impl<'a> Checker<'a> {
             }
             return self.decl_as_type(decl, name.span);
         }
+        if segments.len() == 1
+            && let Some(which) = self.container_name(pkg, name.name)
+        {
+            self.note_builtin(name.span, which.0);
+            if args.is_empty() {
+                self.container_needs_args(which, name.span);
+                return self.types.unknown();
+            }
+            // Behind the container's own pointer, so a struct may hold a
+            // `DynamicArray(Self)` before it is complete, as with `[dynamic]T`.
+            let arg_tys: Vec<TyId> = args
+                .iter()
+                .map(|a| match a {
+                    ast::GenericArg::Type(t) => self.resolve_shallow(t, ctx),
+                    ast::GenericArg::Expr(e) => self.generic_expr_arg(e, ctx),
+                })
+                .collect();
+            let arg_spans: Vec<Span> = args
+                .iter()
+                .map(|a| match a {
+                    ast::GenericArg::Type(t) => t.span,
+                    ast::GenericArg::Expr(e) => e.span,
+                })
+                .collect();
+            return self.container_type(which, &arg_tys, &arg_spans, span);
+        }
         if self.pkg_incomplete(pkg)
             || ((segments.len() == 2 || self.merged_cimports.contains_key(&pkg))
                 && self.report_not_imported(pkg, name.name, name.span))
@@ -781,4 +886,12 @@ fn common_type_hint(name: &str) -> Option<&'static str> {
         "Void" | "Unit" | "Nil" => "a method that returns nothing simply has no `-> Type`",
         _ => return None,
     })
+}
+
+/// What a builtin container name stands for, for its errors.
+fn container_note(name: &str) -> &'static str {
+    match name {
+        "DynamicArray" => "`DynamicArray(T)` is the dynamic array `[dynamic]T`",
+        _ => "`Map(K, V)` is the map `map[K]V`",
+    }
 }

@@ -166,6 +166,13 @@ impl<'a> Checker<'a> {
         let (decl, name) = match &call.callee {
             ast::Callee::Name(n) => {
                 let loc = self.loc_at(n.span);
+                // `DynamicArray(Ball)` or `Map(String, Int)`.
+                if let Some(which) = self.container_name(loc.pkg, n.name) {
+                    self.note_builtin(n.span, which.0);
+                    let args: Vec<TyId> = call.args.iter().map(|a| self.type_arg(&a.value)).collect();
+                    let spans: Vec<Span> = call.args.iter().map(|a| a.value.span).collect();
+                    return Some(self.container_type(which, &args, &spans, span));
+                }
                 (self.lookup_pkg(loc.pkg, n.name).or_else(|| self.lookup_prelude(n.name))?, *n)
             }
             ast::Callee::Method { recv, name, safe: false } => {

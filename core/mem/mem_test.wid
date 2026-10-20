@@ -27,7 +27,7 @@ end
 def arena_grows_the_newest_block_in_place(t: ^testing.T)
   arena = Arena.create
   defer arena.destroy
-  xs = [dynamic]Int.new(allocator: arena.allocator)
+  xs = DynamicArray(Int).new(allocator: arena.allocator)
   for i in 0...100
     xs << i
   end

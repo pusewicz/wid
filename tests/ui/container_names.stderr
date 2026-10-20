@@ -1,0 +1,74 @@
+error[E0315]: `DynamicArray` needs type arguments
+ --> tests/ui/container_names.wid:6:6
+  |
+6 |   a: DynamicArray
+  |      ^^^^^^^^^^^^ write it like `DynamicArray(T)`
+  = note: `DynamicArray(T)` is the dynamic array `[dynamic]T`
+  = see `wid explain E0315`
+
+error[E0315]: `DynamicArray` takes 1 type argument, but 2 were given
+ --> tests/ui/container_names.wid:7:6
+  |
+7 |   b: DynamicArray(Ball, Int)
+  |      ^^^^^^^^^^^^^^^^^^^^^^^ write it like `DynamicArray(T)`
+  = note: `DynamicArray(T)` is the dynamic array `[dynamic]T`
+  = see `wid explain E0315`
+
+error[E0315]: `Map` takes 2 type arguments, but 1 was given
+ --> tests/ui/container_names.wid:8:6
+  |
+8 |   c: Map(String)
+  |      ^^^^^^^^^^^ write it like `Map(K, V)`
+  = note: `Map(K, V)` is the map `map[K]V`
+  = see `wid explain E0315`
+
+error[E0315]: `DynamicArray` takes a type for `T`, but `4` is a value
+ --> tests/ui/container_names.wid:9:19
+  |
+9 |   d: DynamicArray(4)
+  |                   ^ expected a type like `F32` or `Vec2`
+  = note: `DynamicArray(T)` is the dynamic array `[dynamic]T`
+  = see `wid explain E0315`
+
+error[E0315]: `DynamicArray` needs type arguments
+  --> tests/ui/container_names.wid:13:8
+   |
+13 |   xs = DynamicArray.new
+   |        ^^^^^^^^^^^^ write it like `DynamicArray(T)`
+   = note: `DynamicArray(T)` is the dynamic array `[dynamic]T`
+   = see `wid explain E0315`
+
+error[E0315]: `Map` takes 2 type arguments, but 1 was given
+  --> tests/ui/container_names.wid:14:8
+   |
+14 |   ys = Map(String).new
+   |        ^^^^^^^^^^^ write it like `Map(K, V)`
+   = note: `Map(K, V)` is the map `map[K]V`
+   = see `wid explain E0315`
+
+error[E0305]: `DynamicArray` is a builtin type, not a method
+  --> tests/ui/container_names.wid:15:8
+   |
+15 |   zs = DynamicArray(Ball)
+   |        ^^^^^^^^^^^^ cannot be called
+help: `DynamicArray(Ball)` is a type: build a value of it with `new`
+   |   zs = DynamicArray(Ball).new
+   = see `wid explain E0305`
+
+error[E0201]: undefined method `DynamicAray`
+  --> tests/ui/container_names.wid:16:8
+   |
+16 |   vs = DynamicAray(Ball).new
+   |        ^^^^^^^^^^^ not found in this scope
+help: a similar name exists: `DynamicArray`
+   |   vs = DynamicArray(Ball).new
+   = see `wid explain E0201`
+
+error[E0323]: `Ball` is a struct, not a value
+  --> tests/ui/container_names.wid:16:20
+   |
+16 |   vs = DynamicAray(Ball).new
+   |                    ^^^^ expected a value here
+   = see `wid explain E0323`
+
+error: could not compile due to 9 errors
