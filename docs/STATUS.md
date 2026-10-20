@@ -547,7 +547,9 @@ the language server.
   `@[no_bounds_check]`.
 - Strings: interpolation, `to_s`, `inspect`, byte indexing and slicing,
   comparisons, `include?`, `index`, `starts_with?`, `ends_with?`, `to_cstr`.
-- Memory: `alloc(T)`, `alloc([]T, n)`, `free`, `free_all`, `size_of`,
+- Memory: `alloc(T)`, `alloc([]T, n)`, `free`, `allocator.free_all`
+  (`extend Allocator` in `core:builtin`; `free_all(a)` is E0201, fixed to
+  `a.free_all`), `size_of`,
   `align_of`, `T.size`; `context` as a real struct, with assignments to its
   fields scoped to the block (`Stmt::WithContext`).
 - Blocks: `&blk: block(T) -> R` parameters, `yield`, inlining at each call

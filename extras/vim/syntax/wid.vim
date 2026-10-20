@@ -86,7 +86,7 @@ syn match widOperatorMethod /\[\]=\=\|<=>\|\*\*\|[=!<>]=\|<<\|>>\|[-+*\/%<>!~&|]
 syn match widDefSelf /\<self\./ contained nextgroup=widFunction,widOperatorMethod
 
 " Built-in procedures, unless the name is being assigned or passed by name.
-syn match widBuiltin /\<\%(puts\|print\|method\|alloc\|embed\|config\|free\|free_all\|size_of\|align_of\|type_info\|panic\|unreachable\|assert\)\>[?!]\@!\%(\s*\%([-+*\/%&|~<>]\{,2}\)=\%([^=]\|$\)\|:\)\@!/
+syn match widBuiltin /\<\%(puts\|print\|method\|alloc\|embed\|config\|free\|size_of\|align_of\|type_info\|panic\|unreachable\|assert\)\>[?!]\@!\%(\s*\%([-+*\/%&|~<>]\{,2}\)=\%([^=]\|$\)\|:\)\@!/
 " `p` is also a common local name, so it only counts when it is called.
 syn match widBuiltin /\<p\>\%((\|\s\+\%(\<in\>\|[-+*\/%=<>!&|^~.?,)\]}#]\)\@!\S\)\@=/
 

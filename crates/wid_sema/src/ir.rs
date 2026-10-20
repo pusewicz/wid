@@ -302,8 +302,6 @@ pub enum Builtin {
     /// `free(x)`: `(value, allocator)` for pointers, slices and strings, or
     /// `(^container)` for dynamic arrays and maps.
     Free,
-    /// `free_all(allocator)`.
-    FreeAll,
     /// Copies a string into a NUL-terminated C string: `(string, allocator)`.
     ToCString,
     /// Byte-wise string comparison: `(a, b)` returning a negative, zero or

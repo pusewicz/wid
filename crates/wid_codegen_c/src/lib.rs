@@ -907,10 +907,6 @@ impl<'p> Gen<'p> {
                     _ => "((void)0)".into(),
                 }
             }
-            Builtin::FreeAll => {
-                let a = self.expr(&args[0]);
-                format!("wid_free_all({}, {})", strip_parens(&a), self.location(span))
-            }
             Builtin::ToCString => {
                 let s = self.expr(&args[0]);
                 let a = self.expr(&args[1]);

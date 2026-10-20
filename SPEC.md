@@ -41,7 +41,7 @@ def main
       rl.draw_circle_v(b.pos, b.radius, rl.RED)
     end
     rl.end_drawing
-    free_all(context.temp_allocator)
+    context.temp_allocator.free_all
   end
 end
 ```
@@ -434,6 +434,7 @@ end
   - slices with `each`, `each_with_index`, `reverse_each`, `count`, `any?`,
     `all?`, `none?`, `find`, `find_index`, `include?`, `index`, `sum`, `min`,
     `max`, `reverse!`, `sort!` and `sort_by!`;
+  - `Allocator` with `free_all`, which releases everything it handed out;
   - numbers with `between?`, `clamp`, `min`, `max`, `zero?`, `abs`, `even?`,
   `odd?`, `times` and `upto`. Inside a method, `self` is the receiver itself (passed by
   pointer, so changes are visible to the caller), and a bare method name calls
@@ -512,7 +513,10 @@ end
   `^T`) or `alloc([]T, n)`, and release with `free(x)`; each takes an optional
   `allocator:`. A container grows using the allocator it was created with.
   String interpolation and `to_s` use `context.temp_allocator`; reset it once
-  per frame with `free_all`. `.new`, `{}` and array literals never allocate.
+  per frame with `context.temp_allocator.free_all`. `free_all` is a method of
+  `Allocator`, as it is of `core:mem`'s `Arena` and `Pool`: an allocator
+  resets itself, and `free_all(a)` is an error (E0201) whose fix rewrites it
+  to `a.free_all`. `.new`, `{}` and array literals never allocate.
 - Cleanup uses `defer`, which runs at scope exit. Wid has no `ensure`.
 - `core:mem` ships the heap and temp allocators, a growing `Arena`, a
   fixed-chunk `Pool` and a `Tracker`, plus `copy`, `set`, `zero` and

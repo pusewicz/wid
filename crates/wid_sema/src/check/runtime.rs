@@ -203,21 +203,30 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Lowers `free_all(allocator)`.
-    pub fn builtin_free_all(&mut self, args: &[ast::Arg], span: Span) -> ir::Expr {
-        let void = self.types.void();
-        let allocator_ty = self.types.allocator_ty;
-        let a = match args {
-            [arg] => self.expr_coerced(&arg.value, allocator_ty),
-            _ => {
-                self.report(
-                    Diagnostic::error(codes::ARG_COUNT, "`free_all` takes one allocator")
-                        .primary(span, "write it like `free_all(context.temp_allocator)`"),
-                );
-                return ir::Expr::new(ExprKind::Zero, void);
+    /// Reports `free_all(a)`: resetting an allocator is the method
+    /// `a.free_all`, so the call is rewritten to it.
+    pub fn free_all_call(&mut self, name_span: Span, args: &[ast::Arg], span: Span) -> ir::Expr {
+        let mut diag = Diagnostic::error(codes::UNDEFINED_NAME, "`free_all` is a method of `Allocator`")
+            .primary(name_span, "not a function")
+            .note("an allocator resets itself, like `context.temp_allocator.free_all`");
+        diag = match args {
+            [arg] if arg.name.is_none() => {
+                let text = self.source_text(arg.value.span);
+                let operand = if super::items::is_simple_operand(&text) { text } else { format!("({text})") };
+                diag.suggest_replace(
+                    "call it on the allocator",
+                    span,
+                    format!("{operand}.free_all"),
+                    Applicability::MachineApplicable,
+                )
             }
+            _ => diag.help("call it on the allocator to reset: `allocator.free_all`"),
         };
-        ir::Expr::new(ExprKind::Builtin { op: Builtin::FreeAll, args: vec![a], span }, void)
+        self.report(diag);
+        for arg in args {
+            self.expr(&arg.value, None);
+        }
+        ir::Expr::new(ExprKind::Zero, self.types.void())
     }
 
     /// Lowers `size_of(T)` and `align_of(T)`.
