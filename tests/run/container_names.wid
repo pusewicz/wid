@@ -1,0 +1,56 @@
+# `DynamicArray(T)` and `Map(K, V)` name `[dynamic]T` and `map[K]V`.
+struct Ball
+  x: Int
+end
+
+struct Node
+  kids: DynamicArray(Node)
+end
+
+struct Bag
+  balls: DynamicArray(Ball)
+  counts: Map(String, Int)
+end
+
+def total(xs: []Ball) -> Int
+  sum = 0
+  for b in xs
+    sum += b.x
+  end
+  sum
+end
+
+def last_of(xs: DynamicArray($T)) -> T? = xs.last
+
+def main
+  balls = DynamicArray(Ball).new
+  defer free(balls)
+  balls << Ball.new(1)
+  balls << Ball.new(2)
+  # The same type as `[dynamic]Ball`.
+  same: [dynamic]Ball = balls
+  puts total(same)
+  p last_of(balls)
+
+  counts = Map(String, Int).new(allocator: context.allocator)
+  defer free(counts)
+  counts["a"] += 1
+  counts["a"] += 1
+  p counts["a"]
+
+  bag = Bag.new
+  defer free(bag.balls)
+  defer free(bag.counts)
+  bag.balls << Ball.new(5)
+  bag.counts["b"] = 3
+  puts total(bag.balls)
+  p bag.counts["b"]
+
+  tree = Node.new
+  defer free(tree.kids)
+  tree.kids << Node.new
+  puts tree.kids.size
+
+  puts size_of(DynamicArray(Ball)) == size_of([dynamic]Ball)
+  puts size_of(Map(String, Int)) == size_of(map[String]Int)
+end

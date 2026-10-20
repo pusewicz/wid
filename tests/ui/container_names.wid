@@ -1,0 +1,19 @@
+struct Ball
+  x: Int
+end
+
+struct Holder
+  a: DynamicArray
+  b: DynamicArray(Ball, Int)
+  c: Map(String)
+  d: DynamicArray(4)
+end
+
+def main
+  xs = DynamicArray.new
+  ys = Map(String).new
+  zs = DynamicArray(Ball)
+  vs = DynamicAray(Ball).new
+  h = Holder.new
+  p xs, ys, zs, vs, h
+end

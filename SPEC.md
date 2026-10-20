@@ -29,7 +29,7 @@ def main
   rl.init_window(800, 450, "bounce")
   defer rl.close_window
 
-  balls = [dynamic]Ball.new
+  balls = DynamicArray(Ball).new
   defer free(balls)
   balls << Ball.new(pos: [400.0, 225.0])
 
@@ -189,10 +189,21 @@ end
   declared again. `Context`, `Allocator`, `AllocMode`, `Location` and
   `Logger` are predeclared library types: a package may declare its own type
   under one of these names (a C library's `stbrp_context` becomes `Context`),
-  and inside that package the name means its own type.
+  and inside that package the name means its own type. `DynamicArray` and
+  `Map` are predeclared the same way (see the constructors below).
 - **Constructors (Odin):** `^T`, `[^]T`, `[N]T`, `[]T`, `[dynamic]T`,
   `map[K]V`, `proc(A) -> R`, `distinct T` and `matrix[R, C]T`. Small numeric
   arrays support element-wise math and swizzles (`v.xy`, `c.rgb`).
+  - `DynamicArray(T)` is another name for `[dynamic]T`, and `Map(K, V)` for
+    `map[K]V`: the same types, written like a generic struct instance
+    (`Pool(Ball, 64)`), anywhere a type goes. Construct containers with these
+    names, `DynamicArray(Ball).new` and `Map(String, Int).new`: their
+    parentheses close the type before `.new`, where `[dynamic]Ball.new`
+    reads as `[dynamic]` applied to `Ball.new`. Either spelling works, and
+    diagnostics show the type as `[dynamic]T` or `map[K]V`.
+  - `DynamicArray` takes one type and `Map` two. Without them, or with a
+    value, it is an error (E0315), and `DynamicArray(Int)` alone where a
+    value is expected is E0305 with a fix that adds `.new`.
 - **Size limit:** a type can take at most `2^61 - 1` bytes, and an array can
   have at most `2^61 - 1` elements. Clang rejects larger arrays, so every
   type within the limit compiles with every supported C compiler. A larger
@@ -318,8 +329,9 @@ end
   - Dynamic arrays also have `<<` and `.push`, `.pop` (returns `T?`),
     `.insert(i, x)`, `.delete_at(i)`, `.reserve(n)`, `.clear` and
     `.capacity`.
-  - `[dynamic]T.new` and `map[K]V.new` start empty and grow with the
-    allocator that was `context.allocator` at creation, or with `allocator:`.
+  - `DynamicArray(T).new` and `Map(K, V).new` (or `[dynamic]T.new` and
+    `map[K]V.new`) start empty and grow with the allocator that was
+    `context.allocator` at creation, or with `allocator:`.
     A zero-valued container adopts `context.allocator` when it first grows.
   - As in Odin, growing a dynamic array or map while iterating it, or while
     holding a pointer into it, invalidates the iteration and the pointer.

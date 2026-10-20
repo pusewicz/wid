@@ -74,11 +74,12 @@ impl<'a> Checker<'a> {
                 let tmp = self.spill(ir::Expr::new(ExprKind::Aggregate(values), arr));
                 self.full_slice(tmp, expected.expect("checked above"))
             }
-            Some(TyKind::Dynamic(_)) => {
+            Some(TyKind::Dynamic(elem)) => {
+                let elem = self.types.display(elem);
                 self.report(
                     Diagnostic::error(codes::TYPE_MISMATCH, "an array literal cannot become a dynamic array")
                         .primary(span, "dynamic arrays grow with an allocator")
-                        .help("create it with `[dynamic]T.new` and append with `<<`"),
+                        .help(format!("create it with `DynamicArray({elem}).new` and append with `<<`")),
                 );
                 ir::Expr::new(ExprKind::Zero, expected.expect("checked above"))
             }
@@ -87,7 +88,7 @@ impl<'a> Checker<'a> {
                     self.report(
                         Diagnostic::error(codes::CANNOT_INFER, "cannot infer the type of an empty array")
                             .primary(span, "no elements to infer from")
-                            .help("give it a type, like `xs: [0]Int = []`, or use `[dynamic]Int.new`"),
+                            .help("give it a type, like `xs: [0]Int = []`, or use `DynamicArray(Int).new`"),
                     );
                     return ir::Expr::new(ExprKind::Zero, self.types.unknown());
                 };

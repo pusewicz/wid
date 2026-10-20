@@ -391,6 +391,10 @@ impl<'a> Checker<'a> {
                 if let Some(t) = self.primitive(n.as_str()) {
                     return Receiver::Type(t);
                 }
+                if let Some(which) = self.container_name(loc.pkg, *n) {
+                    self.container_needs_args(which, recv.span);
+                    return Receiver::Type(self.types.unknown());
+                }
                 match self.lookup_import(loc, *n) {
                     Some(p) => Receiver::Package(p),
                     None => Receiver::Value,

@@ -1725,6 +1725,28 @@ impl<'a> Checker<'a> {
                     self.report(diag);
                     return ir::Expr::new(ExprKind::Zero, self.types.unknown());
                 }
+                if let Some((container, params)) = self.container_name(loc.pkg, name.name) {
+                    // `DynamicArray(Int)` names a type, like an instance of a
+                    // generic struct.
+                    let mut diag = Diagnostic::error(
+                        codes::NOT_CALLABLE,
+                        format!("`{container}` is a builtin type, not a method"),
+                    )
+                    .primary(name.span, "cannot be called");
+                    diag = if call.args.is_empty() || block.is_some() {
+                        diag.help(format!("build a value with `{container}({}).new`", params.join(", ")))
+                    } else {
+                        let text = self.source_text(span);
+                        diag.suggest_replace(
+                            format!("`{text}` is a type: build a value of it with `new`"),
+                            span,
+                            format!("{text}.new"),
+                            Applicability::MachineApplicable,
+                        )
+                    };
+                    self.report(diag);
+                    return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+                }
                 if name.as_str() == "free_all" {
                     return self.free_all_call(name.span, &call.args, span);
                 }
@@ -1749,6 +1771,10 @@ impl<'a> Checker<'a> {
                 let mut candidates = own.methods.clone();
                 candidates.extend(self.package_names(loc.pkg));
                 candidates.extend(BUILTINS.iter().copied());
+                // `DynamicAray(Ball).new` meant the builtin container.
+                if name.as_str().starts_with(char::is_uppercase) {
+                    candidates.extend(super::ty::CONTAINER_NAMES.iter().map(|(n, _)| *n));
+                }
                 self.undefined_call(*name, &call.args, span, &candidates, &own)
             }
             ast::Callee::Method { recv, name, safe } => {

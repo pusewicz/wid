@@ -35,7 +35,7 @@ syn match widConstant /\<\u[A-Z0-9_]\+\>/
 syn keyword widBuiltinType Int UInt I8 I16 I32 I64 U8 U16 U32 U64 F32 F64 Bool Rune
 syn keyword widBuiltinType String CString RawPtr TypeId Any Error Never Type Code Symbol Self
 syn keyword widBuiltinType Context Allocator AllocMode Location Logger Os Arch FieldInfo MethodInfo
-syn keyword widBuiltinType TypeInfo TypeKind TypeInfoField TypeInfoMember
+syn keyword widBuiltinType TypeInfo TypeKind TypeInfoField TypeInfoMember DynamicArray Map
 
 " The lexer's reserved words (`Keyword` in crates/wid_syntax/src/token.rs) by
 " highlight group, with extra arguments for the match. A reserved word followed

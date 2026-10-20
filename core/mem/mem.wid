@@ -2,9 +2,9 @@
 #
 # Every allocator here is a plain `Allocator` value (a C-ABI procedure plus a
 # data pointer), so it can go anywhere one is expected: `alloc(T, allocator:)`,
-# `[dynamic]T.new(allocator:)` or `context.allocator = arena.allocator`. The
-# struct behind an allocator must stay where it is while the allocator is in
-# use: `allocator` captures its address.
+# `DynamicArray(T).new(allocator:)` or `context.allocator = arena.allocator`.
+# The struct behind an allocator must stay where it is while the allocator is
+# in use: `allocator` captures its address.
 
 # The process-wide heap allocator, backed by malloc.
 @[extern("wid_heap_allocator")]

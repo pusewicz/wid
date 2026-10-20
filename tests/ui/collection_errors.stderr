@@ -33,7 +33,7 @@ error[E0304]: cannot infer the type of an empty array
    |
 13 |   e = []
    |       ^^ no elements to infer from
-help: give it a type, like `xs: [0]Int = []`, or use `[dynamic]Int.new`
+help: give it a type, like `xs: [0]Int = []`, or use `DynamicArray(Int).new`
    = see `wid explain E0304`
 
 error[E0323]: a range is not a value by itself

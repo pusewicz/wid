@@ -7,7 +7,7 @@ struct Builder
 
   # An empty builder whose buffer grows with `allocator`.
   def self.create(allocator: Allocator = context.allocator) -> Builder
-    Builder.new(buf: [dynamic]U8.new(allocator: allocator))
+    Builder.new(buf: DynamicArray(U8).new(allocator: allocator))
   end
 
   # Appends a string.
