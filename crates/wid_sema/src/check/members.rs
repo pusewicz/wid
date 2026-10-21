@@ -1320,7 +1320,22 @@ impl<'a> Checker<'a> {
             }
             diag = diag.note(format!("available: {}", parts.join("; ")));
         }
+        // `x = d` followed by `    .south`, meant as a member of its own.
+        if !is_ivar && self.continued_line(span) {
+            diag = diag.note(format!(
+                "this line starts with `.`, and is indented deeper than the line above, so it continues it; \
+                 to give the enum member `.{name}` instead, indent it like that line"
+            ));
+        }
         self.report(diag);
+    }
+
+    /// Whether the name at `span` follows a `.` that starts its line, so
+    /// the line continues the one above.
+    fn continued_line(&self, span: Span) -> bool {
+        let Some(text) = self.source_texts.get(&span.file) else { return false };
+        let Some(before) = text.get(..span.start as usize) else { return false };
+        before.strip_suffix('.').is_some_and(|b| b.rsplit('\n').next().is_some_and(|l| l.trim().is_empty()))
     }
 
     /// The names that each `using` field of `ty` promotes, transitively,

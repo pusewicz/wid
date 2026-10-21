@@ -7,7 +7,7 @@ enum E
 end
 
 def main
-  x: E = :a
-  y: E = :c
+  x: E = .a
+  y: E = .c
   p x, y
 end

@@ -330,6 +330,7 @@ impl<'c> Printer<'c> {
             ExprKind::Float(v) => self.literal(e.span).unwrap_or_else(|| float_text(*v)),
             ExprKind::Str(parts) => self.literal(e.span).unwrap_or_else(|| self.string(parts)),
             ExprKind::Symbol(name) => format!(":{}", name.as_str()),
+            ExprKind::Selector(name) => format!(".{}", name.as_str()),
             ExprKind::Nil => "nil".to_string(),
             ExprKind::True => "true".to_string(),
             ExprKind::False => "false".to_string(),

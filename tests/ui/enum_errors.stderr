@@ -1,25 +1,34 @@
-error[E0313]: `case` does not handle :blue
+error[E0313]: `case` does not handle .blue
  --> tests/ui/enum_errors.wid:8:8
   |
 8 |   case c
   |        ^ `Color` has 3 members
-help: add `when :blue` or an `else` branch
+help: add `when .blue` or an `else` branch
   = see `wid explain E0313`
 
 error[E0204]: `Color` has no member `purple`
   --> tests/ui/enum_errors.wid:15:14
    |
-15 |   c: Color = :purple
+15 |   c: Color = .purple
    |              ^^^^^^^ not a member of `Color`
-   = note: members: :red, :green, :blue
+   = note: members: .red, .green, .blue
    = see `wid explain E0204`
 
-error[E0304]: cannot infer which enum this symbol belongs to
+error[E0331]: `:red` is a symbol, not a value
   --> tests/ui/enum_errors.wid:17:7
    |
 17 |   x = :red
-   |       ^^^^ symbols need an expected enum type
-help: declare the variable's type, like `dir: Dir = :north`
+   |       ^^^^ a symbol names something while compiling
+   = note: an enum member is written `.red` where its enum is expected, or with the enum's name, like `Dir.red`
+help: declare the variable's type and write the member, like `dir: Dir = .red`
+   = see `wid explain E0331`
+
+error[E0304]: cannot infer which enum `.red` belongs to
+  --> tests/ui/enum_errors.wid:18:7
+   |
+18 |   y = .red
+   |       ^^^^ no enum is expected here
+help: write the enum's name, like `Color.red`, or give the value a type where it goes, like `x: Color = .red`
    = see `wid explain E0304`
 
-error: could not compile due to 3 errors
+error: could not compile due to 4 errors

@@ -107,6 +107,10 @@ exe 'syn match widSymbol /' . s:unattached . ':\h\w*\%([?!]=\@!\|=[=>~]\@!\)\=/'
 exe 'syn match widSymbol /' . s:unattached . ':\%(\[\]=\=\|<=>\|\*\*\|[=!<>]=\|<<\|>>\|[-+*\/%<>!]\)/'
 unlet s:unattached
 
+" `.north`, an enum member: a `.` that follows no value, mid-line (a line
+" that starts with `.` may continue the one above).
+syn match widEnumSelector /\%(\w\|[)\]}"'?!.]\)\@1<!\%(^\s*\)\@<!\.\%(\l\|_\)\w*/
+
 syn match widInstanceVariable /@\h\w*/
 syn match widTypeParam /\$\h\w*/
 syn match widUninitialized /---/
@@ -124,7 +128,7 @@ syn match widRawEscape /\\[\\']/ contained
 syn cluster widExpr contains=widOperator,widNumber,widFloat,widType,widConstant,widBuiltinType,
       \widConditional,widConditionalModifier,widRepeat,widRepeatModifier,widControl,widKeyword,
       \widStructure,widInclude,widComptime,widBoolean,widNil,widPseudoVariable,widBuiltin,
-      \widTypeKeyword,widMember,widSymbol,widInstanceVariable,widTypeParam,widUninitialized,
+      \widTypeKeyword,widMember,widEnumSelector,widSymbol,widInstanceVariable,widTypeParam,widUninitialized,
       \widString,widRawString,widNestedBraces,widSplice
 syn region widInterpolation matchgroup=widInterpolationDelimiter start=/#{/ end=/}/ contained oneline
       \ contains=@widExpr
@@ -172,6 +176,7 @@ hi def link widPseudoVariable Constant
 hi def link widBuiltin Function
 hi def link widTypeKeyword Type
 hi def link widSymbol Constant
+hi def link widEnumSelector Constant
 hi def link widInstanceVariable Identifier
 hi def link widTypeParam Type
 hi def link widUninitialized Special

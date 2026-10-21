@@ -1,0 +1,21 @@
+error[E0105]: an enum member's name goes right after the `.`
+  --> tests/ui/enum_member_syntax.wid:11:13
+   |
+11 |   d: Dir = . north
+   |             ^ remove this space
+   = note: `.name` names a member of the enum expected here, like `.north`
+help: remove the space
+   |   d: Dir = .north
+   = see `wid explain E0105`
+
+error[E0105]: `.to_s` starts a line, so it calls a method on nothing
+  --> tests/ui/enum_member_syntax.wid:13:3
+   |
+13 |   .to_s(2)
+   |   ^^^^^ this call has no receiver
+   = note: a line that starts with `.` continues the statement above only when it is indented deeper than the statement's first line, and the line above doesn't open a block; otherwise `.name` is an enum member
+help: indent it deeper than the line above, to continue that line
+   |     .to_s(2)
+   = see `wid explain E0105`
+
+error: could not compile due to 2 errors

@@ -127,7 +127,7 @@ def main
   end
   puts later
   puts width(1.5.to(F32)), width(7.to(U8)), width(2)
-  comptime if OS == :darwin || OS == :linux
+  comptime if OS == .darwin || OS == .linux
     puts "unix"
   else
     puts "not unix"

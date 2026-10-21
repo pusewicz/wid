@@ -124,6 +124,7 @@ impl<'a> Checker<'a> {
             E::SelfRef => self.self_place(e.span, "`self`"),
             E::IVar(name) => self.ivar(*name, e.span),
             E::Symbol(name) => self.symbol(*name, e.span, expected),
+            E::Selector(name) => self.selector(*name, e.span, expected),
             E::Case(case) => self.case_value(case, expected, e.span),
             E::AddrOf(inner) => self.address_of_expr(inner, e.span),
             E::Array(elems) => self.array_literal(elems, expected, e.span),
@@ -337,10 +338,15 @@ impl<'a> Checker<'a> {
                 ty
             }
             TyKind::Symbol => {
+                let text = self.source_text(span);
+                let member = text.trim_start().trim_start_matches(':');
                 self.report(
-                    Diagnostic::error(codes::CANNOT_INFER, "cannot infer which enum this symbol belongs to")
-                        .primary(span, "symbols need an expected enum type")
-                        .help("declare the variable's type, like `dir: Dir = :north`"),
+                    Diagnostic::error(codes::SYMBOL_AS_MEMBER, format!("`{text}` is a symbol, not a value"))
+                        .primary(span, "a symbol names something while compiling")
+                        .note(format!(
+                            "an enum member is written `.{member}` where its enum is expected, or with the enum's name, like `Dir.{member}`"
+                        ))
+                        .help(format!("declare the variable's type and write the member, like `dir: Dir = .{member}`")),
                 );
                 self.types.unknown()
             }
@@ -479,7 +485,7 @@ impl<'a> Checker<'a> {
                 TyKind::Enum(id) => {
                     let first = self.types.enum_info(*id).members.first().map_or("member", |(n, _)| n.as_str());
                     format!(
-                        "an enum's value is one of its members, like `{written}.{first}`, or `:{first}` where a `{shown}` is expected"
+                        "an enum's value is one of its members, like `{written}.{first}`, or `.{first}` where a `{shown}` is expected"
                     )
                 }
                 TyKind::Union(id) => {
@@ -521,23 +527,90 @@ impl<'a> Checker<'a> {
 
     // ----- names ---------------------------------------------------------
 
-    /// Lowers `:name`, which selects an enum member when one is expected
-    /// (also as a `T?`, which the member converts to), and is otherwise a
-    /// `Symbol` value (an error at run time).
+    /// Lowers `:name`, a `Symbol`. Where an enum (or `Error`) is expected
+    /// it was meant as a member, which is written `.name`: that is
+    /// reported (E0331), with the fix, and lowered as the member.
     fn symbol(&mut self, name: Name, span: Span, expected: Option<TyId>) -> ir::Expr {
-        if let Some(ty) = expected {
-            let ty = self.optional_inner(ty).unwrap_or(ty);
-            let base = self.types.base(ty);
-            match self.types.kind(base) {
-                TyKind::Enum(_) => return self.enum_member(base, name, span),
-                TyKind::Error => {
-                    self.error_tag(name);
-                    return ir::Expr::new(ExprKind::ErrorTag(name), ty);
+        // A quoted symbol (`:"north"`) was reported (E0110).
+        let quoted = self.source_text(span).contains(['"', '\'']);
+        if quoted && expected.and_then(|t| self.expected_enum(t)).is_some() {
+            return self.selector(name, span, expected);
+        }
+        if let Some(ty) = expected
+            && let Some(base) = self.expected_enum(ty)
+        {
+            let shown = self.types.display(base);
+            let mut diag = Diagnostic::error(
+                codes::SYMBOL_AS_MEMBER,
+                format!("an enum member is written `.{name}`, not `:{name}`"),
+            )
+            .primary(span, format!("a member of `{shown}` goes here"))
+            .note("`:name` is a symbol, a name for macros and options; `.name` is a member of the enum expected");
+            diag = match self.spliced_by(span) {
+                Some(by) => {
+                    diag.help(format!("`{by}` splices this symbol: write `.#{{…}}` in its `quote` where a member goes"))
                 }
-                _ => {}
-            }
+                None if self.source_text(span) == format!(":{name}") => diag.suggest_replace(
+                    format!("write `.{name}`"),
+                    Span { end: span.start + 1, ..span },
+                    ".",
+                    Applicability::MachineApplicable,
+                ),
+                None => diag.help(format!("write `.{name}`")),
+            };
+            self.report(diag);
+            return self.selector(name, span, expected);
         }
         ir::Expr::new(ExprKind::Int(i128::from(name.index())), self.types.symbol())
+    }
+
+    /// The enum (or `Error`) that a value of type `ty` names a member of
+    /// when written `.name`, looking through an optional.
+    fn expected_enum(&self, ty: TyId) -> Option<TyId> {
+        let ty = self.optional_inner(ty).unwrap_or(ty);
+        let base = self.types.base(ty);
+        matches!(self.types.kind(base), TyKind::Enum(_) | TyKind::Error).then_some(base)
+    }
+
+    /// Lowers `.name`, the member of the enum expected (also as a `T?`,
+    /// which the member converts to), or of `Error`. Without an expected
+    /// enum it names nothing (E0304).
+    fn selector(&mut self, name: Name, span: Span, expected: Option<TyId>) -> ir::Expr {
+        if let Some(ty) = expected
+            && let Some(base) = self.expected_enum(ty)
+        {
+            if let TyKind::Error = self.types.kind(base) {
+                self.error_tag(name);
+                return ir::Expr::new(ExprKind::ErrorTag(name), self.optional_inner(ty).unwrap_or(ty));
+            }
+            return self.enum_member(base, name, span);
+        }
+        // The type expected was reported.
+        if expected.is_some_and(|t| matches!(self.types.kind(t), TyKind::Unknown)) {
+            return ir::Expr::new(ExprKind::Zero, self.types.unknown());
+        }
+        let owner = self.types.enums.iter().find(|e| e.members.iter().any(|(n, _)| *n == name)).map(|e| e.name.clone());
+        let example = owner.as_deref().unwrap_or("Dir");
+        let mut diag = Diagnostic::error(codes::CANNOT_INFER, format!("cannot infer which enum `.{name}` belongs to"))
+            .primary(span, "no enum is expected here")
+            .help(format!(
+                "write the enum's name, like `{example}.{name}`, or give the value a type where it goes, like `x: {example} = .{name}`"
+            ));
+        if self.starts_line(span) {
+            diag = diag.note(
+                "a line that starts with `.` continues the statement above only when it is indented deeper than \
+                 the statement's first line, and the line above doesn't open a block",
+            );
+        }
+        self.report(diag);
+        ir::Expr::new(ExprKind::Zero, self.types.unknown())
+    }
+
+    /// Whether `span` starts its line, after nothing but indentation.
+    fn starts_line(&self, span: Span) -> bool {
+        let Some(text) = self.source_texts.get(&span.file) else { return false };
+        let before = &text[..(span.start as usize).min(text.len())];
+        before.rsplit('\n').next().is_some_and(|l| l.trim().is_empty())
     }
 
     fn ident(&mut self, name: Name, span: Span, expected: Option<TyId>) -> ir::Expr {

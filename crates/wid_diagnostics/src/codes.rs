@@ -102,6 +102,7 @@ codes! {
     UNKNOWN_ATTRIBUTE = "E0328", "unknown or misused attribute";
     TYPE_TOO_LARGE = "E0329", "type is too large";
     PREDICATE_RETURN = "E0330", "`?` method does not return `Bool`";
+    SYMBOL_AS_MEMBER = "E0331", "symbol where an enum member is expected";
 
     // Errors and control flow.
     IGNORED_ERROR = "E0401", "`Error` result ignored";

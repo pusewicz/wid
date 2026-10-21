@@ -43,16 +43,16 @@ def write_float(
   b: ^strings.Builder,
   x: F64,
   precision: Int = -1,
-  style: FloatStyle = :fixed,
+  style: FloatStyle = .fixed,
   width: Int = 0,
   pad: Rune = ' ',
   plus: Bool = false
 )
   buf: [128]U8 = ---
   code = case style
-    when :fixed then 102
-    when :exponent then 101
-    when :general then 103
+    when .fixed then 102
+    when .exponent then 101
+    when .general then 103
   end
   n = format_float_raw(x, precision, code.to(U8), &buf[0], 128)
   text = buf[0...n].to(String)
@@ -91,7 +91,7 @@ end
 def float(
   x: F64,
   precision: Int = -1,
-  style: FloatStyle = :fixed,
+  style: FloatStyle = .fixed,
   width: Int = 0,
   pad: Rune = ' ',
   plus: Bool = false,

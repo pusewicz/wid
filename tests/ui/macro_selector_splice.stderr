@@ -1,0 +1,26 @@
+error[E0911]: the macro `by_number` splices an integer where a name goes
+  --> tests/ui/macro_selector_splice.wid:21:12
+   |
+21 |   a: Dir = by_number(3)
+   |            ^^^^^^^^^^^^ `by_number` expands here
+  ::: tests/ui/macro_selector_splice.wid:9:5
+   |
+ 9 |     .#{n}
+   |     ----- this splice is an integer
+help: splice a `Symbol` where a name goes; `"text".to_sym` makes one from a string
+   = see `wid explain E0911`
+
+error[E0911]: the macro `by_name` splices the name `North` where an enum member goes
+  --> tests/ui/macro_selector_splice.wid:22:12
+   |
+22 |   b: Dir = by_name("North")
+   |            ^^^^^^^^^^^^^^^^ `by_name` expands here
+  ::: tests/ui/macro_selector_splice.wid:16:5
+   |
+16 |     .#{sym}
+   |     ------- `North` is spliced here
+   = note: an enum member starts with a lowercase letter or `_`, followed by letters, digits and `_`
+help: build a name that follows this rule, like `north`, before `.to_sym`
+   = see `wid explain E0911`
+
+error: could not compile due to 2 errors

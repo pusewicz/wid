@@ -2,7 +2,7 @@
 # reflection hands out.
 
 # Operating systems a program can be compiled for. `OS` holds the target's,
-# so `comptime if OS == :windows` picks code per platform.
+# so `comptime if OS == .windows` picks code per platform.
 enum Os
   # macOS and Apple's other systems.
   darwin

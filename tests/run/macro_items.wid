@@ -10,7 +10,7 @@ def main
   puts hero.describe
   p hero.is_alive
   puts hero.field_names
-  c: Color = :green
+  c: Color = .green
   puts c.describe, Color.count_line
   puts hero.greet
   puts 5.shout

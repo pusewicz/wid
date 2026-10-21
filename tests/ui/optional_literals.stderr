@@ -45,9 +45,9 @@ error[E0301]: expected `F32`, found `Bool`
 error[E0204]: `Dir` has no member `west`
   --> tests/ui/optional_literals.wid:27:13
    |
-27 |   d: Dir? = :west
+27 |   d: Dir? = .west
    |             ^^^^^ not a member of `Dir`
-   = note: members: :north
+   = note: members: .north
    = see `wid explain E0204`
 
 error: could not compile due to 7 errors

@@ -23,6 +23,7 @@ macro def record(name: Symbol, ty: Type, init: Code, *extras: Symbol) -> Code
       value: #{ty} = #{reader}
       copy = self.#{name}
       @#{name} = :#{name}
+      p .#{name}
       #{name}(1, #{name}: 2)
       for #{name} in [1, 2]
         puts "#{name} is interpolated at run time"
@@ -42,7 +43,7 @@ macro def record(name: Symbol, ty: Type, init: Code, *extras: Symbol) -> Code
     overload :#{name}, :#{name}
     #{name} = #{init}
     @[export("record")] private def exported = 1
-    comptime if OS == :linux
+    comptime if OS == .linux
       LIMIT = 2
     end
     stats.counter :kills

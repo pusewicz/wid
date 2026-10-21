@@ -742,9 +742,10 @@ impl<'a> Checker<'a> {
                 "…?".to_string(),
                 Applicability::HasPlaceholders,
             ),
-            // `def dir = :north`: a symbol is a value where an enum is expected.
+            // `def dir = :north`: a symbol only names things while
+            // compiling, so the value was likely meant as an enum member.
             (TyKind::Symbol, _) => (
-                "declare the return type, the enum the symbol is a member of",
+                "declare the return type, and return a value of it: a symbol is a name for macros, not a value",
                 "…".to_string(),
                 Applicability::HasPlaceholders,
             ),

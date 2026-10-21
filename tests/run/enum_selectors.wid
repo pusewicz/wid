@@ -1,0 +1,97 @@
+# `.name` names a member of the enum the context expects: in a declaration,
+# an argument (with or without parentheses), a comparison, a `when`, a
+# return, an array, an optional and an `Error`. A line that starts with
+# `.name` is a value of its own unless it is indented deeper than its
+# statement's first line, which doesn't open a block.
+enum Dir : U8
+  north
+  east
+  south
+  west
+
+  # On their own lines, after `when` and `else`.
+  def turn -> Dir
+    case self
+    when .north
+      .east
+    when .east
+      .south
+    when .south
+      .west
+    else
+      .north
+    end
+  end
+
+  def name -> String
+    case self
+    when .north, .south then "vertical"
+    else "horizontal"
+    end
+  end
+end
+
+enum Kind
+  struct
+  union
+end
+
+# The value of a method on its own line.
+def start -> Dir
+  .north
+end
+
+def step(d: Dir) -> Dir
+  if d == .west
+    return .north
+  end
+  d.turn
+end
+
+def show(d: Dir)
+  puts "#{d.to_i} #{d.name}"
+end
+
+def find(n: Int) -> (Int, Error)
+  return 0, .not_found if n < 0
+  return n, nil
+end
+
+macro def member(name: Symbol) -> Code
+  quote do
+    .#{name}
+  end
+end
+
+macro def members(*names: Symbol) -> Code
+  quote do
+    [.#{names}]
+  end
+end
+
+FACING: Dir = .south
+
+def main
+  d: Dir = .north
+  show .east
+  show(.south)
+  show d.turn
+  show start.turn.turn
+  show step(.west)
+  show FACING
+  ds: [3]Dir = [.west, .east, d]
+  p ds[0] == .west, ds[1] != .west
+  maybe: Dir? = .south
+  p maybe == .south
+  _, err = find(-1)
+  p err == .not_found
+  k: Kind = .struct
+  p k == .union
+  show member(:west)
+  all: [2]Dir = members(:north, :west)
+  p all[1] == .west
+  # A line indented under its statement continues it.
+  n = 5.to_f
+    .to_i
+  p n
+end

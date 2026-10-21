@@ -1,0 +1,15 @@
+# A `.` that names an enum member is followed by the name, with no space.
+# A line that starts with `.name(…)`, or `.name` and a block or arguments,
+# is a method call that doesn't continue the line above when it isn't
+# indented deeper than that line's statement.
+enum Dir
+  north
+  south
+end
+
+def main
+  d: Dir = . north
+  n = 5
+  .to_s(2)
+  p d, n
+end

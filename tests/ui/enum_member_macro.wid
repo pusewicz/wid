@@ -16,8 +16,8 @@ enum Tool
 end
 
 def main
-  c: Color = :red
+  c: Color = .red
   puts c.describe
-  t: Tool = :helpers
+  t: Tool = .helpers
   p t
 end

@@ -1,0 +1,47 @@
+# An enum member is written `.name`: `:name` is a symbol, a name for macros
+# and options. Where an enum (or `Error`) is expected, a symbol is E0331,
+# whose fix writes `.name`; one stored with no enum expected is E0331 too.
+# `.name` where no enum is expected is E0304, with a note when it starts a
+# line. A line indented deeper than the one above continues it, and a
+# member that isn't found there says so.
+enum Dir
+  north
+  south
+end
+
+FACING: Dir = :south
+
+def go(d: Dir)
+  puts d.to_i
+end
+
+def find(n: Int) -> (Int, Error)
+  return 0, :not_found if n < 0
+  return n, nil
+end
+
+def main
+  d: Dir = :north
+  go :south
+  p d == :south
+  case d
+  when :north then puts "up"
+  else puts "down"
+  end
+  m: Dir? = :south
+  _, err = find(1)
+  p m, err, FACING
+  s = :north
+  x = .north
+  p .south
+  y = d
+  .south
+  p s, x, y
+end
+
+def facing(d: Dir) -> Dir
+  puts "facing"
+  z = d
+    .south
+  z
+end

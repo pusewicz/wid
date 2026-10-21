@@ -338,6 +338,7 @@ macro_rules! visitor {
                 ExprKind::Int(_)
                 | ExprKind::Float(_)
                 | ExprKind::Symbol(_)
+                | ExprKind::Selector(_)
                 | ExprKind::Nil
                 | ExprKind::True
                 | ExprKind::False

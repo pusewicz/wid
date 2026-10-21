@@ -4055,6 +4055,7 @@ impl<'a> Parser<'a> {
                 | T::Str(_)
                 | T::StrBegin
                 | T::Symbol
+                | T::Dot
                 | T::Ident
                 | T::Const
                 | T::IVar
@@ -4113,10 +4114,112 @@ impl<'a> Parser<'a> {
             // Outside a `quote` a splice is a mistyped comment, not an argument.
             T::SpliceBegin | T::AtSplice | T::ColonSplice => self.splices_are_code(),
             T::LBracket | T::Minus | T::Star | T::Amp | T::Tilde | T::Caret => tight_next,
+            // `turn .north`, but not a line that continues a chain.
+            T::Dot => tight_next && !self.starts_line(idx - 1),
             // A keyword that names an argument (`Node.new next: n`).
             T::Kw(_) => tight_next && self.tokens.get(idx).is_some_and(|n| n.kind == T::Colon),
             _ => false,
         }
+    }
+
+    /// Whether the token at `index` is the first on its line.
+    fn starts_line(&self, index: usize) -> bool {
+        let Some(tok) = self.tokens.get(index) else { return false };
+        index
+            .checked_sub(1)
+            .and_then(|i| self.tokens.get(i))
+            .is_none_or(|prev| prev.kind == T::Newline || self.line_of(prev.span.start) < self.line_of(tok.span.start))
+    }
+
+    /// Parses `.name` at the `.`: the member of the enum the context
+    /// expects, as in Odin and Swift (`.#{name}` in a `quote`). A line that
+    /// starts with `.name` followed by arguments or a block is a method
+    /// call meant to continue the line above, which it doesn't: that is
+    /// reported, and parsed as a call with no receiver.
+    fn parse_selector(&mut self, cmd: bool) -> Expr {
+        let at = self.pos;
+        let dot = self.bump();
+        let next = self.peek();
+        // `. north`: the name was meant right after the `.`.
+        let same_line = self.line_of(next.span.start) == self.line_of(dot.span.start);
+        if next.space_before && same_line && matches!(next.kind, T::Ident | T::Const | T::Kw(_)) {
+            let gap = Span::new(self.file, dot.span.end, next.span.start);
+            self.report(
+                Diagnostic::error(codes::UNEXPECTED_TOKEN, "an enum member's name goes right after the `.`")
+                    .primary(gap, "remove this space")
+                    .note("`.name` names a member of the enum expected here, like `.north`")
+                    .suggest_replace("remove the space", gap, "", Applicability::MachineApplicable),
+            );
+        }
+        let name = match next.kind {
+            _ if next.space_before && !same_line => None,
+            T::Ident | T::Const => {
+                self.bump();
+                Some(Ident { name: Name::new(self.text_of(next.span)), span: next.span })
+            }
+            T::Kw(k) => {
+                self.bump();
+                Some(Ident { name: Name::new(k.as_str()), span: next.span })
+            }
+            T::SpliceBegin => match self.parse_splice_name() {
+                Some(name) => Some(name),
+                None => return Expr { kind: ExprKind::Error, span: dot.span.to(self.prev_span()) },
+            },
+            _ => None,
+        };
+        let Some(name) = name else {
+            self.report(
+                Diagnostic::error(
+                    codes::UNEXPECTED_TOKEN,
+                    format!("expected an enum member's name, found {}", self.found()),
+                )
+                .primary(dot.span, "expected a name right after this `.`")
+                .note("`.name` names a member of the enum expected here, like `.north`"),
+            );
+            return Expr { kind: ExprKind::Error, span: dot.span };
+        };
+        let call_ahead = (self.at(T::LParen) && !self.peek().space_before)
+            || self.at(T::LBrace)
+            || self.at_kw(K::Do)
+            || self.can_start_command_arg(self.peek());
+        if call_ahead && self.starts_line(at) {
+            self.unattached_call(at, dot.span.to(name.span));
+            self.pos = at;
+            return self.parse_postfix(Expr { kind: ExprKind::Error, span: dot.span.shrink_to_start() }, cmd);
+        }
+        Expr { kind: ExprKind::Selector(name.name), span: dot.span.to(name.span) }
+    }
+
+    /// Reports a line that starts with a method call, `.name` at `span`
+    /// (its `.` is the token at `index`), which doesn't continue the line
+    /// above: it isn't indented deeper than that line's statement, or the
+    /// line above opens a block.
+    fn unattached_call(&mut self, index: usize, span: Span) {
+        let line = self.line_of(span.start);
+        let indent = self.indent_of_line(line);
+        let above =
+            self.tokens[..index].iter().rev().find(|t| t.kind != T::Newline).map(|t| self.line_of(t.span.start));
+        let mut diag = Diagnostic::error(
+            codes::UNEXPECTED_TOKEN,
+            format!("`{}` starts a line, so it calls a method on nothing", self.text_of(span)),
+        )
+        .primary(span, "this call has no receiver")
+        .note(
+            "a line that starts with `.` continues the statement above only when it is indented deeper than \
+             the statement's first line, and the line above doesn't open a block; otherwise `.name` is an enum member",
+        );
+        diag = match above.map(|l| self.indent_of_line(l)) {
+            Some(prev) if prev >= indent => {
+                let at = Span::new(self.file, self.line_starts[line], self.line_starts[line] + indent as u32);
+                diag.suggest(
+                    "indent it deeper than the line above, to continue that line",
+                    vec![Edit { span: at, replacement: " ".repeat(prev + 2) }],
+                    Applicability::MaybeIncorrect,
+                )
+            }
+            _ => diag.help("write what it is called on before the `.`, or join it to the end of the line above"),
+        };
+        self.report(diag);
     }
 
     fn parse_int(&mut self, tok: Token) -> Expr {
@@ -4517,6 +4620,7 @@ impl<'a> Parser<'a> {
                 Expr { kind: ExprKind::Paren(Box::new(inner)), span: span.to(self.prev_span()) }
             }
             T::Arrow => self.parse_lambda(),
+            T::Dot => self.parse_selector(cmd),
             T::IVar => {
                 self.bump();
                 let name = Ident { name: Name::new(&self.text_of(span)[1..]), span };

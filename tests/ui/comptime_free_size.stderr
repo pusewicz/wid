@@ -12,7 +12,7 @@ help: free exactly what `alloc` returned; a part of a slice, or a pointer cast t
 error[E0901]: `comptime` code failed: resize of 4 bytes, but the block is 8 bytes
   --> tests/ui/comptime_free_size.wid:10:7
    |
-10 |   _ = a.proc(a.data, :resize, 16, 8, x.to(RawPtr), 4, caller_location)
+10 |   _ = a.proc(a.data, .resize, 16, 8, x.to(RawPtr), 4, caller_location)
    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ failed here
 ...
 21 | STALE = comptime resize_stale

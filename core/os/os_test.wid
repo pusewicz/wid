@@ -28,9 +28,9 @@ end
 @[test]
 def reports_errors(t: ^testing.T)
   _, err = read_file("/nonexistent/wid/file")
-  t.expect_eq(err, :not_found)
-  t.expect_eq(remove("/nonexistent/wid/file"), :not_found)
+  t.expect_eq(err, .not_found)
+  t.expect_eq(remove("/nonexistent/wid/file"), .not_found)
   _, dir_err = read_file(".")
-  t.expect_eq(dir_err, :is_directory)
+  t.expect_eq(dir_err, .is_directory)
   t.expect(dir?("."))
 end

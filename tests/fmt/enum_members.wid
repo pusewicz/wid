@@ -1,0 +1,24 @@
+# `.name` spaces like a value: after a keyword, an operator, a `,` or a
+# call's name. A line that starts with `.name` keeps its own indentation
+# level unless it continues the line above.
+enum Dir
+  north
+  south
+
+  def flip -> Dir
+    case self
+    when  .north  then   .south
+    else
+        .north
+    end
+  end
+end
+
+def main
+  d: Dir =.north
+  p d ==   .south, [ .north,.south ]
+  go   .north
+  go( .south )
+  x = d
+      .flip
+end

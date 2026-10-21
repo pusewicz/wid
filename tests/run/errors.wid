@@ -4,8 +4,8 @@ struct Level
 end
 
 def parse_lives(text: String) -> (Int, Error)
-  return 0, :empty if text == ""
-  return 0, :not_a_number if text == "x"
+  return 0, .empty if text == ""
+  return 0, .not_a_number if text == "x"
   return 3, nil
 end
 
@@ -23,7 +23,7 @@ def first_positive(a: Int, b: Int) -> Int?
 end
 
 def check(n: Int) -> Error
-  return :negative if n < 0
+  return .negative if n < 0
   nil
 end
 
@@ -33,10 +33,10 @@ def main
   p err
   _, err2 = load_level("broken", "x")
   p err2
-  puts err2 == :not_a_number
-  puts err2 != :empty
+  puts err2 == .not_a_number
+  puts err2 != .empty
   case err2
-  when :not_a_number then puts "bad number"
+  when .not_a_number then puts "bad number"
   else puts "other"
   end
 

@@ -23,7 +23,7 @@ error[E0802]: test `resizes_with_a_stale_size` panicked: resize of 4 bytes, but 
 10 | def resizes_with_a_stale_size(t: ^testing.T)
    |     ------------------------- in this test
 ...
-13 |   _ = a.proc(a.data, :resize, 16, 8, x.to(RawPtr), 4, caller_location)
+13 |   _ = a.proc(a.data, .resize, 16, 8, x.to(RawPtr), 4, caller_location)
    |                                                       ^^^^^^^^^^^^^^^^ panicked here
    = note: 8 bytes allocated at tests/test/free_size/free_size_test.wid:12:7
 help: pass the block's current size: the size it was allocated or last resized to

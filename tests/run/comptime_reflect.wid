@@ -14,7 +14,7 @@ enum Mood
   calm
   angry
 
-  def loud? -> Bool = self == :angry
+  def loud? -> Bool = self == .angry
 end
 
 def layout(t: Type) -> String

@@ -32,11 +32,12 @@ impl Ident {
 /// name.
 ///
 /// A splice where the grammar expects a name (`def #{name}`, `x.#{name}`,
-/// `@#{name}`, `:#{name}`, `struct #{name}`, parameter, field, local,
-/// block-parameter and loop-variable names, enum members, named arguments
-/// and the callee of `#{name}(args)`) becomes this name in the [`Ident`],
-/// [`ExprKind::IVar`] or [`ExprKind::Symbol`] that would hold the written
-/// one; the node's span covers the whole `#{…}`. Expansion replaces it with
+/// `@#{name}`, `:#{name}`, `.#{name}`, `struct #{name}`, parameter, field,
+/// local, block-parameter and loop-variable names, enum members, named
+/// arguments and the callee of `#{name}(args)`) becomes this name in the
+/// [`Ident`], [`ExprKind::IVar`], [`ExprKind::Symbol`] or
+/// [`ExprKind::Selector`] that would hold the written one; the node's span
+/// covers the whole `#{…}`. Expansion replaces it with
 /// the spliced `Symbol`.
 pub fn splice_name(index: u32) -> Name {
     Name::new(&format!("#{{{index}}}"))
@@ -556,7 +557,11 @@ pub enum ExprKind {
     Int(u128),
     Float(f64),
     Str(Vec<StrPart>),
+    /// `:name`, a compile-time name (a `Symbol`).
     Symbol(Name),
+    /// `.name`, the member of the enum the context expects, as in Odin and
+    /// Swift (`d: Dir = .north`). Its span covers the `.` and the name.
+    Selector(Name),
     Nil,
     True,
     False,

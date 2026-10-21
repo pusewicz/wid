@@ -38,7 +38,7 @@ end
 with_more :Shade
 
 def main
-  c: Color = :green
-  s: Shade = :red
+  c: Color = .green
+  s: Shade = .red
   p c, s
 end

@@ -27,12 +27,12 @@ error[E0201]: undefined name `nope`
   |          ^^^^ not found in this scope
   = see `wid explain E0201`
 
-error[E0304]: cannot infer which enum this symbol belongs to
+error[E0304]: cannot infer which enum `.red` belongs to
   --> tests/ui/unused_after_error.wid:10:7
    |
-10 |   c = :red
-   |       ^^^^ symbols need an expected enum type
-help: declare the variable's type, like `dir: Dir = :north`
+10 |   c = .red
+   |       ^^^^ no enum is expected here
+help: write the enum's name, like `Dir.red`, or give the value a type where it goes, like `x: Dir = .red`
    = see `wid explain E0304`
 
 error[E0203]: `total` is assigned but never read

@@ -17,14 +17,14 @@ end
 
 def make -> [3]Cell
   [
-    Cell.new(color: :red, value: 5, maybe: 3),
-    Cell.new(color: :green, value: "five", maybe: nil),
-    Cell.new(color: :red, value: 5.5),
+    Cell.new(color: .red, value: 5, maybe: 3),
+    Cell.new(color: .green, value: "five", maybe: nil),
+    Cell.new(color: .red, value: 5.5),
   ]
 end
 
 def failing -> Error
-  :not_found
+  .not_found
 end
 
 def mat -> matrix[2, 2]F32

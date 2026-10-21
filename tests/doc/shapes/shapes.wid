@@ -28,10 +28,10 @@ enum Dir : U8
   # The opposite direction.
   def opposite -> Dir
     case self
-    when :north then :south
-    when :south then :north
-    when :east then :west
-    else :east
+    when .north then .south
+    when .south then .north
+    when .east then .west
+    else .east
     end
   end
 end
