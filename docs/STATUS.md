@@ -85,8 +85,11 @@ the language server.
   failed merged `cimport` (`failed_merges`) silences undefined-name errors in
   that package.
 - The driver loads libclang lazily; the test suite loads it before starting
-  workers (loading sets `LIBCLANG_PATH` briefly) and skips `cimport` and
-  `vendor_` cases when it is missing.
+  workers (loading sets `LIBCLANG_PATH` briefly) and skips `cimport`,
+  `vendor_` and `examples/` cases when it is missing.
+- An example with an `examples/NAME.stdout` (the tour) needs no system
+  library: the suite builds and runs it as `examples/NAME`, and runs its
+  `_test.wid` files as `examples/NAME/test`; `vendor.rs` skips it.
 - `crates/wid_driver/tests/vendor.rs` checks every `vendor/` package with all
   declarations, builds `examples/*` (build only: they open windows) and
   builds and runs `tests/vendor/*` against `.stdout`, with both compilers and
@@ -1674,6 +1677,17 @@ the language server.
   header, so `.south` alone on a line in a `when` body is a value. `p`
   writes members (and `Error`s) as `.north`, in C and in the interpreter.
   `core`, the tests and the docs use the new form.
+- `examples/tour`: one program that walks through the language section by
+  section (structs, operators, enums, unions, optionals, errors, generics,
+  blocks and procs, modules, overloads, collections, strings, control flow,
+  numbers, memory, pointers, compile time, macros, C interop through a
+  header-only `tour.h`, checks), with `@[test]`s in `main_test.wid`. Its
+  output is `examples/tour.stdout`; it runs the same with `-debug` (no
+  overflow, no leaks). A test build no longer emits the package's own
+  `main` (or what only it reaches), which C flagged as an unused static
+  function under `-Werror` (`tests/test/with_main`). Found while writing
+  it: #189 (`<=>` doesn't give `<`…), #190 (interpolation evaluates out of
+  order), #191 (`defer free` after a `context.allocator` switch).
 
 ## Next
 

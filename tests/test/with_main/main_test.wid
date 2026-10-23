@@ -1,0 +1,6 @@
+import "core:testing"
+
+@[test]
+def doubles(t: ^testing.T)
+  t.expect_eq(double(4), 8)
+end

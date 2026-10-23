@@ -49,7 +49,9 @@ what is implemented, which conventions are fixed and what comes next.
   without `as:` (its names become the package's) with a short doc header;
   vendored C sources keep their license next to them.
 - `examples/`: programs that need system libraries (built, not run, by
-  `crates/wid_driver/tests/vendor.rs`)
+  `crates/wid_driver/tests/vendor.rs`), and `examples/tour`, a walk through
+  the whole language that the suite runs against `examples/tour.stdout`
+  (re-bless it, and keep it covering new features, when syntax changes)
 - `docs/errors/EXXXX.md`: `wid explain` text, one file per code. Whole-line
   HTML comments are tooling markers (`<!-- flags: … -->`,
   `<!-- drift: skip REASON -->`) and are stripped from `wid explain`.

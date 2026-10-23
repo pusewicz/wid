@@ -16,6 +16,10 @@
 //!   `tests/test/NAME.stdout`.
 //! - Every `core/` package with `_test.wid` files is run with `wid test`, and
 //!   all of its tests must pass.
+//! - An example `examples/NAME/` with an `examples/NAME.stdout` is built and
+//!   run like a `tests/run` package (named `examples/NAME`), and when it has
+//!   `_test.wid` files, they must pass (`examples/NAME/test`). The other
+//!   examples need system libraries; `tests/vendor.rs` builds them.
 //! - `tests/doc/NAME.args` holds the arguments of a `wid doc` command, run
 //!   from `tests/doc/` (or from `tests/doc/DIR` when the first argument is
 //!   `-in:DIR`, for the forms that document the package in `.`). Its stdout
@@ -153,6 +157,26 @@ fn collect(root: &Path, filter: &str) -> Vec<Case> {
                 let name = path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
                 cases.push(Case::Fmt { name: format!("fmt/{name}"), file: path });
             }
+        }
+    }
+    if let Ok(rd) = std::fs::read_dir(root.join("examples")) {
+        for entry in rd.flatten() {
+            let path = entry.path();
+            if !path.is_dir() || !path.with_extension("stdout").exists() {
+                continue;
+            }
+            let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+            let has_tests = std::fs::read_dir(&path)
+                .is_ok_and(|files| files.flatten().any(|f| f.file_name().to_string_lossy().ends_with("_test.wid")));
+            if has_tests {
+                cases.push(Case::Test { name: format!("examples/{name}/test"), target: path.clone(), expect: None });
+            }
+            cases.push(Case::Run {
+                name: format!("examples/{name}"),
+                target: path.clone(),
+                file_mode: false,
+                expect_base: path,
+            });
         }
     }
     if let Ok(rd) = std::fs::read_dir(root.join("core")) {
@@ -536,9 +560,14 @@ fn main() {
     let ccs = compilers();
     let mut cases = collect(&root, &filter);
     // libclang is loaded once, before the workers start: loading sets an
-    // environment variable. Without it, the `cimport` and `vendor_` cases are skipped.
+    // environment variable. Without it, the `cimport`, `vendor_` and
+    // `examples/` cases are skipped (the examples `cimport` C headers).
     if let Err(e) = wid_cimport::libclang() {
-        cases.retain(|c| !name_of(c).contains("cimport") && !name_of(c).starts_with("vendor_"));
+        cases.retain(|c| {
+            !name_of(c).contains("cimport")
+                && !name_of(c).starts_with("vendor_")
+                && !name_of(c).starts_with("examples/")
+        });
         eprintln!("skipping cimport cases: {e}");
     }
     let next = AtomicUsize::new(0);

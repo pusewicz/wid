@@ -1,0 +1,959 @@
+# A tour of Wid: one program that walks through the language, from
+# constants to macros and C, in the order a newcomer meets them. Each section is a
+# method that `main` calls, and each prints what it shows, so the output
+# reads as a walkthrough too (`examples/tour.stdout`).
+#
+# Run it from the repository root with `wid run examples/tour`, and its
+# tests with `wid test examples/tour`. `SPEC.md` is the full reference.
+
+# ===== Packages =================================================================
+
+# `core:` ships with the compiler. `as:` picks the name the package goes by
+# in this file; without it, the name is the package's own (`fmt`).
+import "core:fmt"
+import "core:math"
+import "core:mem"
+import "core:os"
+import "core:strings", as: :str
+
+# `cimport` turns a C header into Wid declarations through libclang. Here
+# they live under `tc.`, lose their `tour_` prefix, and the C struct
+# `tour_Point` is replaced by our own `Vec2` (the same size and alignment).
+# It also brings `C` into scope, for C's own types (`C.int`).
+cimport "tour.h", as: :tc, strip_prefix: "tour_", types: {tour_Point: Vec2}
+
+# ===== Constants and types ======================================================
+
+# A name that starts with a capital letter is a compile-time constant. Number
+# literals stay untyped until they are used, so `SIZE` fits any integer type.
+SIZE = 4 * 4
+GREETING = "Hello"
+GRAVITY: F32 = 9.81
+
+# A constant can name a type: `Vec2` is another name for `[2]F32`.
+Vec2 = [2]F32
+Grid = [SIZE]U8
+
+# `distinct` makes a new type with the same representation; it never mixes
+# with its base type by accident.
+Meters = distinct F64
+Seconds = distinct F64
+
+# A proc type, for storable callbacks.
+Callback = proc(Int) -> Int
+
+# `-define:name=value` on the command line sets a `config`; without the flag
+# the default is used, and its type is the default's.
+LEVEL = config(:level, 1)
+VERBOSE = config(:verbose, false)
+
+# `comptime` runs ordinary Wid code while compiling and keeps the result.
+SQUARES = comptime squares_table
+FIBS = comptime fibonacci(10)
+
+# `embed` reads a file next to the package at compile time, as a `[]U8`.
+GREETING_FILE = embed("greeting.txt")
+
+def squares_table -> [8]Int
+  table: [8]Int = {}
+  for i in 0...8
+    table[i] = i * i
+  end
+  table
+end
+
+def fibonacci(n: Int) -> []Int
+  out = DynamicArray(Int).new
+  a, b = 0, 1
+  n.times do
+    out << a
+    a, b = b, a + b
+  end
+  out
+end
+
+# ===== Structs ==================================================================
+
+# A struct holds fields and methods. Its values are copied on assignment.
+# Fields may have defaults; `T.new` builds a value and never allocates.
+struct Ball
+  pos: Vec2
+  vel: Vec2 = [3.0, -4.0]
+  radius: F32 = 0.5
+  bounces: Int
+
+  # `def self.` declares a type-level function. `new` is reserved for the
+  # field-by-field constructor, so custom ones get other names.
+  def self.at(x: F32, y: F32) -> Ball = Ball.new(pos: [x, y])
+
+  # Methods get `self` by pointer, so they can change the value. `@pos` is
+  # `self.pos`.
+  def step(dt: F32)
+    @pos += @vel * dt
+    if @pos.y < 0.0
+      @pos.y = -@pos.y
+      @vel.y = -@vel.y
+      bounce!
+    end
+  end
+
+  # A name ending in `?` asks a question and must return `Bool`. One ending
+  # in `!` has no rule; by convention it changes something.
+  def moving? -> Bool = @vel.x != 0.0 || @vel.y != 0.0
+
+  # A `private` method can only be called from methods of the same type.
+  private def bounce!
+    @bounces += 1
+  end
+
+  # An endless `def` names its return type like any other.
+  def speed -> F32 = math.sqrt(@vel.x * @vel.x + @vel.y * @vel.y)
+end
+
+def structs
+  section "structs"
+  ball = Ball.at(1.0, 0.5)
+  # The call site takes the address for a method: `ball` itself changes.
+  ball.step(0.25)
+  puts "ball at #{ball.pos}, #{ball.bounces} bounce, speed #{ball.speed}"
+  copy = ball
+  copy.radius = 2.0
+  # Structs compare field by field.
+  puts "copied: #{copy.radius} vs #{ball.radius}, equal? #{copy == ball}"
+  # Fields can be passed by position or by name, in any mix; missing ones
+  # take their default or zero.
+  still = Ball.new([0.0, 0.0], vel: [0.0, 0.0])
+  puts "moving? #{ball.moving?} #{still.moving?}"
+  p still
+end
+
+# ===== Operators ================================================================
+
+# Operators are methods: `+ - * / %`, unary `-`, `==`, `<=>`, `[]` and `[]=`.
+# `+=` and its friends come for free.
+struct Money
+  cents: Int
+
+  def +(o: Money) -> Money = Money.new(@cents + o.cents)
+  def - -> Money = Money.new(-@cents)
+  def <=>(o: Money) -> Int = @cents <=> o.cents
+
+  def to_s -> String
+    sign = @cents < 0 ? "-" : ""
+    "#{sign}$#{@cents.abs / 100}.#{fmt.int(@cents.abs % 100, width: 2, pad: '0')}"
+  end
+end
+
+# A grid you index like an array, with `[]` and `[]=`.
+struct Board
+  cells: Grid
+
+  def [](x: Int, y: Int) -> U8 = @cells[y * 4 + x]
+
+  def []=(x: Int, y: Int, v: U8)
+    @cells[y * 4 + x] = v
+  end
+end
+
+def operators
+  section "operators"
+  wallet = Money.new(1050)
+  wallet += Money.new(275)
+  puts "wallet #{wallet.to_s}, debt #{(-wallet).to_s}"
+  puts "compared to ten dollars: #{wallet <=> Money.new(1000)}"
+  board = Board.new
+  board[1, 2] = 7
+  board[1, 2] += 1
+  puts "board[1, 2] = #{board[1, 2]}"
+end
+
+# ===== Enums ====================================================================
+
+# Enum members are lowercase and count up from 0 unless given a value. An
+# enum can choose its backing type and have methods.
+enum Dir : U8
+  north
+  east
+  south
+  west
+
+  def turn_right -> Dir
+    # `.east` names a member of the enum expected where it is written.
+    case self
+    when .north then .east
+    when .east then .south
+    when .south then .west
+    when .west then .north
+    end
+  end
+
+  def vertical? -> Bool = self == .north || self == .south
+end
+
+enum Status
+  ok = 200
+  not_found = 404
+  teapot = 418
+end
+
+def enums
+  section "enums"
+  d: Dir = .north
+  d = d.turn_right.turn_right
+  # `puts` writes a member's name, `p` writes it as Wid would.
+  puts d
+  p d
+  puts "vertical? #{d.vertical?}, value #{d.to_i}"
+  puts "#{Status.teapot} is #{Status.teapot.to_i}"
+  # `case` over an enum must cover every member, or have an `else`.
+  for s in [Status.ok, Status.not_found]
+    case s
+    when .ok then puts "200: fine"
+    else puts "#{s.to_i}: not fine"
+    end
+  end
+end
+
+# ===== Unions ===================================================================
+
+struct Circle
+  radius: F64
+end
+
+struct Rect
+  w: F64
+  h: F64
+end
+
+# A tagged union holds one of its variants, or nil. `case` narrows it.
+union Shape = Circle | Rect
+
+def area(s: Shape) -> F64
+  case s
+  when Circle then math.PI * s.radius * s.radius
+  when Rect then s.w * s.h
+  else 0.0
+  end
+end
+
+def unions
+  section "unions"
+  shapes: [3]Shape = [Circle.new(1.0), Rect.new(w: 2.0, h: 3.0), nil]
+  for s, i in shapes
+    puts "shape #{i}: area #{fmt.float(area(s), precision: 2)}"
+  end
+end
+
+# ===== Optionals ================================================================
+
+# `T?` is a `T` or `nil`. Only `nil` and `false` are falsy.
+def find_even(xs: []Int) -> Int?
+  for x in xs
+    return x if x.even?
+  end
+  nil
+end
+
+struct Profile
+  name: String
+  nickname: String?
+end
+
+def optionals
+  section "optionals"
+  found = find_even([3, 5, 8, 9])
+  missing = find_even([1, 3])
+  p found, missing
+  # `||` unwraps with a fallback.
+  puts "missing or zero: #{missing || 0}"
+  # `if v = …` binds the value when there is one.
+  if n = found
+    puts "found #{n}, doubled #{n * 2}"
+  end
+  # Checks narrow a local's type in the code they protect.
+  unless missing.nil?
+    puts "unreachable"
+  end
+  # `&.` reaches through an optional, giving nil when it is nil.
+  profile = Profile.new("Ada")
+  maybe: Profile? = profile
+  p maybe&.name
+  # `||=` assigns only when the value is nil.
+  profile.nickname ||= "the countess"
+  profile.nickname ||= "ignored"
+  p profile.nickname
+  # `&&=` assigns only when there is a value.
+  profile.nickname &&= "Lady Lovelace"
+  p profile.nickname
+  # An untyped literal converts to an optional, enum members included.
+  facing: Dir? = .west
+  p facing
+end
+
+# ===== Errors ===================================================================
+
+# No exceptions: a fallible method returns its error last. `Error` is an
+# enum of every `.name` the program uses where an `Error` is expected, and
+# `nil` means success.
+def parse_age(text: String) -> (Int, Error)
+  return 0, .empty if text.empty?
+  zero: Rune = '0'
+  n = 0
+  for r in text
+    return 0, .not_a_number unless r >= '0' && r <= '9'
+    n = n * 10 + r.to_i - zero.to_i
+  end
+  return 0, .too_old if n > 150
+  return n, nil
+end
+
+def describe_age(text: String) -> String
+  # `guard` binds the values for the rest of the method, or runs its
+  # `else`, which must leave.
+  guard age = parse_age(text) else |err|
+    return "#{text.inspect} fails: #{err}"
+  end
+  "#{text.inspect} is #{age}"
+end
+
+def errors
+  section "errors"
+  for text in ["42", "", "4x2", "999"]
+    puts describe_age(text)
+  end
+  # Both values, by hand. Dropping an `Error` silently is a compile error;
+  # `_` discards one on purpose.
+  age, err = parse_age("7")
+  puts "age #{age}, err nil? #{err.nil?}"
+  _, err = parse_age("x")
+  puts "an error: #{err == .not_a_number}"
+  # Any method can return several values.
+  low, high = min_max([4, -2, 9])
+  puts "min #{low}, max #{high}"
+end
+
+def min_max(xs: []Int) -> (Int, Int)
+  return (xs.min || 0), (xs.max || 0)
+end
+
+# ===== Generics =================================================================
+
+# `$T` introduces a type parameter, inferred from the arguments.
+def largest(xs: []$T) -> T?
+  best: T? = nil
+  for x in xs
+    if b = best
+      best = x if x > b
+    else
+      best = x
+    end
+  end
+  best
+end
+
+# A generic struct takes types and constant integers. `N` is a constant in
+# its methods and field types.
+struct Ring($T, $N: Int)
+  items: [N]T
+  head: Int
+  count: Int
+
+  def push(x: T)
+    @items[(@head + @count) % N] = x
+    if @count == N
+      @head = (@head + 1) % N
+    else
+      @count += 1
+    end
+  end
+
+  def full? -> Bool = @count == N
+
+  def each(&blk: block(T))
+    for i in 0...@count
+      yield @items[(@head + i) % N]
+    end
+  end
+end
+
+def generics
+  section "generics"
+  p largest([3, 9, 4]), largest(["pear", "apple"]), largest([1.5, -2.0])
+  empty: [0]Int = []
+  p largest(empty)
+  ring = Ring(Int, 3).new
+  for i in 1..5
+    ring.push(i * 10)
+  end
+  print "ring holds"
+  ring.each { |x| print " ", x }
+  puts ", full? #{ring.full?}"
+  puts "a Ring(Int, 3) takes #{size_of(Ring(Int, 3))} bytes"
+end
+
+# ===== Blocks and procs =========================================================
+
+# A method takes a block with `&name: block(T) -> R` and calls it with
+# `yield`. Blocks are inlined into the caller: they capture locals freely
+# and allocate nothing, and `next`, `break` and `return` work as in Ruby.
+def repeat(n: Int, &blk: block(Int))
+  i = 0
+  while i < n
+    yield i
+    i += 1
+  end
+end
+
+def sum_of(xs: []Int, &f: block(Int) -> Int) -> Int
+  total = 0
+  for x in xs
+    total += yield x
+  end
+  total
+end
+
+# Procs are storable, non-capturing callbacks.
+def triple(x: Int) -> Int = x * 3
+
+def apply_twice(f: Callback, x: Int) -> Int = f(f(x))
+
+struct Button
+  label: String
+  on_click: proc(String) -> Int
+end
+
+def blocks_and_procs
+  section "blocks and procs"
+  seen = 0
+  repeat(6) do |i|
+    next if i == 1
+    break if i == 4
+    seen += i
+  end
+  puts "seen #{seen}"
+  puts "sum of squares #{sum_of([1, 2, 3]) { |x| x * x }}"
+  # Bind by reference with `|&x|` to change the elements.
+  xs = [1, 2, 3]
+  xs.each { |&x| x *= 10 }
+  p xs
+  # A proc literal, and a method as a proc.
+  inc = ->(x: Int) -> Int { x + 1 }
+  puts "inc twice #{apply_twice(inc, 1)}, triple twice #{apply_twice(method(:triple), 1)}"
+  b = Button.new("ok", ->(s: String) -> Int { s.size })
+  puts "clicked #{b.label}: #{b.on_click(b.label)}"
+  # Procs are nil-able.
+  nothing: Callback = nil
+  puts "no callback? #{nothing.nil?}"
+end
+
+# ===== Modules, extend and using ================================================
+
+# A module holds methods (no fields) to mix into types with `include`.
+# `@hp` reads the field of whichever type includes it.
+module Living
+  def alive? -> Bool = @hp > 0
+
+  def hurt(n: Int)
+    @hp = (@hp - n).max(0)
+  end
+end
+
+struct Entity
+  name: String
+  hp: Int = 10
+
+  include Living
+end
+
+# No inheritance: `using` promotes a field's fields and methods.
+struct Player
+  using entity: Entity
+  score: Int
+
+  def summary -> String = "#{@name} (#{@hp} hp, #{@score} points)"
+end
+
+# `extend` adds methods to any type, builtin ones included.
+extend Int
+  def squared -> Int = self * self
+end
+
+extend String
+  def shout -> String = "#{upcase}!"
+end
+
+def modules
+  section "modules"
+  hero = Player.new(Entity.new("Ayla"), score: 3)
+  # `hurt` and `hp` come from `Entity` through `using`.
+  hero.hurt(4)
+  hero.score += 1
+  puts hero.summary
+  puts "alive? #{hero.alive?}, 7 squared #{7.squared}, #{"hey".shout}"
+end
+
+# ===== Overloads ================================================================
+
+# Two defs can't share a name. An explicit `overload` set names the members,
+# and a call picks the one whose parameters fit best.
+def describe_int(n: Int) -> String = "the number #{n}"
+def describe_text(s: String) -> String = "the text #{s.inspect}"
+def describe_dir(d: Dir) -> String = "the direction #{d}"
+overload :describe, :describe_int, :describe_text, :describe_dir
+
+def overloads
+  section "overloads"
+  puts describe(42)
+  puts describe("hi")
+  puts describe(Dir.west)
+end
+
+# ===== Collections ==============================================================
+
+def collections
+  section "collections"
+  # A fixed array lives inline; a slice is a view into one.
+  primes = [2, 3, 5, 7, 11, 13]
+  middle = primes[1...4]
+  puts "#{primes.size} primes, middle #{middle}, last #{primes.last || 0}"
+  puts "sum #{primes.sum}, any > 10? #{primes.any? { |x| x > 10 }}"
+  # Small numeric arrays do element-wise math and swizzles.
+  v: Vec2 = [3.0, 4.0]
+  w = v * 2.0 + [1.0, 1.0]
+  puts "w = #{w}, w.yx = #{w.yx}"
+  # Matrices are column-major; literals list them row by row.
+  rotate: matrix[2, 2]F32 = [0.0, -1.0, 1.0, 0.0]
+  puts "rotated #{rotate * v}"
+
+  # A dynamic array grows with the allocator it was created with. Growing
+  # always shows: `<<`, `push`, `free`.
+  names = DynamicArray(String).new
+  defer free(names)
+  names << "carol"
+  names << "alice"
+  names.push("bob")
+  names.sort!
+  puts "sorted #{names}"
+  last = names.pop || "?"
+  puts "popped #{last}, left #{names.size}"
+  names.insert(0, "zed")
+  names.delete_at(1)
+  for name, i in names
+    puts "  #{i}: #{name}"
+  end
+  # `for &x` binds each element by reference.
+  for &x in primes
+    x *= 2
+  end
+  puts "doubled #{primes}"
+
+  # A map; `m[k]` gives `V?`, and `+=` starts a missing key at zero.
+  counts = Map(String, Int).new
+  defer free(counts)
+  for word in "the cat and the hat".split(" ")
+    counts[word] += 1
+  end
+  puts "#{counts.size} words, \"the\" x#{counts["the"] || 0}, has dog? #{counts.has_key?("dog")}"
+end
+
+# ===== Strings ==================================================================
+
+def strings_and_text
+  section "strings"
+  s = "héllo, wörld"
+  # Strings are UTF-8 byte views: `.size` counts bytes, `for` walks runes.
+  runes = 0
+  for _r in s
+    runes += 1
+  end
+  puts "#{s.size} bytes, #{runes} runes, first byte #{s[0]}"
+  puts "#{s[0...6].upcase} | #{s.index("w") || -1} | #{"  padded ".strip}"
+  # Interpolation and `core:` text helpers build on the temp allocator,
+  # which a frame clears with `context.temp_allocator.free_all`.
+  puts "#{GREETING}, #{fmt.int(255, base: 16)} #{fmt.float(math.PI, precision: 3)}"
+  # A builder collects text in memory you own.
+  b = str.Builder.create
+  defer b.destroy
+  for word in ["one", "two", "three"]
+    b.write(" ") unless b.empty?
+    b.write(word)
+  end
+  b.write_rune('!')
+  puts b.string
+end
+
+# ===== Control flow =============================================================
+
+def classify(n: Int) -> String
+  # `case` takes several values and ranges; it is an expression.
+  case n
+  when 0 then "zero"
+  when 1..9 then "small"
+  when 10, 20, 30 then "round"
+  else n < 0 ? "negative" : "big"
+  end
+end
+
+def sign_of(n: Int) -> String
+  if n < 0
+    "minus"
+  elsif n == 0
+    "zero"
+  else
+    "plus"
+  end
+end
+
+def control_flow
+  section "control flow"
+  puts [-1, 0, 7, 20, 99].map_text { |n| classify(n) }
+  puts "#{sign_of(-3)} #{sign_of(0)} #{sign_of(3)}"
+  n = 0
+  while n < 3
+    n += 1
+  end
+  until n == 0
+    n -= 1
+  end
+  loop do
+    n += 5
+    break if n > 12
+  end
+  puts "n = #{n}" if n > 0
+  puts "never printed" unless n > 0
+  parity = if n.even? then "even" else "odd" end
+  puts "#{n} is #{parity}"
+  for i in 0..2
+    print i, " "
+  end
+  for i in 0...2
+    print i, " "
+  end
+  puts
+end
+
+# `[]$T` patterns extend every array, slice and dynamic array.
+extend []$T
+  def map_text(&f: block(T) -> String) -> String
+    text = ""
+    each_with_index do |x, i|
+      text = i == 0 ? yield(x) : "#{text}, #{yield x}"
+    end
+    text
+  end
+end
+
+# ===== Numbers ==================================================================
+
+def numbers
+  section "numbers"
+  # Conversions are explicit.
+  i = 7
+  f = i.to(F32) / 2.0
+  puts "#{i} / 2 = #{i / 2}, as floats #{f}, back #{f.to_i}"
+  # Integers wrap on overflow, and `-debug` builds panic on it instead, so
+  # widen first when a sum may not fit.
+  byte: U8 = 250
+  puts "a U8 of 250, plus 10 as an Int: #{byte.to(Int) + 10}"
+  # `**` is power, `~` is xor (and unary not), `^` is only for pointers.
+  puts "2 ** 10 = #{2 ** 10}, 6 ~ 3 = #{6 ~ 3}, 1 << 4 = #{1 << 4}"
+  puts "-7.abs = #{-7.abs}, 15.clamp(0, 10) = #{15.clamp(0, 10)}"
+  # Distinct types keep units apart; convert with `.to`.
+  run: Meters = 100.0
+  time: Seconds = 9.58
+  puts "speed #{fmt.float(run.to(F64) / time.to(F64), precision: 2)} m/s"
+  puts "gravity #{GRAVITY}, a typed constant"
+  letter: Rune = 'A'
+  puts "#{letter} is rune #{letter.to_i}, hex #{0xFF}, binary #{0b1010}, big #{1_000_000}"
+end
+
+# ===== Memory ===================================================================
+
+struct Node
+  value: Int
+  next: ^Node?
+end
+
+def memory
+  section "memory"
+  # Allocation is explicit: `alloc` and `free`, both with an optional
+  # `allocator:`. `defer` runs at the end of the scope.
+  n = alloc(Int)
+  defer free(n)
+  n^ = 41
+  n^ += 1
+  puts "allocated #{n^}"
+  buf = alloc([]F32, 4)
+  defer free(buf)
+  buf[3] = 1.5
+  puts "buffer #{buf}"
+  arena_list
+end
+
+def arena_list
+  # An arena frees everything at once. Setting `context.allocator` lasts
+  # until the end of the scope, and everything below allocates from it,
+  # so it goes in a method of its own: a `defer free(…)` above it would
+  # free through the arena too.
+  arena = mem.Arena.create
+  defer arena.destroy
+  context.allocator = arena.allocator
+  head: ^Node? = nil
+  for v in 1..3
+    node = alloc(Node)
+    node.value = v
+    node.next = head
+    head = node
+  end
+  # `while v = …` loops until the optional is nil.
+  print "list"
+  at = head
+  while node = at
+    print " ", node.value
+    at = node.next
+  end
+  puts
+  arena.free_all
+  puts "arena reset, #{arena.used} bytes in use"
+end
+
+# ===== Pointers =================================================================
+
+def bump(x: ^Int)
+  x^ += 1
+end
+
+def pointers
+  section "pointers"
+  # `&x` takes an address, `p^` dereferences.
+  count = 1
+  bump(&count)
+  ptr = &count
+  ptr^ *= 10
+  puts "count #{count}"
+  # `[^]T` is a pointer to many, with arithmetic in whole elements.
+  nums = [10, 20, 30, 40]
+  first = nums.to([^]Int)
+  third = first + 2
+  puts "third #{third[0]}, distance #{third - first}"
+  # Any pointer converts to `RawPtr`; going back needs `.to`.
+  raw: RawPtr = ptr
+  guard back = raw.to(^Int?) else
+    return
+  end
+  puts "through RawPtr: #{back^}"
+end
+
+# ===== Compile time =============================================================
+
+# Reflection: `T.fields` and friends, while compiling.
+def field_list(t: Type) -> String
+  text = "#{t.name}:"
+  for f in t.fields
+    text = "#{text} #{f.name}: #{f.type.name}"
+  end
+  text
+end
+
+BALL_FIELDS = comptime field_list(Ball)
+
+# `comptime if` picks code for the target; the other branches are only
+# parsed.
+comptime if OS == .windows
+  def path_sep -> String = "\\"
+else
+  def path_sep -> String = "/"
+end
+
+def compile_time
+  section "compile time"
+  p SQUARES
+  p FIBS
+  puts BALL_FIELDS
+  puts "level #{LEVEL}, verbose #{VERBOSE}, path separator #{path_sep.inspect}"
+  # `comptime do … end` is a whole block computed while compiling.
+  total = comptime do
+    sum = 0
+    for x in squares_table
+      sum += x
+    end
+    sum
+  end
+  puts "sum of squares, computed while compiling: #{total}"
+  puts GREETING_FILE.to(String).strip
+  # `type_info` describes any type at run time, from static tables.
+  info = type_info(Ball)
+  puts "#{info.name} is a #{info.kind} of #{info.size} bytes and #{info.fields.size} fields"
+end
+
+# ===== Macros ===================================================================
+
+# A macro runs at compile time and returns code built with `quote`. `#{}`
+# splices values in: code, symbols as names, types and literals.
+macro def twice(e: Code) -> Code
+  quote do
+    #{e} * 2
+  end
+end
+
+# A statement macro. Its own `tmp` never touches the caller's; the names
+# spliced from symbols are the caller's variables.
+macro def swap(a: Symbol, b: Symbol) -> Code
+  quote do
+    tmp = #{a}
+    #{a} = #{b}
+    #{b} = tmp
+  end
+end
+
+# A macro called among declarations generates declarations. `*names`
+# collects the remaining arguments.
+macro def bit_flags(*names: Symbol) -> Code
+  decls = DynamicArray(Code).new
+  for name, i in names
+    decls << quote do
+      #{name} = #{1 << i}
+    end
+  end
+  quote do
+    #{decls}
+  end
+end
+
+bit_flags :READ, :WRITE, :EXEC
+
+# In a struct body, a macro sees the struct as `Self`.
+macro def derive_describe -> Code
+  parts = DynamicArray(Code).new
+  for f in Self.fields
+    field = f.name.to_sym
+    label = "#{f.name}="
+    parts << quote do
+      text = "#{text} #{#{label}}#{@#{field}}"
+    end
+  end
+  name = Self.name
+  quote do
+    def describe -> String
+      text = #{name}
+      #{parts}
+      text
+    end
+  end
+end
+
+struct Settings
+  width: Int = 800
+  height: Int = 450
+  title: String = "tour"
+
+  derive_describe
+end
+
+def macros
+  section "macros"
+  puts "twice(21) = #{twice(21)}"
+  a = 1
+  b = 2
+  swap :a, :b
+  puts "swapped: a = #{a}, b = #{b}"
+  puts "flags #{READ} #{WRITE} #{EXEC}, read|exec = #{READ | EXEC}"
+  puts Settings.new.describe
+end
+
+# ===== C interop ================================================================
+
+# `@[c]` gives a def the C calling convention, so C can call it back, and
+# `@[export]` gives it a stable C symbol for C code linked with the program.
+@[c, export("tour_add_one")]
+def add_one(value: C.int) -> C.int = value + 1
+
+def c_interop
+  section "C interop"
+  puts "tour.h version #{tc.VERSION}, max #{tc.MAX_ITEMS} items"
+  puts "gcd(84, 36) = #{tc.gcd(84, 36)}"
+  # `Vec2` stands in for `tour_Point`, copied across on each call.
+  mid = tc.midpoint([0.0, 0.0], [4.0, 2.0])
+  puts "midpoint #{mid}"
+  values: [3]C.int = [1, 2, 3]
+  puts "sum of value + 1: #{tc.sum_mapped(&values[0], 3, method(:add_one))}"
+end
+
+# ===== Checks ===================================================================
+
+# `-> Never` marks a method that never returns: its body ends in `panic`,
+# which stops the program with a message. A `caller_location` default is
+# where the call was written.
+def fail(message: String, loc: Location = caller_location) -> Never
+  panic "#{message} (line #{loc.line})"
+end
+
+def checked_div(a: Int, b: Int) -> Int
+  # `guard` also takes a plain `Bool`. A `Never` call leaves, like `return`.
+  guard b != 0 else
+    fail("division by zero")
+  end
+  a / b
+end
+
+# Bounds checks are on by default. `@[no_bounds_check]` turns them off for
+# the code written inside one method (or one statement).
+@[no_bounds_check]
+def sum_unchecked(xs: []Int) -> Int
+  total = 0
+  for i in 0...xs.size
+    total += xs[i]
+  end
+  total
+end
+
+# `unreachable` marks a path that can't happen; it panics if it does.
+def axis(d: Dir) -> String
+  case d.to_i % 2
+  when 0 then "vertical"
+  when 1 then "horizontal"
+  else unreachable
+  end
+end
+
+def checks
+  section "checks"
+  puts "7 / 2 = #{checked_div(7, 2)}"
+  # `assert` panics, with its message, when the condition is false.
+  assert sum_unchecked([1, 2, 3]) == 6, "sum_unchecked is broken"
+  puts "west is #{axis(.west)}"
+end
+
+# ===== The program ==============================================================
+
+def section(title: String)
+  puts "-- #{title}"
+end
+
+# `ARGV` holds the arguments after the program's name, as in Ruby;
+# `wid run examples/tour -- a b` passes `a` and `b`.
+def main
+  puts "#{GREETING} from #{os.args.size - ARGV.size == 1 ? "Wid" : "?"}, #{ARGV.size} arguments"
+  structs
+  operators
+  enums
+  unions
+  optionals
+  errors
+  generics
+  blocks_and_procs
+  modules
+  overloads
+  collections
+  strings_and_text
+  control_flow
+  numbers
+  memory
+  pointers
+  compile_time
+  macros
+  c_interop
+  checks
+  # Temp memory (interpolation, `upcase`, `split`, …) is released in one go.
+  context.temp_allocator.free_all
+end

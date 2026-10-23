@@ -16,7 +16,9 @@ end
 wid run .
 ```
 
-Status: design phase. See [SPEC.md](SPEC.md).
+Status: design phase. See [SPEC.md](SPEC.md), and
+[examples/tour](examples/tour/main.wid), one program that walks through the
+language section by section.
 
 Editor support: [Vim](extras/vim), and the language server for Neovim, Vim and
 VS Code ([docs/editors.md](docs/editors.md)).
