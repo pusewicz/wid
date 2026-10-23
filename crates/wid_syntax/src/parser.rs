@@ -2758,7 +2758,7 @@ impl<'a> Parser<'a> {
                 break;
             }
             // Members are always public, like fields.
-            if self.at_kw(K::Private) && (self.enum_member_at(1) || self.upper_member_at(1)) {
+            if self.at_kw(K::Private) && self.enum_member_at(1) {
                 let (kw, removal) = self.bump_private();
                 self.report(
                     Diagnostic::error(codes::UNEXPECTED_TOKEN, "an enum member can't be `private`")
@@ -2783,22 +2783,6 @@ impl<'a> Parser<'a> {
                     }
                     self.skip_newlines();
                 }
-            } else if self.upper_member_at(0) {
-                let tok = self.bump();
-                let text = self.text_of(tok.span);
-                let lower = to_snake_case(text);
-                self.report(
-                    Diagnostic::error(codes::UNEXPECTED_TOKEN, "enum members are lowercase")
-                        .primary(tok.span, "members are written like symbols")
-                        .note("members are selected with symbols such as `:north`, so they use snake_case")
-                        .suggest_replace(
-                            "use a lowercase name",
-                            tok.span,
-                            lower.clone(),
-                            Applicability::MachineApplicable,
-                        ),
-                );
-                members.push(EnumMember { name: Ident { name: Name::new(&lower), span: tok.span }, value: None });
             } else if let Some(item) = self.parse_item(ItemCtx::Enum) {
                 body.push(item);
             }
@@ -2808,35 +2792,31 @@ impl<'a> Parser<'a> {
         ItemKind::Enum(Box::new(EnumDecl { name, backing, members, body }))
     }
 
-    /// Whether the token `n` ahead starts an enum member. A splice is a
-    /// member when a value or another member follows; standing alone it is
-    /// an `ItemKind::Splice`. `struct`, `enum` and `union` standing alone
-    /// are members (`TypeKind.struct`).
+    /// Whether the token `n` ahead starts an enum member: a constant-style
+    /// name standing alone or followed by `=` or `,` (`North`,
+    /// `DARK_RED = 4`). A splice is a member when a value or another member
+    /// follows; standing alone it is an `ItemKind::Splice`. A lowercase
+    /// name, or `struct`, `enum` or `union`, standing where a member goes is
+    /// one too: see [`Parser::parse_enum_member`].
     fn enum_member_at(&self, n: usize) -> bool {
+        let member_end = |i: usize| matches!(self.nth(i).kind, T::Newline | T::Eq | T::Comma | T::Kw(K::End));
+        if self.nth(n).kind == T::Const {
+            return member_end(n + 1);
+        }
         match self.name_len(n) {
-            Some(len) if self.nth(n).kind == T::Ident => {
-                matches!(self.nth(n + len).kind, T::Newline | T::Eq | T::Comma | T::Kw(K::End))
-            }
+            Some(len) if self.nth(n).kind == T::Ident => member_end(n + len),
             Some(len) => matches!(self.nth(n + len).kind, T::Eq | T::Comma),
-            None => {
-                is_keyword_member(self.nth(n).kind)
-                    && matches!(self.nth(n + 1).kind, T::Newline | T::Eq | T::Comma | T::Kw(K::End))
-            }
+            None => is_keyword_member(self.nth(n).kind) && member_end(n + 1),
         }
     }
 
-    /// Whether the token `n` ahead is an uppercase name standing as an enum
-    /// member, which is reported.
-    fn upper_member_at(&self, n: usize) -> bool {
-        self.nth(n).kind == T::Const && matches!(self.nth(n + 1).kind, T::Newline | T::Comma | T::Kw(K::End))
-    }
-
-    /// An enum member's name: an identifier, a splice, or `struct`, `enum`
-    /// or `union` standing alone, so an enum can name the kinds of types
-    /// (`TypeKind.struct`).
+    /// An enum member's name: a constant-style name, a splice, or a
+    /// lowercase name or `struct`, `enum` or `union` standing where a member
+    /// goes, which the checker reports (E0114), or E0914 when it names a
+    /// macro.
     fn parse_enum_member(&mut self) -> Ident {
         let tok = self.peek();
-        if is_keyword_member(tok.kind) && matches!(self.nth(1).kind, T::Newline | T::Eq | T::Comma | T::Kw(K::End)) {
+        if tok.kind == T::Const || is_keyword_member(tok.kind) {
             self.bump();
             return Ident { name: Name::new(self.text_of(tok.span)), span: tok.span };
         }
@@ -4114,7 +4094,7 @@ impl<'a> Parser<'a> {
             // Outside a `quote` a splice is a mistyped comment, not an argument.
             T::SpliceBegin | T::AtSplice | T::ColonSplice => self.splices_are_code(),
             T::LBracket | T::Minus | T::Star | T::Amp | T::Tilde | T::Caret => tight_next,
-            // `turn .north`, but not a line that continues a chain.
+            // `turn .North`, but not a line that continues a chain.
             T::Dot => tight_next && !self.starts_line(idx - 1),
             // A keyword that names an argument (`Node.new next: n`).
             T::Kw(_) => tight_next && self.tokens.get(idx).is_some_and(|n| n.kind == T::Colon),
@@ -4147,7 +4127,7 @@ impl<'a> Parser<'a> {
             self.report(
                 Diagnostic::error(codes::UNEXPECTED_TOKEN, "an enum member's name goes right after the `.`")
                     .primary(gap, "remove this space")
-                    .note("`.name` names a member of the enum expected here, like `.north`")
+                    .note("`.name` names a member of the enum expected here, like `.North`")
                     .suggest_replace("remove the space", gap, "", Applicability::MachineApplicable),
             );
         }
@@ -4174,7 +4154,7 @@ impl<'a> Parser<'a> {
                     format!("expected an enum member's name, found {}", self.found()),
                 )
                 .primary(dot.span, "expected a name right after this `.`")
-                .note("`.name` names a member of the enum expected here, like `.north`"),
+                .note("`.name` names a member of the enum expected here, like `.North`"),
             );
             return Expr { kind: ExprKind::Error, span: dot.span };
         };
@@ -5795,7 +5775,8 @@ fn is_assignable(expr: &Expr) -> bool {
     }
 }
 
-/// The reserved words that may name an enum member when they stand alone.
+/// The reserved words read as an enum member when they stand alone where one
+/// goes, so `struct` there is reported as the member `Struct` (E0114).
 fn is_keyword_member(kind: TokenKind) -> bool {
     matches!(kind, T::Kw(Keyword::Struct | Keyword::Enum | Keyword::Union))
 }
@@ -5966,7 +5947,7 @@ def load_level(path: String) -> (Level, Error)
   end
 
   guard spawn = data.find_spawn else   # Vec2?
-    return {}, :no_spawn
+    return {}, .NoSpawn
   end
 
   lives = data.parse_int("lives") || 3

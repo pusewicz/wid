@@ -42,7 +42,8 @@ impl<'c> Interp<'c> {
                 "kind" => {
                     let value = match types.kind(slot.ty) {
                         TyKind::Enum(id) => {
-                            types.enum_info(*id).members.iter().find(|(n, _)| n.as_str() == d.kind).map_or(0, |m| m.1)
+                            let member = crate::type_info::kind_member(d.kind);
+                            types.enum_info(*id).members.iter().find(|(n, _)| n.as_str() == member).map_or(0, |m| m.1)
                         }
                         _ => 0,
                     };

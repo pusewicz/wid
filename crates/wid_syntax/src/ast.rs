@@ -560,7 +560,7 @@ pub enum ExprKind {
     /// `:name`, a compile-time name (a `Symbol`).
     Symbol(Name),
     /// `.name`, the member of the enum the context expects, as in Odin and
-    /// Swift (`d: Dir = .north`). Its span covers the `.` and the name.
+    /// Swift (`d: Dir = .North`). Its span covers the `.` and the name.
     Selector(Name),
     Nil,
     True,

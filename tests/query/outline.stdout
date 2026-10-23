@@ -115,11 +115,11 @@
             "file": "tests/doc/shapes/shapes.wid",
             "line": 22
           },
-          "name": "north",
+          "name": "North",
           "package": ".",
-          "path": "Dir.north",
+          "path": "Dir.North",
           "private": false,
-          "signature": "north",
+          "signature": "North",
           "span": {
             "column": 3,
             "end_column": 8,
@@ -139,11 +139,11 @@
             "file": "tests/doc/shapes/shapes.wid",
             "line": 23
           },
-          "name": "south",
+          "name": "South",
           "package": ".",
-          "path": "Dir.south",
+          "path": "Dir.South",
           "private": false,
-          "signature": "south",
+          "signature": "South",
           "span": {
             "column": 3,
             "end_column": 8,
@@ -163,11 +163,11 @@
             "file": "tests/doc/shapes/shapes.wid",
             "line": 25
           },
-          "name": "east",
+          "name": "East",
           "package": ".",
-          "path": "Dir.east",
+          "path": "Dir.East",
           "private": false,
-          "signature": "east = 4",
+          "signature": "East = 4",
           "span": {
             "column": 3,
             "end_column": 11,
@@ -187,11 +187,11 @@
             "file": "tests/doc/shapes/shapes.wid",
             "line": 26
           },
-          "name": "west",
+          "name": "West",
           "package": ".",
-          "path": "Dir.west",
+          "path": "Dir.West",
           "private": false,
-          "signature": "west",
+          "signature": "West",
           "span": {
             "column": 3,
             "end_column": 7,

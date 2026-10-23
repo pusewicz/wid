@@ -658,6 +658,11 @@ impl<'a> Checker<'a> {
     /// Turns the code a macro generated among declarations into
     /// declarations, reporting lines that can't be one.
     fn declarations_from(&mut self, code: Vec<ast::Stmt>, shown: &str, p: PendingMacro<'a>) -> Vec<ast::Item> {
+        let in_enum = p.owner.filter(|o| matches!(self.decls[o.0 as usize].kind, DeclKind::Enum(_)));
+        let code = match in_enum {
+            Some(o) => self.reject_generated_members(o, code, shown),
+            None => code,
+        };
         let mut statements = Vec::new();
         let generated = lines_to_items(code, &mut statements);
         for stmt in statements {
@@ -698,6 +703,37 @@ impl<'a> Checker<'a> {
             items.push(item);
         }
         items
+    }
+
+    /// Reports the lines a macro called in the body of `owner`, an enum,
+    /// generated as members: a capitalized name alone or `Name = value`
+    /// (E0913). An enum's members are fixed before the macros in its body
+    /// run. Returns the other lines.
+    fn reject_generated_members(&mut self, owner: DeclId, code: Vec<ast::Stmt>, shown: &str) -> Vec<ast::Stmt> {
+        let enum_name = self.decls[owner.0 as usize].name;
+        let generated = self.decls[owner.0 as usize].item.span.file.expansion_index().is_some();
+        let mut rest = Vec::with_capacity(code.len());
+        for stmt in code {
+            let Some(member) = super::macros::enum_member_line(&stmt)
+                .filter(|m| m.name.as_str().starts_with(|c: char| c.is_ascii_uppercase()))
+            else {
+                rest.push(stmt);
+                continue;
+            };
+            let help = if generated {
+                "splice the members into the generated `enum` itself: names alone or `Name = value`, alone on a line in its body"
+            } else {
+                "list the member in the enum itself, or have a macro called at package level generate the whole `enum`"
+            };
+            self.report(
+                Diagnostic::error(codes::MACRO_DECLARATION, format!("a macro can't add members to `{enum_name}`"))
+                    .primary(member.name.span, format!("`{shown}` generates the member `{}`", member.name.as_str()))
+                    .note("an enum's members are fixed before the macros in its body run, so a macro can't add members")
+                    .help(help),
+            );
+            self.macros.failed_owners.insert(owner);
+        }
+        rest
     }
 
     /// Reports an `import` or `cimport` a macro generated (E0913), which

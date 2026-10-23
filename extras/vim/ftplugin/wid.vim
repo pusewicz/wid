@@ -35,7 +35,7 @@ let b:match_words =
       \ . ':\<end\>[?!]\@!'
 let b:match_skip = 's:\<wid\%(Comment\|Todo\|String\|RawString\|StringDelimiter\|Escape\|RawEscape\|'
       \ . 'EscapeError\|InterpolationDelimiter\|Symbol\|ConditionalModifier\|RepeatModifier\|Member\|'
-      \ . 'EndlessDefine\|Attribute\|AttributeDelimiter\|EnumMember\)$'
+      \ . 'EndlessDefine\|Attribute\|AttributeDelimiter\)$'
 let b:undo_ftplugin .= ' | unlet! b:match_ignorecase b:match_words b:match_skip'
 
 let &cpo = s:cpo_save

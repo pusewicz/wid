@@ -37,10 +37,10 @@ help: for a literal backslash, write `\\`
 error[E0110]: symbols are written without quotes
   --> tests/ui/lexer_errors.wid:10:12
    |
-10 |   d: Dir = :"north"
+10 |   d: Dir = :"North"
    |            ^^^^^^^^ a quoted symbol
 help: remove the quotes
-   |   d: Dir = :north
+   |   d: Dir = :North
    = see `wid explain E0110`
 
 error[E0102]: unterminated string interpolation

@@ -10,26 +10,26 @@ macro def make_enum(name: Symbol, *members: Symbol) -> Code
   end
   quote do
     enum #{name}
-      red
+      Red
       #{lines}
     end
   end
 end
 
-make_enum :Color, :green, :blue
+make_enum :Color, :Green, :Blue
 
 # A macro called in a generated enum's body can't add members either; the
 # generated enum gets them from splices.
 macro def more_members -> Code
   quote do
-    yellow
+    Yellow
   end
 end
 
 macro def with_more(name: Symbol) -> Code
   quote do
     enum #{name}
-      red
+      Red
       more_members()
     end
   end
@@ -38,7 +38,7 @@ end
 with_more :Shade
 
 def main
-  c: Color = .green
-  s: Shade = .red
+  c: Color = .Green
+  s: Shade = .Red
   p c, s
 end

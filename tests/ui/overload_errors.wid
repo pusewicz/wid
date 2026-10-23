@@ -50,8 +50,8 @@ def main
 end
 
 enum Mode
-  on
-  off
+  On
+  Off
 
   level: Int
 end

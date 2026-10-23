@@ -100,6 +100,25 @@ pub enum NameShape {
     Invalid,
 }
 
+/// `PascalCase` for a name written in `snake_case` or lowercase, the way an
+/// enum member is written: `not_found` becomes `NotFound` and `north`
+/// becomes `North`. A name already capitalized is kept.
+pub fn pascal_case(text: &str) -> String {
+    let mut out = String::new();
+    let mut upper = true;
+    for ch in text.chars() {
+        if ch == '_' {
+            upper = true;
+        } else if upper {
+            out.extend(ch.to_uppercase());
+            upper = false;
+        } else {
+            out.push(ch);
+        }
+    }
+    if out.is_empty() { text.to_string() } else { out }
+}
+
 /// Classifies `text` as the lexer reads names: see [`NameShape`].
 pub fn name_shape(text: &str) -> NameShape {
     if OPERATOR_NAMES.contains(&text) {
@@ -196,7 +215,7 @@ impl<'a> Lexer<'a> {
     /// statement: it starts with `&.`, or with `.` and is indented deeper
     /// than the statement's first line, which doesn't open a block (see
     /// [`Lexer::opens_block`]). Any other line starting with `.` starts a
-    /// statement of its own, such as the enum member `.north`.
+    /// statement of its own, such as the enum member `.North`.
     fn next_line_continues(&self) -> bool {
         let mut i = self.pos;
         loop {

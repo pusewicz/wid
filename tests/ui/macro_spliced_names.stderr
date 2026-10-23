@@ -72,11 +72,11 @@ error[E0911]: the macro `make_enum` splices the name `two words` where an enum m
    |
 44 |       #{m}
    |       ---- `two words` is spliced here
-   = note: an enum member starts with a lowercase letter or `_`, followed by letters, digits and `_`
-help: build a name that follows this rule, like `two_words`, before `.to_sym`
+   = note: an enum member is named like a constant: it starts with a capital letter, followed by letters, digits and `_`, like `North` or `NOT_FOUND`
+help: build a name that follows this rule, like `TwoWords`, before `.to_sym`
    = see `wid explain E0911`
 
-error[E0911]: the macro `enum_of` splices the name `Big` where an enum member goes
+error[E0911]: the macro `enum_of` splices the name `small` where an enum member goes
   --> tests/ui/macro_spliced_names.wid:67:1
    |
 67 | enum_of :small, :Big
@@ -84,10 +84,10 @@ error[E0911]: the macro `enum_of` splices the name `Big` where an enum member go
   ::: tests/ui/macro_spliced_names.wid:62:7
    |
 62 |       #{lines}
-   |       -------- `Big` is spliced here
-   = note: an enum member starts with a lowercase letter or `_`, followed by letters, digits and `_`
-help: pass a name that follows this rule, like `:big`
-   | enum_of :small, :big
+   |       -------- `small` is spliced here
+   = note: an enum member is named like a constant: it starts with a capital letter, followed by letters, digits and `_`, like `North` or `NOT_FOUND`
+help: pass a name that follows this rule, like `:Small`
+   | enum_of :Small, :Big
    = see `wid explain E0911`
 
 error[E0911]: the macro `make_constant` splices the name `A B` where an assigned name goes

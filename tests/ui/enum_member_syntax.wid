@@ -3,12 +3,12 @@
 # is a method call that doesn't continue the line above when it isn't
 # indented deeper than that line's statement.
 enum Dir
-  north
-  south
+  North
+  South
 end
 
 def main
-  d: Dir = . north
+  d: Dir = . North
   n = 5
   .to_s(2)
   p d, n

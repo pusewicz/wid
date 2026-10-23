@@ -1,5 +1,5 @@
 enum Dir
-  north
+  North
 end
 
 def main
@@ -7,7 +7,7 @@ def main
   b: Int = 0b102
   c: Int = 0x
   puts "\q"
-  d: Dir = :"north"
+  d: Dir = :"North"
   hp = 3
   puts "hp: #{hp"
   puts "unclosed

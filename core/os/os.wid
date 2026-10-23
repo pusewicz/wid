@@ -1,9 +1,9 @@
 # core:os: the command line, the environment, files, standard input and
 # process exit.
 #
-# Fallible functions return an `Error` last: `:not_found`,
-# `:permission_denied`, `:already_exists`, `:is_directory`, `:not_directory`,
-# `:no_space`, `:invalid_argument` or `:io_error`.
+# Fallible functions return an `Error` last: `.NotFound`,
+# `.PermissionDenied`, `.AlreadyExists`, `.IsDirectory`, `.NotDirectory`,
+# `.NoSpace`, `.InvalidArgument` or `.IoError`.
 
 # The command-line arguments, program name first. The strings point into the
 # process's own argument memory; nothing is allocated.
@@ -89,14 +89,14 @@ end
 private def os_error(kind: I32) -> Error
   case kind
   when 0 then nil
-  when 1 then .not_found
-  when 2 then .permission_denied
-  when 3 then .already_exists
-  when 4 then .is_directory
-  when 5 then .not_directory
-  when 6 then .no_space
-  when 7 then .invalid_argument
-  else .io_error
+  when 1 then .NotFound
+  when 2 then .PermissionDenied
+  when 3 then .AlreadyExists
+  when 4 then .IsDirectory
+  when 5 then .NotDirectory
+  when 6 then .NoSpace
+  when 7 then .InvalidArgument
+  else .IoError
   end
 end
 

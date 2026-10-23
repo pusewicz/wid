@@ -452,7 +452,7 @@ impl TypeTable {
             name: "AllocMode".into(),
             c_name: "wid_AllocMode".into(),
             backing: IntTy::U8,
-            members: ["alloc", "free", "free_all", "resize"]
+            members: ["Alloc", "Free", "FreeAll", "Resize"]
                 .iter()
                 .enumerate()
                 .map(|(i, n)| (Name::new(n), i as i128))

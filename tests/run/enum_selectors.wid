@@ -4,46 +4,46 @@
 # `.name` is a value of its own unless it is indented deeper than its
 # statement's first line, which doesn't open a block.
 enum Dir : U8
-  north
-  east
-  south
-  west
+  North
+  East
+  South
+  West
 
   # On their own lines, after `when` and `else`.
   def turn -> Dir
     case self
-    when .north
-      .east
-    when .east
-      .south
-    when .south
-      .west
+    when .North
+      .East
+    when .East
+      .South
+    when .South
+      .West
     else
-      .north
+      .North
     end
   end
 
   def name -> String
     case self
-    when .north, .south then "vertical"
+    when .North, .South then "vertical"
     else "horizontal"
     end
   end
 end
 
 enum Kind
-  struct
-  union
+  Struct
+  Union
 end
 
 # The value of a method on its own line.
 def start -> Dir
-  .north
+  .North
 end
 
 def step(d: Dir) -> Dir
-  if d == .west
-    return .north
+  if d == .West
+    return .North
   end
   d.turn
 end
@@ -53,7 +53,7 @@ def show(d: Dir)
 end
 
 def find(n: Int) -> (Int, Error)
-  return 0, .not_found if n < 0
+  return 0, .NotFound if n < 0
   return n, nil
 end
 
@@ -69,27 +69,27 @@ macro def members(*names: Symbol) -> Code
   end
 end
 
-FACING: Dir = .south
+FACING: Dir = .South
 
 def main
-  d: Dir = .north
-  show .east
-  show(.south)
+  d: Dir = .North
+  show .East
+  show(.South)
   show d.turn
   show start.turn.turn
-  show step(.west)
+  show step(.West)
   show FACING
-  ds: [3]Dir = [.west, .east, d]
-  p ds[0] == .west, ds[1] != .west
-  maybe: Dir? = .south
-  p maybe == .south
+  ds: [3]Dir = [.West, .East, d]
+  p ds[0] == .West, ds[1] != .West
+  maybe: Dir? = .South
+  p maybe == .South
   _, err = find(-1)
-  p err == .not_found
-  k: Kind = .struct
-  p k == .union
-  show member(:west)
-  all: [2]Dir = members(:north, :west)
-  p all[1] == .west
+  p err == .NotFound
+  k: Kind = .Struct
+  p k == .Union
+  show member(:West)
+  all: [2]Dir = members(:North, :West)
+  p all[1] == .West
   # A line indented under its statement continues it.
   n = 5.to_f
     .to_i

@@ -13,5 +13,5 @@ pub mod uses;
 pub use check::{check_program, check_program_indexed, is_reserved_type_name};
 pub use input::{
     CBinding, CFunction, CRecord, CSkipped, CSlot, CheckOptions, FileInput, PackageId, PackageInput, ProgramInput,
-    TARGET_ARCHES, TARGET_OSES, host_arch, host_os, parse_target,
+    TARGET_ARCHES, TARGET_OSES, arch_member, host_arch, host_os, os_member, parse_target,
 };

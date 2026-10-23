@@ -70,22 +70,22 @@ def parsing_numbers(t: ^testing.T)
   expect_int(t, "ff", 255, base: 16)
   expect_int(t, "9223372036854775807", 9223372036854775807)
   expect_int(t, "-9223372036854775808", -9223372036854775807 - 1)
-  expect_bad_int(t, "9223372036854775808", .out_of_range)
-  expect_bad_int(t, "12x", .invalid_number)
-  expect_bad_int(t, "", .invalid_number)
-  expect_bad_int(t, "1__0", .invalid_number)
-  expect_bad_int(t, "_1", .invalid_number)
+  expect_bad_int(t, "9223372036854775808", .OutOfRange)
+  expect_bad_int(t, "12x", .InvalidNumber)
+  expect_bad_int(t, "", .InvalidNumber)
+  expect_bad_int(t, "1__0", .InvalidNumber)
+  expect_bad_int(t, "_1", .InvalidNumber)
   f, err = "3.5".parse_float
   t.expect_eq(f, 3.5)
   t.expect_nil(err)
   g, _ = "-2e3".parse_float
   t.expect_eq(g, -2000.0)
   _, bad = " 1".parse_float
-  t.expect_eq(bad, .invalid_number)
+  t.expect_eq(bad, .InvalidNumber)
   yes, _ = "true".parse_bool
   t.expect(yes)
   _, not_bool = "yes".parse_bool
-  t.expect_eq(not_bool, .invalid_bool)
+  t.expect_eq(not_bool, .InvalidBool)
 end
 
 def expect_int(t: ^testing.T, text: String, want: Int, base: Int = 10, loc: Location = caller_location)

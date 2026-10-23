@@ -1,0 +1,33 @@
+# Enum members are named like constants: `PascalCase` or `UPPER_CASE`. A
+# lowercase member is E0114 with a fix, and is kept under its `PascalCase`
+# name, so uses that spell it so resolve. A use written in lowercase gets a
+# fix to the member's spelling, and so does an `Error` member.
+enum Dir
+  north
+  not_found = 4
+  struct
+  South
+  WEST
+end
+
+enum Mode
+  On
+  # `Name = value` in an enum is a member, so it can't share a constant's
+  # name.
+  LIMIT = 2
+  LIMIT: Int = 3
+end
+
+def find(n: Int) -> (Int, Error)
+  return 0, .not_found if n < 0
+  return n, nil
+end
+
+def main
+  a: Dir = .North
+  b: Dir = .south
+  c = Dir.west
+  d: Dir = :north
+  _, err = find(1)
+  p a, b, c, d, Dir.Struct, Dir.NotFound, Mode.On, err
+end

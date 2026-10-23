@@ -2,40 +2,40 @@
 # reflection hands out.
 
 # Operating systems a program can be compiled for. `OS` holds the target's,
-# so `comptime if OS == .windows` picks code per platform.
+# so `comptime if OS == .Windows` picks code per platform.
 enum Os
   # macOS and Apple's other systems.
-  darwin
+  Darwin
   # Linux.
-  linux
+  Linux
   # Windows.
-  windows
+  Windows
   # FreeBSD.
-  freebsd
+  FreeBSD
   # OpenBSD.
-  openbsd
+  OpenBSD
   # NetBSD.
-  netbsd
+  NetBSD
   # No operating system, as on bare metal.
-  freestanding
+  Freestanding
 end
 
 # CPU architectures a program can be compiled for. `ARCH` holds the target's.
 enum Arch
   # 64-bit ARM (AArch64).
-  arm64
+  Arm64
   # 64-bit x86 (x86-64).
-  amd64
+  Amd64
   # 32-bit x86.
-  i386
+  I386
   # 32-bit ARM.
-  arm32
+  Arm32
   # 64-bit RISC-V.
-  riscv64
+  Riscv64
   # WebAssembly with 32-bit addresses.
-  wasm32
+  Wasm32
   # WebAssembly with 64-bit addresses.
-  wasm64
+  Wasm64
 end
 
 # A field of a struct, as `T.fields` describes it while compiling.

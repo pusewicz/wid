@@ -7,8 +7,8 @@ MAX_HP = 100
 
 # A compass direction.
 enum Dir
-  north
-  south
+  North
+  South
 end
 
 # Says hello.
@@ -32,7 +32,7 @@ end
 struct Player
   using base: Entity
   name: String
-  facing: Dir = .north
+  facing: Dir = .North
   include Greeter
 
   def heal(amount: Int) -> Int
@@ -97,8 +97,8 @@ def main
   end
   hero.pos = geo.make(1.0, 2.0)
   puts geo.length2(hero.pos)
-  d: Dir = .south
-  if d == Dir.north || hero.facing == .north
+  d: Dir = .South
+  if d == Dir.North || hero.facing == .North
     puts "north"
   end
   pool = Pool(Player, 4).new

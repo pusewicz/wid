@@ -195,7 +195,8 @@ impl Loader<'_> {
         let text = format!(
             "# The operating system this program is compiled for, set with `-target:`.\nOS = Os.{}\n\
              # The CPU architecture this program is compiled for, set with `-target:`.\nARCH = Arch.{}\n",
-            self.opts.target_os, self.opts.target_arch
+            wid_sema::os_member(&self.opts.target_os),
+            wid_sema::arch_member(&self.opts.target_arch)
         );
         let text: Arc<str> = Arc::from(text);
         let display = "core:builtin/target.wid".to_string();

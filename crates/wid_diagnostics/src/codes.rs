@@ -58,6 +58,7 @@ codes! {
     MISPLACED_SPLICE = "E0111", "misplaced splice";
     VARIADIC_PARAM = "E0112", "misused `*` parameter";
     STRUCT_LITERAL = "E0113", "struct literal syntax";
+    ENUM_MEMBER_CASE = "E0114", "enum member does not start with a capital letter";
 
     // Names and scopes.
     UNDEFINED_NAME = "E0201", "undefined name";

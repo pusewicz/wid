@@ -10,7 +10,7 @@ def main
   puts hero.describe
   p hero.is_alive
   puts hero.field_names
-  c: Color = .green
+  c: Color = .Green
   puts c.describe, Color.count_line
   puts hero.greet
   puts 5.shout
@@ -156,8 +156,8 @@ macro def enum_helpers -> Code
 end
 
 enum Color
-  red
-  green
+  Red
+  Green
   def plain -> Bool = true
   enum_helpers()
 end

@@ -12,12 +12,12 @@ import "core:strings"
 enum FloatStyle
   # `1234.5`: digits after the point; the shortest exact digits when the
   # precision is negative.
-  fixed
+  Fixed
   # `1.2345e+03`: one digit before the point and an exponent.
-  exponent
+  Exponent
   # Fixed or exponent, whichever is shorter; precision counts significant
   # digits.
-  general
+  General
 end
 
 # The digits of bases up to 36, in order: a digit's value is its index.
@@ -43,16 +43,16 @@ def write_float(
   b: ^strings.Builder,
   x: F64,
   precision: Int = -1,
-  style: FloatStyle = .fixed,
+  style: FloatStyle = .Fixed,
   width: Int = 0,
   pad: Rune = ' ',
   plus: Bool = false
 )
   buf: [128]U8 = ---
   code = case style
-    when .fixed then 102
-    when .exponent then 101
-    when .general then 103
+    when .Fixed then 102
+    when .Exponent then 101
+    when .General then 103
   end
   n = format_float_raw(x, precision, code.to(U8), &buf[0], 128)
   text = buf[0...n].to(String)
@@ -91,7 +91,7 @@ end
 def float(
   x: F64,
   precision: Int = -1,
-  style: FloatStyle = .fixed,
+  style: FloatStyle = .Fixed,
   width: Int = 0,
   pad: Rune = ' ',
   plus: Bool = false,

@@ -176,7 +176,7 @@ enum Role {
     /// a return type's `->`, a union's `|`.
     BinOp,
     /// A prefix operator: unary `-`, `!`, `~`, `&x`, `*xs`, `&blk`, `^T`,
-    /// and the `.` of an enum member, `.north`.
+    /// and the `.` of an enum member, `.North`.
     Prefix,
     /// The `^` of a dereference, `p^`.
     Postfix,
@@ -649,7 +649,7 @@ impl Visit for Collector<'_, '_> {
             }
             ExprKind::Unary { .. } => self.set(first, &[T::Minus, T::Bang, T::Tilde], Role::Prefix),
             ExprKind::AddrOf(_) => self.set(first, &[T::Amp], Role::Prefix),
-            // `.north` spaces like an operand, not like a member access.
+            // `.North` spaces like an operand, not like a member access.
             ExprKind::Selector(_) => self.set(first, &[T::Dot], Role::Prefix),
             ExprKind::Deref(_) => self.set(self.toks.ending_at(e.span.end), &[T::Caret], Role::Postfix),
             ExprKind::Ternary { cond, else_, .. } => {

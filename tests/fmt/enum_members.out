@@ -2,23 +2,23 @@
 # call's name. A line that starts with `.name` keeps its own indentation
 # level unless it continues the line above.
 enum Dir
-  north
-  south
+  North
+  South
 
   def flip -> Dir
     case self
-    when .north then .south
+    when .North then .South
     else
-      .north
+      .North
     end
   end
 end
 
 def main
-  d: Dir = .north
-  p d == .south, [.north, .south]
-  go .north
-  go(.south)
+  d: Dir = .North
+  p d == .South, [.North, .South]
+  go .North
+  go(.South)
   x = d
     .flip
 end

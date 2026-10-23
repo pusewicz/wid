@@ -10,7 +10,7 @@ end
 def resizes_with_a_stale_size(t: ^testing.T)
   a = context.allocator
   x = alloc(Int)
-  _ = a.proc(a.data, .resize, 16, 8, x.to(RawPtr), 4, caller_location)
+  _ = a.proc(a.data, .Resize, 16, 8, x.to(RawPtr), 4, caller_location)
 end
 
 @[test]

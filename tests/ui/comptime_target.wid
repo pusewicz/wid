@@ -1,7 +1,7 @@
 # Checked as if for Windows (see comptime_target.flags): the Windows branch
 # is chosen, so its missing header is reported, and the Unix branch is not
 # checked at all.
-comptime if OS == .windows
+comptime if OS == .Windows
   cimport "zzz_windows_only.h", as: :sys
   def family -> String = "windows"
 else

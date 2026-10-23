@@ -1,13 +1,13 @@
 enum Color
-  red
-  green
-  blue
+  Red
+  Green
+  Blue
 end
 
 def name(c: Color) -> String
   case c
-  when .red then "red"
-  when .green then "green"
+  when .Red then "red"
+  when .Green then "green"
   end
 end
 
