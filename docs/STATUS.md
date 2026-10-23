@@ -595,6 +595,14 @@ the language server.
   declaration checks), package-level operator functions with literal operand
   typing, unary `def -`/`def ~`, `[]`/`[]=` methods, and `+=`-style forms
   through operator methods.
+- Derived comparisons (#189): without its own `<`, `<=`, `>` or `>=`, a
+  type's `<=>` (method, overload set or package-level function) is called
+  and its result compared with 0, and `!=` negates a user `==` (it compared
+  members before, so `a == b` and `a != b` could both be true). A `<=>`
+  that doesn't return an integer, or an `==` that doesn't return `Bool`, is
+  E0307 at the derived use, with a fix for the return type. E0307's help for
+  a missing comparison on a struct or enum suggests `def <=>` (or `def ==`
+  for `!=`).
 - `using` fields (by value or pointer; field and method promotion, also
   through `@field`, implicit-self calls and nested `using`; ambiguity errors),
   `module`/`include` (in structs, enums, modules and `extend`; `Self`-generic
@@ -1814,7 +1822,8 @@ only on `main` and can run in parallel with the macro stack.
 7. **SPEC conformance audit: done** (at e73c919). Every finding was
    reproduced on main and filed as a GitHub issue, so the open issues are
    now its queue. In order of value:
-   - `<=>` deriving the comparisons, and the definable operator set (#134);
+   - the definable operator set (#134; `<=>` deriving the comparisons
+     landed with #189);
    - `def self.` in an `extend` (#135);
    - gcc-15 `-Werror` at `-o:speed` and `-o:aggressive`, and suite
      coverage of `-o:` (#130);

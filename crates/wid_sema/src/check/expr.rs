@@ -1205,25 +1205,21 @@ impl<'a> Checker<'a> {
                 return self.pointer_arith(op, l, r, span);
             }
             if let Some(decl) = self.operator_method(l.ty, op.as_str()) {
-                let recv = self.address_of(l);
-                let arg = ast::Arg { name: None, value: rhs.clone(), splat: false };
-                let args = std::slice::from_ref(&arg);
-                if let DeclKind::Overload(_) = self.decls[decl.0 as usize].kind {
-                    let owner = self.types.base(recv.ty);
-                    let owner = match self.types.kind(owner) {
-                        TyKind::Pointer(t) => *t,
-                        _ => owner,
-                    };
-                    return self.call_overloaded(decl, Some(recv), Some(owner), args, lhs.span.to(rhs.span), span);
-                }
-                return self.call_fn(decl, Some(recv), args, None, lhs.span.to(rhs.span), span);
+                return self.call_operator_method(decl, l, rhs, lhs.span.to(rhs.span), span);
+            }
+            // `a < b` calls `a <=> b` and `a != b` calls `a == b` when the
+            // type defines only those.
+            if let Some(source) = derived_from(op)
+                && let Some(decl) = self.operator_method(l.ty, source)
+            {
+                let call = self.call_operator_method(decl, l, rhs, lhs.span.to(rhs.span), span);
+                return self.derived_comparison(op, decl, call, span);
             }
             let rhs_expected =
-                if self.types.is_numeric(l.ty) { None } else { self.package_operand_type(op.as_str(), l.ty, true) };
+                if self.types.is_numeric(l.ty) { None } else { self.package_operand_type_for(op, l.ty, true) };
             let (l, r) = self.sequenced(l, |this, l_ty| this.expr(rhs, Some(rhs_expected.unwrap_or(l_ty))));
-            if let Some(decl) = self.package_operator(op.as_str(), l.ty, r.ty) {
-                self.note_ref(span, decl, crate::uses::RefKind::Call);
-                return self.call_operator_fn(decl, l, r);
+            if let Some(e) = self.package_operator_call(op, l.clone(), r.clone(), span) {
+                return e;
             }
             return self.binary_values(op, l, r, lhs.span, rhs.span, span);
         }
@@ -1231,15 +1227,12 @@ impl<'a> Checker<'a> {
             let r = self.expr(rhs, operand_expected);
             let l_expected = match self.numeric_array_elem(r.ty) {
                 Some(elem) => elem,
-                None if !self.types.is_numeric(r.ty) => {
-                    self.package_operand_type(op.as_str(), r.ty, false).unwrap_or(r.ty)
-                }
+                None if !self.types.is_numeric(r.ty) => self.package_operand_type_for(op, r.ty, false).unwrap_or(r.ty),
                 None => r.ty,
             };
             let l = self.expr(lhs, Some(l_expected));
-            if let Some(decl) = self.package_operator(op.as_str(), l.ty, r.ty) {
-                self.note_ref(span, decl, crate::uses::RefKind::Call);
-                return self.call_operator_fn(decl, l, r);
+            if let Some(e) = self.package_operator_call(op, l.clone(), r.clone(), span) {
+                return e;
             }
             (l, r)
         } else {
@@ -1248,6 +1241,108 @@ impl<'a> Checker<'a> {
             (l, r)
         };
         self.binary_values(op, l, r, lhs.span, rhs.span, span)
+    }
+
+    /// Calls the operator method `decl` of the left operand `l` with `rhs`.
+    fn call_operator_method(
+        &mut self,
+        decl: super::DeclId,
+        l: ir::Expr,
+        rhs: &ast::Expr,
+        args_span: Span,
+        span: Span,
+    ) -> ir::Expr {
+        let recv = self.address_of(l);
+        let arg = ast::Arg { name: None, value: rhs.clone(), splat: false };
+        let args = std::slice::from_ref(&arg);
+        if let DeclKind::Overload(_) = self.decls[decl.0 as usize].kind {
+            let owner = self.types.base(recv.ty);
+            let owner = match self.types.kind(owner) {
+                TyKind::Pointer(t) => *t,
+                _ => owner,
+            };
+            return self.call_overloaded(decl, Some(recv), Some(owner), args, args_span, span);
+        }
+        self.call_fn(decl, Some(recv), args, None, args_span, span)
+    }
+
+    /// The package-level operand type for `op`, or for the operator it
+    /// derives from (`<=>` for `<`, `==` for `!=`) when nothing defines `op`.
+    fn package_operand_type_for(&mut self, op: ast::BinOp, known: TyId, known_left: bool) -> Option<TyId> {
+        self.package_operand_type(op.as_str(), known, known_left)
+            .or_else(|| derived_from(op).and_then(|source| self.package_operand_type(source, known, known_left)))
+    }
+
+    /// Calls the package-level function for `l op r`, or the one for the
+    /// operator `op` derives from, if either takes these operand types.
+    fn package_operator_call(&mut self, op: ast::BinOp, l: ir::Expr, r: ir::Expr, span: Span) -> Option<ir::Expr> {
+        if let Some(decl) = self.package_operator(op.as_str(), l.ty, r.ty) {
+            self.note_ref(span, decl, crate::uses::RefKind::Call);
+            return Some(self.call_operator_fn(decl, l, r));
+        }
+        let source = derived_from(op)?;
+        let decl = self.package_operator(source, l.ty, r.ty)?;
+        self.note_ref(span, decl, crate::uses::RefKind::Call);
+        let call = self.call_operator_fn(decl, l, r);
+        Some(self.derived_comparison(op, decl, call, span))
+    }
+
+    /// Turns the result of `<=>` into `<`, `<=`, `>` or `>=` by comparing it
+    /// with 0, and the result of `==` into `!=` by negating it.
+    fn derived_comparison(&mut self, op: ast::BinOp, decl: super::DeclId, call: ir::Expr, span: Span) -> ir::Expr {
+        let bool_ty = self.types.bool();
+        if matches!(self.types.kind(call.ty), TyKind::Unknown) {
+            return ir::Expr::new(ExprKind::Zero, bool_ty);
+        }
+        let ir_op = match op {
+            ast::BinOp::Ne => {
+                if matches!(self.types.kind(self.types.base(call.ty)), TyKind::Bool) {
+                    return self.not(call);
+                }
+                None
+            }
+            ast::BinOp::Lt => Some(ir::BinaryOp::Lt),
+            ast::BinOp::Le => Some(ir::BinaryOp::Le),
+            ast::BinOp::Gt => Some(ir::BinaryOp::Gt),
+            _ => Some(ir::BinaryOp::Ge),
+        };
+        if let Some(ir_op) = ir_op
+            && self.types.is_int(call.ty)
+        {
+            let zero = ir::Expr::new(ExprKind::Int(0), call.ty);
+            return ir::Expr::new(
+                ExprKind::Binary { op: ir_op, lhs: Box::new(call), rhs: Box::new(zero), span },
+                bool_ty,
+            );
+        }
+        let source = derived_from(op).expect("invariant: a derived comparison has a source operator");
+        let (wanted, meaning) = if op == ast::BinOp::Ne {
+            ("Bool", "`!=` negates `==`")
+        } else {
+            ("Int", "`<`, `<=`, `>` and `>=` compare the result of `<=>` with 0")
+        };
+        let got = self.types.display(call.ty);
+        let d = &self.decls[decl.0 as usize];
+        let ret_span = match d.kind {
+            DeclKind::Fn(f) => f.ret.as_ref().map(|t| t.span),
+            _ => None,
+        };
+        let def_span = ret_span.unwrap_or(d.span);
+        let help = format!("make `{source}` return `{wanted}`");
+        let diag = Diagnostic::error(
+            codes::NO_OPERATOR,
+            format!("`{}` needs `{source}` to return `{wanted}`, but it returns `{got}`", op.as_str()),
+        )
+        .primary(span, format!("`{}` calls `{source}` here", op.as_str()))
+        .secondary(def_span, format!("`{source}` returns `{got}`"))
+        .note(meaning);
+        let diag = match ret_span {
+            // The body has to change too, so the fix is only a start.
+            Some(at) => diag.suggest_replace(help, at, wanted, Applicability::MaybeIncorrect),
+            None => diag.help(help),
+        };
+        self.report(diag);
+        ir::Expr::new(ExprKind::Zero, bool_ty)
     }
 
     /// Lowers `p + n` and `p - n` on a `[^]T` (moving by whole elements) and
@@ -1489,10 +1584,22 @@ impl<'a> Checker<'a> {
                     .primary(span, format!("both sides are `{shown}`"));
             if matches!(kind, TyKind::String) && op == ast::BinOp::Add {
                 diag = diag.help("build strings with interpolation: `\"#{a}#{b}\"`");
-            } else if matches!(kind, TyKind::Struct(_)) {
-                let ret = if op.is_comparison() { "Bool".to_string() } else { shown.clone() };
-                diag = diag
-                    .help(format!("define the operator on `{shown}`: `def {}(other: {shown}) -> {ret}`", op.as_str()));
+            } else if matches!(kind, TyKind::Struct(_) | TyKind::Enum(_)) {
+                // The comparisons derive from `<=>` and `!=` from `==`, so
+                // those are the ones to define.
+                let (name, ret) = match op {
+                    ast::BinOp::Lt | ast::BinOp::Le | ast::BinOp::Gt | ast::BinOp::Ge => ("<=>", "Int".to_string()),
+                    ast::BinOp::Eq | ast::BinOp::Ne => ("==", "Bool".to_string()),
+                    _ => (op.as_str(), shown.clone()),
+                };
+                let what = if name == op.as_str() { "the operator".to_string() } else { format!("`{name}`") };
+                diag = diag.help(format!("define {what} on `{shown}`: `def {name}(other: {shown}) -> {ret}`"));
+                if name == "<=>" {
+                    diag = diag.note(format!(
+                        "`{}` calls `<=>` and compares its result with 0: negative when the left side comes first, 0 when the sides are equal and positive when the right side does",
+                        op.as_str()
+                    ));
+                }
             }
             self.report(diag);
         }
@@ -2490,4 +2597,14 @@ pub(crate) enum ArgSource<'e> {
 
 fn plural(n: usize) -> &'static str {
     if n == 1 { "" } else { "s" }
+}
+
+/// The operator that `op` derives from when a type doesn't define `op`
+/// itself: `<=>` for the ordering comparisons and `==` for `!=`.
+fn derived_from(op: ast::BinOp) -> Option<&'static str> {
+    match op {
+        ast::BinOp::Lt | ast::BinOp::Le | ast::BinOp::Gt | ast::BinOp::Ge => Some("<=>"),
+        ast::BinOp::Ne => Some("=="),
+        _ => None,
+    }
 }
