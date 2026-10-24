@@ -1,16 +1,16 @@
 # Each target gets its own declarations; only the chosen branch is checked,
 # so the Windows branch may import a header this machine doesn't have.
-comptime if OS == .windows
+comptime if OS == .Windows
   cimport "windows.h", as: :sys
   def family -> String = "windows"
-elsif OS == .darwin || OS == .linux
+elsif OS == .Darwin || OS == .Linux
   cimport "unix.h", as: :sys
   def family -> String = "unix"
 else
   def family -> String = "other"
 end
 
-comptime if ARCH == .wasm32
+comptime if ARCH == .Wasm32
   POINTER_BITS = 32
 else
   POINTER_BITS = 64

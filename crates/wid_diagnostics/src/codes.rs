@@ -58,6 +58,7 @@ codes! {
     MISPLACED_SPLICE = "E0111", "misplaced splice";
     VARIADIC_PARAM = "E0112", "misused `*` parameter";
     STRUCT_LITERAL = "E0113", "struct literal syntax";
+    ENUM_MEMBER_CASE = "E0114", "enum member does not start with a capital letter";
 
     // Names and scopes.
     UNDEFINED_NAME = "E0201", "undefined name";
@@ -103,6 +104,7 @@ codes! {
     TYPE_TOO_LARGE = "E0329", "type is too large";
     PREDICATE_RETURN = "E0330", "`?` method does not return `Bool`";
     SYMBOL_AS_MEMBER = "E0331", "symbol where an enum member is expected";
+    UNDEFINABLE_OPERATOR = "E0332", "operator that derives from another can't be defined";
 
     // Errors and control flow.
     IGNORED_ERROR = "E0401", "`Error` result ignored";

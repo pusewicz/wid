@@ -1,5 +1,5 @@
-[Cell(color: .red, value: 5, maybe: 3, pair: [.red, .red]), Cell(color: .green, value: "five", maybe: nil, pair: [.red, .red]), Cell(color: .red, value: 5.5, maybe: nil, pair: [.red, .red])]
-.not_found
+[Cell(color: .Red, value: 5, maybe: 3, pair: [.Red, .Red]), Cell(color: .Green, value: "five", maybe: nil, pair: [.Red, .Red]), Cell(color: .Red, value: 5.5, maybe: nil, pair: [.Red, .Red])]
+.NotFound
 matrix[[1.0, 10.0], [0.0, 16.0]]
 511.5
 int

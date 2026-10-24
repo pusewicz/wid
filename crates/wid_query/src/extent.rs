@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn the_smallest_declaration_around_a_name_wins() {
-        let src = "struct Ball\n  pos: Int\n  counter :kills\n\n  @[inline]\n  def speed -> Int\n    1\n  end\nend\n\nenum Dir\n  north\n  east = 4\nend\n";
+        let src = "struct Ball\n  pos: Int\n  counter :kills\n\n  @[inline]\n  def speed -> Int\n    1\n  end\nend\n\nenum Dir\n  North\n  East = 4\nend\n";
         let mut sources = SourceMap::new();
         let file = sources.add("main.wid".into(), "main.wid".into(), src);
         let (ast, diags) = wid_syntax::parse_file(file, src);
@@ -117,8 +117,8 @@ mod tests {
         assert_eq!(text("Ball"), &src[..src.find("\n\nenum").expect("enum")]);
         assert_eq!(text("pos"), "pos: Int");
         assert_eq!(text("kills"), "counter :kills");
-        assert_eq!(text("east"), "east = 4");
-        assert_eq!(text("north"), "north");
+        assert_eq!(text("East"), "East = 4");
+        assert_eq!(text("North"), "North");
         assert_eq!(extents.declaration(&sources, Span::new(FileId(9), 0, 1)), None);
     }
 }

@@ -1,29 +1,29 @@
 enum Dir : U8
-  north
-  east
-  south
-  west
+  North
+  East
+  South
+  West
 
   def opposite -> Dir
     case self
-    when .north then .south
-    when .south then .north
-    when .east then .west
-    when .west then .east
+    when .North then .South
+    when .South then .North
+    when .East then .West
+    when .West then .East
     end
   end
 
   def vertical? -> Bool
     case self
-    when .north, .south then true
+    when .North, .South then true
     else false
     end
   end
 end
 
 enum Status
-  ok = 200
-  not_found = 404
+  Ok = 200
+  NotFound = 404
 end
 
 def describe(n: Int) -> String
@@ -36,26 +36,26 @@ def describe(n: Int) -> String
 end
 
 def main
-  d: Dir = .east
+  d: Dir = .East
   p d
   puts d
   puts d.opposite
   puts d.vertical?
-  puts Dir.north.vertical?
-  puts d == .east
+  puts Dir.North.vertical?
+  puts d == .East
   puts d.to_i
-  s = Status.not_found
+  s = Status.NotFound
   puts s.to_i
   puts describe(0)
   puts describe(7)
   puts describe(20)
   puts describe(99)
   case d
-  when .north
+  when .North
     puts "up"
-  when .east, .west
+  when .East, .West
     puts "sideways"
-  when .south
+  when .South
     puts "down"
   end
 end

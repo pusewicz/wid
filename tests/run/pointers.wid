@@ -11,7 +11,7 @@ def counting_proc(data: RawPtr, mode: AllocMode, size: Int, align: Int, old: Raw
   guard c = data.to(^Counter?) else
     return nil
   end
-  c.allocations += 1 if mode == .alloc
+  c.allocations += 1 if mode == .Alloc
   c.backing.proc(c.backing.data, mode, size, align, old, old_size, loc)
 end
 

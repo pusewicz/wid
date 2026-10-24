@@ -5,19 +5,19 @@ macro def helpers -> Code
 end
 
 enum Color
-  red
+  Red
   helpers
 end
 
 # A member with a value is never a macro call.
 enum Tool
-  hammer
-  helpers = 1
+  Hammer
+  Helpers = 1
 end
 
 def main
-  c: Color = .red
+  c: Color = .Red
   puts c.describe
-  t: Tool = .helpers
+  t: Tool = .Helpers
   p t
 end

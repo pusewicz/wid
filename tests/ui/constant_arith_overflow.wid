@@ -14,13 +14,13 @@ SHIFTED: U8 = (MAX + 1) << 2
 
 # The member after one that doesn't fit isn't reported again.
 enum Big
-  top = 170141183460469231731687303715884105727
-  after
+  Top = 170141183460469231731687303715884105727
+  After
 end
 
 def main
   p NEG, ADD, SUB, MUL, DIV, POW, NEG_POW, SHIFTED
   p 2 ** 127
   x: I8 = 170141183460469231731687303715884105727 * 3
-  p x, Big.after
+  p x, Big.After
 end

@@ -171,9 +171,24 @@ the language server.
   `alignof` and `offsetof`. The interpreter builds the same tables in its
   static region from `describe`, once per type per evaluation
   (`Interp::type_infos`), with Wid's layouts.
-- In an `enum` body, `struct`, `enum` or `union` followed by a newline, `=` or
-  `,` is a member (`is_keyword_member` in the parser), for `TypeKind`. Vim
-  matches them as `widEnumMember`, which opens no block.
+- Enum members are named like constants (`North`, `NOT_FOUND`). In an
+  `enum` body a capitalized name followed by a newline, `=`, `,` or `end`
+  is a member (`Parser::enum_member_at`), so `Name = value` there is a
+  member, never a constant; a constant in an enum is typed (`MAX: Int =
+  3`) and may not share a member's name (E0202 in `Checker::enum_type`).
+  The parser still reads a lowercase name, or `struct`, `enum` or `union`,
+  standing there as a member; `Checker::enum_type` reports it (E0114,
+  `member_case`, or E0914 when it names a macro) and keeps it under its
+  `PascalCase` name (`wid_syntax::lexer::pascal_case`), so uses spelled
+  that way don't cascade. A lowercase `Error` member is E0114 too
+  (`Checker::error_member_case`), interned as its `PascalCase` form. A
+  lowercase use of a declared member is E0204 with a machine-applicable fix
+  to the member's spelling, and E0331 and E0304 suggest that spelling. The
+  prelude's `TypeKind` members are named after the types (`UInt`,
+  `CString`, `MultiPointer`; `type_info::kind_member`), `Os` and `Arch`
+  after the `-target:` words (`Linux`, `FreeBSD`, `Amd64`;
+  `os_member`, `arch_member`), and `AllocMode`'s are `Alloc`, `Free`,
+  `FreeAll` and `Resize`.
 - An enum member is `.name` (`ExprKind::Selector`, parsed by
   `Parser::parse_selector` at a `.` where an expression starts), resolved
   against the expected type by `Checker::selector` (an enum, or `Error`
@@ -189,9 +204,9 @@ the language server.
   without parentheses, `.` with a space before and none after is an
   argument (`can_start_command_arg`) unless it starts a line. `.#{name}`
   splices a `Symbol` (or `[.#{names}]` a `[]Symbol`) as members
-  (`NamePlace::Member`). The formatter gives the selector's `.` the
-  `Prefix` role, so it spaces like an operand; Vim highlights it as
-  `widEnumSelector` when it follows no value mid-line.
+  (`NamePlace::Member`, whose names are capitalized). The formatter gives
+  the selector's `.` the `Prefix` role, so it spaces like an operand; Vim
+  highlights `.Name` as `widEnumSelector` when it follows no value.
 - Macro expansion (`check/macros.rs`, whose module docs describe the core):
   - A call resolves like any call; `call`, `ident` and `package_member`
     hand a macro to `Checker::call_macro` with the expected type, and
@@ -598,6 +613,19 @@ the language server.
   declaration checks), package-level operator functions with literal operand
   typing, unary `def -`/`def ~`, `[]`/`[]=` methods, and `+=`-style forms
   through operator methods.
+- Derived comparisons (#189): without its own `<`, `<=`, `>` or `>=`, a
+  type's `<=>` (method, overload set or package-level function) is called
+  and its result compared with 0, and `!=` negates a user `==` (it compared
+  members before, so `a == b` and `a != b` could both be true). A `<=>`
+  that doesn't return an integer, or an `==` that doesn't return `Bool`, is
+  E0307 at the derived use, with a fix for the return type. E0307's help for
+  a missing comparison on a struct or enum suggests `def <=>` (or `def ==`
+  for `!=`).
+- The definable operator set (#134): `+ - * / % **`, the bitwise
+  `& | ~ << >>`, unary `-` and `~`, `==`, `<=>`, `[]` and `[]=`. Defining
+  `!=`, `<`, `<=`, `>`, `>=` or `!` (a method, a package-level function or
+  an `overload` set) is E0332, with a fix that renames it to `==` or `<=>`;
+  the declaration is kept, so its uses report nothing more.
 - `using` fields (by value or pointer; field and method promotion, also
   through `@field`, implicit-self calls and nested `using`; ambiguity errors),
   `module`/`include` (in structs, enums, modules and `extend`; `Self`-generic
@@ -1109,9 +1137,9 @@ the language server.
   macro either (E0915).
 - A name spliced from a `Symbol` must be one the lexer reads in its place
   (#77; `"Odd-Name".to_sym` named a struct, `"x-y"` a field and `"end"` a
-  local): a capitalized identifier for a type or a constant, an identifier
-  for a method (maybe ending in `?` or `!`, or an operator), field,
-  parameter, variable or enum member, never a reserved word. Otherwise it
+  local): a capitalized identifier for a type, a constant or an enum
+  member, an identifier for a method (maybe ending in `?` or `!`, or an
+  operator), field, parameter or variable, never a reserved word. Otherwise it
   is E0911 at the call, naming the name, the place and its rule, with a
   name that would fit (a fix at the call for a symbol argument). An empty
   name is "an empty name" (it was E0203 on a variable named ``).
@@ -1677,6 +1705,18 @@ the language server.
   header, so `.south` alone on a line in a `when` body is a value. `p`
   writes members (and `Error`s) as `.north`, in C and in the interpreter.
   `core`, the tests and the docs use the new form.
+- Enum members are named like constants, as in Ruby: `PascalCase` or
+  `UPPER_CASE` (`Dir.North`, `.NotFound`, `Color.DARK_RED`). A lowercase
+  member, declared or as an `Error`, is the new E0114 with a fix to its
+  `PascalCase` form; a lowercase use of a declared member is E0204 with a
+  fix to the member's spelling. `Name = value` in an enum body is a member,
+  and a constant there with a member's name is E0202. A macro called in an
+  enum's body that generates a member line is E0913 (it used to read as an
+  undefined macro call), and a generated `Name = value` line spliced into a
+  generated enum is a member. The keyword members (`TypeKind.struct`) are
+  gone: `TypeKind.Struct`. `core`, the prelude (`TypeKind`, `Os`, `Arch`,
+  `AllocMode`), the tests, `docs/errors` and the Vim syntax use the new
+  names.
 - `examples/tour`: one program that walks through the language section by
   section (structs, operators, enums, unions, optionals, errors, generics,
   blocks and procs, modules, overloads, collections, strings, control flow,
@@ -1686,7 +1726,7 @@ the language server.
   overflow, no leaks). A test build no longer emits the package's own
   `main` (or what only it reaches), which C flagged as an unused static
   function under `-Werror` (`tests/test/with_main`). Found while writing
-  it: #189 (`<=>` doesn't give `<`…), #190 (interpolation evaluates out of
+  it: #189 (`<=>` didn't give `<`…, fixed by #193), #190 (interpolation evaluates out of
   order), #191 (`defer free` after a `context.allocator` switch).
 
 ## Next
@@ -1828,7 +1868,6 @@ only on `main` and can run in parallel with the macro stack.
 7. **SPEC conformance audit: done** (at e73c919). Every finding was
    reproduced on main and filed as a GitHub issue, so the open issues are
    now its queue. In order of value:
-   - `<=>` deriving the comparisons, and the definable operator set (#134);
    - `def self.` in an `extend` (#135);
    - gcc-15 `-Werror` at `-o:speed` and `-o:aggressive`, and suite
      coverage of `-o:` (#130);

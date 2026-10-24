@@ -7,29 +7,29 @@ struct Sample
 end
 
 enum Level : I8
-  low = -1
-  high = 1
+  Low = -1
+  High = 1
 end
 
 @[test]
 def describes_struct_fields(t: ^testing.T)
   info = type_info(Sample)
   t.expect_eq(info.name, "Sample")
-  t.expect_eq(info.kind, TypeKind.struct)
+  t.expect_eq(info.kind, TypeKind.Struct)
   t.expect_eq(info.size, 24)
   t.expect_eq(info.fields.size, 3)
   t.expect_eq(info.fields[1].name, "flag")
   t.expect_eq(info.fields[1].offset, 8)
   t.expect(info.fields[1].type == type_info(U8))
-  t.expect_eq(info.fields[2].type.kind, TypeKind.optional)
+  t.expect_eq(info.fields[2].type.kind, TypeKind.Optional)
 end
 
 @[test]
 def describes_enum_members(t: ^testing.T)
   info = type_info(Level)
-  t.expect_eq(info.kind, TypeKind.enum)
+  t.expect_eq(info.kind, TypeKind.Enum)
   t.expect_eq(info.members.size, 2)
-  t.expect_eq(info.members[0].name, "low")
+  t.expect_eq(info.members[0].name, "Low")
   t.expect_eq(info.members[0].value, -1)
   if backing = info.elem
     t.expect(backing == type_info(I8))
@@ -51,5 +51,5 @@ def describes_at_compile_time(t: ^testing.T)
   name = comptime type_info(Sample).fields[2].name
   kind = comptime type_info([]Level).kind
   t.expect_eq(name, "next")
-  t.expect_eq(kind, TypeKind.slice)
+  t.expect_eq(kind, TypeKind.Slice)
 end

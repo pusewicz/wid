@@ -1,0 +1,84 @@
+error[E0114]: enum member `north` must start with a capital letter
+ --> tests/ui/enum_member_case.wid:6:3
+  |
+6 |   north
+  |   ^^^^^ enum members are named like constants
+  = note: a member is a constant of its enum, so it is written in `PascalCase` or `UPPER_CASE`, like `North` or `NORTH`
+help: write `North`
+  |   North
+  = see `wid explain E0114`
+
+error[E0114]: enum member `not_found` must start with a capital letter
+ --> tests/ui/enum_member_case.wid:7:3
+  |
+7 |   not_found = 4
+  |   ^^^^^^^^^ enum members are named like constants
+  = note: a member is a constant of its enum, so it is written in `PascalCase` or `UPPER_CASE`, like `NotFound` or `NOT_FOUND`
+help: write `NotFound`
+  |   NotFound = 4
+  = see `wid explain E0114`
+
+error[E0114]: enum member `struct` must start with a capital letter
+ --> tests/ui/enum_member_case.wid:8:3
+  |
+8 |   struct
+  |   ^^^^^^ enum members are named like constants
+  = note: a member is a constant of its enum, so it is written in `PascalCase` or `UPPER_CASE`, like `Struct` or `STRUCT`
+help: write `Struct`
+  |   Struct
+  = see `wid explain E0114`
+
+error[E0202]: `LIMIT` is both a member and a constant of `Mode`
+  --> tests/ui/enum_member_case.wid:18:3
+   |
+17 |   LIMIT = 2
+   |   ----- the member
+18 |   LIMIT: Int = 3
+   |   ^^^^^ a constant with the member's name
+   = note: `Mode.LIMIT` would name either, so each name in an enum names one thing
+help: rename the constant, or move it out of the enum
+   = see `wid explain E0202`
+
+error[E0114]: error member `.not_found` must start with a capital letter
+  --> tests/ui/enum_member_case.wid:22:13
+   |
+22 |   return 0, .not_found if n < 0
+   |             ^^^^^^^^^^ members of `Error` are named like constants
+   = note: `Error` is an enum, and enum members are written in `PascalCase` or `UPPER_CASE`, like `.NotFound` or `.NOT_FOUND`
+help: write `.NotFound`
+   |   return 0, .NotFound if n < 0
+   = see `wid explain E0114`
+
+error[E0204]: `Dir` has no member `south`
+  --> tests/ui/enum_member_case.wid:28:12
+   |
+28 |   b: Dir = .south
+   |            ^^^^^^ not a member of `Dir`
+   = note: members: .North, .NotFound, .Struct, .South, .WEST
+   = note: enum members are named like constants, so they start with a capital letter
+help: write `.South`
+   |   b: Dir = .South
+   = see `wid explain E0204`
+
+error[E0204]: `Dir` has no member `west`
+  --> tests/ui/enum_member_case.wid:29:11
+   |
+29 |   c = Dir.west
+   |           ^^^^ not a member of `Dir`
+   = note: members: .North, .NotFound, .Struct, .South, .WEST
+   = note: enum members are named like constants, so they start with a capital letter
+help: write `WEST`
+   |   c = Dir.WEST
+   = see `wid explain E0204`
+
+error[E0331]: an enum member is written `.North`, not `:north`
+  --> tests/ui/enum_member_case.wid:30:12
+   |
+30 |   d: Dir = :north
+   |            ^^^^^^ a member of `Dir` goes here
+   = note: `:name` is a symbol, a name for macros and options; `.name` is a member of the enum expected
+help: write `.North`
+   |   d: Dir = .North
+   = see `wid explain E0331`
+
+error: could not compile due to 8 errors

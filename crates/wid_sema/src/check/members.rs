@@ -1320,7 +1320,7 @@ impl<'a> Checker<'a> {
             }
             diag = diag.note(format!("available: {}", parts.join("; ")));
         }
-        // `x = d` followed by `    .south`, meant as a member of its own.
+        // `x = d` followed by `    .South`, meant as a member of its own.
         if !is_ivar && self.continued_line(span) {
             diag = diag.note(format!(
                 "this line starts with `.`, and is indented deeper than the line above, so it continues it; \

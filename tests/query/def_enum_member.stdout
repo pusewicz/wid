@@ -17,15 +17,15 @@
         "file": "tests/doc/shapes/shapes.wid",
         "line": 25
       },
-      "name": "east",
+      "name": "East",
       "owner": {
         "kind": "enum",
         "name": "Dir"
       },
       "package": ".",
-      "path": "Dir.east",
+      "path": "Dir.East",
       "private": false,
-      "signature": "east = 4",
+      "signature": "East = 4",
       "span": {
         "column": 3,
         "end_column": 11,
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "symbol": "Dir.east"
+  "symbol": "Dir.East"
 }

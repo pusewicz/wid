@@ -16,7 +16,7 @@ def spawn -> Vec2?
 end
 
 enum Dir
-  north
+  North
 end
 
 def main

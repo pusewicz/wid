@@ -10,7 +10,7 @@ struct V
 end
 
 enum Dir
-  north
+  North
 end
 
 def main

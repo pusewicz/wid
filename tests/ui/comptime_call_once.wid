@@ -3,8 +3,8 @@
 def width -> Int = 3
 
 enum E
-  a
-  b = width()
+  A
+  B = width()
 end
 
 struct Pool($T, $N: Int)
@@ -16,5 +16,5 @@ def main
   m: matrix[width(), 2]F32 = {}
   pool: Pool(Int, width()) = {}
   bytes = embed(width())
-  p ys.size, m, pool, bytes, E.b
+  p ys.size, m, pool, bytes, E.B
 end

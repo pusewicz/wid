@@ -3,6 +3,7 @@
 use wid_diagnostics::{Applicability, Diagnostic, Span, codes, did_you_mean};
 use wid_syntax::Name;
 use wid_syntax::ast::{self, ExprKind as E};
+use wid_syntax::lexer::pascal_case;
 
 use super::body::Dest;
 use super::items::{ConstValue, conversion_help};
@@ -540,9 +541,11 @@ impl<'a> Checker<'a> {
             && let Some(base) = self.expected_enum(ty)
         {
             let shown = self.types.display(base);
+            // `:north` for `.North`: the fix spells the member right too.
+            let member = self.member_spelling(base, name);
             let mut diag = Diagnostic::error(
                 codes::SYMBOL_AS_MEMBER,
-                format!("an enum member is written `.{name}`, not `:{name}`"),
+                format!("an enum member is written `.{member}`, not `:{name}`"),
             )
             .primary(span, format!("a member of `{shown}` goes here"))
             .note("`:name` is a symbol, a name for macros and options; `.name` is a member of the enum expected");
@@ -550,18 +553,48 @@ impl<'a> Checker<'a> {
                 Some(by) => {
                     diag.help(format!("`{by}` splices this symbol: write `.#{{…}}` in its `quote` where a member goes"))
                 }
-                None if self.source_text(span) == format!(":{name}") => diag.suggest_replace(
+                None if self.source_text(span) == format!(":{name}") && member == name => diag.suggest_replace(
                     format!("write `.{name}`"),
                     Span { end: span.start + 1, ..span },
                     ".",
                     Applicability::MachineApplicable,
                 ),
-                None => diag.help(format!("write `.{name}`")),
+                None if self.source_text(span) == format!(":{name}") => diag.suggest_replace(
+                    format!("write `.{member}`"),
+                    span,
+                    format!(".{member}"),
+                    Applicability::MachineApplicable,
+                ),
+                None => diag.help(format!("write `.{member}`")),
             };
             self.report(diag);
-            return self.selector(name, span, expected);
+            return self.selector(member, span, expected);
         }
         ir::Expr::new(ExprKind::Int(i128::from(name.index())), self.types.symbol())
+    }
+
+    /// The member of `base`, an enum or `Error`, that `name` was meant to
+    /// spell: `name` itself when it starts with a capital letter, the
+    /// member it names with a lowercase first letter or in `snake_case`
+    /// (`north` for `North`, `not_found` for `NOT_FOUND`), or for `Error`
+    /// its `PascalCase` form.
+    fn member_spelling(&self, base: TyId, name: Name) -> Name {
+        let text = name.as_str();
+        if text.starts_with(|c: char| c.is_ascii_uppercase()) {
+            return name;
+        }
+        let (pascal, upper) = (pascal_case(text), super::structs::pascal_upper(text));
+        match self.types.kind(base) {
+            TyKind::Enum(id) => self
+                .types
+                .enum_info(*id)
+                .members
+                .iter()
+                .map(|(n, _)| *n)
+                .find(|n| n.as_str() == pascal || n.as_str() == upper)
+                .unwrap_or(name),
+            _ => Name::new(&pascal),
+        }
     }
 
     /// The enum (or `Error`) that a value of type `ty` names a member of
@@ -580,6 +613,7 @@ impl<'a> Checker<'a> {
             && let Some(base) = self.expected_enum(ty)
         {
             if let TyKind::Error = self.types.kind(base) {
+                let name = self.error_member_case(name, span);
                 self.error_tag(name);
                 return ir::Expr::new(ExprKind::ErrorTag(name), self.optional_inner(ty).unwrap_or(ty));
             }
@@ -589,12 +623,22 @@ impl<'a> Checker<'a> {
         if expected.is_some_and(|t| matches!(self.types.kind(t), TyKind::Unknown)) {
             return ir::Expr::new(ExprKind::Zero, self.types.unknown());
         }
-        let owner = self.types.enums.iter().find(|e| e.members.iter().any(|(n, _)| *n == name)).map(|e| e.name.clone());
-        let example = owner.as_deref().unwrap_or("Dir");
+        // The enum that has the member, spelled as it declares it: `.Red`
+        // for `Color.Red` is written `.Red`.
+        let (pascal, upper) = (pascal_case(name.as_str()), super::structs::pascal_upper(name.as_str()));
+        let owner = self.types.enums.iter().find_map(|e| {
+            let exact = e.members.iter().find(|(n, _)| *n == name);
+            let recased = || e.members.iter().find(|(n, _)| n.as_str() == pascal || n.as_str() == upper);
+            exact.or_else(recased).map(|(n, _)| (e.name.clone(), *n))
+        });
+        let (example, member) = match &owner {
+            Some((e, member)) => (e.as_str(), *member),
+            None => ("Dir", name),
+        };
         let mut diag = Diagnostic::error(codes::CANNOT_INFER, format!("cannot infer which enum `.{name}` belongs to"))
             .primary(span, "no enum is expected here")
             .help(format!(
-                "write the enum's name, like `{example}.{name}`, or give the value a type where it goes, like `x: {example} = .{name}`"
+                "write the enum's name, like `{example}.{member}`, or give the value a type where it goes, like `x: {example} = .{member}`"
             ));
         if self.starts_line(span) {
             diag = diag.note(
@@ -604,6 +648,35 @@ impl<'a> Checker<'a> {
         }
         self.report(diag);
         ir::Expr::new(ExprKind::Zero, self.types.unknown())
+    }
+
+    /// Checks that `.name`, a member of `Error`, starts with a capital
+    /// letter like any enum member (E0114), and returns the name the
+    /// member gets: its `PascalCase` form when it doesn't.
+    fn error_member_case(&mut self, name: Name, span: Span) -> Name {
+        let text = name.as_str();
+        if text.starts_with(|c: char| c.is_ascii_uppercase()) {
+            return name;
+        }
+        let pascal = pascal_case(text);
+        let upper = super::structs::pascal_upper(text);
+        let like = if upper == pascal { format!("`.{pascal}`") } else { format!("`.{pascal}` or `.{upper}`") };
+        let mut diag = Diagnostic::error(
+            codes::ENUM_MEMBER_CASE,
+            format!("error member `.{text}` must start with a capital letter"),
+        )
+        .primary(span, "members of `Error` are named like constants")
+        .note(format!("`Error` is an enum, and enum members are written in `PascalCase` or `UPPER_CASE`, like {like}"));
+        if self.source_text(span) == format!(".{text}") {
+            diag = diag.suggest_replace(
+                format!("write `.{pascal}`"),
+                span,
+                format!(".{pascal}"),
+                Applicability::MachineApplicable,
+            );
+        }
+        self.report(diag);
+        Name::new(&pascal)
     }
 
     /// Whether `span` starts its line, after nothing but indentation.
@@ -1205,25 +1278,21 @@ impl<'a> Checker<'a> {
                 return self.pointer_arith(op, l, r, span);
             }
             if let Some(decl) = self.operator_method(l.ty, op.as_str()) {
-                let recv = self.address_of(l);
-                let arg = ast::Arg { name: None, value: rhs.clone(), splat: false };
-                let args = std::slice::from_ref(&arg);
-                if let DeclKind::Overload(_) = self.decls[decl.0 as usize].kind {
-                    let owner = self.types.base(recv.ty);
-                    let owner = match self.types.kind(owner) {
-                        TyKind::Pointer(t) => *t,
-                        _ => owner,
-                    };
-                    return self.call_overloaded(decl, Some(recv), Some(owner), args, lhs.span.to(rhs.span), span);
-                }
-                return self.call_fn(decl, Some(recv), args, None, lhs.span.to(rhs.span), span);
+                return self.call_operator_method(decl, l, rhs, lhs.span.to(rhs.span), span);
+            }
+            // `a < b` calls `a <=> b` and `a != b` calls `a == b` when the
+            // type defines only those.
+            if let Some(source) = derived_from(op)
+                && let Some(decl) = self.operator_method(l.ty, source)
+            {
+                let call = self.call_operator_method(decl, l, rhs, lhs.span.to(rhs.span), span);
+                return self.derived_comparison(op, decl, call, span);
             }
             let rhs_expected =
-                if self.types.is_numeric(l.ty) { None } else { self.package_operand_type(op.as_str(), l.ty, true) };
+                if self.types.is_numeric(l.ty) { None } else { self.package_operand_type_for(op, l.ty, true) };
             let (l, r) = self.sequenced(l, |this, l_ty| this.expr(rhs, Some(rhs_expected.unwrap_or(l_ty))));
-            if let Some(decl) = self.package_operator(op.as_str(), l.ty, r.ty) {
-                self.note_ref(span, decl, crate::uses::RefKind::Call);
-                return self.call_operator_fn(decl, l, r);
+            if let Some(e) = self.package_operator_call(op, l.clone(), r.clone(), span) {
+                return e;
             }
             return self.binary_values(op, l, r, lhs.span, rhs.span, span);
         }
@@ -1231,15 +1300,12 @@ impl<'a> Checker<'a> {
             let r = self.expr(rhs, operand_expected);
             let l_expected = match self.numeric_array_elem(r.ty) {
                 Some(elem) => elem,
-                None if !self.types.is_numeric(r.ty) => {
-                    self.package_operand_type(op.as_str(), r.ty, false).unwrap_or(r.ty)
-                }
+                None if !self.types.is_numeric(r.ty) => self.package_operand_type_for(op, r.ty, false).unwrap_or(r.ty),
                 None => r.ty,
             };
             let l = self.expr(lhs, Some(l_expected));
-            if let Some(decl) = self.package_operator(op.as_str(), l.ty, r.ty) {
-                self.note_ref(span, decl, crate::uses::RefKind::Call);
-                return self.call_operator_fn(decl, l, r);
+            if let Some(e) = self.package_operator_call(op, l.clone(), r.clone(), span) {
+                return e;
             }
             (l, r)
         } else {
@@ -1248,6 +1314,108 @@ impl<'a> Checker<'a> {
             (l, r)
         };
         self.binary_values(op, l, r, lhs.span, rhs.span, span)
+    }
+
+    /// Calls the operator method `decl` of the left operand `l` with `rhs`.
+    fn call_operator_method(
+        &mut self,
+        decl: super::DeclId,
+        l: ir::Expr,
+        rhs: &ast::Expr,
+        args_span: Span,
+        span: Span,
+    ) -> ir::Expr {
+        let recv = self.address_of(l);
+        let arg = ast::Arg { name: None, value: rhs.clone(), splat: false };
+        let args = std::slice::from_ref(&arg);
+        if let DeclKind::Overload(_) = self.decls[decl.0 as usize].kind {
+            let owner = self.types.base(recv.ty);
+            let owner = match self.types.kind(owner) {
+                TyKind::Pointer(t) => *t,
+                _ => owner,
+            };
+            return self.call_overloaded(decl, Some(recv), Some(owner), args, args_span, span);
+        }
+        self.call_fn(decl, Some(recv), args, None, args_span, span)
+    }
+
+    /// The package-level operand type for `op`, or for the operator it
+    /// derives from (`<=>` for `<`, `==` for `!=`) when nothing defines `op`.
+    fn package_operand_type_for(&mut self, op: ast::BinOp, known: TyId, known_left: bool) -> Option<TyId> {
+        self.package_operand_type(op.as_str(), known, known_left)
+            .or_else(|| derived_from(op).and_then(|source| self.package_operand_type(source, known, known_left)))
+    }
+
+    /// Calls the package-level function for `l op r`, or the one for the
+    /// operator `op` derives from, if either takes these operand types.
+    fn package_operator_call(&mut self, op: ast::BinOp, l: ir::Expr, r: ir::Expr, span: Span) -> Option<ir::Expr> {
+        if let Some(decl) = self.package_operator(op.as_str(), l.ty, r.ty) {
+            self.note_ref(span, decl, crate::uses::RefKind::Call);
+            return Some(self.call_operator_fn(decl, l, r));
+        }
+        let source = derived_from(op)?;
+        let decl = self.package_operator(source, l.ty, r.ty)?;
+        self.note_ref(span, decl, crate::uses::RefKind::Call);
+        let call = self.call_operator_fn(decl, l, r);
+        Some(self.derived_comparison(op, decl, call, span))
+    }
+
+    /// Turns the result of `<=>` into `<`, `<=`, `>` or `>=` by comparing it
+    /// with 0, and the result of `==` into `!=` by negating it.
+    fn derived_comparison(&mut self, op: ast::BinOp, decl: super::DeclId, call: ir::Expr, span: Span) -> ir::Expr {
+        let bool_ty = self.types.bool();
+        if matches!(self.types.kind(call.ty), TyKind::Unknown) {
+            return ir::Expr::new(ExprKind::Zero, bool_ty);
+        }
+        let ir_op = match op {
+            ast::BinOp::Ne => {
+                if matches!(self.types.kind(self.types.base(call.ty)), TyKind::Bool) {
+                    return self.not(call);
+                }
+                None
+            }
+            ast::BinOp::Lt => Some(ir::BinaryOp::Lt),
+            ast::BinOp::Le => Some(ir::BinaryOp::Le),
+            ast::BinOp::Gt => Some(ir::BinaryOp::Gt),
+            _ => Some(ir::BinaryOp::Ge),
+        };
+        if let Some(ir_op) = ir_op
+            && self.types.is_int(call.ty)
+        {
+            let zero = ir::Expr::new(ExprKind::Int(0), call.ty);
+            return ir::Expr::new(
+                ExprKind::Binary { op: ir_op, lhs: Box::new(call), rhs: Box::new(zero), span },
+                bool_ty,
+            );
+        }
+        let source = derived_from(op).expect("invariant: a derived comparison has a source operator");
+        let (wanted, meaning) = if op == ast::BinOp::Ne {
+            ("Bool", "`!=` negates `==`")
+        } else {
+            ("Int", "`<`, `<=`, `>` and `>=` compare the result of `<=>` with 0")
+        };
+        let got = self.types.display(call.ty);
+        let d = &self.decls[decl.0 as usize];
+        let ret_span = match d.kind {
+            DeclKind::Fn(f) => f.ret.as_ref().map(|t| t.span),
+            _ => None,
+        };
+        let def_span = ret_span.unwrap_or(d.span);
+        let help = format!("make `{source}` return `{wanted}`");
+        let diag = Diagnostic::error(
+            codes::NO_OPERATOR,
+            format!("`{}` needs `{source}` to return `{wanted}`, but it returns `{got}`", op.as_str()),
+        )
+        .primary(span, format!("`{}` calls `{source}` here", op.as_str()))
+        .secondary(def_span, format!("`{source}` returns `{got}`"))
+        .note(meaning);
+        let diag = match ret_span {
+            // The body has to change too, so the fix is only a start.
+            Some(at) => diag.suggest_replace(help, at, wanted, Applicability::MaybeIncorrect),
+            None => diag.help(help),
+        };
+        self.report(diag);
+        ir::Expr::new(ExprKind::Zero, bool_ty)
     }
 
     /// Lowers `p + n` and `p - n` on a `[^]T` (moving by whole elements) and
@@ -1489,10 +1657,22 @@ impl<'a> Checker<'a> {
                     .primary(span, format!("both sides are `{shown}`"));
             if matches!(kind, TyKind::String) && op == ast::BinOp::Add {
                 diag = diag.help("build strings with interpolation: `\"#{a}#{b}\"`");
-            } else if matches!(kind, TyKind::Struct(_)) {
-                let ret = if op.is_comparison() { "Bool".to_string() } else { shown.clone() };
-                diag = diag
-                    .help(format!("define the operator on `{shown}`: `def {}(other: {shown}) -> {ret}`", op.as_str()));
+            } else if matches!(kind, TyKind::Struct(_) | TyKind::Enum(_)) {
+                // The comparisons derive from `<=>` and `!=` from `==`, so
+                // those are the ones to define.
+                let (name, ret) = match op {
+                    ast::BinOp::Lt | ast::BinOp::Le | ast::BinOp::Gt | ast::BinOp::Ge => ("<=>", "Int".to_string()),
+                    ast::BinOp::Eq | ast::BinOp::Ne => ("==", "Bool".to_string()),
+                    _ => (op.as_str(), shown.clone()),
+                };
+                let what = if name == op.as_str() { "the operator".to_string() } else { format!("`{name}`") };
+                diag = diag.help(format!("define {what} on `{shown}`: `def {name}(other: {shown}) -> {ret}`"));
+                if name == "<=>" {
+                    diag = diag.note(format!(
+                        "`{}` calls `<=>` and compares its result with 0: negative when the left side comes first, 0 when the sides are equal and positive when the right side does",
+                        op.as_str()
+                    ));
+                }
             }
             self.report(diag);
         }
@@ -2490,4 +2670,14 @@ pub(crate) enum ArgSource<'e> {
 
 fn plural(n: usize) -> &'static str {
     if n == 1 { "" } else { "s" }
+}
+
+/// The operator that `op` derives from when a type doesn't define `op`
+/// itself: `<=>` for the ordering comparisons and `==` for `!=`.
+fn derived_from(op: ast::BinOp) -> Option<&'static str> {
+    match op {
+        ast::BinOp::Lt | ast::BinOp::Le | ast::BinOp::Gt | ast::BinOp::Ge => Some("<=>"),
+        ast::BinOp::Ne => Some("=="),
+        _ => None,
+    }
 }

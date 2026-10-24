@@ -5,49 +5,49 @@
 # What kind of type a `TypeInfo` describes.
 enum TypeKind
   # A signed integer: `Int`, `I8` … `I64`.
-  int
+  Int
   # An unsigned integer: `UInt`, `U8` … `U64`.
-  uint
+  UInt
   # A float: `F32` or `F64`.
-  float
+  Float
   # `Bool`.
-  bool
+  Bool
   # `Rune`, a Unicode code point.
-  rune
+  Rune
   # `String`.
-  string
+  String
   # `CString`, a NUL-terminated C string.
-  cstring
+  CString
   # `RawPtr`, a pointer to anything.
-  rawptr
+  RawPtr
   # `TypeId`.
-  typeid
+  TypeId
   # `Any`.
-  any
+  Any
   # A pointer, `^T`.
-  pointer
+  Pointer
   # A multi-pointer, `[^]T`.
-  multi_pointer
+  MultiPointer
   # A fixed array, `[N]T`.
-  array
+  Array
   # A slice, `[]T`.
-  slice
+  Slice
   # A dynamic array, `[dynamic]T`.
-  dynamic_array
+  DynamicArray
   # A map, `map[K]V`.
-  map
+  Map
   # A matrix, `matrix[R, C]T`.
-  matrix
+  Matrix
   # An optional, `T?`, including `^T?`, whose `elem` is `^T`.
-  optional
+  Optional
   # A proc, `proc(A) -> R`.
-  proc
+  Proc
   # A struct.
-  struct
+  Struct
   # An enum.
-  enum
+  Enum
   # A tagged union.
-  union
+  Union
 end
 
 # A type, as the program sees it at run time.

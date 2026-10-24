@@ -186,11 +186,30 @@ pub struct CheckOptions {
     pub library: bool,
 }
 
-/// Operating systems `-target:` accepts, as the prelude's `Os` names them.
+/// Operating systems `-target:` accepts; [`os_member`] gives the prelude's
+/// `Os` member for each.
 pub const TARGET_OSES: &[&str] = &["darwin", "linux", "windows", "freebsd", "openbsd", "netbsd", "freestanding"];
 
-/// Architectures `-target:` accepts, as the prelude's `Arch` names them.
+/// Architectures `-target:` accepts; [`arch_member`] gives the prelude's
+/// `Arch` member for each.
 pub const TARGET_ARCHES: &[&str] = &["arm64", "amd64", "i386", "arm32", "riscv64", "wasm32", "wasm64"];
+
+/// The member of the prelude's `Os` enum that names `os`, a word from
+/// [`TARGET_OSES`]: `linux` is `Linux`, `freebsd` is `FreeBSD`.
+pub fn os_member(os: &str) -> String {
+    match os {
+        "freebsd" => "FreeBSD".into(),
+        "openbsd" => "OpenBSD".into(),
+        "netbsd" => "NetBSD".into(),
+        _ => wid_syntax::lexer::pascal_case(os),
+    }
+}
+
+/// The member of the prelude's `Arch` enum that names `arch`, a word from
+/// [`TARGET_ARCHES`]: `amd64` is `Amd64`.
+pub fn arch_member(arch: &str) -> String {
+    wid_syntax::lexer::pascal_case(arch)
+}
 
 /// The operating system the compiler runs on.
 pub fn host_os() -> String {

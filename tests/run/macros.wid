@@ -7,8 +7,8 @@ struct Vec2
 end
 
 enum Dir
-  north
-  south
+  North
+  South
 end
 
 # An expression macro: its code is the call's value.
@@ -210,7 +210,7 @@ def main
   hits += 3
   p hits, misses
 
-  literals "south"
+  literals "South"
   p zero_of(Int), zero_of(F32), zero_of(Vec2)
   p make(Vec2)
   p size_in_bits(Vec2), convert(3, F32), bytes_of(I16)

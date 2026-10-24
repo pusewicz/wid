@@ -65,7 +65,7 @@ help: use a value in range; a float type, like `F64`, holds larger values
 error[E0311]: `170141183460469231731687303715884105727` does not fit in the enum's backing type `Int`
   --> tests/ui/constant_arith_overflow.wid:17:3
    |
-17 |   top = 170141183460469231731687303715884105727
+17 |   Top = 170141183460469231731687303715884105727
    |   ^^^ `Int` holds values from -9223372036854775808 to 9223372036854775807
    = see `wid explain E0311`
 

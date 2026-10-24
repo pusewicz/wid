@@ -47,7 +47,7 @@ error[E0204]: `Dir` has no member `west`
    |
 27 |   d: Dir? = .west
    |             ^^^^^ not a member of `Dir`
-   = note: members: .north
+   = note: members: .North
    = see `wid explain E0204`
 
 error: could not compile due to 7 errors

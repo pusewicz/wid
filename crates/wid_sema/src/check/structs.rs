@@ -3,6 +3,7 @@
 use wid_diagnostics::{Applicability, Diagnostic, Span, codes, did_you_mean};
 use wid_syntax::Name;
 use wid_syntax::ast::{self, ItemKind};
+use wid_syntax::lexer::pascal_case;
 
 use super::body::Frame;
 use super::items::ConstValue;
@@ -272,6 +273,14 @@ impl<'a> Checker<'a> {
             None => IntTy::Int,
         };
         let (lo, hi) = backing.range();
+        let constants: Vec<ast::Ident> = e
+            .body
+            .iter()
+            .filter_map(|item| match &item.kind {
+                ItemKind::Const(c) => Some(c.name),
+                _ => None,
+            })
+            .collect();
         let mut members: Vec<(Name, i128)> = Vec::new();
         let mut next = 0i128;
         // Whether the member before fits; one that follows it without a
@@ -304,7 +313,30 @@ impl<'a> Checker<'a> {
                     .primary(m.name.span, format!("`{}` holds values from {lo} to {hi}", backing.name())),
                 );
             }
-            if members.iter().any(|(n, _)| *n == m.name.name) {
+            // A member is named like a constant. One written in lowercase is
+            // kept under its `PascalCase` form, so uses written that way
+            // resolve.
+            let mut name = m.name.name;
+            if !name.as_str().starts_with(|c: char| c.is_ascii_uppercase()) {
+                let named_macro = m.value.is_none() && self.member_names_macro(decl, m, value);
+                if !named_macro {
+                    self.member_case(m);
+                }
+                name = Name::new(&pascal_case(name.as_str()));
+            }
+            if let Some(c) = constants.iter().find(|c| c.name == name) {
+                self.report(
+                    Diagnostic::error(
+                        codes::DUPLICATE_DEFINITION,
+                        format!("`{}` is both a member and a constant of `{}`", name, d.name),
+                    )
+                    .primary(c.span, "a constant with the member's name")
+                    .secondary(m.name.span, "the member")
+                    .note(format!("`{}.{name}` would name either, so each name in an enum names one thing", d.name))
+                    .help("rename the constant, or move it out of the enum"),
+                );
+            }
+            if members.iter().any(|(n, _)| *n == name) {
                 self.report(
                     Diagnostic::error(
                         codes::DUPLICATE_DEFINITION,
@@ -314,10 +346,7 @@ impl<'a> Checker<'a> {
                 );
                 continue;
             }
-            if m.value.is_none() {
-                self.member_names_macro(decl, m, value);
-            }
-            members.push((m.name.name, value));
+            members.push((name, value));
             prev_fits = fits;
             // A value past `Int`'s range was reported, so the next one may
             // stop at the limit of the 128 bits constants are computed in.
@@ -349,26 +378,26 @@ impl<'a> Checker<'a> {
     /// visible in the enum's body (E0914): the line was likely meant to call
     /// the macro, which needs `()` there. The member is kept, and the enum's
     /// missing methods aren't reported, as after a failed macro call.
-    fn member_names_macro(&mut self, decl: DeclId, member: &ast::EnumMember, value: i128) {
+    fn member_names_macro(&mut self, decl: DeclId, member: &ast::EnumMember, value: i128) -> bool {
         let d = &self.decls[decl.0 as usize];
         let (enum_name, enum_loc) = (d.name, d.loc);
         // Where the name resolves: for an enum a macro generated, the
         // macro's file.
         let loc = self.virtual_file(member.name.span.file).map_or(enum_loc, |v| v.loc);
         let name = member.name.name;
-        let Some(found) = self.lookup_pkg(loc.pkg, name).or_else(|| self.lookup_prelude(name)) else { return };
+        let Some(found) = self.lookup_pkg(loc.pkg, name).or_else(|| self.lookup_prelude(name)) else { return false };
         let m = &self.decls[found.0 as usize];
         if !self.is_macro(found) || (m.private && m.loc.pkg != loc.pkg) {
-            return;
+            return false;
         }
         let macro_span = m.span;
         let text = name.as_str();
         self.report(
             Diagnostic::error(
                 codes::ENUM_MEMBER_MACRO,
-                format!("`{text}` names a macro, but alone on a line in an enum it declares a member"),
+                format!("`{text}` names a macro, but alone on a line in an enum it is read as a member"),
             )
-            .primary(member.name.span, format!("this declares the member `.{text}` of `{enum_name}`"))
+            .primary(member.name.span, format!("alone on a line, this is read as a member of `{enum_name}`"))
             .secondary(macro_span, format!("`{text}` is a macro"))
             .note("in an `enum` body a name alone on a line is a member, so a macro without arguments is called with `()` there")
             .suggest(
@@ -376,9 +405,43 @@ impl<'a> Checker<'a> {
                 vec![wid_diagnostics::Edit { span: member.name.span.shrink_to_end(), replacement: "()".into() }],
                 Applicability::MachineApplicable,
             )
-            .help(format!("to keep the member, write its value: `{text} = {value}`")),
+            .help(format!(
+                "to declare a member, name it like a constant: `{}`, or `{} = {value}`",
+                pascal_case(text),
+                pascal_case(text)
+            )),
         );
         self.macros.failed_owners.insert(decl);
+        true
+    }
+
+    /// Reports an enum member whose name doesn't start with a capital
+    /// letter (E0114). Members are constants of their enum, so they are
+    /// named `PascalCase` or `UPPER_CASE`.
+    fn member_case(&mut self, member: &ast::EnumMember) {
+        let text = self.source_text(member.name.span).to_string();
+        let shown = member.name.name.as_str();
+        let pascal = pascal_case(shown);
+        let upper = pascal_upper(shown);
+        let like = if upper == pascal { format!("`{pascal}`") } else { format!("`{pascal}` or `{upper}`") };
+        let mut diag = Diagnostic::error(
+            codes::ENUM_MEMBER_CASE,
+            format!("enum member `{shown}` must start with a capital letter"),
+        )
+        .primary(member.name.span, "enum members are named like constants")
+        .note(format!(
+            "a member is a constant of its enum, so it is written in `PascalCase` or `UPPER_CASE`, like {like}"
+        ));
+        // A name a macro built is fixed in the macro, not here.
+        if text == shown {
+            diag = diag.suggest_replace(
+                format!("write `{pascal}`"),
+                member.name.span,
+                pascal,
+                Applicability::MachineApplicable,
+            );
+        }
+        self.report(diag);
     }
 
     /// Returns the value of enum member `name`, reporting unknown members.
@@ -397,7 +460,24 @@ impl<'a> Checker<'a> {
             diag =
                 diag.note(format!("members: {}", names.iter().map(|n| format!(".{n}")).collect::<Vec<_>>().join(", ")));
         }
-        if let Some(best) = did_you_mean(name.as_str(), names.iter().copied()) {
+        // `.North` for `North`: the name only needs its constant spelling.
+        let text = name.as_str();
+        let recased = names.iter().copied().find(|n| *n == pascal_case(text) || *n == pascal_upper(text));
+        if let Some(best) = recased.filter(|_| !text.starts_with(|c: char| c.is_ascii_uppercase())) {
+            let written = self.source_text(span);
+            let replacement = match written.chars().next() {
+                Some(c @ (':' | '.')) => format!("{c}{best}"),
+                _ => best.to_string(),
+            };
+            diag = diag
+                .note("enum members are named like constants, so they start with a capital letter")
+                .suggest_replace(
+                    format!("write `{replacement}`"),
+                    span,
+                    replacement.clone(),
+                    Applicability::MachineApplicable,
+                );
+        } else if let Some(best) = did_you_mean(name.as_str(), names.iter().copied()) {
             let text = self.source_text(span);
             let replacement = match text.chars().next() {
                 Some(c @ (':' | '.')) => format!("{c}{best}"),
@@ -987,4 +1067,10 @@ fn layout_attr(item: &ast::Item, name: &str) -> Option<u64> {
         ast::ExprKind::Int(n) => u64::try_from(n).ok(),
         _ => None,
     }
+}
+
+/// `UPPER_CASE` for a member name written in `snake_case` or lowercase:
+/// `not_found` becomes `NOT_FOUND`.
+pub(super) fn pascal_upper(text: &str) -> String {
+    text.trim_start_matches('_').to_ascii_uppercase()
 }

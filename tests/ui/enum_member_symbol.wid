@@ -5,8 +5,8 @@
 # line. A line indented deeper than the one above continues it, and a
 # member that isn't found there says so.
 enum Dir
-  north
-  south
+  North
+  South
 end
 
 FACING: Dir = :south

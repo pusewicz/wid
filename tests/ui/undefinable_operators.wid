@@ -1,0 +1,19 @@
+struct M
+  c: Int
+  def <(o: M) -> Bool = @c < o.c
+  def !=(o: M) -> Bool = @c != o.c
+  def ! -> Bool = @c == 0
+  def lt(o: M) -> Bool = @c < o.c
+  def lt_int(n: Int) -> Bool = @c < n
+  overload :>=, :lt, :lt_int
+end
+
+def >(a: M, b: M) -> Bool = a.c > b.c
+
+extend Int
+  def <=(o: M) -> Bool = self <= o.c
+end
+
+def main
+  puts M.new(1) < M.new(2)
+end

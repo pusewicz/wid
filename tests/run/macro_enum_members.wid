@@ -32,9 +32,9 @@ macro def scaled_enum(name: Symbol, step: Int, *members: Symbol) -> Code
   end
   quote do
     enum #{name}
-      none
+      None
       #{lines}
-      top
+      Top
     end
   end
 end
@@ -42,30 +42,30 @@ end
 # One `Code` value of several lines, and `Symbol`s, keep their places too.
 macro def mixed_enum(name: Symbol, extra: Symbol) -> Code
   pair = quote do
-    left
-    right = 7
+    Left
+    Right = 7
   end
   quote do
     enum #{name}
-      start
+      Start
       #{pair}
-      middle
+      Middle
       #{extra}
-      finish
+      Finish
     end
   end
 end
 
-make_enum :Color, :red, :green, :blue
-scaled_enum :Level, 10, :low, :high
-mixed_enum :Side, :up
+make_enum :Color, :Red, :Green, :Blue
+scaled_enum :Level, 10, :Low, :High
+mixed_enum :Side, :Up
 
 def main
-  c: Color = .green
-  p c, c.to_i, Color.blue.to_i
-  l: Level = .high
-  p l, l.to_i, l.twice, Level.none.to_i, Level.top.to_i
-  for s in [Side.start, Side.left, Side.right, Side.middle, Side.up, Side.finish]
+  c: Color = .Green
+  p c, c.to_i, Color.Blue.to_i
+  l: Level = .High
+  p l, l.to_i, l.twice, Level.None.to_i, Level.Top.to_i
+  for s in [Side.Start, Side.Left, Side.Right, Side.Middle, Side.Up, Side.Finish]
     p s, s.to_i
   end
 end

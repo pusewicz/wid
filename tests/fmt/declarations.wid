@@ -10,8 +10,8 @@ import "core:strings"
 SIZE = 4
 Grid = [SIZE][SIZE]U8
 enum Dir:U8
-  north
-  east  =  2
+  North
+  East  =  2
 
 
 end

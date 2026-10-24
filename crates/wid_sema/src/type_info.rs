@@ -13,7 +13,8 @@ use crate::types::{IntTy, TyId, TyKind, TypeTable};
 pub struct Description {
     /// The name, as Wid displays the type.
     pub name: String,
-    /// The `TypeKind` member, like `"struct"`.
+    /// The kind in lowercase, like `"struct"` or `"multi_pointer"`; the
+    /// `TypeKind` member is its `PascalCase` form (`Struct`).
     pub kind: &'static str,
     /// The type whose layout gives `size`, `align` and field offsets: the
     /// type itself, or the base of a `distinct` type. `None` when only C
@@ -59,6 +60,36 @@ impl Description {
         out.extend(self.fields.iter().map(|f| f.ty));
         out.extend(self.variants.iter().copied());
         out
+    }
+}
+
+/// The member of the prelude's `TypeKind` enum that names `kind`, a
+/// [`Description::kind`]: `"multi_pointer"` is `MultiPointer`, and kinds
+/// named after a type are spelled like it (`UInt`, `CString`, `RawPtr`).
+pub fn kind_member(kind: &str) -> &'static str {
+    match kind {
+        "int" => "Int",
+        "uint" => "UInt",
+        "float" => "Float",
+        "bool" => "Bool",
+        "rune" => "Rune",
+        "string" => "String",
+        "cstring" => "CString",
+        "rawptr" => "RawPtr",
+        "typeid" => "TypeId",
+        "any" => "Any",
+        "pointer" => "Pointer",
+        "multi_pointer" => "MultiPointer",
+        "array" => "Array",
+        "slice" => "Slice",
+        "dynamic_array" => "DynamicArray",
+        "map" => "Map",
+        "matrix" => "Matrix",
+        "optional" => "Optional",
+        "proc" => "Proc",
+        "struct" => "Struct",
+        "enum" => "Enum",
+        _ => "Union",
     }
 }
 

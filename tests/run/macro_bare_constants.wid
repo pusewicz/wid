@@ -13,8 +13,8 @@ TYPED: Int = five
 TWICE = five * five
 
 enum Level
-  low = five
-  high
+  Low = five
+  High
 end
 
 struct Buffer
@@ -26,5 +26,5 @@ def main
   xs: [five]Int = {}
   ys: [five + 1]Int = {}
   p xs.size, ys.size, Buffer.new.data.size
-  p Level.low.to(Int), Level.high.to(Int)
+  p Level.Low.to(Int), Level.High.to(Int)
 end

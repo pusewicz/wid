@@ -1,71 +1,71 @@
-error[E0331]: an enum member is written `.south`, not `:south`
+error[E0331]: an enum member is written `.South`, not `:south`
   --> tests/ui/enum_member_symbol.wid:12:15
    |
 12 | FACING: Dir = :south
    |               ^^^^^^ a member of `Dir` goes here
    = note: `:name` is a symbol, a name for macros and options; `.name` is a member of the enum expected
-help: write `.south`
-   | FACING: Dir = .south
+help: write `.South`
+   | FACING: Dir = .South
    = see `wid explain E0331`
 
-error[E0331]: an enum member is written `.not_found`, not `:not_found`
+error[E0331]: an enum member is written `.NotFound`, not `:not_found`
   --> tests/ui/enum_member_symbol.wid:19:13
    |
 19 |   return 0, :not_found if n < 0
    |             ^^^^^^^^^^ a member of `Error` goes here
    = note: `:name` is a symbol, a name for macros and options; `.name` is a member of the enum expected
-help: write `.not_found`
-   |   return 0, .not_found if n < 0
+help: write `.NotFound`
+   |   return 0, .NotFound if n < 0
    = see `wid explain E0331`
 
-error[E0331]: an enum member is written `.north`, not `:north`
+error[E0331]: an enum member is written `.North`, not `:north`
   --> tests/ui/enum_member_symbol.wid:24:12
    |
 24 |   d: Dir = :north
    |            ^^^^^^ a member of `Dir` goes here
    = note: `:name` is a symbol, a name for macros and options; `.name` is a member of the enum expected
-help: write `.north`
-   |   d: Dir = .north
+help: write `.North`
+   |   d: Dir = .North
    = see `wid explain E0331`
 
-error[E0331]: an enum member is written `.south`, not `:south`
+error[E0331]: an enum member is written `.South`, not `:south`
   --> tests/ui/enum_member_symbol.wid:25:6
    |
 25 |   go :south
    |      ^^^^^^ a member of `Dir` goes here
    = note: `:name` is a symbol, a name for macros and options; `.name` is a member of the enum expected
-help: write `.south`
-   |   go .south
+help: write `.South`
+   |   go .South
    = see `wid explain E0331`
 
-error[E0331]: an enum member is written `.south`, not `:south`
+error[E0331]: an enum member is written `.South`, not `:south`
   --> tests/ui/enum_member_symbol.wid:26:10
    |
 26 |   p d == :south
    |          ^^^^^^ a member of `Dir` goes here
    = note: `:name` is a symbol, a name for macros and options; `.name` is a member of the enum expected
-help: write `.south`
-   |   p d == .south
+help: write `.South`
+   |   p d == .South
    = see `wid explain E0331`
 
-error[E0331]: an enum member is written `.north`, not `:north`
+error[E0331]: an enum member is written `.North`, not `:north`
   --> tests/ui/enum_member_symbol.wid:28:8
    |
 28 |   when :north then puts "up"
    |        ^^^^^^ a member of `Dir` goes here
    = note: `:name` is a symbol, a name for macros and options; `.name` is a member of the enum expected
-help: write `.north`
-   |   when .north then puts "up"
+help: write `.North`
+   |   when .North then puts "up"
    = see `wid explain E0331`
 
-error[E0331]: an enum member is written `.south`, not `:south`
+error[E0331]: an enum member is written `.South`, not `:south`
   --> tests/ui/enum_member_symbol.wid:31:13
    |
 31 |   m: Dir? = :south
    |             ^^^^^^ a member of `Dir` goes here
    = note: `:name` is a symbol, a name for macros and options; `.name` is a member of the enum expected
-help: write `.south`
-   |   m: Dir? = .south
+help: write `.South`
+   |   m: Dir? = .South
    = see `wid explain E0331`
 
 error[E0331]: `:north` is a symbol, not a value
@@ -82,7 +82,7 @@ error[E0304]: cannot infer which enum `.north` belongs to
    |
 35 |   x = .north
    |       ^^^^^^ no enum is expected here
-help: write the enum's name, like `Dir.north`, or give the value a type where it goes, like `x: Dir = .north`
+help: write the enum's name, like `Dir.North`, or give the value a type where it goes, like `x: Dir = .North`
    = see `wid explain E0304`
 
 error[E0304]: cannot infer which enum `.south` belongs to
@@ -90,7 +90,7 @@ error[E0304]: cannot infer which enum `.south` belongs to
    |
 36 |   p .south
    |     ^^^^^^ no enum is expected here
-help: write the enum's name, like `Dir.south`, or give the value a type where it goes, like `x: Dir = .south`
+help: write the enum's name, like `Dir.South`, or give the value a type where it goes, like `x: Dir = .South`
    = see `wid explain E0304`
 
 error[E0304]: cannot infer which enum `.south` belongs to
@@ -99,7 +99,7 @@ error[E0304]: cannot infer which enum `.south` belongs to
 38 |   .south
    |   ^^^^^^ no enum is expected here
    = note: a line that starts with `.` continues the statement above only when it is indented deeper than the statement's first line, and the line above doesn't open a block
-help: write the enum's name, like `Dir.south`, or give the value a type where it goes, like `x: Dir = .south`
+help: write the enum's name, like `Dir.South`, or give the value a type where it goes, like `x: Dir = .South`
    = see `wid explain E0304`
 
 error[E0204]: `Dir` has no field or method `south`

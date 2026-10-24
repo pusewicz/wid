@@ -23,7 +23,7 @@ help: add an `else` branch with the value to use
 error[E0324]: this `comptime if` is used as a value but has no `else`
   --> tests/ui/comptime_if_no_else.wid:16:7
    |
-16 |   c = comptime if OS == .freestanding
+16 |   c = comptime if OS == .Freestanding
    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ when the condition is false there is no value
 help: add an `else` branch with the value to use
    |   else

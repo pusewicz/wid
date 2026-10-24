@@ -83,7 +83,7 @@ struct Pool($T)
 end
 
 enum Color
-  red
+  Red
   member()
 end
 

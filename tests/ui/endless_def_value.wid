@@ -1,7 +1,7 @@
 # An endless `def` without `-> T` returns nothing, so its value is thrown
 # away (E0310, #137). The fix writes the type when it is known: as a
 # type parameter in generic code, and with a placeholder for `nil` or a
-# symbol (an enum member, `.north`, needs its enum: E0304). A call of such
+# symbol (an enum member, `.North`, needs its enum: E0304). A call of such
 # a method adds no "has no value" error.
 
 def sep = "/"

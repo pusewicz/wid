@@ -1,0 +1,99 @@
+# `<=>` gives `<`, `<=`, `>` and `>=`, and `==` gives `!=`.
+
+struct Money
+  cents: Int
+
+  def <=>(o: Money) -> Int = @cents <=> o.cents
+end
+
+struct Version
+  major: Int
+  minor: Int
+
+  def <=>(o: Version) -> Int
+    by_major = @major <=> o.major
+    by_major != 0 ? by_major : @minor <=> o.minor
+  end
+end
+
+# `==` that ignores `note`, so memberwise `!=` would disagree with it.
+struct Tagged
+  id: Int
+  note: String
+
+  def ==(o: Tagged) -> Bool = @id == o.id
+end
+
+# A `<=>` that returns a narrower integer type.
+struct Small
+  v: I8
+
+  def <=>(o: Small) -> I8 = (@v <=> o.v).to(I8)
+end
+
+# Package-level operators work the same way.
+struct Weight
+  grams: Int
+end
+
+def <=>(a: Weight, b: Weight) -> Int = a.grams <=> b.grams
+def ==(a: Weight, b: Weight) -> Bool = a.grams / 1000 == b.grams / 1000
+
+# An overload set of `<=>`, against the type itself and a bare `Int`.
+struct Score
+  points: Int
+
+  def cmp_score(o: Score) -> Int = @points <=> o.points
+  def cmp_int(n: Int) -> Int = @points <=> n
+  overload :<=>, :cmp_score, :cmp_int
+end
+
+enum Size
+  small
+  large
+
+  def rank -> Int = self == Self.small ? 0 : 1
+  def <=>(o: Size) -> Int = rank <=> o.rank
+end
+
+struct Counter
+  calls: Int
+
+  def next -> Money
+    @calls += 1
+    Money.new(@calls)
+  end
+end
+
+def main
+  a = Money.new(100)
+  b = Money.new(250)
+  puts [a < b, a <= b, a > b, a >= b]
+  puts [b < a, b <= a, b > a, b >= a]
+  puts [a < a, a <= a, a > a, a >= a]
+  puts a <=> b
+
+  puts Version.new(1, 2) < Version.new(1, 10)
+  puts Version.new(2, 0) > Version.new(1, 10)
+
+  x = Tagged.new(1, "first")
+  y = Tagged.new(1, "second")
+  z = Tagged.new(2, "first")
+  puts [x == y, x != y, x != z]
+
+  puts [Small.new(-3) < Small.new(4), Small.new(-3) >= Small.new(4)]
+
+  light = Weight.new(1200)
+  heavy = Weight.new(3000)
+  puts [light < heavy, light >= heavy, light != Weight.new(1900), light != heavy]
+
+  s = Score.new(7)
+  puts [s < Score.new(9), s > 5, s <= 7, s >= 8]
+
+  puts [Size.small < Size.large, Size.large <= Size.small]
+
+  # Each operand is evaluated once, left to right.
+  c = Counter.new(0)
+  puts c.next < c.next
+  puts c.calls
+end

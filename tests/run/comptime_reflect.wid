@@ -11,10 +11,10 @@ struct Ball
 end
 
 enum Mood
-  calm
-  angry
+  Calm
+  Angry
 
-  def loud? -> Bool = self == .angry
+  def loud? -> Bool = self == .Angry
 end
 
 def layout(t: Type) -> String
