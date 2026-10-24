@@ -129,8 +129,9 @@ end
 
 # ===== Operators ================================================================
 
-# Operators are methods: `+ - * / %`, unary `-`, `==`, `<=>`, `[]` and `[]=`.
-# `+=` and its friends come for free.
+# Operators are methods: `+ - * / % **`, bitwise ones, unary `-`, `==`,
+# `<=>`, `[]` and `[]=`. `+=` and its friends come for free, `==` gives `!=`,
+# and `<=>` gives `<`, `<=`, `>` and `>=`, so they can never disagree.
 struct Money
   cents: Int
 
@@ -160,7 +161,7 @@ def operators
   wallet = Money.new(1050)
   wallet += Money.new(275)
   puts "wallet #{wallet.to_s}, debt #{(-wallet).to_s}"
-  puts "compared to ten dollars: #{wallet <=> Money.new(1000)}"
+  puts "more than ten dollars? #{wallet > Money.new(1000)}"
   board = Board.new
   board[1, 2] = 7
   board[1, 2] += 1
@@ -169,46 +170,47 @@ end
 
 # ===== Enums ====================================================================
 
-# Enum members are lowercase and count up from 0 unless given a value. An
-# enum can choose its backing type and have methods.
+# Enum members are named like constants (`North`, `NOT_FOUND`) and count up
+# from 0 unless given a value. An enum can choose its backing type and have
+# methods.
 enum Dir : U8
-  north
-  east
-  south
-  west
+  North
+  East
+  South
+  West
 
   def turn_right -> Dir
-    # `.east` names a member of the enum expected where it is written.
+    # `.East` names a member of the enum expected where it is written.
     case self
-    when .north then .east
-    when .east then .south
-    when .south then .west
-    when .west then .north
+    when .North then .East
+    when .East then .South
+    when .South then .West
+    when .West then .North
     end
   end
 
-  def vertical? -> Bool = self == .north || self == .south
+  def vertical? -> Bool = self == .North || self == .South
 end
 
 enum Status
-  ok = 200
-  not_found = 404
-  teapot = 418
+  Ok = 200
+  NotFound = 404
+  Teapot = 418
 end
 
 def enums
   section "enums"
-  d: Dir = .north
+  d: Dir = .North
   d = d.turn_right.turn_right
   # `puts` writes a member's name, `p` writes it as Wid would.
   puts d
   p d
   puts "vertical? #{d.vertical?}, value #{d.to_i}"
-  puts "#{Status.teapot} is #{Status.teapot.to_i}"
+  puts "#{Status.Teapot} is #{Status.Teapot.to_i}"
   # `case` over an enum must cover every member, or have an `else`.
-  for s in [Status.ok, Status.not_found]
+  for s in [Status.Ok, Status.NotFound]
     case s
-    when .ok then puts "200: fine"
+    when .Ok then puts "200: fine"
     else puts "#{s.to_i}: not fine"
     end
   end
@@ -286,7 +288,7 @@ def optionals
   profile.nickname &&= "Lady Lovelace"
   p profile.nickname
   # An untyped literal converts to an optional, enum members included.
-  facing: Dir? = .west
+  facing: Dir? = .West
   p facing
 end
 
@@ -296,14 +298,14 @@ end
 # enum of every `.name` the program uses where an `Error` is expected, and
 # `nil` means success.
 def parse_age(text: String) -> (Int, Error)
-  return 0, .empty if text.empty?
+  return 0, .Empty if text.empty?
   zero: Rune = '0'
   n = 0
   for r in text
-    return 0, .not_a_number unless r >= '0' && r <= '9'
+    return 0, .NotANumber unless r >= '0' && r <= '9'
     n = n * 10 + r.to_i - zero.to_i
   end
-  return 0, .too_old if n > 150
+  return 0, .TooOld if n > 150
   return n, nil
 end
 
@@ -326,7 +328,7 @@ def errors
   age, err = parse_age("7")
   puts "age #{age}, err nil? #{err.nil?}"
   _, err = parse_age("x")
-  puts "an error: #{err == .not_a_number}"
+  puts "an error: #{err == .NotANumber}"
   # Any method can return several values.
   low, high = min_max([4, -2, 9])
   puts "min #{low}, max #{high}"
@@ -505,7 +507,7 @@ def overloads
   section "overloads"
   puts describe(42)
   puts describe("hi")
-  puts describe(Dir.west)
+  puts describe(Dir.West)
 end
 
 # ===== Collections ==============================================================
@@ -759,7 +761,7 @@ BALL_FIELDS = comptime field_list(Ball)
 
 # `comptime if` picks code for the target; the other branches are only
 # parsed.
-comptime if OS == .windows
+comptime if OS == .Windows
   def path_sep -> String = "\\"
 else
   def path_sep -> String = "/"
@@ -921,7 +923,7 @@ def checks
   puts "7 / 2 = #{checked_div(7, 2)}"
   # `assert` panics, with its message, when the condition is false.
   assert sum_unchecked([1, 2, 3]) == 6, "sum_unchecked is broken"
-  puts "west is #{axis(.west)}"
+  puts "west is #{axis(.West)}"
 end
 
 # ===== The program ==============================================================

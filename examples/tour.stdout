@@ -6,13 +6,13 @@ moving? true false
 Ball(pos: [0.0, 0.0], vel: [0.0, 0.0], radius: 0.5, bounces: 0)
 -- operators
 wallet $13.25, debt -$13.25
-compared to ten dollars: 1
+more than ten dollars? true
 board[1, 2] = 8
 -- enums
-south
-.south
+South
+.South
 vertical? true, value 2
-teapot is 418
+Teapot is 418
 200: fine
 404: not fine
 -- unions
@@ -27,12 +27,12 @@ found 8, doubled 16
 "Ada"
 "the countess"
 "Lady Lovelace"
-.west
+.West
 -- errors
 "42" is 42
-"" fails: empty
-"4x2" fails: not_a_number
-"999" fails: too_old
+"" fails: Empty
+"4x2" fails: NotANumber
+"999" fails: TooOld
 age 7, err nil? true
 an error: true
 min -2, max 9
@@ -56,7 +56,7 @@ alive? true, 7 squared 49, HEY!
 -- overloads
 the number 42
 the text "hi"
-the direction west
+the direction West
 -- collections
 6 primes, middle [3, 5, 7], last 13
 sum 41, any > 10? true
@@ -103,7 +103,7 @@ Ball: pos: [2]F32 vel: [2]F32 radius: F32 bounces: Int
 level 1, verbose false, path separator "/"
 sum of squares, computed while compiling: 140
 Hello from an embedded file!
-Ball is a struct of 32 bytes and 4 fields
+Ball is a Struct of 32 bytes and 4 fields
 -- macros
 twice(21) = 42
 swapped: a = 2, b = 1

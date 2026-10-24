@@ -13,9 +13,9 @@ end
 @[test]
 def parse_age_reports_errors(t: ^testing.T)
   _, err = parse_age("")
-  t.expect(err == .empty)
+  t.expect(err == .Empty)
   _, err = parse_age("4x2")
-  t.expect(err == .not_a_number)
+  t.expect(err == .NotANumber)
 end
 
 @[test]
