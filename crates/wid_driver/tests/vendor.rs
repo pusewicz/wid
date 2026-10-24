@@ -4,7 +4,9 @@
 //!   the ones a program uses.
 //! - `examples/NAME/` is built with clang and, when available, gcc, using
 //!   `-std=c23 -Wall -Wextra -Wpedantic -Werror`. Examples open windows, so
-//!   they are only built.
+//!   they are only built. An example with an `examples/NAME.stdout` needs no
+//!   system library and is built and run by the suite instead, so it is
+//!   skipped here, with the packages inside it.
 //! - `tests/vendor/NAME/` is built the same way and run; its stdout must
 //!   match `tests/vendor/NAME.stdout`.
 //!
@@ -181,7 +183,13 @@ fn vendor() {
     for package in packages(&root.join("vendor")) {
         check_vendor_package(&root, &package, &mut failures);
     }
-    for example in packages(&root.join("examples")) {
+    let examples = root.join("examples");
+    for example in packages(&examples) {
+        let run_by_suite =
+            example.ancestors().take_while(|dir| *dir != examples).any(|dir| dir.with_extension("stdout").exists());
+        if run_by_suite {
+            continue;
+        }
         build_program(&root, &example, None, &ccs, &mut failures);
     }
     for program in packages(&root.join("tests/vendor")) {

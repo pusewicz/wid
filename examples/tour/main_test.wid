@@ -1,0 +1,40 @@
+# Tests live in `_test.wid` files next to the code, which only `wid test`
+# builds. Each `@[test]` method gets a `^testing.T` to report through; a
+# failed expectation is reported where it was written, and the test goes on.
+import "core:testing"
+
+@[test]
+def parse_age_reads_digits(t: ^testing.T)
+  age, err = parse_age("42")
+  t.expect_eq(age, 42)
+  t.expect_nil(err)
+end
+
+@[test]
+def parse_age_reports_errors(t: ^testing.T)
+  _, err = parse_age("")
+  t.expect(err == .Empty)
+  _, err = parse_age("4x2")
+  t.expect(err == .NotANumber)
+end
+
+@[test]
+def ring_keeps_the_newest(t: ^testing.T)
+  ring = Ring(Int, 2).new
+  for i in 1..3
+    ring.push(i)
+  end
+  total = 0
+  ring.each { |x| total += x }
+  t.expect_eq(total, 5)
+  t.expect(ring.full?)
+end
+
+# Every test runs on a fresh tracking allocator: a block it leaks fails it.
+@[test]
+def collections_free_what_they_allocate(t: ^testing.T)
+  xs = DynamicArray(Int).new
+  defer free(xs)
+  xs << 1
+  t.expect_eq(xs.size, 1)
+end

@@ -1,0 +1,119 @@
+Hello from Wid, 0 arguments
+-- structs
+ball at [1.75, 0.5], 1 bounce, speed 5.0
+copied: 2.0 vs 0.5, equal? false
+moving? true false
+Ball(pos: [0.0, 0.0], vel: [0.0, 0.0], radius: 0.5, bounces: 0)
+-- operators
+wallet $13.25, debt -$13.25
+more than ten dollars? true
+board[1, 2] = 8
+-- enums
+South
+.South
+vertical? true, value 2
+Teapot is 418
+200: fine
+404: not fine
+-- unions
+shape 0: area 3.14
+shape 1: area 6.00
+shape 2: area 0.00
+-- optionals
+8
+nil
+missing or zero: 0
+found 8, doubled 16
+"Ada"
+"the countess"
+"Lady Lovelace"
+.West
+-- errors
+"42" is 42
+"" fails: Empty
+"4x2" fails: NotANumber
+"999" fails: TooOld
+age 7, err nil? true
+an error: true
+min -2, max 9
+-- generics
+9
+"pear"
+1.5
+nil
+ring holds 30 40 50, full? true
+a Ring(Int, 3) takes 40 bytes
+-- blocks and procs
+seen 5
+sum of squares 14
+[10, 20, 30]
+inc twice 3, triple twice 9
+clicked ok: 2
+no callback? true
+-- modules
+Ayla (6 hp, 4 points)
+alive? true, 7 squared 49, HEY!
+-- overloads
+the number 42
+the text "hi"
+the direction West
+-- collections
+6 primes, middle [3, 5, 7], last 13
+sum 41, any > 10? true
+w = [7.0, 9.0], w.yx = [9.0, 7.0]
+rotated [-4.0, 3.0]
+sorted ["alice", "bob", "carol"]
+popped carol, left 2
+  0: zed
+  1: bob
+doubled [4, 6, 10, 14, 22, 26]
+4 words, "the" x2, has dog? false
+-- strings
+14 bytes, 12 runes, first byte 104
+HéLLO | 8 | padded
+Hello, ff 3.142
+one two three!
+-- control flow
+negative, zero, small, round, big
+minus zero plus
+n = 15
+15 is odd
+0 1 2 0 1 
+-- numbers
+7 / 2 = 3, as floats 3.5, back 3
+a U8 of 250, plus 10 as an Int: 260
+2 ** 10 = 1024, 6 ~ 3 = 5, 1 << 4 = 16
+-7.abs = 7, 15.clamp(0, 10) = 10
+speed 10.44 m/s
+gravity 9.81, a typed constant
+A is rune 65, hex 255, binary 10, big 1000000
+-- memory
+allocated 42
+buffer [0.0, 0.0, 0.0, 1.5]
+list 3 2 1
+arena reset, 0 bytes in use
+-- pointers
+count 20
+third 30, distance 2
+through RawPtr: 20
+-- compile time
+[0, 1, 4, 9, 16, 25, 36, 49]
+[0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
+Ball: pos: [2]F32 vel: [2]F32 radius: F32 bounces: Int
+level 1, verbose false, path separator "/"
+sum of squares, computed while compiling: 140
+Hello from an embedded file!
+Ball is a Struct of 32 bytes and 4 fields
+-- macros
+twice(21) = 42
+swapped: a = 2, b = 1
+flags 1 2 4, read|exec = 5
+Settings width=800 height=450 title=tour
+-- C interop
+tour.h version 1.0, max 16 items
+gcd(84, 36) = 12
+midpoint [2.0, 1.0]
+sum of value + 1: 9
+-- checks
+7 / 2 = 3
+west is horizontal

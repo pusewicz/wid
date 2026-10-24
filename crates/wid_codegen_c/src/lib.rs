@@ -201,7 +201,11 @@ impl<'p> Gen<'p> {
     /// functions.
     fn reachable(&self) -> HashSet<FnId> {
         let mut seen = HashSet::new();
-        let mut stack: Vec<FnId> = self.p.main.into_iter().collect();
+        // A test build's `main` runs the tests, not the package's `main`, so
+        // that one (and what only it calls) is left out, or C would warn
+        // about an unused static function.
+        let test_build = !self.p.tests.is_empty() && self.p.test_runner.is_some();
+        let mut stack: Vec<FnId> = if test_build { Vec::new() } else { self.p.main.into_iter().collect() };
         stack.extend(self.p.tests.iter().map(|t| t.func));
         stack.extend(self.p.test_runner);
         for (i, f) in self.p.functions.iter().enumerate() {

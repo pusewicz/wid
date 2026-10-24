@@ -49,10 +49,10 @@ struct Score
 end
 
 enum Size
-  small
-  large
+  Small
+  Large
 
-  def rank -> Int = self == Self.small ? 0 : 1
+  def rank -> Int = self == Self.Small ? 0 : 1
   def <=>(o: Size) -> Int = rank <=> o.rank
 end
 
@@ -90,7 +90,7 @@ def main
   s = Score.new(7)
   puts [s < Score.new(9), s > 5, s <= 7, s >= 8]
 
-  puts [Size.small < Size.large, Size.large <= Size.small]
+  puts [Size.Small < Size.Large, Size.Large <= Size.Small]
 
   # Each operand is evaluated once, left to right.
   c = Counter.new(0)

@@ -1,0 +1,11 @@
+# A program's package, `main` included, tested with `wid test`: the test
+# build runs the tests instead of `main`, and leaves `main` (and what only
+# it calls) out of the C, which must still compile warning-free.
+def double(x: Int) -> Int = x * 2
+
+def banner -> String = "only main calls this"
+
+def main
+  puts banner
+  puts double(21)
+end
