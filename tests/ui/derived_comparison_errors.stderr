@@ -1,0 +1,44 @@
+error[E0307]: `<` is not defined for `Plain`
+  --> tests/ui/derived_comparison_errors.wid:22:8
+   |
+22 |   puts Plain.new(1) < Plain.new(2)
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^ both sides are `Plain`
+   = note: `<` calls `<=>` and compares its result with 0: negative when the left side comes first, 0 when the sides are equal and positive when the right side does
+help: define `<=>` on `Plain`: `def <=>(other: Plain) -> Int`
+   = see `wid explain E0307`
+
+error[E0307]: `!=` is not defined for `Holder`
+  --> tests/ui/derived_comparison_errors.wid:23:8
+   |
+23 |   puts Holder.new([1]) != Holder.new([2])
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ both sides are `Holder`
+help: define `==` on `Holder`: `def ==(other: Holder) -> Bool`
+   = see `wid explain E0307`
+
+error[E0307]: `>=` needs `<=>` to return `Int`, but it returns `Bool`
+  --> tests/ui/derived_comparison_errors.wid:24:8
+   |
+12 |   def <=>(o: Flag) -> Bool = @on && !o.on
+   |                       ---- `<=>` returns `Bool`
+...
+24 |   puts Flag.new(true) >= Flag.new(false)
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `>=` calls `<=>` here
+   = note: `<`, `<=`, `>` and `>=` compare the result of `<=>` with 0
+help: make `<=>` return `Int`
+   |   def <=>(o: Flag) -> Int = @on && !o.on
+   = see `wid explain E0307`
+
+error[E0307]: `!=` needs `==` to return `Bool`, but it returns `Int`
+  --> tests/ui/derived_comparison_errors.wid:25:8
+   |
+18 |   def ==(o: Odd) -> Int = @n - o.n
+   |                     --- `==` returns `Int`
+...
+25 |   puts Odd.new(1) != Odd.new(2)
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^ `!=` calls `==` here
+   = note: `!=` negates `==`
+help: make `==` return `Bool`
+   |   def ==(o: Odd) -> Bool = @n - o.n
+   = see `wid explain E0307`
+
+error: could not compile due to 4 errors

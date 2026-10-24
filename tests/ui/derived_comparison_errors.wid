@@ -1,0 +1,26 @@
+struct Plain
+  n: Int
+end
+
+struct Holder
+  items: []Int
+end
+
+struct Flag
+  on: Bool
+
+  def <=>(o: Flag) -> Bool = @on && !o.on
+end
+
+struct Odd
+  n: Int
+
+  def ==(o: Odd) -> Int = @n - o.n
+end
+
+def main
+  puts Plain.new(1) < Plain.new(2)
+  puts Holder.new([1]) != Holder.new([2])
+  puts Flag.new(true) >= Flag.new(false)
+  puts Odd.new(1) != Odd.new(2)
+end

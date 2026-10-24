@@ -1,0 +1,26 @@
+# The bitwise operators and `**` are definable, with their `op=` forms.
+
+struct Flags
+  bits: U8
+
+  def |(o: Flags) -> Flags = Flags.new(@bits | o.bits)
+  def &(o: Flags) -> Flags = Flags.new(@bits & o.bits)
+  def ~(o: Flags) -> Flags = Flags.new(@bits ~ o.bits)
+  def ~ -> Flags = Flags.new(~@bits)
+  def <<(n: Int) -> Flags = Flags.new(@bits << n.to(U8))
+  def >>(n: Int) -> Flags = Flags.new(@bits >> n.to(U8))
+  def **(n: Int) -> Flags = Flags.new(@bits * n.to(U8))
+end
+
+def main
+  f = Flags.new(1)
+  f |= Flags.new(4)
+  f <<= 1
+  puts f.bits
+  puts (f & Flags.new(8)).bits
+  puts (f ~ Flags.new(2)).bits
+  puts (~f).bits
+  puts (f >> 1).bits
+  f **= 2
+  puts f.bits
+end

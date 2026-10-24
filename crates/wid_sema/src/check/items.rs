@@ -276,8 +276,58 @@ impl<'a> Checker<'a> {
         );
     }
 
+    /// Reports a `def` or `overload` of `!=`, `<`, `<=`, `>`, `>=` or `!`
+    /// (E0332). The comparisons derive from `==` and `<=>`, so a type can't
+    /// make them disagree, and `!` always tests truthiness. The declaration
+    /// is kept, so its uses aren't reported again.
+    fn check_definable_operator(&mut self, name: &ast::Ident) {
+        let op = name.as_str();
+        let source = match op {
+            "!=" => "==",
+            "<" | "<=" | ">" | ">=" => "<=>",
+            "!" => {
+                self.report(
+                    Diagnostic::error(codes::UNDEFINABLE_OPERATOR, "`!` can't be defined")
+                        .primary(name.span, "`!` defined here")
+                        .note("`!` negates a `Bool`; it isn't a method, so no type can define it")
+                        .help("name the test instead, like `def empty? -> Bool`, and write `!x.empty?`"),
+                );
+                return;
+            }
+            _ => return,
+        };
+        let text = self.source_text(name.span);
+        let replacement = if text.starts_with(':') { format!(":{source}") } else { source.to_string() };
+        let note = if source == "==" {
+            "`a != b` negates `a == b`, so the two always agree; define `def ==(other: T) -> Bool`".to_string()
+        } else {
+            format!(
+                "`a {op} b` compares `a <=> b` with 0, so `<`, `<=`, `>` and `>=` always agree; define `def <=>(other: T) -> Int`, negative when `self` comes first, 0 when equal and positive when `other` does"
+            )
+        };
+        self.report(
+            Diagnostic::error(
+                codes::UNDEFINABLE_OPERATOR,
+                format!("`{op}` can't be defined; define `{source}` instead"),
+            )
+            .primary(name.span, format!("`{op}` defined here"))
+            .note(note)
+            .suggest_replace(
+                format!("define `{source}`, and change the return type and body to match"),
+                name.span,
+                replacement,
+                Applicability::MaybeIncorrect,
+            ),
+        );
+    }
+
     pub(super) fn collect_item(&mut self, item: &'a ast::Item, loc: DeclLoc, owner: Option<DeclId>) {
         self.check_item_attributes(item);
+        match &item.kind {
+            ItemKind::Def(f) if !f.is_macro => self.check_definable_operator(&f.name),
+            ItemKind::Overload(o) => self.check_definable_operator(&o.name),
+            _ => {}
+        }
         let (name, span, kind) = match &item.kind {
             ItemKind::Def(f) if f.is_macro && owner.is_some() => {
                 self.report(
