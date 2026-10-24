@@ -1,0 +1,60 @@
+error[E0332]: `<` can't be defined; define `<=>` instead
+ --> tests/ui/undefinable_operators.wid:3:7
+  |
+3 |   def <(o: M) -> Bool = @c < o.c
+  |       ^ `<` defined here
+  = note: `a < b` compares `a <=> b` with 0, so `<`, `<=`, `>` and `>=` always agree; define `def <=>(other: T) -> Int`, negative when `self` comes first, 0 when equal and positive when `other` does
+help: define `<=>`, and change the return type and body to match
+  |   def <=>(o: M) -> Bool = @c < o.c
+  = see `wid explain E0332`
+
+error[E0332]: `!=` can't be defined; define `==` instead
+ --> tests/ui/undefinable_operators.wid:4:7
+  |
+4 |   def !=(o: M) -> Bool = @c != o.c
+  |       ^^ `!=` defined here
+  = note: `a != b` negates `a == b`, so the two always agree; define `def ==(other: T) -> Bool`
+help: define `==`, and change the return type and body to match
+  |   def ==(o: M) -> Bool = @c != o.c
+  = see `wid explain E0332`
+
+error[E0332]: `!` can't be defined
+ --> tests/ui/undefinable_operators.wid:5:7
+  |
+5 |   def ! -> Bool = @c == 0
+  |       ^ `!` defined here
+  = note: `!` negates a `Bool`; it isn't a method, so no type can define it
+help: name the test instead, like `def empty? -> Bool`, and write `!x.empty?`
+  = see `wid explain E0332`
+
+error[E0332]: `>=` can't be defined; define `<=>` instead
+ --> tests/ui/undefinable_operators.wid:8:12
+  |
+8 |   overload :>=, :lt, :lt_int
+  |            ^^^ `>=` defined here
+  = note: `a >= b` compares `a <=> b` with 0, so `<`, `<=`, `>` and `>=` always agree; define `def <=>(other: T) -> Int`, negative when `self` comes first, 0 when equal and positive when `other` does
+help: define `<=>`, and change the return type and body to match
+  |   overload :<=>, :lt, :lt_int
+  = see `wid explain E0332`
+
+error[E0332]: `>` can't be defined; define `<=>` instead
+  --> tests/ui/undefinable_operators.wid:11:5
+   |
+11 | def >(a: M, b: M) -> Bool = a.c > b.c
+   |     ^ `>` defined here
+   = note: `a > b` compares `a <=> b` with 0, so `<`, `<=`, `>` and `>=` always agree; define `def <=>(other: T) -> Int`, negative when `self` comes first, 0 when equal and positive when `other` does
+help: define `<=>`, and change the return type and body to match
+   | def <=>(a: M, b: M) -> Bool = a.c > b.c
+   = see `wid explain E0332`
+
+error[E0332]: `<=` can't be defined; define `<=>` instead
+  --> tests/ui/undefinable_operators.wid:14:7
+   |
+14 |   def <=(o: M) -> Bool = self <= o.c
+   |       ^^ `<=` defined here
+   = note: `a <= b` compares `a <=> b` with 0, so `<`, `<=`, `>` and `>=` always agree; define `def <=>(other: T) -> Int`, negative when `self` comes first, 0 when equal and positive when `other` does
+help: define `<=>`, and change the return type and body to match
+   |   def <=>(o: M) -> Bool = self <= o.c
+   = see `wid explain E0332`
+
+error: could not compile due to 6 errors

@@ -603,6 +603,11 @@ the language server.
   E0307 at the derived use, with a fix for the return type. E0307's help for
   a missing comparison on a struct or enum suggests `def <=>` (or `def ==`
   for `!=`).
+- The definable operator set (#134): `+ - * / % **`, the bitwise
+  `& | ~ << >>`, unary `-` and `~`, `==`, `<=>`, `[]` and `[]=`. Defining
+  `!=`, `<`, `<=`, `>`, `>=` or `!` (a method, a package-level function or
+  an `overload` set) is E0332, with a fix that renames it to `==` or `<=>`;
+  the declaration is kept, so its uses report nothing more.
 - `using` fields (by value or pointer; field and method promotion, also
   through `@field`, implicit-self calls and nested `using`; ambiguity errors),
   `module`/`include` (in structs, enums, modules and `extend`; `Self`-generic
@@ -1822,8 +1827,6 @@ only on `main` and can run in parallel with the macro stack.
 7. **SPEC conformance audit: done** (at e73c919). Every finding was
    reproduced on main and filed as a GitHub issue, so the open issues are
    now its queue. In order of value:
-   - the definable operator set (#134; `<=>` deriving the comparisons
-     landed with #189);
    - `def self.` in an `extend` (#135);
    - gcc-15 `-Werror` at `-o:speed` and `-o:aggressive`, and suite
      coverage of `-o:` (#130);

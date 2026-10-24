@@ -414,13 +414,16 @@ end
   may take the same parameter types. A member may be a macro, which expands
   when a call chooses it (see Compile-time).
 - **Operators are methods**, because math-heavy game code needs them. You can
-  define `+ - * / %`, unary `-`, `==` (which gives you `!=`), `<=>` (which
-  gives you `<`, `<=`, `>` and `>=`), `[]` and `[]=`, and `+=`-style forms
-  are derived automatically. `a != b` is `!(a == b)` with your `==`, so it
-  never falls back to comparing members, and `a < b` is `(a <=> b) < 0`:
-  `<=>` returns an integer, negative when `a` comes first, 0 when they are
-  equal and positive when `b` does. Package-level `==` and `<=>` derive the
-  same way.
+  define `+ - * / % **`, the bitwise `& | ~ << >>` (for flag and bit-set
+  types), unary `-` and `~`, `==` (which gives you `!=`), `<=>` (which gives
+  you `<`, `<=`, `>` and `>=`), `[]` and `[]=`, and `+=`-style forms are
+  derived automatically for each binary operator. `a != b` is `!(a == b)`
+  with your `==`, so it never falls back to comparing members, and `a < b`
+  is `(a <=> b) < 0`: `<=>` returns an integer, negative when `a` comes
+  first, 0 when they are equal and positive when `b` does. Package-level
+  `==` and `<=>` derive the same way. So the comparisons can't disagree,
+  `!=`, `<`, `<=`, `>` and `>=` can't be defined themselves, and neither can
+  `!`, which only negates a `Bool` (E0332).
   When a type needs more than one right-hand type, use an explicit set, as
   with any other overload:
 
