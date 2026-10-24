@@ -24,7 +24,7 @@ end
 
 macro def platform -> Code
   quote do
-    comptime if OS == .linux || OS != .linux
+    comptime if OS == .Linux || OS != .Linux
       puts "some platform"
     else
       puts "no platform"

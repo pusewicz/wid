@@ -1,11 +1,11 @@
 error[E0327]: a constant can't call `width` without `comptime`
  --> tests/ui/comptime_call_once.wid:7:7
   |
-7 |   b = width()
+7 |   B = width()
   |       ^^^^^ this method would run while compiling
   = note: constants are computed at compile time; `comptime` marks code that runs then
 help: run the initializer with `comptime`
-  |   b = comptime width()
+  |   B = comptime width()
   = see `wid explain E0327`
 
 error[E0327]: a constant can't call `width` without `comptime`

@@ -1,11 +1,11 @@
 error[E0105]: an enum member's name goes right after the `.`
   --> tests/ui/enum_member_syntax.wid:11:13
    |
-11 |   d: Dir = . north
+11 |   d: Dir = . North
    |             ^ remove this space
-   = note: `.name` names a member of the enum expected here, like `.north`
+   = note: `.name` names a member of the enum expected here, like `.North`
 help: remove the space
-   |   d: Dir = .north
+   |   d: Dir = .North
    = see `wid explain E0105`
 
 error[E0105]: `.to_s` starts a line, so it calls a method on nothing

@@ -21,7 +21,7 @@ error[E0113]: Wid has no struct literal syntax
    |
 16 |   c = Color{1}
    |       ^^^^^^ `Color` is an enum, not a struct, so it has no `new`
-help: an enum's value is one of its members, like `Color.red`, or `.red` where a `Color` is expected
+help: an enum's value is one of its members, like `Color.Red`, or `.Red` where a `Color` is expected
    = see `wid explain E0113`
 
 error[E0113]: Wid has no struct literal syntax

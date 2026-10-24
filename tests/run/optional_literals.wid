@@ -5,8 +5,8 @@ Vec2 = [2]F32
 M2 = matrix[2, 2]F32
 
 enum Dir
-  north
-  south
+  North
+  South
 end
 
 LIMIT = 7
@@ -65,7 +65,7 @@ def main
   m: U8? = LIMIT
   q: F32? = 1.0 + 2.0
   p n, m, q
-  d: Dir? = .south
+  d: Dir? = .South
   p d
   r: Rune? = "r"
   p r

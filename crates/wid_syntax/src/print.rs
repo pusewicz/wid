@@ -569,7 +569,7 @@ struct Pool($T, $N: Int)
   end
 end
 enum Dir : U8
-  north
+  North
 end
 union Shape = Circle | Rect
 Vec2 = [2]F32

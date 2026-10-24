@@ -1,9 +1,9 @@
-error[E0313]: `case` does not handle .blue
+error[E0313]: `case` does not handle .Blue
  --> tests/ui/enum_errors.wid:8:8
   |
 8 |   case c
   |        ^ `Color` has 3 members
-help: add `when .blue` or an `else` branch
+help: add `when .Blue` or an `else` branch
   = see `wid explain E0313`
 
 error[E0204]: `Color` has no member `purple`
@@ -11,7 +11,7 @@ error[E0204]: `Color` has no member `purple`
    |
 15 |   c: Color = .purple
    |              ^^^^^^^ not a member of `Color`
-   = note: members: .red, .green, .blue
+   = note: members: .Red, .Green, .Blue
    = see `wid explain E0204`
 
 error[E0331]: `:red` is a symbol, not a value
@@ -28,7 +28,7 @@ error[E0304]: cannot infer which enum `.red` belongs to
    |
 18 |   y = .red
    |       ^^^^ no enum is expected here
-help: write the enum's name, like `Color.red`, or give the value a type where it goes, like `x: Color = .red`
+help: write the enum's name, like `Color.Red`, or give the value a type where it goes, like `x: Color = .Red`
    = see `wid explain E0304`
 
 error: could not compile due to 4 errors

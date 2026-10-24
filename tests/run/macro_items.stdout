@@ -8,7 +8,7 @@
 Hero hp=30 name=Ayla
 true
 fields: hp name
-Color.green
+Color.Green
 Color had 1 methods before these
 hello from a module
 an Int says hi

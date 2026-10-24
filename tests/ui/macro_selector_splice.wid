@@ -1,7 +1,7 @@
 # `.#{name}` in a `quote` names the enum member a `Symbol` names. Another
 # value, or a name an enum member can't have, is E0911 at the call.
 enum Dir
-  north
+  North
 end
 
 macro def by_number(n: Int) -> Code

@@ -23,12 +23,12 @@ Pixels = distinct F32
 enum Dir : U8
     A compass direction.
 
-    north
+    North
         Up the screen.
-    south
-    east = 4
+    South
+    East = 4
         Values can skip ahead.
-    west
+    West
 
     def opposite -> Dir
         The opposite direction.

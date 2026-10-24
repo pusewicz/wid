@@ -29,7 +29,7 @@ syn match widNumber /\<0[oO][0-7_]\+\>/
 syn match widFloat /\<\d[0-9_]*\%(\.\d[0-9_]*\%([eE][-+]\=\d\+\)\=\|[eE][-+]\=\d\+\)\>/
 
 " An uppercase name is a constant to the compiler; by convention PascalCase
-" names a type and SCREAMING_CASE a value.
+" names a type or an enum member and SCREAMING_CASE a value.
 syn match widType /\<\u\w*\>/
 syn match widConstant /\<\u[A-Z0-9_]\+\>/
 syn keyword widBuiltinType Int UInt I8 I16 I32 I64 U8 U16 U32 U64 F32 F64 Bool Rune
@@ -60,10 +60,6 @@ for s:entry in s:reserved
 endfor
 unlet s:entry s:reserved
 syn match widPseudoVariable /\<\%(context\|caller_location\)\>[?!]\@!/
-" Inside an enum, `struct`, `enum` or `union` standing alone names a member
-" (the prelude's `TypeKind`) and opens no block. It stays unhighlighted, like
-" other members.
-syn match widEnumMember /\<\%(struct\|enum\|union\)\>\ze\s*\%(=[=~>]\@!\|,\|#\|$\)/
 
 " `x if cond`: after the end of an expression, `if`, `unless`, `while` and
 " `until` are modifiers and open no block. The indent and matchit rules rely on
@@ -107,9 +103,10 @@ exe 'syn match widSymbol /' . s:unattached . ':\h\w*\%([?!]=\@!\|=[=>~]\@!\)\=/'
 exe 'syn match widSymbol /' . s:unattached . ':\%(\[\]=\=\|<=>\|\*\*\|[=!<>]=\|<<\|>>\|[-+*\/%<>!]\)/'
 unlet s:unattached
 
-" `.north`, an enum member: a `.` that follows no value, mid-line (a line
-" that starts with `.` may continue the one above).
-syn match widEnumSelector /\%(\w\|[)\]}"'?!.]\)\@1<!\%(^\s*\)\@<!\.\%(\l\|_\)\w*/
+" `.North`, an enum member: a `.` that follows no value, before a capitalized
+" name. Members are named like constants and methods never are, so a line
+" that starts with one is a member too.
+syn match widEnumSelector /\%(\w\|[)\]}"'?!.]\)\@1<!\.\u\w*/
 
 syn match widInstanceVariable /@\h\w*/
 syn match widTypeParam /\$\h\w*/

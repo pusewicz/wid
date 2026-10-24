@@ -1998,13 +1998,13 @@ impl NamePlace {
     fn fits(self, shape: NameShape) -> bool {
         match self {
             NamePlace::Method | NamePlace::Access => matches!(shape, NameShape::Ident { .. } | NameShape::Operator),
-            NamePlace::Field | NamePlace::Param | NamePlace::Variable | NamePlace::Argument | NamePlace::Member => {
+            NamePlace::Field | NamePlace::Param | NamePlace::Variable | NamePlace::Argument => {
                 shape == NameShape::Ident { suffixed: false }
             }
             NamePlace::Declared | NamePlace::Target => {
                 matches!(shape, NameShape::Ident { suffixed: false } | NameShape::Const)
             }
-            NamePlace::Type(_) | NamePlace::Const => shape == NameShape::Const,
+            NamePlace::Type(_) | NamePlace::Const | NamePlace::Member => shape == NameShape::Const,
             NamePlace::Expr => matches!(shape, NameShape::Ident { .. } | NameShape::Const),
         }
     }
@@ -2020,19 +2020,24 @@ impl NamePlace {
             NamePlace::Access => {
                 format!("{what} starts with a lowercase letter or `_`, {REST}; a method's may end in `?` or `!`")
             }
-            NamePlace::Field | NamePlace::Param | NamePlace::Variable | NamePlace::Argument | NamePlace::Member => {
+            NamePlace::Field | NamePlace::Param | NamePlace::Variable | NamePlace::Argument => {
                 format!("{what} starts with a lowercase letter or `_`, {REST}")
             }
             NamePlace::Declared | NamePlace::Target | NamePlace::Expr => {
                 format!("{what} starts with a letter or `_`, {REST}")
             }
             NamePlace::Type(_) | NamePlace::Const => format!("{what} starts with a capital letter, {REST}"),
+            NamePlace::Member => {
+                format!(
+                    "{what} is named like a constant: it starts with a capital letter, {REST}, like `North` or `NOT_FOUND`"
+                )
+            }
         }
     }
 
     /// Whether names in this place start with a capital letter.
     fn capitalized(self) -> bool {
-        matches!(self, NamePlace::Type(_) | NamePlace::Const)
+        matches!(self, NamePlace::Type(_) | NamePlace::Const | NamePlace::Member)
     }
 
     /// Whether names in this place start with a lowercase letter or `_`.
@@ -2046,6 +2051,11 @@ impl NamePlace {
 /// word gets a trailing `_`.
 fn suggest_name(text: &str, place: NamePlace) -> Option<String> {
     let mut out: String = text.chars().map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' }).collect();
+    // An enum member's is `PascalCase`: `not_found` becomes `NotFound`.
+    if matches!(place, NamePlace::Member) {
+        let out = wid_syntax::lexer::pascal_case(out.trim_start_matches(|c: char| c == '_' || c.is_ascii_digit()));
+        return (out != text && place.fits(name_shape(&out))).then_some(out);
+    }
     if place.capitalized() {
         out = out.trim_start_matches(|c: char| c == '_' || c.is_ascii_digit()).to_string();
         let first = out.chars().next()?;
@@ -2610,7 +2620,7 @@ impl Splicer<'_, '_> {
 /// A line of code spliced among an enum's members as a member, if it is
 /// one: a name alone, or `name = value`. A capitalized name alone is taken
 /// too, for its name to be reported.
-fn enum_member_line(stmt: &ast::Stmt) -> Option<ast::EnumMember> {
+pub(super) fn enum_member_line(stmt: &ast::Stmt) -> Option<ast::EnumMember> {
     if !stmt.attrs.is_empty() {
         return None;
     }
@@ -2619,8 +2629,15 @@ fn enum_member_line(stmt: &ast::Stmt) -> Option<ast::EnumMember> {
             Some(ast::EnumMember { name: Ident { name: *name, span: *span }, value: None })
         }
         StmtKind::Assign { targets, op: None, values } => match (targets.as_slice(), values.as_slice()) {
-            ([ast::Expr { kind: E::Ident(name), span }], [value]) => {
+            ([ast::Expr { kind: E::Ident(name) | E::Const(name), span }], [value]) => {
                 Some(ast::EnumMember { name: Ident { name: *name, span: *span }, value: Some(value.clone()) })
+            }
+            _ => None,
+        },
+        // `Name = value` written in a `quote`, which reads it as a constant.
+        StmtKind::Item(item) if item.attrs.is_empty() && item.doc.is_none() => match &item.kind {
+            ItemKind::Const(c) if c.ty.is_none() => {
+                Some(ast::EnumMember { name: c.name, value: Some(c.value.clone()) })
             }
             _ => None,
         },

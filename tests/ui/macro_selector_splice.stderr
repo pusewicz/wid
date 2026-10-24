@@ -10,17 +10,17 @@ error[E0911]: the macro `by_number` splices an integer where a name goes
 help: splice a `Symbol` where a name goes; `"text".to_sym` makes one from a string
    = see `wid explain E0911`
 
-error[E0911]: the macro `by_name` splices the name `North` where an enum member goes
-  --> tests/ui/macro_selector_splice.wid:22:12
+error[E0911]: the macro `by_name` splices the name `north` where an enum member goes
+  --> tests/ui/macro_selector_splice.wid:23:12
    |
-22 |   b: Dir = by_name("North")
+23 |   c: Dir = by_name("north")
    |            ^^^^^^^^^^^^^^^^ `by_name` expands here
   ::: tests/ui/macro_selector_splice.wid:16:5
    |
 16 |     .#{sym}
-   |     ------- `North` is spliced here
-   = note: an enum member starts with a lowercase letter or `_`, followed by letters, digits and `_`
-help: build a name that follows this rule, like `north`, before `.to_sym`
+   |     ------- `north` is spliced here
+   = note: an enum member is named like a constant: it starts with a capital letter, followed by letters, digits and `_`, like `North` or `NOT_FOUND`
+help: build a name that follows this rule, like `North`, before `.to_sym`
    = see `wid explain E0911`
 
 error: could not compile due to 2 errors

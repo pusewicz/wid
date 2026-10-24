@@ -328,8 +328,8 @@ extend Player
 end
 
 enum Dir
-  north
-  east = 4
+  North
+  East = 4
 end
 
 def clamp_int(x: Int) -> Int = x
@@ -401,7 +401,7 @@ private LIMIT = 3
         assert_eq!(methods, [("Player.heal", false), ("Player.secret", true)]);
         assert!(items[9].private);
         let dir: Vec<&str> = items[4].members.iter().map(|m| m.signature.as_str()).collect();
-        assert_eq!(dir, ["north", "east = 4"]);
+        assert_eq!(dir, ["North", "East = 4"]);
         let heal = &player.methods[0];
         let (at, whole) = (heal.location.as_ref().expect("located"), heal.span.as_ref().expect("spanned"));
         assert_eq!((at.line, at.column, at.end_line, at.end_column), (22, 7, 22, 11));
@@ -422,7 +422,7 @@ private LIMIT = 3
         assert!(one("Player.secret").private);
         let hp = one("Player.hp");
         assert_eq!((hp.kind, hp.promoted_into.as_deref()), ("field", Some("Player")));
-        assert_eq!(one("Dir.east").signature, "east = 4");
+        assert_eq!(one("Dir.East").signature, "East = 4");
         assert_eq!(one("Int").kind, "builtin_type");
         assert_eq!(one("Int").methods[0].name, "twice");
         let set = def(&a, ROOT, "clamp").expect("an overload set");

@@ -2,8 +2,8 @@
 # the type: a number is written as itself (a new local gets the type), and
 # anything else gets a help on how to build its value.
 enum Color
-  red
-  green
+  Red
+  Green
 end
 
 union Shape = Int | F64

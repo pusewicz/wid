@@ -97,7 +97,7 @@ impl<'a> Checker<'a> {
                 let unknown = matches!(self.types.kind(elem), TyKind::Unknown);
                 let mut values = vec![v];
                 for e in &elems[1..] {
-                    // `[.north, .south]`: the first was reported, and an
+                    // `[.North, .South]`: the first was reported, and an
                     // enum member names nothing more without its enum.
                     if unknown && matches!(e.kind, ast::ExprKind::Selector(_)) {
                         continue;

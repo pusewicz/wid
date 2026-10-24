@@ -169,7 +169,11 @@ impl Gen<'_> {
         for (i, name) in names.iter().enumerate() {
             let value = match name.as_str() {
                 "name" => string_init(&d.name),
-                "kind" => r.kinds.iter().find(|(n, _)| n == d.kind).map_or_else(|| "0".into(), |(_, v)| v.to_string()),
+                "kind" => r
+                    .kinds
+                    .iter()
+                    .find(|(n, _)| n == wid_sema::type_info::kind_member(d.kind))
+                    .map_or_else(|| "0".into(), |(_, v)| v.to_string()),
                 "size" => size.clone(),
                 "align" => align.clone(),
                 "elem" => self.optional_ptr(d.elem, r),

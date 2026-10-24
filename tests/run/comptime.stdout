@@ -5,14 +5,14 @@
 Vec2(x: 1.5, y: -2.0)
 Entry(name: "hero", pos: Vec2(x: 1.5, y: -2.0), tags: [2, 3, 5, 7])
 [3, 2, 1]
-answer: 42, pi: 3.25, shape: square
+answer: 42, pi: 3.25, shape: Square
 16
 55
 129
 0.5
 hello
 bye
-.circle
+.Circle
 30
 4
 1

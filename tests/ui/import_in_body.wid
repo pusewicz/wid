@@ -11,7 +11,7 @@ struct Box
 end
 
 enum Color
-  red
+  Red
   import "core:math"
 end
 
@@ -26,7 +26,7 @@ extend Int
 end
 
 def main
-  p Box.new(w: 1), Color.red
+  p Box.new(w: 1), Color.Red
   b = strings.Builder.create
   b.write("ok")
   puts b.string

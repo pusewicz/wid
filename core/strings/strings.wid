@@ -203,24 +203,24 @@ extend String
   # Parses a whole string as an integer in `base` (2 to 36), with an optional
   # sign and single `_` separators between digits.
   def parse_int(base: Int = 10) -> (Int, Error)
-    return 0, .invalid_number if base < 2 || base > 36
+    return 0, .InvalidNumber if base < 2 || base > 36
     s = self
     negative = s.starts_with?("-")
     s = s[1...s.size] if negative || s.starts_with?("+")
-    return 0, .invalid_number if s.empty? || s[0] == 95 || s[s.size - 1] == 95
+    return 0, .InvalidNumber if s.empty? || s[0] == 95 || s[s.size - 1] == 95
     limit: UInt = negative ? 9223372036854775808 : 9223372036854775807
     b = base.to(UInt)
     value: UInt = 0
     for i in 0...s.size
       c = s[i]
       if c == 95
-        return 0, .invalid_number if s[i + 1] == 95
+        return 0, .InvalidNumber if s[i + 1] == 95
         next
       end
       d = digit_value(c)
-      return 0, .invalid_number if d < 0 || d >= base
+      return 0, .InvalidNumber if d < 0 || d >= base
       digit = d.to(UInt)
-      return 0, .out_of_range if value > (limit - digit) / b
+      return 0, .OutOfRange if value > (limit - digit) / b
       value = value * b + digit
     end
     return 0 - (value - 1).to(Int) - 1, nil if negative && value > 0
@@ -231,14 +231,14 @@ extend String
   def parse_float -> (F64, Error)
     out = 0.0
     return out, nil if parse_float_raw(self, &out)
-    return 0.0, .invalid_number
+    return 0.0, .InvalidNumber
   end
 
   # Parses `true` or `false`.
   def parse_bool -> (Bool, Error)
     return true, nil if self == "true"
     return false, nil if self == "false"
-    return false, .invalid_bool
+    return false, .InvalidBool
   end
 
   private def pad(right: Int, left: Int, fill: Rune, allocator: Allocator) -> String

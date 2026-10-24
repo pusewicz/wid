@@ -5,7 +5,7 @@
 def foo_x -> Int = 1
 
 enum Kind
-  foo_x
+  FOO_X
 end
 
 macro def call_foo(name: Symbol) -> Code
@@ -16,12 +16,12 @@ end
 
 macro def symbol_of(name: Symbol) -> Code
   quote do
-    .#{:foo_#{name}}
+    .#{:FOO_#{name}}
   end
 end
 
 def main
   p call_foo(:x)
-  k: Kind = symbol_of(:x)
+  k: Kind = symbol_of(:X)
   p k
 end

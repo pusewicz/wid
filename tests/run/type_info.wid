@@ -37,20 +37,20 @@ end
 Spot = distinct Vec3
 
 enum Dir : U8
-  north = 1
-  east
-  south = 10
-  west
+  North = 1
+  East
+  South = 10
+  West
 end
 
 enum Mood
-  calm
-  angry
+  Calm
+  Angry
 end
 
 enum Mask : U64
-  none
-  all = 0xFFFF_FFFF_FFFF_FFFF
+  None
+  All = 0xFFFF_FFFF_FFFF_FFFF
 end
 
 struct Circle
@@ -87,8 +87,8 @@ def show(t: ^TypeInfo)
 end
 
 def check(path: String) -> (Int, Error)
-  return 0, .not_found if path.empty?
-  return 0, .too_big if path.size > 8
+  return 0, .NotFound if path.empty?
+  return 0, .TooBig if path.size > 8
   return path.size, nil
 end
 

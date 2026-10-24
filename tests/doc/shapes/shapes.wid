@@ -19,19 +19,19 @@ DEBUG_SHAPES = false
 # A compass direction.
 enum Dir : U8
   # Up the screen.
-  north
-  south
+  North
+  South
   # Values can skip ahead.
-  east = 4
-  west
+  East = 4
+  West
 
   # The opposite direction.
   def opposite -> Dir
     case self
-    when .north then .south
-    when .south then .north
-    when .east then .west
-    else .east
+    when .North then .South
+    when .South then .North
+    when .East then .West
+    else .East
     end
   end
 end

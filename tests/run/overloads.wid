@@ -115,14 +115,14 @@ struct Clicker
 end
 
 enum Dir
-  north
-  south
+  North
+  South
 
   include Flipping
 end
 
 module Flipping
-  def flipped -> Self = self == Self.north ? Self.south : Self.north
+  def flipped -> Self = self == Self.North ? Self.South : Self.North
 end
 
 struct Grid
@@ -210,8 +210,8 @@ def main
   c.click
   c.bump
   p c.doubled
-  p Dir.north.flipped
-  p Dir.south.flipped
+  p Dir.North.flipped
+  p Dir.South.flipped
   puts 5.framed
   puts "x".framed
 
